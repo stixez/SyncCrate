@@ -15,7 +15,7 @@ const RECV_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
-    Hello { name: String, version: String },
+    Hello { name: String, version: String, pin: Option<String> },
     Welcome { name: String, version: String },
     ManifestRequest,
     ManifestResponse { manifest: FileManifest },

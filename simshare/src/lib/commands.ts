@@ -10,16 +10,16 @@ import type {
   SyncPlan,
 } from "./types";
 
-export async function startHost(name: string): Promise<SessionInfo> {
-  return invoke("start_host", { name });
+export async function startHost(name: string, usePin?: boolean): Promise<SessionInfo> {
+  return invoke("start_host", { name, usePin });
 }
 
 export async function startJoin(name: string): Promise<PeerInfo[]> {
   return invoke("start_join", { name });
 }
 
-export async function connectToPeer(peerId: string): Promise<SessionInfo> {
-  return invoke("connect_to_peer", { peerId });
+export async function connectToPeer(peerId: string, pin?: string): Promise<SessionInfo> {
+  return invoke("connect_to_peer", { peerId, pin });
 }
 
 export async function disconnect(): Promise<void> {
@@ -56,6 +56,13 @@ export async function resolveConflict(
   peerId?: string,
 ): Promise<SyncPlan> {
   return invoke("resolve_conflict", { path, resolution, peerId });
+}
+
+export async function resolveAllConflicts(
+  strategy: string,
+  peerId?: string,
+): Promise<SyncPlan> {
+  return invoke("resolve_all_conflicts", { strategy, peerId });
 }
 
 export async function disconnectPeer(peerId: string): Promise<void> {

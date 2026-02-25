@@ -11,10 +11,10 @@ export function useSession() {
   const setSyncProgress = useAppStore((s) => s.setSyncProgress);
   const addLog = useLogStore((s) => s.addLog);
 
-  const host = async (name: string) => {
+  const host = async (name: string, usePin?: boolean) => {
     setIsLoading(true);
     try {
-      const info = await cmd.startHost(name);
+      const info = await cmd.startHost(name, usePin);
       const status = await cmd.getSessionStatus();
       setSession(status);
       addLog(`Hosting session as "${name}" on port ${info.port}`, "success");
@@ -38,10 +38,10 @@ export function useSession() {
     }
   };
 
-  const connectTo = async (peerId: string) => {
+  const connectTo = async (peerId: string, pin?: string) => {
     setIsLoading(true);
     try {
-      await cmd.connectToPeer(peerId);
+      await cmd.connectToPeer(peerId, pin);
       const status = await cmd.getSessionStatus();
       setSession(status);
       addLog("Connected to host", "success");

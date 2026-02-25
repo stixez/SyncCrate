@@ -35,6 +35,7 @@ pub struct PeerInfo {
     pub port: u16,
     pub mod_count: usize,
     pub version: String,
+    pub pin_required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +60,7 @@ pub struct SessionStatus {
     pub port: u16,
     pub peers: Vec<PeerInfo>,
     pub is_syncing: bool,
+    pub pin: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +130,7 @@ pub struct AppState {
     pub session_name: String,
     pub local_display_name: String,
     pub session_port: u16,
+    pub session_pin: Option<String>,
     pub discovered_peers: Vec<PeerInfo>,
     pub connections: HashMap<String, PeerConnection>,
     #[allow(dead_code)]
@@ -186,6 +189,7 @@ impl Default for AppState {
             session_name: String::new(),
             local_display_name: String::new(),
             session_port: 9847,
+            session_pin: None,
             discovered_peers: Vec::new(),
             connections: HashMap::new(),
             file_watcher: None,

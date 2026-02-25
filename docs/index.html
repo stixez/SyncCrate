@@ -284,6 +284,49 @@
       line-height: 1.55;
     }
 
+    /* ─── Screenshots ─── */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .screenshot-grid a {
+      display: block;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .screenshot-grid a:hover {
+      border-color: rgba(30, 168, 75, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .screenshot-grid img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .screenshot-grid .screenshot-wide {
+      grid-column: 1 / -1;
+    }
+
+    .screenshot-label {
+      padding: 10px 16px;
+      background: var(--bg-card);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+
+    @media (max-width: 480px) {
+      .screenshot-grid { grid-template-columns: 1fr; }
+      .screenshot-grid .screenshot-wide { grid-column: auto; }
+    }
+
     /* ─── How it works ─── */
     .steps {
       display: grid;
@@ -499,6 +542,7 @@
       </div>
       <nav class="header-nav">
         <a href="#features">Features</a>
+        <a href="#screenshots">Screenshots</a>
         <a href="#how-it-works">How It Works</a>
         <a href="https://github.com/stixez/SimShare">GitHub</a>
         <a href="https://github.com/stixez/SimShare/releases/latest" class="btn-sm btn-primary">Download</a>
@@ -567,6 +611,36 @@
           <h3>Conflict Resolution</h3>
           <p>Keep yours, use theirs, or keep both. Every conflict is resolved on your terms.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshots -->
+  <section id="screenshots">
+    <div class="container">
+      <h2 class="section-title">See It in Action</h2>
+      <p class="section-subtitle">A clean, focused interface built for getting things done.</p>
+      <div class="screenshot-grid">
+        <a href="screenshots/dashboard.png" class="screenshot-wide">
+          <img src="screenshots/dashboard.png" alt="SimShare Dashboard" loading="lazy">
+          <div class="screenshot-label">Dashboard &mdash; Session overview, sync plan, connected peers</div>
+        </a>
+        <a href="screenshots/mods-cc.png">
+          <img src="screenshots/mods-cc.png" alt="Mods & Custom Content" loading="lazy">
+          <div class="screenshot-label">Mods &amp; CC &mdash; Browse and resolve conflicts</div>
+        </a>
+        <a href="screenshots/saves.png">
+          <img src="screenshots/saves.png" alt="Save Files" loading="lazy">
+          <div class="screenshot-label">Saves &mdash; Save file management</div>
+        </a>
+        <a href="screenshots/profiles.png">
+          <img src="screenshots/profiles.png" alt="Mod Profiles" loading="lazy">
+          <div class="screenshot-label">Profiles &mdash; Snapshot and share mod setups</div>
+        </a>
+        <a href="screenshots/activity-log.png">
+          <img src="screenshots/activity-log.png" alt="Activity Log" loading="lazy">
+          <div class="screenshot-label">Activity Log &mdash; Real-time session events</div>
+        </a>
       </div>
     </div>
   </section>

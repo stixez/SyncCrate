@@ -10,7 +10,31 @@ permissions:
   contents: write
 
 jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - name: Create GitHub Release
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `SimShare ${tag}`,
+              body: `See the [changelog](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.\n\n## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` or \`.msi\` |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |`,
+              draft: false,
+              prerelease: false,
+            });
+            return release.id;
+
   build:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -73,18 +97,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: simshare
-          tagName: ${{ github.ref_name }}
-          releaseName: "SimShare ${{ github.ref_name }}"
-          releaseBody: |
-            See the [changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-
-            ## Downloads
-            | Platform | File |
-            |----------|------|
-            | Windows | `.exe` or `.msi` |
-            | macOS (Apple Silicon) | `.dmg` |
-            | macOS (Intel) | `.dmg` |
-            | Linux | `.AppImage` or `.deb` |
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}

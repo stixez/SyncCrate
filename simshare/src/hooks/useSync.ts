@@ -43,5 +43,15 @@ export function useSync() {
     }
   };
 
-  return { computePlan, executeSync, resolve, isLoading };
+  const resolveAll = async (strategy: string) => {
+    try {
+      const updatedPlan = await cmd.resolveAllConflicts(strategy);
+      setSyncPlan(updatedPlan);
+      addLog(`Resolved all conflicts using "${strategy}"`, "success");
+    } catch (e: any) {
+      addLog(`Failed to resolve all conflicts: ${e}`, "error");
+    }
+  };
+
+  return { computePlan, executeSync, resolve, resolveAll, isLoading };
 }

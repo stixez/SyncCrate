@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle } from "lucide-react";
+import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle, Lock, Copy, Check } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
@@ -20,8 +20,12 @@ export default function Dashboard() {
   const discoveredPeers = useAppStore((s) => s.discoveredPeers);
   const addLog = useLogStore((s) => s.addLog);
   const { host, join, connectTo, leave, isLoading } = useSession();
-  const { computePlan, executeSync, isLoading: isSyncLoading } = useSync();
+  const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading } = useSync();
   const [hostName, setHostName] = useState("");
+  const [usePin, setUsePin] = useState(false);
+  const [pinCopied, setPinCopied] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinPeerId, setPinPeerId] = useState<string | null>(null);
 
   const [localVersion, setLocalVersion] = useState("");
   useEffect(() => {
@@ -91,8 +95,18 @@ export default function Dashboard() {
               placeholder="Your name..."
               className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-accent"
             />
+            <label className="flex items-center gap-2 mb-3 cursor-pointer text-sm text-txt-dim">
+              <input
+                type="checkbox"
+                checked={usePin}
+                onChange={(e) => setUsePin(e.target.checked)}
+                className="rounded border-border accent-accent"
+              />
+              <Lock size={14} />
+              Require PIN to join
+            </label>
             <button
-              onClick={() => host(hostName.trim() || "Host")}
+              onClick={() => host(hostName.trim() || "Host", usePin)}
               disabled={isLoading}
               className="w-full bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             >
@@ -122,14 +136,65 @@ export default function Dashboard() {
                 {discoveredPeers.map((peer) => (
                   <button
                     key={peer.id}
-                    onClick={() => connectTo(peer.id)}
+                    onClick={() => {
+                      if (peer.pin_required) {
+                        setPinPeerId(peer.id);
+                        setPinInput("");
+                      } else {
+                        connectTo(peer.id);
+                      }
+                    }}
                     disabled={isLoading}
                     className="w-full flex items-center justify-between bg-bg rounded-lg px-3 py-2 text-sm hover:bg-bg-card-hover transition-colors disabled:opacity-50"
                   >
-                    <span>{peer.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      {peer.name}
+                      {peer.pin_required && <Lock size={12} className="text-txt-dim" />}
+                    </span>
                     <span className="text-txt-dim text-xs">{peer.mod_count} mods</span>
                   </button>
                 ))}
+              </div>
+            )}
+            {pinPeerId && (
+              <div className="mt-3 bg-bg rounded-lg border border-border p-3">
+                <p className="text-sm font-medium mb-2">Enter Session PIN</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="0000"
+                    className="flex-1 bg-bg-card border border-border rounded-lg px-3 py-2 text-center text-lg font-mono tracking-widest focus:outline-none focus:border-accent"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && pinInput.length === 4) {
+                        connectTo(pinPeerId, pinInput);
+                        setPinPeerId(null);
+                      } else if (e.key === "Escape") {
+                        setPinPeerId(null);
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      connectTo(pinPeerId, pinInput);
+                      setPinPeerId(null);
+                    }}
+                    disabled={pinInput.length !== 4 || isLoading}
+                    className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    Connect
+                  </button>
+                </div>
+                <button
+                  onClick={() => setPinPeerId(null)}
+                  className="text-xs text-txt-dim mt-2 hover:text-txt"
+                >
+                  Cancel
+                </button>
               </div>
             )}
           </div>
@@ -200,6 +265,29 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {session.session_type === "Host" && session.pin && (
+        <div className="bg-accent/10 border border-accent/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Lock size={18} className="text-accent-light" />
+            <div>
+              <p className="text-xs text-txt-dim">Session PIN</p>
+              <p className="text-2xl font-bold font-mono tracking-[0.3em]">{session.pin}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(session.pin!);
+              setPinCopied(true);
+              setTimeout(() => setPinCopied(false), 2000);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-card border border-border hover:bg-bg-card-hover text-sm transition-colors"
+          >
+            {pinCopied ? <Check size={14} className="text-status-green" /> : <Copy size={14} />}
+            {pinCopied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      )}
+
       {mismatchedPeers.length > 0 && (
         <div className="bg-status-yellow/10 border border-status-yellow/30 rounded-xl p-3 flex items-center gap-2">
           <AlertTriangle size={16} className="text-status-yellow shrink-0" />
@@ -210,7 +298,7 @@ export default function Dashboard() {
       )}
 
       {syncPlan && syncPlan.actions.length > 0 && (
-        <SyncBanner plan={syncPlan} onSync={executeSync} />
+        <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} />
       )}
       {syncPlan && syncPlan.actions.length === 0 && (
         <div className="bg-status-green/10 border border-status-green/30 rounded-xl p-4 text-center">

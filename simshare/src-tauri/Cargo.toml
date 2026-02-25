@@ -1,6 +1,6 @@
 [package]
 name = "simshare"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]
@@ -29,3 +29,4 @@ hex = "0.4"
 chrono = "0.4"
 base64 = "0.22"
 tokio-util = { version = "0.7", features = ["codec"] }
+rand = "0.8"

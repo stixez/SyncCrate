@@ -4,6 +4,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::Emitter;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -19,10 +21,6 @@ const MAX_PEER_NAME_LEN: usize = 64;
 
 /// Maximum decoded size of a single file chunk (1 MB)
 const MAX_CHUNK_SIZE: usize = 1_048_576;
-
-/// Cap initial allocation for incoming file data (10 MB).
-/// Files larger than this still work — the Vec grows dynamically.
-const MAX_PREALLOC: usize = 10 * 1024 * 1024;
 
 static LISTENER_TOKEN: Mutex<Option<CancellationToken>> = Mutex::const_new(None);
 
@@ -117,19 +115,41 @@ async fn handle_client(
         protocol::recv_message(&mut *s).await?
     };
 
-    let peer_name = match msg {
-        Message::Hello { name, version: _ } => {
+    let (peer_name, peer_pin) = match msg {
+        Message::Hello { name, version: _, pin } => {
             // Sanitize: truncate and strip control characters
-            name.chars()
+            let sanitized = name.chars()
                 .filter(|c| !c.is_control())
                 .take(MAX_PEER_NAME_LEN)
-                .collect::<String>()
+                .collect::<String>();
+            (sanitized, pin)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
 
     if peer_name.is_empty() {
         return Err("Peer sent empty name".to_string());
+    }
+
+    // Validate PIN if the host has one set
+    {
+        let app_state = state.lock().await;
+        if let Some(ref expected_pin) = app_state.session_pin {
+            match &peer_pin {
+                Some(provided) if provided == expected_pin => {}
+                _ => {
+                    let mut s = stream.lock().await;
+                    protocol::send_message(
+                        &mut *s,
+                        &Message::Error {
+                            message: "Invalid PIN".to_string(),
+                        },
+                    )
+                    .await?;
+                    return Err("Peer provided invalid PIN".to_string());
+                }
+            }
+        }
     }
 
     // Send Welcome
@@ -158,6 +178,7 @@ async fn handle_client(
             port: 0,
             mod_count: 0,
             version: String::new(),
+            pin_required: false,
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -241,38 +262,55 @@ async fn handle_client(
                     }
                 };
 
-                match tokio::fs::read(&full_path).await {
-                    Ok(data) => {
-                        let hash = {
-                            let mut hasher = Sha256::new();
-                            hasher.update(&data);
-                            hex::encode(hasher.finalize())
-                        };
+                match tokio::fs::File::open(&full_path).await {
+                    Ok(mut file) => {
+                        // Get file size for the header
+                        let metadata = file.metadata().await.map_err(|e| e.to_string())?;
+                        let file_size = metadata.len();
 
+                        // Stream file: read in 64KB chunks, hash incrementally, send immediately
+                        let chunk_size = 65536;
+                        let mut buf = vec![0u8; chunk_size];
+                        let mut hasher = Sha256::new();
+                        let mut offset = 0u64;
+
+                        // First pass: compute hash by streaming through the file
+                        loop {
+                            let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
+                            if n == 0 { break; }
+                            hasher.update(&buf[..n]);
+                        }
+                        let hash = hex::encode(hasher.finalize());
+
+                        // Send header with known size and hash
                         let mut s = stream.lock().await;
                         protocol::send_message(
                             &mut *s,
                             &Message::FileHeader {
                                 path: path.clone(),
-                                size: data.len() as u64,
+                                size: file_size,
                                 hash,
                             },
                         )
                         .await?;
 
-                        // Send in 64KB chunks, base64-encoded
-                        let chunk_size = 65536;
-                        let mut offset = 0u64;
-                        for chunk in data.chunks(chunk_size) {
+                        // Second pass: re-read and send chunks
+                        // Seek back to start
+                        use tokio::io::AsyncSeekExt;
+                        file.seek(std::io::SeekFrom::Start(0)).await.map_err(|e| e.to_string())?;
+
+                        loop {
+                            let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
+                            if n == 0 { break; }
                             protocol::send_message(
                                 &mut *s,
                                 &Message::FileChunk {
-                                    data: BASE64.encode(chunk),
+                                    data: BASE64.encode(&buf[..n]),
                                     offset,
                                 },
                             )
                             .await?;
-                            offset += chunk.len() as u64;
+                            offset += n as u64;
                         }
 
                         protocol::send_message(&mut *s, &Message::FileComplete { path }).await?;
@@ -325,6 +363,7 @@ pub async fn connect_to_host(
     peer_id: &str,
     state: Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
+    pin: Option<String>,
 ) -> Result<(), String> {
     let addr = format!("{}:{}", ip, port);
     let stream = tokio::time::timeout(
@@ -347,17 +386,19 @@ pub async fn connect_to_host(
             &Message::Hello {
                 name: our_name,
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                pin: pin.clone(),
             },
         )
         .await?;
     }
 
-    // Wait for Welcome
+    // Wait for Welcome (or Error if PIN was rejected)
     let host_name = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
             Message::Welcome { name, .. } => name,
+            Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
         }
     };
@@ -388,6 +429,7 @@ pub async fn connect_to_host(
             port,
             mod_count: remote_manifest.files.len(),
             version: String::new(),
+            pin_required: false,
         };
         app_state.connections.insert(
             peer_id.to_string(),
@@ -420,8 +462,31 @@ pub async fn request_file(
             .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?
     };
 
+    // Validate path stays within base directory before writing
+    let dest_path = crate::utils::safe_join(dest_base, path)
+        .map_err(|e| format!("Path validation failed for {}: {}", path, e))?;
+
+    if let Some(parent) = dest_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Atomic write: stream chunks to temp file, then rename
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let tmp_path = dest_path.with_extension(
+        format!(
+            "{}.{}.tmp",
+            dest_path.extension().and_then(|e| e.to_str()).unwrap_or(""),
+            unique,
+        ),
+    );
+
     // Hold stream lock for the entire file transfer to prevent message interleaving
-    let (_expected_size, expected_hash, file_data) = {
+    let expected_hash = {
         let mut s = connection.lock().await;
 
         // Send file request
@@ -437,7 +502,7 @@ pub async fn request_file(
             }
         };
 
-        // Validate file size before allocation
+        // Validate file size before writing
         if expected_size > MAX_FILE_SIZE {
             return Err(format!(
                 "File too large: {} bytes (max {} bytes)",
@@ -445,9 +510,13 @@ pub async fn request_file(
             ));
         }
 
-        // Receive chunks — cap pre-allocation to avoid untrusted size causing OOM
-        let prealloc = std::cmp::min(expected_size as usize, MAX_PREALLOC);
-        let mut file_data = Vec::with_capacity(prealloc);
+        // Stream chunks directly to temp file on disk
+        let mut out_file = tokio::fs::File::create(&tmp_path)
+            .await
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        let mut hasher = Sha256::new();
+        let mut bytes_written = 0u64;
+
         loop {
             let msg = protocol::recv_message(&mut *s).await?;
             match msg {
@@ -460,10 +529,12 @@ pub async fn request_file(
                             MAX_CHUNK_SIZE
                         ));
                     }
-                    file_data.extend_from_slice(&decoded);
-                    if file_data.len() as u64 > expected_size {
+                    bytes_written += decoded.len() as u64;
+                    if bytes_written > expected_size {
                         return Err("Received more data than declared size".to_string());
                     }
+                    hasher.update(&decoded);
+                    out_file.write_all(&decoded).await.map_err(|e| e.to_string())?;
                 }
                 Message::FileComplete { .. } => break,
                 Message::Error { message } => return Err(message),
@@ -471,52 +542,31 @@ pub async fn request_file(
             }
         }
 
-        (expected_size, expected_hash, file_data)
+        out_file.flush().await.map_err(|e| e.to_string())?;
+
+        // Verify hash
+        let actual_hash = hex::encode(hasher.finalize());
+        if actual_hash != expected_hash {
+            // Clean up temp file on hash mismatch
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            return Err(format!(
+                "Hash mismatch for {}: expected {}, got {}",
+                path, expected_hash, actual_hash
+            ));
+        }
+
+        expected_hash
     };
 
-    // Verify hash
-    let mut hasher = Sha256::new();
-    hasher.update(&file_data);
-    let actual_hash = hex::encode(hasher.finalize());
-    if actual_hash != expected_hash {
-        return Err(format!(
-            "Hash mismatch for {}: expected {}, got {}",
-            path, expected_hash, actual_hash
-        ));
-    }
-
-    // Validate path stays within base directory before writing
-    let dest_path = crate::utils::safe_join(dest_base, path)
-        .map_err(|e| format!("Path validation failed for {}: {}", path, e))?;
-
-    if let Some(parent) = dest_path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    // Atomic write: write to temp file then rename to prevent partial files on crash/disconnect
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let tmp_path = dest_path.with_extension(
-        format!(
-            "{}.{}.tmp",
-            dest_path.extension().and_then(|e| e.to_str()).unwrap_or(""),
-            unique,
-        ),
-    );
-    tokio::fs::write(&tmp_path, &file_data)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Rename temp file to final destination
     tokio::fs::rename(&tmp_path, &dest_path)
         .await
         .map_err(|e| {
-            // Clean up temp file on rename failure
             let tmp = tmp_path.clone();
             tokio::spawn(async move { let _ = tokio::fs::remove_file(tmp).await; });
             e.to_string()
         })?;
 
+    let _ = expected_hash; // suppress unused warning
     Ok(())
 }

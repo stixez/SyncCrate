@@ -104,6 +104,7 @@ pub fn run() {
             commands::sync::compute_sync_plan,
             commands::sync::execute_sync,
             commands::sync::resolve_conflict,
+            commands::sync::resolve_all_conflicts,
             commands::profiles::list_profiles,
             commands::profiles::save_profile,
             commands::profiles::load_profile,

@@ -18,6 +18,7 @@ export interface PeerInfo {
   port: number;
   mod_count: number;
   version: string;
+  pin_required: boolean;
 }
 
 export interface SessionInfo {
@@ -33,6 +34,7 @@ export interface SessionStatus {
   port: number;
   peers: PeerInfo[];
   is_syncing: boolean;
+  pin: string | null;
 }
 
 export interface SyncAction {

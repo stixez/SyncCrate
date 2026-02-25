@@ -28,6 +28,32 @@ One player hosts a session, others join. SimShare compares mod folders, surfaces
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" width="100%" alt="Dashboard">
+</p>
+<p align="center"><em>Dashboard — Session overview, sync plan, and connected peers</em></p>
+
+<details>
+<summary><strong>More screenshots</strong></summary>
+
+<br>
+
+| Mods & CC | Save Files |
+|:-:|:-:|
+| ![Mods & CC](docs/screenshots/mods-cc.png) | ![Save Files](docs/screenshots/saves.png) |
+| *Browse mods, resolve conflicts* | *Manage and sync save files* |
+
+| Profiles | Activity Log |
+|:-:|:-:|
+| ![Profiles](docs/screenshots/profiles.png) | ![Activity Log](docs/screenshots/activity-log.png) |
+| *Snapshot and share mod setups* | *Real-time session events* |
+
+</details>
+
+---
+
 ## Features
 
 | | Feature | Description |

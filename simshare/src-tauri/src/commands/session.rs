@@ -1,6 +1,7 @@
 use crate::network::discovery;
 use crate::state::{AppState, PeerInfo, SessionInfo, SessionStatus, SessionType};
 use crate::network::protocol::{self, Message};
+use rand::Rng;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
@@ -20,6 +21,7 @@ pub async fn start_host(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     name: String,
+    use_pin: Option<bool>,
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
 
@@ -41,19 +43,28 @@ pub async fn start_host(
     // Bind TCP listener first — surfaces port conflicts to user before committing state
     let listener = crate::network::transfer::bind_listener(port).await?;
 
+    // Optionally generate a 4-digit session PIN
+    let pin = if use_pin.unwrap_or(false) {
+        Some(format!("{:04}", rand::thread_rng().gen_range(1000..=9999)))
+    } else {
+        None
+    };
+
     // Commit session state now that we know the port is available
     {
         let mut app_state = state.lock().await;
         app_state.session_type = SessionType::Host;
         app_state.session_name = name.clone();
         app_state.local_display_name = name.clone();
+        app_state.session_pin = pin.clone();
     }
 
     // Start mDNS broadcast in background
     let app_handle = app.clone();
     let host_name = name.clone();
+    let pin_required = pin.is_some();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, app_handle).await {
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, app_handle).await {
             log::error!("mDNS broadcast error: {}", e);
         }
     });
@@ -103,6 +114,7 @@ pub async fn connect_to_peer(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     peer_id: String,
+    pin: Option<String>,
 ) -> Result<SessionInfo, String> {
     let mut app_state = state.lock().await;
 
@@ -122,6 +134,7 @@ pub async fn connect_to_peer(
 
     // Connect to host in background
     let app_handle = app.clone();
+    let connect_pin = pin;
     tokio::spawn(async move {
         if let Err(e) = crate::network::transfer::connect_to_host(
             &peer.ip,
@@ -129,6 +142,7 @@ pub async fn connect_to_peer(
             &connection_peer_id,
             state_clone.clone(),
             app_handle.clone(),
+            connect_pin,
         ).await {
             log::error!("Connection error: {}", e);
             // Reset session state on failure
@@ -174,6 +188,7 @@ pub async fn disconnect(
     app_state.session_type = SessionType::None;
     app_state.session_name.clear();
     app_state.local_display_name.clear();
+    app_state.session_pin = None;
     app_state.discovered_peers.clear();
 
     discovery::stop_broadcast().await;
@@ -223,6 +238,7 @@ pub async fn get_session_status(
         port: app_state.session_port,
         peers: app_state.peers(),
         is_syncing: app_state.is_any_syncing(),
+        pin: app_state.session_pin.clone(),
     })
 }
 

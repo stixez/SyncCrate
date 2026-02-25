@@ -16,10 +16,12 @@ pub async fn start_broadcast(
     name: String,
     port: u16,
     mod_count: usize,
+    pin_required: bool,
     _app: tauri::AppHandle,
 ) -> Result<(), String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
 
+    let pin_flag = if pin_required { "true" } else { "false" };
     let host_name = format!("simshare-{}.local.", Uuid::new_v4().to_string().split('-').next().unwrap_or("host"));
     let service = ServiceInfo::new(
         SERVICE_TYPE,
@@ -31,6 +33,7 @@ pub async fn start_broadcast(
             ("version", env!("CARGO_PKG_VERSION")),
             ("name", &name),
             ("mods", &mod_count.to_string()),
+            ("pin_required", pin_flag),
         ]
         .as_ref(),
     )
@@ -91,6 +94,12 @@ pub async fn scan_for_hosts(_app: tauri::AppHandle) -> Result<Vec<PeerInfo>, Str
 
                     let port = info.get_port();
 
+                    let pin_required = info
+                        .get_properties()
+                        .get("pin_required")
+                        .map(|v| v.val_str() == "true")
+                        .unwrap_or(false);
+
                     // Deduplicate by (ip, port) — mDNS can fire multiple
                     // ServiceResolved events for the same host (IPv4 + IPv6, etc.)
                     if !peers.iter().any(|p| p.ip == ip && p.port == port) {
@@ -101,6 +110,7 @@ pub async fn scan_for_hosts(_app: tauri::AppHandle) -> Result<Vec<PeerInfo>, Str
                             port,
                             mod_count,
                             version,
+                            pin_required,
                         });
                     }
                 }

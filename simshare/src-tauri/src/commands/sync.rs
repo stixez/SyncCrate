@@ -1,5 +1,5 @@
 use crate::network::transfer;
-use crate::state::{AppState, Resolution, SyncAction, SyncPlan};
+use crate::state::{AppState, FileInfo, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use std::sync::Arc;
 use tauri::Emitter;
@@ -249,6 +249,61 @@ pub async fn resolve_conflict(
                     plan.actions.push(SyncAction::ReceiveFromRemote(renamed));
                 }
             }
+        }
+    }
+
+    conn.sync_plan
+        .clone()
+        .ok_or_else(|| "No sync plan available".to_string())
+}
+
+#[tauri::command]
+pub async fn resolve_all_conflicts(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    strategy: String,
+    peer_id: Option<String>,
+) -> Result<SyncPlan, String> {
+    if strategy != "use_newest" {
+        return Err(format!("Unknown strategy: {}", strategy));
+    }
+
+    let mut app_state = state.lock().await;
+    let resolved_id = app_state.resolve_peer_id(peer_id)?;
+
+    let conn = app_state
+        .connections
+        .get_mut(&resolved_id)
+        .ok_or("Peer not found")?;
+
+    if conn.is_syncing {
+        return Err("Cannot resolve conflicts while sync is in progress".to_string());
+    }
+
+    let remote_manifest = conn.remote_manifest.clone();
+
+    if let Some(ref mut plan) = conn.sync_plan {
+        // Collect conflicts and determine resolutions
+        let mut to_receive: Vec<FileInfo> = Vec::new();
+        plan.actions.retain(|action| {
+            if let SyncAction::Conflict { local, remote } = action {
+                if remote.modified > local.modified {
+                    // Remote is newer — receive it
+                    to_receive.push(remote.clone());
+                }
+                // else local is newer — keep mine (just remove the conflict)
+                return false;
+            }
+            true
+        });
+
+        // Add receive actions for "use theirs" resolutions
+        for file_info in to_receive {
+            // Use remote manifest version if available (authoritative), fall back to conflict info
+            let receive = remote_manifest
+                .as_ref()
+                .and_then(|m| m.files.get(&file_info.relative_path).cloned())
+                .unwrap_or(file_info);
+            plan.actions.push(SyncAction::ReceiveFromRemote(receive));
         }
     }
 
