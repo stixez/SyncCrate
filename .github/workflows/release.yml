@@ -27,7 +27,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: tag,
               name: `SimShare ${tag}`,
-              body: `See the [changelog](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.\n\n## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` or \`.msi\` |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |`,
+              body: `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |`,
               draft: false,
               prerelease: false,
             });
