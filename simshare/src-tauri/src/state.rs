@@ -148,15 +148,6 @@ impl AppState {
         self.connections.values().any(|c| c.is_syncing)
     }
 
-    /// For a client: get the single host connection's peer_id, if any.
-    pub fn host_peer_id(&self) -> Option<String> {
-        if self.session_type == SessionType::Client {
-            self.connections.keys().next().cloned()
-        } else {
-            None
-        }
-    }
-
     /// Resolve an optional peer_id: if None and we're a client with one connection, auto-resolve.
     pub fn resolve_peer_id(&self, peer_id: Option<String>) -> Result<String, String> {
         match peer_id {

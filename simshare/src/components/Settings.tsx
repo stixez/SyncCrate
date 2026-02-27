@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, RefreshCw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { ask, message } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import * as cmd from "../lib/commands";
@@ -13,6 +16,7 @@ export default function Settings() {
   const [port, setPort] = useState("9847");
   const [version, setVersion] = useState("");
   const [pathInput, setPathInput] = useState(sims4Path || "");
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     cmd.getAppVersion().then(setVersion).catch(() => {});
@@ -118,12 +122,56 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-2">
+      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
         <h3 className="font-semibold text-sm">About</h3>
         <p className="text-sm text-txt-dim">SimShare v{version || "..."}</p>
         <p className="text-xs text-txt-dim">
           Free and open-source. Licensed under MIT.
         </p>
+        <button
+          onClick={async () => {
+            setUpdating(true);
+            try {
+              const update = await check();
+              if (update?.available) {
+                const yes = await ask(
+                  `Update to v${update.version} is available!\n\n${update.body ?? ""}`,
+                  {
+                    title: "Update Available",
+                    kind: "info",
+                    okLabel: "Update",
+                    cancelLabel: "Cancel",
+                  }
+                );
+                if (yes) {
+                  addLog(`Downloading update v${update.version}...`, "info");
+                  await update.downloadAndInstall();
+                  await relaunch();
+                }
+              } else {
+                await message("You're on the latest version!", {
+                  title: "No Update Available",
+                  kind: "info",
+                  okLabel: "OK",
+                });
+              }
+            } catch (e) {
+              addLog(`Update check failed: ${e}`, "error");
+              await message("Failed to check for updates.\nPlease try again later.", {
+                title: "Update Error",
+                kind: "error",
+                okLabel: "OK",
+              });
+            } finally {
+              setUpdating(false);
+            }
+          }}
+          disabled={updating}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg border border-border hover:bg-bg-card-hover text-sm transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={updating ? "animate-spin" : ""} />
+          {updating ? "Checking..." : "Check for Updates"}
+        </button>
       </div>
     </div>
   );
