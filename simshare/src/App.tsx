@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Toaster } from "sonner";
 import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import ModList from "./components/ModList";
@@ -21,6 +22,7 @@ import {
   demoLogs,
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
+import { toastSuccess, toastError } from "./lib/toast";
 import * as cmd from "./lib/commands";
 
 function App() {
@@ -55,10 +57,12 @@ function App() {
         const successCount = results.filter((r) => r.status === "Success").length;
         if (successCount > 0) {
           addLog(`Installed ${successCount} mod file(s)`, "success");
+          toastSuccess(`Installed ${successCount} mod file(s)`);
           cmd.scanFiles().then((m) => useAppStore.getState().setManifest(m)).catch(() => {});
         }
       } catch (e) {
         addLog(`Install failed: ${e}`, "error");
+        toastError("Install failed");
       }
     },
     [addLog],
@@ -118,6 +122,17 @@ function App() {
           onResolveDuplicate={handleResolveDuplicate}
         />
       )}
+      <Toaster
+        position="bottom-right"
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: "#121a22",
+            border: "1px solid #1e2d38",
+            color: "#e8ecf4",
+          },
+        }}
+      />
     </Layout>
   );
 }

@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Package, Tag, CheckSquare, X } from "lucide-react";
+import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import ModItem from "./ModItem";
 import ConflictResolver from "./ConflictResolver";
 import { useSync } from "../hooks/useSync";
+import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import type { ModCompatibility } from "../lib/types";
+
+type ModSortBy = "name" | "size" | "date" | "status";
 
 export default function ModList() {
   const manifest = useAppStore((s) => s.manifest);
@@ -13,10 +16,15 @@ export default function ModList() {
   const syncPlan = useAppStore((s) => s.syncPlan);
   const modTags = useAppStore((s) => s.modTags);
   const setModTags = useAppStore((s) => s.setModTags);
+  const isScanning = useAppStore((s) => s.isScanning);
   const { resolve } = useSync();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "mod" | "cc">("all");
-  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const search = useAppStore((s) => s.modSearch);
+  const setSearch = useAppStore((s) => s.setModSearch);
+  const filter = useAppStore((s) => s.modFilter);
+  const setFilter = useAppStore((s) => s.setModFilter);
+  const tagFilter = useAppStore((s) => s.modTagFilter);
+  const setTagFilter = useAppStore((s) => s.setModTagFilter);
+  const [sortBy, setSortBy] = useState<ModSortBy>("name");
   const [predefinedTags, setPredefinedTags] = useState<string[]>([]);
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -63,8 +71,11 @@ export default function ModList() {
       const updated = await cmd.getModTags();
       setModTags(updated);
       setBulkTagInput(false);
+      setSelected(new Set());
+      setBulkMode(false);
+      toastSuccess(`Tagged ${paths.length} mod(s) as "${tag}"`);
     } catch (e) {
-      console.error("Bulk tag failed:", e);
+      toastError(`Bulk tag failed: ${e}`);
     }
   };
 
@@ -125,14 +136,38 @@ export default function ModList() {
         const fileTags = modTags[f.relative_path] || [];
         return fileTags.includes(tagFilter);
       })
-      .sort((a, b) => a.relative_path.localeCompare(b.relative_path));
-  }, [manifest, search, filter, tagFilter, modTags]);
+      .sort((a, b) => {
+        switch (sortBy) {
+          case "size": return b.size - a.size;
+          case "date": return b.modified - a.modified;
+          case "status": {
+            const sa = getSyncStatus(a.relative_path);
+            const sb = getSyncStatus(b.relative_path);
+            return sa.localeCompare(sb);
+          }
+          default: return a.relative_path.localeCompare(b.relative_path);
+        }
+      });
+  }, [manifest, search, filter, tagFilter, modTags, sortBy, getSyncStatus]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Mods & Custom Content</h2>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-bg-card border border-border rounded-lg px-2.5 py-1">
+            <ArrowUpDown size={12} className="text-txt-dim" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as ModSortBy)}
+              className="bg-transparent text-xs text-txt-dim focus:outline-none cursor-pointer"
+            >
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+              <option value="date">Date</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
           <button
             onClick={() => {
               setBulkMode(!bulkMode);
@@ -206,6 +241,13 @@ export default function ModList() {
         </div>
       )}
 
+      {!bulkMode && !search && (
+        <p className="flex items-center gap-1.5 text-xs text-txt-dim">
+          <Upload size={12} />
+          Drop .package files here to install
+        </p>
+      )}
+
       {bulkMode && selected.size > 0 && (
         <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg p-2">
           <span className="text-xs font-medium text-accent-light">
@@ -255,7 +297,18 @@ export default function ModList() {
       )}
 
       <div className="space-y-1">
-        {mods.length === 0 ? (
+        {isScanning && mods.length === 0 ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-card">
+              <div className="w-8 h-8 rounded animate-pulse bg-bg-card-hover" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-1/3 rounded animate-pulse bg-bg-card-hover" />
+                <div className="h-2 w-1/5 rounded animate-pulse bg-bg-card-hover" />
+              </div>
+              <div className="h-5 w-16 rounded animate-pulse bg-bg-card-hover" />
+            </div>
+          ))
+        ) : mods.length === 0 ? (
           <div className="text-center py-12 text-txt-dim">
             <Package size={40} className="mx-auto mb-3 opacity-40" />
             <p>No mods found</p>

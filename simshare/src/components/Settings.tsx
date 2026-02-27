@@ -6,6 +6,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
+import { toastSuccess, toastError } from "../lib/toast";
 import type { SimsGame } from "../lib/types";
 import * as cmd from "../lib/commands";
 
@@ -53,9 +54,11 @@ export default function Settings() {
         await cmd.setGamePath(game, path);
         setGamePaths({ ...gamePaths, [game]: path });
         addLog(`${GAMES.find((g) => g.key === game)?.label} path updated to: ${path}`, "success");
+        toastSuccess(`${GAMES.find((g) => g.key === game)?.label} path saved`);
       }
     } catch (e) {
       addLog(`Failed to set path: ${e}`, "error");
+      toastError(`Failed to set path`);
     }
   };
 
@@ -66,8 +69,10 @@ export default function Settings() {
       await cmd.setGamePath(game, input);
       setGamePaths({ ...gamePaths, [game]: input });
       addLog(`${GAMES.find((g) => g.key === game)?.label} path updated to: ${input}`, "success");
+      toastSuccess(`${GAMES.find((g) => g.key === game)?.label} path saved`);
     } catch (e) {
       addLog(`Failed to set path: ${e}`, "error");
+      toastError(`Failed to set path`);
     }
   };
 
@@ -76,8 +81,10 @@ export default function Settings() {
       await cmd.setActiveGame(game);
       setActiveGame(game);
       addLog(`Active game set to ${GAMES.find((g) => g.key === game)?.label}`, "info");
+      toastSuccess(`Switched to ${GAMES.find((g) => g.key === game)?.label}`);
     } catch (e) {
       addLog(`Failed to set active game: ${e}`, "error");
+      toastError(`Failed to switch game`);
     }
   };
 
@@ -85,13 +92,16 @@ export default function Settings() {
     const p = parseInt(port, 10);
     if (isNaN(p) || p < 1024 || p > 65535) {
       addLog("Port must be between 1024 and 65535", "error");
+      toastError("Port must be between 1024 and 65535");
       return;
     }
     try {
       await cmd.setSessionPort(p);
       addLog(`Session port set to ${p}`, "success");
+      toastSuccess(`Port saved: ${p}`);
     } catch (e) {
       addLog(`Failed to set port: ${e}`, "error");
+      toastError(`Failed to set port`);
     }
   };
 
@@ -126,6 +136,8 @@ export default function Settings() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <h2 className="text-xl font-bold">Settings</h2>
+
+      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Game Configuration</p>
 
       <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <h3 className="font-semibold text-sm">Active Game</h3>
@@ -194,6 +206,8 @@ export default function Settings() {
         </div>
       ))}
 
+      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Network & Sync</p>
+
       <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <h3 className="font-semibold text-sm">Network</h3>
         <p className="text-xs text-txt-dim">
@@ -259,6 +273,8 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Application</p>
 
       <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
         <h3 className="font-semibold text-sm">About</h3>

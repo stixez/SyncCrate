@@ -6,6 +6,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { formatBytes } from "../lib/utils";
+import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
@@ -76,8 +77,11 @@ export default function Dashboard() {
     try {
       const info = await cmd.detectPacks();
       setGameInfo(info);
+      const packCount = info?.installed_packs?.length ?? 0;
+      toastSuccess(`Detected ${packCount} pack(s)`);
     } catch (e) {
       addLog(`Pack detection failed: ${e}`, "error");
+      toastError(`Pack detection failed`);
     } finally {
       setDetectingPacks(false);
     }
@@ -123,8 +127,11 @@ export default function Dashboard() {
     try {
       const m = await cmd.scanFiles();
       setManifest(m);
+      const count = Object.keys(m.files).length;
+      toastSuccess(`Scan complete — ${count} file(s) found`);
     } catch (e) {
       addLog(`Scan failed: ${e}`, "error");
+      toastError(`Scan failed: ${e}`);
     } finally {
       setIsScanning(false);
     }

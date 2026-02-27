@@ -64,6 +64,13 @@ interface AppState {
 
   modCompatibility: ModCompatibility[];
   setModCompatibility: (compat: ModCompatibility[]) => void;
+
+  modSearch: string;
+  setModSearch: (search: string) => void;
+  modFilter: "all" | "mod" | "cc";
+  setModFilter: (filter: "all" | "mod" | "cc") => void;
+  modTagFilter: string | null;
+  setModTagFilter: (tag: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -117,4 +124,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   modCompatibility: [],
   setModCompatibility: (compat) => set({ modCompatibility: compat }),
+
+  modSearch: "",
+  setModSearch: (search) => set({ modSearch: search }),
+  modFilter: "all",
+  setModFilter: (filter) => set({ modFilter: filter }),
+  modTagFilter: null,
+  setModTagFilter: (tag) => set({ modTagFilter: tag }),
 }));

@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Sparkles } from "lucide-react";
 import type { FileInfo, Resolution } from "../lib/types";
 import { formatBytes, formatDate } from "../lib/utils";
 
@@ -66,10 +66,11 @@ export default function ConflictResolver({ localFile, remoteFile, onResolve }: C
         </button>
         <button
           onClick={() => onResolve(localNewer ? "KeepMine" : "UseTheirs")}
-          className="flex-1 bg-bg-card-hover hover:bg-bg-card-active text-txt-dim rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+          className="flex-1 bg-status-green/20 hover:bg-status-green/30 text-status-green rounded-lg px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1"
           title="Automatically keep whichever version was modified more recently"
         >
-          Use Newest
+          <Sparkles size={10} />
+          Use Newest (Recommended)
         </button>
       </div>
     </div>
