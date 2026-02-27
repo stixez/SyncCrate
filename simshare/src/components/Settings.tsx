@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FolderOpen, RefreshCw } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -11,12 +11,15 @@ import * as cmd from "../lib/commands";
 export default function Settings() {
   const sims4Path = useAppStore((s) => s.sims4Path);
   const setSims4Path = useAppStore((s) => s.setSims4Path);
+  const excludePatterns = useAppStore((s) => s.excludePatterns);
+  const setExcludePatterns = useAppStore((s) => s.setExcludePatterns);
   const addLog = useLogStore((s) => s.addLog);
 
   const [port, setPort] = useState("9847");
   const [version, setVersion] = useState("");
   const [pathInput, setPathInput] = useState(sims4Path || "");
   const [updating, setUpdating] = useState(false);
+  const [newPattern, setNewPattern] = useState("");
 
   useEffect(() => {
     cmd.getAppVersion().then(setVersion).catch(() => {});
@@ -24,7 +27,8 @@ export default function Settings() {
       setSims4Path(p);
       setPathInput(p);
     }).catch(() => {});
-  }, [setSims4Path]);
+    cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
+  }, [setSims4Path, setExcludePatterns]);
 
   const handleBrowse = async () => {
     try {
@@ -63,6 +67,34 @@ export default function Settings() {
       addLog(`Session port set to ${p}`, "success");
     } catch (e) {
       addLog(`Failed to set port: ${e}`, "error");
+    }
+  };
+
+  const handleAddPattern = async () => {
+    const trimmed = newPattern.trim();
+    if (!trimmed || excludePatterns.includes(trimmed)) {
+      setNewPattern("");
+      return;
+    }
+    const updated = [...excludePatterns, trimmed];
+    try {
+      await cmd.setExcludePatterns(updated);
+      setExcludePatterns(updated);
+      setNewPattern("");
+      addLog(`Added sync exclusion: ${trimmed}`, "info");
+    } catch (e) {
+      addLog(`Failed to add pattern: ${e}`, "error");
+    }
+  };
+
+  const handleRemovePattern = async (pattern: string) => {
+    const updated = excludePatterns.filter((p) => p !== pattern);
+    try {
+      await cmd.setExcludePatterns(updated);
+      setExcludePatterns(updated);
+      addLog(`Removed sync exclusion: ${pattern}`, "info");
+    } catch (e) {
+      addLog(`Failed to remove pattern: ${e}`, "error");
     }
   };
 
@@ -118,6 +150,49 @@ export default function Settings() {
             className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             Save Port
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-sm">Sync Exclusions</h3>
+        <p className="text-xs text-txt-dim">
+          Patterns for files to exclude from sync by default. Use <code className="bg-bg px-1 rounded">*.ext</code> for extensions, <code className="bg-bg px-1 rounded">folder/*</code> for directories.
+        </p>
+        <div className="space-y-1.5">
+          {excludePatterns.map((pattern) => (
+            <div
+              key={pattern}
+              className="flex items-center gap-2 bg-bg rounded-lg px-3 py-1.5"
+            >
+              <code className="text-xs flex-1 text-txt-dim">{pattern}</code>
+              <button
+                onClick={() => handleRemovePattern(pattern)}
+                className="text-txt-dim hover:text-status-red transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newPattern}
+            onChange={(e) => setNewPattern(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAddPattern();
+            }}
+            maxLength={256}
+            placeholder="e.g. *.ts4script or Saves/*"
+            className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          />
+          <button
+            onClick={handleAddPattern}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm transition-colors"
+          >
+            <Plus size={14} />
+            Add
           </button>
         </div>
       </div>

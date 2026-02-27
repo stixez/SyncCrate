@@ -1,12 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BackupInfo,
   FileManifest,
+  InstallResult,
   ModProfile,
   PeerInfo,
   ProfileComparison,
   Resolution,
   SessionInfo,
   SessionStatus,
+  SimsGame,
   SyncPlan,
 } from "./types";
 
@@ -106,4 +109,76 @@ export async function getAppVersion(): Promise<string> {
 
 export async function setSessionPort(port: number): Promise<void> {
   return invoke("set_session_port", { port });
+}
+
+// Tags
+export async function getPredefinedTags(): Promise<string[]> {
+  return invoke("get_predefined_tags");
+}
+
+export async function getModTags(): Promise<Record<string, string[]>> {
+  return invoke("get_mod_tags");
+}
+
+export async function setModTags(path: string, tags: string[]): Promise<void> {
+  return invoke("set_mod_tags", { path, tags });
+}
+
+export async function bulkSetTags(paths: string[], tags: string[]): Promise<void> {
+  return invoke("bulk_set_tags", { paths, tags });
+}
+
+// Install
+export async function installModFiles(filePaths: string[]): Promise<InstallResult[]> {
+  return invoke("install_mod_files", { filePaths });
+}
+
+export async function confirmInstallDuplicate(
+  source: string,
+  strategy: "overwrite" | "rename",
+): Promise<InstallResult> {
+  return invoke("confirm_install_duplicate", { source, strategy });
+}
+
+// Backup
+export async function createBackup(label: string): Promise<BackupInfo> {
+  return invoke("create_backup", { label });
+}
+
+export async function listBackups(): Promise<BackupInfo[]> {
+  return invoke("list_backups");
+}
+
+export async function restoreBackup(id: string): Promise<void> {
+  return invoke("restore_backup", { id });
+}
+
+export async function deleteBackup(id: string): Promise<void> {
+  return invoke("delete_backup", { id });
+}
+
+// Profile (updated)
+export async function saveProfileWithGame(
+  name: string,
+  desc: string,
+  icon: string,
+  game: SimsGame,
+): Promise<ModProfile> {
+  return invoke("save_profile", { name, desc, icon, game });
+}
+
+// Selective Sync
+export async function updateSyncSelection(
+  peerId: string,
+  excludedPaths: string[],
+): Promise<SyncPlan> {
+  return invoke("update_sync_selection", { peerId, excludedPaths });
+}
+
+export async function setExcludePatterns(patterns: string[]): Promise<void> {
+  return invoke("set_exclude_patterns", { patterns });
+}
+
+export async function getExcludePatterns(): Promise<string[]> {
+  return invoke("get_exclude_patterns");
 }

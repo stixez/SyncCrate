@@ -115,6 +115,19 @@ pub fn run() {
             commands::profiles::delete_profile,
             commands::session::get_app_version,
             commands::session::set_session_port,
+            commands::tags::get_predefined_tags,
+            commands::tags::get_mod_tags,
+            commands::tags::set_mod_tags,
+            commands::tags::bulk_set_tags,
+            commands::install::install_mod_files,
+            commands::install::confirm_install_duplicate,
+            commands::backup::create_backup,
+            commands::backup::list_backups,
+            commands::backup::restore_backup,
+            commands::backup::delete_backup,
+            commands::sync::update_sync_selection,
+            commands::sync::set_exclude_patterns,
+            commands::sync::get_exclude_patterns,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

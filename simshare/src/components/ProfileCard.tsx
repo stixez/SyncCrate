@@ -22,7 +22,18 @@ export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDel
             <p className="text-xs text-txt-dim">{profile.author}</p>
           </div>
         </div>
-        <span className="text-xs text-txt-dim">{formatDateShort(profile.created_at)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+            profile.game === "Sims2"
+              ? "bg-blue-500/20 text-blue-400"
+              : profile.game === "Sims3"
+              ? "bg-emerald-500/20 text-emerald-400"
+              : "bg-accent/20 text-accent-light"
+          }`}>
+            {profile.game === "Sims2" ? "Sims 2" : profile.game === "Sims3" ? "Sims 3" : "Sims 4"}
+          </span>
+          <span className="text-xs text-txt-dim">{formatDateShort(profile.created_at)}</span>
+        </div>
       </div>
       {profile.description && (
         <p className="text-xs text-txt-dim mb-3 line-clamp-2">{profile.description}</p>

@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Upload } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import ProfileCard from "./ProfileCard";
 import * as cmd from "../lib/commands";
-import type { ProfileComparison } from "../lib/types";
+import type { ProfileComparison, SimsGame } from "../lib/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 export default function ProfileList() {
@@ -14,6 +14,8 @@ export default function ProfileList() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  const [game, setGame] = useState<SimsGame>("Sims4");
+  const [gameFilter, setGameFilter] = useState<SimsGame | "all">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [comparison, setComparison] = useState<ProfileComparison | null>(null);
 
@@ -21,10 +23,15 @@ export default function ProfileList() {
     cmd.listProfiles().then(setProfiles).catch(console.error);
   }, [setProfiles]);
 
+  const filteredProfiles = useMemo(() => {
+    if (gameFilter === "all") return profiles;
+    return profiles.filter((p) => p.game === gameFilter);
+  }, [profiles, gameFilter]);
+
   const handleCreate = async () => {
     if (!name.trim()) return;
     try {
-      await cmd.saveProfile(name, desc, "\uD83D\uDCE6");
+      await cmd.saveProfileWithGame(name, desc, "\uD83D\uDCE6", game);
       const updated = await cmd.listProfiles();
       setProfiles(updated);
       setName("");
@@ -111,6 +118,20 @@ export default function ProfileList() {
         </div>
       </div>
 
+      <div className="flex rounded-lg border border-border overflow-hidden w-fit">
+        {(["all", "Sims2", "Sims3", "Sims4"] as const).map((g) => (
+          <button
+            key={g}
+            onClick={() => setGameFilter(g)}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              gameFilter === g ? "bg-accent text-white" : "bg-bg-card text-txt-dim hover:bg-bg-card-hover"
+            }`}
+          >
+            {g === "all" ? "All" : g === "Sims2" ? "Sims 2" : g === "Sims3" ? "Sims 3" : "Sims 4"}
+          </button>
+        ))}
+      </div>
+
       {comparison && (
         <div className="bg-bg-card rounded-xl border border-accent/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -164,7 +185,7 @@ export default function ProfileList() {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {profiles.map((profile) => (
+        {filteredProfiles.map((profile) => (
           <ProfileCard
             key={profile.id}
             profile={profile}
@@ -194,6 +215,18 @@ export default function ProfileList() {
               rows={2}
               className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
             />
+            <div>
+              <label className="text-xs text-txt-dim mb-1 block">Game</label>
+              <select
+                value={game}
+                onChange={(e) => setGame(e.target.value as SimsGame)}
+                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              >
+                <option value="Sims4">Sims 4</option>
+                <option value="Sims3">Sims 3</option>
+                <option value="Sims2">Sims 2</option>
+              </select>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleCreate}

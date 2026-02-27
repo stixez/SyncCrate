@@ -47,6 +47,7 @@ export interface SyncAction {
 export interface SyncPlan {
   actions: SyncAction[];
   total_bytes: number;
+  excluded: string[];
 }
 
 export type Resolution = "KeepMine" | "UseTheirs" | "KeepBoth";
@@ -59,6 +60,7 @@ export interface ModProfile {
   author: string;
   created_at: number;
   mods: ProfileMod[];
+  game: SimsGame;
 }
 
 export interface ProfileMod {
@@ -92,4 +94,23 @@ export interface ProfileComparison {
   extra: string[];
 }
 
-export type Page = "dashboard" | "mods" | "saves" | "profiles" | "activity" | "settings";
+export type Page = "dashboard" | "mods" | "saves" | "profiles" | "backups" | "activity" | "settings";
+
+export type SimsGame = "Sims2" | "Sims3" | "Sims4";
+
+export interface BackupInfo {
+  id: string;
+  created_at: number;
+  label: string;
+  file_count: number;
+  total_size: number;
+  mods_count: number;
+  saves_count: number;
+}
+
+export interface InstallResult {
+  source: string;
+  destination: string;
+  status: "Success" | "Duplicate" | "InvalidExtension" | "Failed";
+  message?: string;
+}

@@ -224,6 +224,7 @@ export const demoSyncPlan: SyncPlan = {
     },
   ],
   total_bytes: 61_248_256,
+  excluded: [],
 };
 
 // --- Discovered Peers (for join view) ---
@@ -259,6 +260,7 @@ export const demoProfiles: ModProfile[] = [
     icon: "gamepad",
     author: "SimSquad",
     created_at: now - 30 * day,
+    game: "Sims4" as const,
     mods: [
       { relative_path: "Mods/MC Command Center/mc_cmd_center.ts4script", hash: "a1b2c3d4", size: 4_821_504, name: "MC Command Center" },
       { relative_path: "Mods/UIExtensions/ui_cheats.ts4script", hash: "d4e5f6a1", size: 512_000, name: "UI Cheats Extension" },
@@ -272,6 +274,7 @@ export const demoProfiles: ModProfile[] = [
     icon: "sparkles",
     author: "SimSquad",
     created_at: now - 14 * day,
+    game: "Sims4" as const,
     mods: [
       { relative_path: "Mods/CC_Hair/aladdin_braids.package", hash: "1a2b3c4d", size: 2_457_600, name: "Aladdin Braids" },
       { relative_path: "Mods/CC_Hair/curly_updo.package", hash: "2b3c4d5e", size: 1_843_200, name: "Curly Updo" },

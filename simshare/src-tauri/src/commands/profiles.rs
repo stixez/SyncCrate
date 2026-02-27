@@ -1,11 +1,11 @@
-use crate::state::{AppState, FileType, ModProfile, ProfileComparison, ProfileMod};
+use crate::state::{AppState, FileType, ModProfile, ProfileComparison, ProfileMod, SimsGame};
 use crate::utils::{self, sanitize_id};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[tauri::command]
-pub async fn list_profiles() -> Result<Vec<ModProfile>, String> {
+pub async fn list_profiles(game: Option<String>) -> Result<Vec<ModProfile>, String> {
     let dir = utils::profiles_dir();
     let mut profiles = Vec::new();
 
@@ -22,6 +22,17 @@ pub async fn list_profiles() -> Result<Vec<ModProfile>, String> {
         }
     }
 
+    // Filter by game if specified
+    if let Some(ref game_filter) = game {
+        let target: SimsGame = match game_filter.as_str() {
+            "Sims2" => SimsGame::Sims2,
+            "Sims3" => SimsGame::Sims3,
+            "Sims4" => SimsGame::Sims4,
+            _ => return Err(format!("Unknown game: {}", game_filter)),
+        };
+        profiles.retain(|p| p.game == target);
+    }
+
     profiles.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(profiles)
 }
@@ -32,6 +43,7 @@ pub async fn save_profile(
     name: String,
     desc: String,
     icon: String,
+    game: Option<SimsGame>,
 ) -> Result<ModProfile, String> {
     if name.trim().is_empty() || name.len() > 128 {
         return Err("Profile name must be 1-128 characters".to_string());
@@ -71,6 +83,7 @@ pub async fn save_profile(
         },
         created_at: utils::timestamp_now(),
         mods,
+        game: game.unwrap_or_default(),
     };
 
     let dir = utils::profiles_dir();

@@ -35,5 +35,6 @@ pub fn compute_diff(local: &FileManifest, remote: &FileManifest) -> SyncPlan {
     SyncPlan {
         actions,
         total_bytes,
+        excluded: Vec::new(),
     }
 }

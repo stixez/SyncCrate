@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Package, Save, FolderOpen, Activity, Settings, Wifi, WifiOff } from "lucide-react";
+import { LayoutDashboard, Package, Save, FolderOpen, Archive, Activity, Settings, Wifi, WifiOff } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
@@ -9,6 +9,7 @@ const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = 
   { page: "mods", label: "Mods & CC", icon: Package },
   { page: "saves", label: "Saves", icon: Save },
   { page: "profiles", label: "Profiles", icon: FolderOpen },
+  { page: "backups", label: "Backups", icon: Archive },
   { page: "activity", label: "Activity Log", icon: Activity },
   { page: "settings", label: "Settings", icon: Settings },
 ];

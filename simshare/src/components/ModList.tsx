@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Package } from "lucide-react";
+import { Search, Package, Tag, CheckSquare, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import ModItem from "./ModItem";
 import ConflictResolver from "./ConflictResolver";
@@ -10,15 +10,56 @@ export default function ModList() {
   const manifest = useAppStore((s) => s.manifest);
   const setManifest = useAppStore((s) => s.setManifest);
   const syncPlan = useAppStore((s) => s.syncPlan);
+  const modTags = useAppStore((s) => s.modTags);
+  const setModTags = useAppStore((s) => s.setModTags);
   const { resolve } = useSync();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "mod" | "cc">("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [predefinedTags, setPredefinedTags] = useState<string[]>([]);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTagInput, setBulkTagInput] = useState(false);
 
   useEffect(() => {
     if (!manifest) {
       cmd.scanFiles().then(setManifest).catch(console.error);
     }
   }, [manifest, setManifest]);
+
+  useEffect(() => {
+    cmd.getModTags().then(setModTags).catch(console.error);
+    cmd.getPredefinedTags().then(setPredefinedTags).catch(() => {});
+  }, [setModTags]);
+
+  const handleTagsChanged = useCallback(
+    (path: string, tags: string[]) => {
+      setModTags({ ...modTags, [path]: tags });
+    },
+    [modTags, setModTags],
+  );
+
+  const handleSelect = useCallback((path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const handleBulkTag = async (tag: string) => {
+    const paths = Array.from(selected);
+    if (paths.length === 0) return;
+    try {
+      await cmd.bulkSetTags(paths, [tag]);
+      const updated = await cmd.getModTags();
+      setModTags(updated);
+      setBulkTagInput(false);
+    } catch (e) {
+      console.error("Bulk tag failed:", e);
+    }
+  };
 
   const getSyncStatus = useCallback(
     (path: string): "synced" | "pending" | "conflict" | "local" => {
@@ -46,6 +87,12 @@ export default function ModList() {
       );
   }, [syncPlan]);
 
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    Object.values(modTags).forEach((arr) => arr.forEach((t) => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [modTags]);
+
   const mods = useMemo(() => {
     if (!manifest) return [];
     return Object.values(manifest.files)
@@ -58,14 +105,35 @@ export default function ModList() {
       .filter((f) =>
         f.relative_path.toLowerCase().includes(search.toLowerCase()),
       )
+      .filter((f) => {
+        if (!tagFilter) return true;
+        const fileTags = modTags[f.relative_path] || [];
+        return fileTags.includes(tagFilter);
+      })
       .sort((a, b) => a.relative_path.localeCompare(b.relative_path));
-  }, [manifest, search, filter]);
+  }, [manifest, search, filter, tagFilter, modTags]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Mods & Custom Content</h2>
-        <span className="text-txt-dim text-sm">{mods.length} items</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setBulkMode(!bulkMode);
+              setSelected(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              bulkMode
+                ? "bg-accent text-white"
+                : "bg-bg-card border border-border text-txt-dim hover:bg-bg-card-hover"
+            }`}
+          >
+            <CheckSquare size={12} />
+            {bulkMode ? "Cancel" : "Bulk Select"}
+          </button>
+          <span className="text-txt-dim text-sm">{mods.length} items</span>
+        </div>
       </div>
 
       <div className="flex gap-3">
@@ -94,6 +162,70 @@ export default function ModList() {
         </div>
       </div>
 
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <Tag size={14} className="text-txt-dim shrink-0" />
+          <button
+            onClick={() => setTagFilter(null)}
+            className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              tagFilter === null
+                ? "bg-accent text-white"
+                : "bg-bg-card border border-border text-txt-dim hover:border-accent/50"
+            }`}
+          >
+            All Tags
+          </button>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+              className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                tagFilter === tag
+                  ? "bg-accent text-white"
+                  : "bg-bg-card border border-border text-txt-dim hover:border-accent/50"
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {bulkMode && selected.size > 0 && (
+        <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg p-2">
+          <span className="text-xs font-medium text-accent-light">
+            {selected.size} selected
+          </span>
+          {!bulkTagInput ? (
+            <button
+              onClick={() => setBulkTagInput(true)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-accent text-white text-xs font-medium"
+            >
+              <Tag size={10} />
+              Tag Selected
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              {predefinedTags.slice(0, 6).map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => handleBulkTag(tag)}
+                  className="px-2 py-0.5 rounded-full bg-bg-card border border-border text-xs text-txt-dim hover:border-accent/50"
+                >
+                  {tag}
+                </button>
+              ))}
+              <button
+                onClick={() => setBulkTagInput(false)}
+                className="text-txt-dim hover:text-txt"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {conflicts.length > 0 && (
         <div className="space-y-3">
           {conflicts.map((c) => (
@@ -120,6 +252,11 @@ export default function ModList() {
               key={mod.relative_path}
               file={mod}
               syncStatus={getSyncStatus(mod.relative_path)}
+              tags={modTags[mod.relative_path] || []}
+              onTagsChanged={handleTagsChanged}
+              bulkMode={bulkMode}
+              selected={selected.has(mod.relative_path)}
+              onSelect={handleSelect}
             />
           ))
         )}

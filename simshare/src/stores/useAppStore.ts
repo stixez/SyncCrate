@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  BackupInfo,
   FileManifest,
   ModProfile,
   Page,
@@ -39,6 +40,18 @@ interface AppState {
 
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
+
+  modTags: Record<string, string[]>;
+  setModTags: (tags: Record<string, string[]>) => void;
+
+  isDragging: boolean;
+  setIsDragging: (dragging: boolean) => void;
+
+  backups: BackupInfo[];
+  setBackups: (backups: BackupInfo[]) => void;
+
+  excludePatterns: string[];
+  setExcludePatterns: (patterns: string[]) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -71,4 +84,16 @@ export const useAppStore = create<AppState>((set) => ({
 
   isScanning: false,
   setIsScanning: (scanning) => set({ isScanning: scanning }),
+
+  modTags: {},
+  setModTags: (tags) => set({ modTags: tags }),
+
+  isDragging: false,
+  setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+  backups: [],
+  setBackups: (backups) => set({ backups }),
+
+  excludePatterns: [],
+  setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),
 }));

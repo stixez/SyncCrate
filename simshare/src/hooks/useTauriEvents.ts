@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import * as cmd from "../lib/commands";
@@ -23,6 +24,7 @@ export function useTauriEvents() {
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
   const setSession = useAppStore((s) => s.setSession);
   const setManifest = useAppStore((s) => s.setManifest);
+  const setIsDragging = useAppStore((s) => s.setIsDragging);
   const addLog = useLogStore((s) => s.addLog);
 
   const notifRequested = useRef(false);
@@ -39,6 +41,8 @@ export function useTauriEvents() {
     const unlisteners: UnlistenFn[] = [];
 
     async function setup() {
+      const appWindow = getCurrentWebviewWindow();
+
       const listeners: Promise<UnlistenFn>[] = [
         listen<{ paths: string[]; kind: string }>("files-changed", async (event) => {
           addLog(`Files changed: ${event.payload.kind}`, "info");
@@ -52,7 +56,6 @@ export function useTauriEvents() {
         listen<{ name: string }>("peer-connected", async (event) => {
           addLog(`Peer connected: ${event.payload.name}`, "success");
           sendNotification("SimShare", `${event.payload.name} connected`);
-          // Refresh session status to update peer list
           try {
             const status = await cmd.getSessionStatus();
             setSession(status);
@@ -62,7 +65,6 @@ export function useTauriEvents() {
         }),
         listen<{ name: string }>("peer-disconnected", async (event) => {
           addLog(`Peer disconnected: ${event.payload.name}`, "warning");
-          // Refresh session status to update peer list
           try {
             const status = await cmd.getSessionStatus();
             setSession(status);
@@ -101,13 +103,38 @@ export function useTauriEvents() {
         listen<{ message: string }>("sync-error", (event) => {
           addLog(`Sync error: ${event.payload.message}`, "error");
         }),
+        // Backup events
+        listen<{ file: string; files_done: number; files_total: number }>("backup-progress", (event) => {
+          const { files_done, files_total } = event.payload;
+          addLog(`Backup progress: ${files_done}/${files_total}`, "info");
+        }),
+        listen<{ file: string; files_done: number; files_total: number }>("restore-progress", (event) => {
+          const { files_done, files_total } = event.payload;
+          addLog(`Restore progress: ${files_done}/${files_total}`, "info");
+        }),
+        // Drag & Drop events
+        appWindow.onDragDropEvent((event) => {
+          const type = event.payload.type;
+          if (type === "enter" || type === "over") {
+            setIsDragging(true);
+          } else if (type === "drop") {
+            setIsDragging(false);
+            const payload = event.payload as { type: string; paths?: string[] };
+            if (payload.paths && Array.isArray(payload.paths)) {
+              window.dispatchEvent(
+                new CustomEvent("simshare-drop", { detail: payload.paths }),
+              );
+            }
+          } else if (type === "leave") {
+            setIsDragging(false);
+          }
+        }),
       ];
 
       const results = await Promise.all(listeners);
       if (!cancelled) {
         unlisteners.push(...results);
       } else {
-        // Component unmounted before setup finished — clean up immediately
         results.forEach((fn) => fn());
       }
     }
@@ -118,5 +145,5 @@ export function useTauriEvents() {
       cancelled = true;
       unlisteners.forEach((fn) => fn());
     };
-  }, [setSyncProgress, setSyncPlan, setSession, setManifest, addLog]);
+  }, [setSyncProgress, setSyncPlan, setSession, setManifest, setIsDragging, addLog]);
 }

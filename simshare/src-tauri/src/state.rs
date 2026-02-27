@@ -78,6 +78,21 @@ pub enum SyncAction {
 pub struct SyncPlan {
     pub actions: Vec<SyncAction>,
     pub total_bytes: u64,
+    #[serde(default)]
+    pub excluded: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SimsGame {
+    Sims2,
+    Sims3,
+    Sims4,
+}
+
+impl Default for SimsGame {
+    fn default() -> Self {
+        SimsGame::Sims4
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -96,6 +111,8 @@ pub struct ModProfile {
     pub author: String,
     pub created_at: u64,
     pub mods: Vec<ProfileMod>,
+    #[serde(default)]
+    pub game: SimsGame,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

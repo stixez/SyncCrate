@@ -123,6 +123,27 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
     }
 }
 
+pub fn metadata_path() -> PathBuf {
+    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = config.join("simshare");
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("mod_metadata.json")
+}
+
+pub fn backups_dir() -> PathBuf {
+    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = config.join("simshare").join("backups");
+    std::fs::create_dir_all(&dir).ok();
+    dir
+}
+
+pub fn sync_config_path() -> PathBuf {
+    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = config.join("simshare");
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("sync_config.json")
+}
+
 /// Validate a profile ID contains no path separators or traversal
 pub fn sanitize_id(id: &str) -> Result<(), String> {
     if id.is_empty() {
