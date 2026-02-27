@@ -17,11 +17,13 @@ pub async fn start_broadcast(
     port: u16,
     mod_count: usize,
     pin_required: bool,
+    game_version: Option<String>,
     _app: tauri::AppHandle,
 ) -> Result<(), String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
 
     let pin_flag = if pin_required { "true" } else { "false" };
+    let gv = game_version.unwrap_or_default();
     let host_name = format!("simshare-{}.local.", Uuid::new_v4().to_string().split('-').next().unwrap_or("host"));
     let service = ServiceInfo::new(
         SERVICE_TYPE,
@@ -34,6 +36,7 @@ pub async fn start_broadcast(
             ("name", &name),
             ("mods", &mod_count.to_string()),
             ("pin_required", pin_flag),
+            ("game_version", &gv),
         ]
         .as_ref(),
     )
@@ -100,6 +103,17 @@ pub async fn scan_for_hosts(_app: tauri::AppHandle) -> Result<Vec<PeerInfo>, Str
                         .map(|v| v.val_str() == "true")
                         .unwrap_or(false);
 
+                    let game_version = info
+                        .get_properties()
+                        .get("game_version")
+                        .map(|v| v.val_str().to_string())
+                        .filter(|v| !v.is_empty());
+
+                    let game_info = game_version.map(|gv| crate::state::GameInfo {
+                        game_version: Some(gv),
+                        installed_packs: Vec::new(),
+                    });
+
                     // Deduplicate by (ip, port) — mDNS can fire multiple
                     // ServiceResolved events for the same host (IPv4 + IPv6, etc.)
                     if !peers.iter().any(|p| p.ip == ip && p.port == port) {
@@ -111,6 +125,7 @@ pub async fn scan_for_hosts(_app: tauri::AppHandle) -> Result<Vec<PeerInfo>, Str
                             mod_count,
                             version,
                             pin_required,
+                            game_info,
                         });
                     }
                 }

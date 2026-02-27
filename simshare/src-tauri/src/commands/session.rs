@@ -27,7 +27,7 @@ pub async fn start_host(
     let name = sanitize_name(&name)?;
 
     // Validate and read state, then drop lock before async bind
-    let (port, mod_count) = {
+    let (port, mod_count, game_version) = {
         let app_state = state.lock().await;
 
         if app_state.session_type != SessionType::None {
@@ -41,7 +41,12 @@ pub async fn start_host(
             ));
         }
 
-        (app_state.session_port, app_state.local_manifest.files.len())
+        let gv = app_state
+            .game_info
+            .get(&app_state.active_game)
+            .and_then(|gi| gi.game_version.clone());
+
+        (app_state.session_port, app_state.local_manifest.files.len(), gv)
     };
 
     // Bind TCP listener first — surfaces port conflicts to user before committing state
@@ -69,7 +74,7 @@ pub async fn start_host(
     let host_name = name.clone();
     let pin_required = pin.is_some();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, app_handle).await {
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, app_handle).await {
             log::error!("mDNS broadcast error: {}", e);
         }
     });

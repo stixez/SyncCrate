@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type {
   BackupInfo,
   FileManifest,
+  GameInfo,
+  ModCompatibility,
   ModProfile,
   Page,
   PeerInfo,
@@ -56,6 +58,12 @@ interface AppState {
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
+
+  gameInfo: GameInfo | null;
+  setGameInfo: (info: GameInfo | null) => void;
+
+  modCompatibility: ModCompatibility[];
+  setModCompatibility: (compat: ModCompatibility[]) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -103,4 +111,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),
+
+  gameInfo: null,
+  setGameInfo: (info) => set({ gameInfo: info }),
+
+  modCompatibility: [],
+  setModCompatibility: (compat) => set({ modCompatibility: compat }),
 }));

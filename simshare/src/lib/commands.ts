@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BackupInfo,
   FileManifest,
+  GameInfo,
   InstallResult,
+  ModCompatibility,
   ModProfile,
   PeerInfo,
   ProfileComparison,
@@ -195,4 +197,17 @@ export async function setExcludePatterns(patterns: string[]): Promise<void> {
 
 export async function getExcludePatterns(): Promise<string[]> {
   return invoke("get_exclude_patterns");
+}
+
+// Packs
+export async function detectPacks(game?: SimsGame): Promise<GameInfo> {
+  return invoke("detect_packs", { game: game ?? null });
+}
+
+export async function getGameInfo(game?: SimsGame): Promise<GameInfo> {
+  return invoke("get_game_info", { game: game ?? null });
+}
+
+export async function checkCompatibility(game?: SimsGame): Promise<ModCompatibility[]> {
+  return invoke("check_compatibility", { game: game ?? null });
 }

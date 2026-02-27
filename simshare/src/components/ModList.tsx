@@ -5,6 +5,7 @@ import ModItem from "./ModItem";
 import ConflictResolver from "./ConflictResolver";
 import { useSync } from "../hooks/useSync";
 import * as cmd from "../lib/commands";
+import type { ModCompatibility } from "../lib/types";
 
 export default function ModList() {
   const manifest = useAppStore((s) => s.manifest);
@@ -20,12 +21,18 @@ export default function ModList() {
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTagInput, setBulkTagInput] = useState(false);
+  const modCompatibility = useAppStore((s) => s.modCompatibility);
+  const setModCompatibility = useAppStore((s) => s.setModCompatibility);
 
   useEffect(() => {
     if (!manifest) {
       cmd.scanFiles().then(setManifest).catch(console.error);
     }
   }, [manifest, setManifest]);
+
+  useEffect(() => {
+    cmd.checkCompatibility().then(setModCompatibility).catch(() => {});
+  }, [manifest, setModCompatibility]);
 
   useEffect(() => {
     cmd.getModTags().then(setModTags).catch(console.error);
@@ -86,6 +93,14 @@ export default function ModList() {
           c.local.file_type === "Mod" || c.local.file_type === "CustomContent",
       );
   }, [syncPlan]);
+
+  const compatMap = useMemo(() => {
+    const map = new Map<string, ModCompatibility>();
+    for (const c of modCompatibility) {
+      map.set(c.mod_path, c);
+    }
+    return map;
+  }, [modCompatibility]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -257,6 +272,7 @@ export default function ModList() {
               bulkMode={bulkMode}
               selected={selected.has(mod.relative_path)}
               onSelect={handleSelect}
+              compatibility={compatMap.get(mod.relative_path)}
             />
           ))
         )}

@@ -68,6 +68,8 @@ pub struct PeerInfo {
     pub mod_count: usize,
     pub version: String,
     pub pin_required: bool,
+    #[serde(default)]
+    pub game_info: Option<GameInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +129,47 @@ impl Default for SimsGame {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum PackType {
+    ExpansionPack,
+    GamePack,
+    StuffPack,
+    Kit,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct PackId {
+    pub code: String,
+    pub pack_type: PackType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackInfo {
+    pub id: PackId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GameInfo {
+    pub game_version: Option<String>,
+    pub installed_packs: Vec<PackInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum CompatibilityStatus {
+    Compatible,
+    MissingPacks,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModCompatibility {
+    pub mod_path: String,
+    pub required_packs: Vec<PackId>,
+    pub missing_packs: Vec<PackId>,
+    pub status: CompatibilityStatus,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Resolution {
     KeepMine,
@@ -176,6 +219,7 @@ pub struct AppState {
     pub game_paths: HashMap<SimsGame, String>,
     pub active_game: SimsGame,
     pub local_manifest: FileManifest,
+    pub game_info: HashMap<SimsGame, GameInfo>,
     pub session_type: SessionType,
     pub session_name: String,
     pub local_display_name: String,
@@ -241,6 +285,7 @@ impl Default for AppState {
             game_paths: HashMap::new(),
             active_game: SimsGame::Sims4,
             local_manifest: FileManifest::default(),
+            game_info: HashMap::new(),
             session_type: SessionType::None,
             session_name: String::new(),
             local_display_name: String::new(),

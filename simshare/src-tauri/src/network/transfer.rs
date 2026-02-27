@@ -1,5 +1,5 @@
 use crate::network::protocol::{self, Message};
-use crate::state::AppState;
+use crate::state::{AppState, GameInfo};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -21,6 +21,38 @@ const MAX_PEER_NAME_LEN: usize = 64;
 
 /// Maximum decoded size of a single file chunk (1 MB)
 const MAX_CHUNK_SIZE: usize = 1_048_576;
+
+/// Maximum number of packs a peer can advertise
+const MAX_PEER_PACKS: usize = 200;
+
+/// Maximum string length for a pack code or name from a peer
+const MAX_PACK_STRING_LEN: usize = 128;
+
+/// Sanitize GameInfo received from an untrusted peer.
+fn sanitize_game_info(info: GameInfo) -> GameInfo {
+    let game_version = info.game_version.map(|v| {
+        v.chars()
+            .filter(|c| !c.is_control())
+            .take(64)
+            .collect::<String>()
+    }).filter(|v| !v.is_empty());
+
+    let installed_packs: Vec<_> = info
+        .installed_packs
+        .into_iter()
+        .take(MAX_PEER_PACKS)
+        .map(|mut p| {
+            p.id.code.truncate(MAX_PACK_STRING_LEN);
+            p.name.truncate(MAX_PACK_STRING_LEN);
+            p
+        })
+        .collect();
+
+    GameInfo {
+        game_version,
+        installed_packs,
+    }
+}
 
 static LISTENER_TOKEN: Mutex<Option<CancellationToken>> = Mutex::const_new(None);
 
@@ -179,6 +211,7 @@ async fn handle_client(
             mod_count: 0,
             version: String::new(),
             pin_required: false,
+            game_info: None,
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -196,6 +229,22 @@ async fn handle_client(
         "peer-connected",
         serde_json::json!({"name": &peer_name, "peer_id": &peer_id}),
     );
+
+    // Send our game info to the peer
+    {
+        let app_state = state.lock().await;
+        let active = &app_state.active_game;
+        if let Some(info) = app_state.game_info.get(active) {
+            let mut s = stream.lock().await;
+            let _ = protocol::send_message(
+                &mut *s,
+                &Message::GameInfoExchange {
+                    game_info: info.clone(),
+                },
+            )
+            .await;
+        }
+    }
 
     // Handle messages in a loop
     let mut clean_disconnect = false;
@@ -348,6 +397,17 @@ async fn handle_client(
                     }
                 }
             }
+            Message::GameInfoExchange { game_info } => {
+                let sanitized = sanitize_game_info(game_info);
+                let mut app_state = state.lock().await;
+                if let Some(conn) = app_state.connections.get_mut(&peer_id) {
+                    conn.info.game_info = Some(sanitized.clone());
+                }
+                let _ = app.emit(
+                    "peer-game-info",
+                    serde_json::json!({"peer_id": &peer_id, "game_info": &sanitized}),
+                );
+            }
             Message::Disconnect => {
                 clean_disconnect = true;
                 break;
@@ -428,14 +488,39 @@ pub async fn connect_to_host(
         serde_json::json!({"name": &host_name, "peer_id": peer_id}),
     );
 
-    // Request and receive manifest
-    let remote_manifest = {
+    // Send our game info to the host
+    {
+        let app_state = state.lock().await;
+        let active = &app_state.active_game;
+        if let Some(info) = app_state.game_info.get(active) {
+            let mut s = stream.lock().await;
+            let _ = protocol::send_message(
+                &mut *s,
+                &Message::GameInfoExchange {
+                    game_info: info.clone(),
+                },
+            )
+            .await;
+        }
+    }
+
+    // Request manifest — the host may have sent GameInfoExchange first,
+    // so we need to drain it before we get our ManifestResponse.
+    let (remote_manifest, host_game_info) = {
         let mut s = stream.lock().await;
         protocol::send_message(&mut *s, &Message::ManifestRequest).await?;
-        let msg = protocol::recv_message(&mut *s).await?;
-        match msg {
-            Message::ManifestResponse { manifest } => manifest,
-            _ => return Err("Expected ManifestResponse".to_string()),
+
+        let mut host_gi: Option<GameInfo> = None;
+        loop {
+            let msg = protocol::recv_message(&mut *s).await?;
+            match msg {
+                Message::ManifestResponse { manifest } => break (manifest, host_gi),
+                Message::GameInfoExchange { game_info } => {
+                    host_gi = Some(sanitize_game_info(game_info));
+                }
+                Message::Error { message } => return Err(message),
+                _ => return Err("Unexpected message while waiting for manifest".to_string()),
+            }
         }
     };
 
@@ -450,6 +535,7 @@ pub async fn connect_to_host(
             mod_count: remote_manifest.files.len(),
             version: String::new(),
             pin_required: false,
+            game_info: host_game_info,
         };
         app_state.connections.insert(
             peer_id.to_string(),

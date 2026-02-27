@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
-fn parse_game(game: &str) -> Result<SimsGame, String> {
+pub(crate) fn parse_game(game: &str) -> Result<SimsGame, String> {
     match game {
         "Sims2" => Ok(SimsGame::Sims2),
         "Sims3" => Ok(SimsGame::Sims3),

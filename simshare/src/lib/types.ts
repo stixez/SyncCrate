@@ -11,6 +11,32 @@ export interface FileManifest {
   generated_at: number;
 }
 
+export type PackType = "ExpansionPack" | "GamePack" | "StuffPack" | "Kit";
+
+export interface PackId {
+  code: string;
+  pack_type: PackType;
+}
+
+export interface PackInfo {
+  id: PackId;
+  name: string;
+}
+
+export interface GameInfo {
+  game_version: string | null;
+  installed_packs: PackInfo[];
+}
+
+export type CompatibilityStatus = "Compatible" | "MissingPacks" | "Unknown";
+
+export interface ModCompatibility {
+  mod_path: string;
+  required_packs: PackId[];
+  missing_packs: PackId[];
+  status: CompatibilityStatus;
+}
+
 export interface PeerInfo {
   id: string;
   name: string;
@@ -19,6 +45,7 @@ export interface PeerInfo {
   mod_count: number;
   version: string;
   pin_required: boolean;
+  game_info?: GameInfo | null;
 }
 
 export interface SessionInfo {

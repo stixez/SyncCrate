@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Puzzle, Palette, Tag } from "lucide-react";
-import type { FileInfo } from "../lib/types";
+import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
+import type { FileInfo, ModCompatibility } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
@@ -13,6 +13,7 @@ interface ModItemProps {
   selected?: boolean;
   onSelect?: (path: string) => void;
   bulkMode?: boolean;
+  compatibility?: ModCompatibility;
 }
 
 export default function ModItem({
@@ -23,6 +24,7 @@ export default function ModItem({
   selected,
   onSelect,
   bulkMode,
+  compatibility,
 }: ModItemProps) {
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
@@ -71,6 +73,14 @@ export default function ModItem({
       >
         <Tag size={14} />
       </button>
+      {compatibility?.status === "MissingPacks" && (
+        <span
+          title={`Missing packs: ${compatibility.missing_packs.map((p) => p.code).join(", ")}`}
+          className="text-status-yellow shrink-0"
+        >
+          <AlertTriangle size={14} />
+        </span>
+      )}
       <StatusBadge status={syncStatus} />
       {showTagEditor && onTagsChanged && (
         <TagEditor

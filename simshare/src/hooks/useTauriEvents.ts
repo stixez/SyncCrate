@@ -103,6 +103,15 @@ export function useTauriEvents() {
         listen<{ message: string }>("sync-error", (event) => {
           addLog(`Sync error: ${event.payload.message}`, "error");
         }),
+        // Peer game info exchange
+        listen<{ peer_id: string }>("peer-game-info", async () => {
+          try {
+            const status = await cmd.getSessionStatus();
+            setSession(status);
+          } catch {
+            // Ignore
+          }
+        }),
         // Backup events
         listen<{ file: string; files_done: number; files_total: number }>("backup-progress", (event) => {
           const { files_done, files_total } = event.payload;

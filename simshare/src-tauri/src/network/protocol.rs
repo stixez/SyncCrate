@@ -1,4 +1,4 @@
-use crate::state::FileManifest;
+use crate::state::{FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -26,6 +26,7 @@ pub enum Message {
     SyncComplete,
     Error { message: String },
     Disconnect,
+    GameInfoExchange { game_info: GameInfo },
 }
 
 pub async fn send_message(stream: &mut TcpStream, msg: &Message) -> Result<(), String> {

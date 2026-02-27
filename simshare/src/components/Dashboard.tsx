@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle, Lock, Copy, Check, LayoutGrid, Camera, FolderSync } from "lucide-react";
-import type { SyncFolderPermissions } from "../lib/types";
+import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle, Lock, Copy, Check, LayoutGrid, Camera, FolderSync, Gamepad2, ChevronDown, ChevronRight } from "lucide-react";
+import type { SyncFolderPermissions, GameInfo } from "../lib/types";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
@@ -32,6 +32,7 @@ export default function Dashboard() {
     try {
       await cmd.setActiveGame(game);
       setActiveGame(game);
+      setPacksExpanded(false);
       // Re-scan for the new game
       setIsScanning(true);
       try {
@@ -41,6 +42,13 @@ export default function Dashboard() {
         addLog(`Scan for ${gameLabels[game]}: ${scanErr}`, "warning");
       } finally {
         setIsScanning(false);
+      }
+      // Refresh game info for the new game
+      try {
+        const info = await cmd.getGameInfo(game);
+        if (info) setGameInfo(info);
+      } catch {
+        setGameInfo(null);
       }
     } catch (e) {
       addLog(`Failed to switch game: ${e}`, "error");
@@ -57,6 +65,29 @@ export default function Dashboard() {
   const [pinCopied, setPinCopied] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinPeerId, setPinPeerId] = useState<string | null>(null);
+
+  const gameInfo = useAppStore((s) => s.gameInfo);
+  const setGameInfo = useAppStore((s) => s.setGameInfo);
+  const [packsExpanded, setPacksExpanded] = useState(false);
+  const [detectingPacks, setDetectingPacks] = useState(false);
+
+  const handleDetectPacks = useCallback(async () => {
+    setDetectingPacks(true);
+    try {
+      const info = await cmd.detectPacks();
+      setGameInfo(info);
+    } catch (e) {
+      addLog(`Pack detection failed: ${e}`, "error");
+    } finally {
+      setDetectingPacks(false);
+    }
+  }, [setGameInfo, addLog]);
+
+  useEffect(() => {
+    cmd.getGameInfo().then((info) => {
+      if (info) setGameInfo(info);
+    }).catch(() => {});
+  }, [activeGame, setGameInfo]);
 
   const [localVersion, setLocalVersion] = useState("");
   useEffect(() => {
@@ -228,7 +259,14 @@ export default function Dashboard() {
                       {peer.name}
                       {peer.pin_required && <Lock size={12} className="text-txt-dim" />}
                     </span>
-                    <span className="text-txt-dim text-xs">{peer.mod_count} mods</span>
+                    <span className="flex items-center gap-2">
+                      {peer.game_info?.game_version && (
+                        <span className="text-accent-light text-[10px] font-medium bg-accent/15 px-1.5 py-0.5 rounded-full">
+                          v{peer.game_info.game_version}
+                        </span>
+                      )}
+                      <span className="text-txt-dim text-xs">{peer.mod_count} mods</span>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -276,6 +314,15 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        <GameInfoCard
+          gameInfo={gameInfo}
+          activeGameLabel={activeGameLabel}
+          packsExpanded={packsExpanded}
+          setPacksExpanded={setPacksExpanded}
+          detectingPacks={detectingPacks}
+          onDetect={handleDetectPacks}
+        />
 
         {manifest && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -376,6 +423,15 @@ export default function Dashboard() {
         </div>
       )}
 
+      <GameInfoCard
+        gameInfo={gameInfo}
+        activeGameLabel={activeGameLabel}
+        packsExpanded={packsExpanded}
+        setPacksExpanded={setPacksExpanded}
+        detectingPacks={detectingPacks}
+        onDetect={handleDetectPacks}
+      />
+
       {syncPlan && syncPlan.actions.length > 0 && (
         <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} />
       )}
@@ -405,6 +461,104 @@ export default function Dashboard() {
       </div>
 
       <PeerList />
+    </div>
+  );
+}
+
+const PACK_TYPE_LABELS: Record<string, string> = {
+  ExpansionPack: "Expansion Packs",
+  GamePack: "Game Packs",
+  StuffPack: "Stuff Packs",
+  Kit: "Kits",
+};
+
+function GameInfoCard({
+  gameInfo,
+  activeGameLabel,
+  packsExpanded,
+  setPacksExpanded,
+  detectingPacks,
+  onDetect,
+}: {
+  gameInfo: GameInfo | null;
+  activeGameLabel: string;
+  packsExpanded: boolean;
+  setPacksExpanded: (v: boolean) => void;
+  detectingPacks: boolean;
+  onDetect: () => void;
+}) {
+  const packCount = gameInfo?.installed_packs?.length ?? 0;
+  const hasVersion = !!gameInfo?.game_version;
+  const hasAnyData = hasVersion || packCount > 0;
+
+  const grouped = (gameInfo?.installed_packs ?? []).reduce<Record<string, string[]>>((acc, p) => {
+    const key = p.id.pack_type;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(p.name);
+    return acc;
+  }, {});
+
+  return (
+    <div className="bg-bg-card rounded-xl border border-border p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Gamepad2 size={16} className="text-accent-light" />
+          <h3 className="font-semibold text-sm">{activeGameLabel} Info</h3>
+        </div>
+        <button
+          onClick={onDetect}
+          disabled={detectingPacks}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-bg border border-border hover:bg-bg-card-hover text-xs transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={detectingPacks ? "animate-spin" : ""} />
+          {detectingPacks ? "Detecting..." : "Detect Packs"}
+        </button>
+      </div>
+      {hasAnyData ? (
+        <>
+          <div className="flex items-center gap-4 text-sm">
+            {hasVersion && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent/15 text-accent-light text-xs font-medium">
+                v{gameInfo!.game_version}
+              </span>
+            )}
+            <span className="text-txt-dim">
+              {packCount} {packCount === 1 ? "pack" : "packs"} detected
+            </span>
+          </div>
+          {packCount > 0 && (
+            <div className="mt-2">
+              <button
+                onClick={() => setPacksExpanded(!packsExpanded)}
+                className="flex items-center gap-1 text-xs text-txt-dim hover:text-txt transition-colors"
+              >
+                {packsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {packsExpanded ? "Hide packs" : "Show installed packs"}
+              </button>
+              {packsExpanded && (
+                <div className="mt-2 space-y-2">
+                  {Object.entries(grouped).map(([type, names]) => (
+                    <div key={type}>
+                      <p className="text-xs font-medium text-txt-dim mb-1">{PACK_TYPE_LABELS[type] ?? type}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {names.map((name) => (
+                          <span key={name} className="inline-block px-2 py-0.5 rounded bg-bg text-xs text-txt-dim border border-border">
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-txt-dim">
+          Click &quot;Detect Packs&quot; to scan for installed DLC and game version.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 mod commands;
 mod network;
+mod packs;
 mod state;
 mod sync;
 mod utils;
@@ -99,10 +100,18 @@ pub fn run() {
                     None
                 };
 
+                // Auto-detect packs for all detected games
+                let mut game_info_map = std::collections::HashMap::new();
+                for (game, path) in &game_paths {
+                    let info = packs::detect_game_info(game, path);
+                    game_info_map.insert(game.clone(), info);
+                }
+
                 // Acquire lock only to update state
                 let mut app_state = state_clone.lock().await;
                 app_state.game_paths = game_paths;
                 app_state.active_game = active_game;
+                app_state.game_info = game_info_map;
                 if let Some(Ok(w)) = watcher_result {
                     app_state.file_watcher = Some(w);
                 }
@@ -148,6 +157,9 @@ pub fn run() {
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
+            commands::packs::detect_packs,
+            commands::packs::get_game_info,
+            commands::packs::check_compatibility,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
