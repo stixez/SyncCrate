@@ -155,6 +155,14 @@ pub fn saves_path(base: &str) -> PathBuf {
     PathBuf::from(base).join("Saves")
 }
 
+pub fn tray_path(base: &str) -> PathBuf {
+    PathBuf::from(base).join("Tray")
+}
+
+pub fn screenshots_path(base: &str) -> PathBuf {
+    PathBuf::from(base).join("Screenshots")
+}
+
 pub fn profiles_dir() -> PathBuf {
     let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let dir = config.join("simshare").join("profiles");

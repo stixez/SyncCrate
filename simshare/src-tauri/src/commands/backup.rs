@@ -20,6 +20,10 @@ pub struct BackupInfo {
     pub total_size: u64,
     pub mods_count: usize,
     pub saves_count: usize,
+    #[serde(default)]
+    pub tray_count: usize,
+    #[serde(default)]
+    pub screenshots_count: usize,
     #[serde(default = "default_game")]
     pub game: String,
 }
@@ -172,7 +176,9 @@ pub async fn create_backup(
 
     let mods_dir = utils::mods_path(&base);
     let saves_dir = utils::saves_path(&base);
-    let files_total = count_files(&mods_dir) + count_files(&saves_dir);
+    let tray_dir = utils::tray_path(&base);
+    let screenshots_dir = utils::screenshots_path(&base);
+    let files_total = count_files(&mods_dir) + count_files(&saves_dir) + count_files(&tray_dir) + count_files(&screenshots_dir);
 
     let id = Uuid::new_v4().to_string();
     let backup_dir = utils::backups_dir().join(&id);
@@ -185,11 +191,19 @@ pub async fn create_backup(
         copy_dir_to_backup(&mods_dir, &backup_dir, "mods", &app, &mut files_done, files_total)?;
     let saves_entries =
         copy_dir_to_backup(&saves_dir, &backup_dir, "saves", &app, &mut files_done, files_total)?;
+    let tray_entries =
+        copy_dir_to_backup(&tray_dir, &backup_dir, "tray", &app, &mut files_done, files_total)?;
+    let screenshots_entries =
+        copy_dir_to_backup(&screenshots_dir, &backup_dir, "screenshots", &app, &mut files_done, files_total)?;
 
     let mods_count = mods_entries.len();
     let saves_count = saves_entries.len();
+    let tray_count = tray_entries.len();
+    let screenshots_count = screenshots_entries.len();
     all_entries.extend(mods_entries);
     all_entries.extend(saves_entries);
+    all_entries.extend(tray_entries);
+    all_entries.extend(screenshots_entries);
 
     let total_size: u64 = all_entries.iter().map(|e| e.size).sum();
 
@@ -201,6 +215,8 @@ pub async fn create_backup(
         total_size,
         mods_count,
         saves_count,
+        tray_count,
+        screenshots_count,
         game: game_to_string(&target_game),
     };
 
@@ -272,7 +288,9 @@ pub async fn restore_backup(
 
     let mods_dir = utils::mods_path(&base);
     let saves_dir = utils::saves_path(&base);
-    let safety_total = count_files(&mods_dir) + count_files(&saves_dir);
+    let tray_dir = utils::tray_path(&base);
+    let screenshots_dir = utils::screenshots_path(&base);
+    let safety_total = count_files(&mods_dir) + count_files(&saves_dir) + count_files(&tray_dir) + count_files(&screenshots_dir);
     let mut safety_done = 0usize;
     let mut safety_entries = Vec::new();
 
@@ -280,11 +298,19 @@ pub async fn restore_backup(
         .unwrap_or_default();
     let saves_e = copy_dir_to_backup(&saves_dir, &safety_dir, "saves", &app, &mut safety_done, safety_total)
         .unwrap_or_default();
+    let tray_e = copy_dir_to_backup(&tray_dir, &safety_dir, "tray", &app, &mut safety_done, safety_total)
+        .unwrap_or_default();
+    let screenshots_e = copy_dir_to_backup(&screenshots_dir, &safety_dir, "screenshots", &app, &mut safety_done, safety_total)
+        .unwrap_or_default();
 
     let safety_mods = mods_e.len();
     let safety_saves = saves_e.len();
+    let safety_tray = tray_e.len();
+    let safety_screenshots = screenshots_e.len();
     safety_entries.extend(mods_e);
     safety_entries.extend(saves_e);
+    safety_entries.extend(tray_e);
+    safety_entries.extend(screenshots_e);
     let safety_size: u64 = safety_entries.iter().map(|e| e.size).sum();
 
     let safety_info = BackupInfo {
@@ -295,6 +321,8 @@ pub async fn restore_backup(
         total_size: safety_size,
         mods_count: safety_mods,
         saves_count: safety_saves,
+        tray_count: safety_tray,
+        screenshots_count: safety_screenshots,
         game: game_to_string(&backup_game),
     };
     let safety_manifest = BackupManifest {
@@ -318,15 +346,17 @@ pub async fn restore_backup(
         }
 
         // Validate category is one of the known values
-        if entry.category != "mods" && entry.category != "saves" {
+        if !matches!(entry.category.as_str(), "mods" | "saves" | "tray" | "screenshots") {
             continue;
         }
 
         let source = backup_dir.join(&entry.category).join(&entry.relative_path);
-        let dest_base = if entry.category == "mods" {
-            &mods_dir
-        } else {
-            &saves_dir
+        let dest_base = match entry.category.as_str() {
+            "mods" => &mods_dir,
+            "saves" => &saves_dir,
+            "tray" => &tray_dir,
+            "screenshots" => &screenshots_dir,
+            _ => continue,
         };
         let dest = dest_base.join(&entry.relative_path);
 

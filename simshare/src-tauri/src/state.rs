@@ -19,6 +19,38 @@ pub enum FileType {
     Mod,
     CustomContent,
     Save,
+    Tray,
+    Screenshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncFolderPermissions {
+    pub mods: bool,
+    pub saves: bool,
+    pub tray: bool,
+    pub screenshots: bool,
+}
+
+impl Default for SyncFolderPermissions {
+    fn default() -> Self {
+        Self {
+            mods: true,
+            saves: true,
+            tray: true,
+            screenshots: true,
+        }
+    }
+}
+
+impl SyncFolderPermissions {
+    pub fn is_file_allowed(&self, file_type: &FileType) -> bool {
+        match file_type {
+            FileType::Mod | FileType::CustomContent => self.mods,
+            FileType::Save => self.saves,
+            FileType::Tray => self.tray,
+            FileType::Screenshot => self.screenshots,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -149,6 +181,7 @@ pub struct AppState {
     pub local_display_name: String,
     pub session_port: u16,
     pub session_pin: Option<String>,
+    pub folder_permissions: SyncFolderPermissions,
     pub discovered_peers: Vec<PeerInfo>,
     pub connections: HashMap<String, PeerConnection>,
     #[allow(dead_code)]
@@ -213,6 +246,7 @@ impl Default for AppState {
             local_display_name: String::new(),
             session_port: 9847,
             session_pin: None,
+            folder_permissions: SyncFolderPermissions::default(),
             discovered_peers: Vec::new(),
             connections: HashMap::new(),
             file_watcher: None,

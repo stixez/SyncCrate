@@ -157,9 +157,13 @@ pub async fn scan_files(
         }, &ext_refs);
 
         let saves = scan_directory(&base_path, "Saves", |_| FileType::Save, &[]);
+        let tray = scan_directory(&base_path, "Tray", |_| FileType::Tray, &[]);
+        let screenshots = scan_directory(&base_path, "Screenshots", |_| FileType::Screenshot, &[]);
 
         let mut all_files = mods;
         all_files.extend(saves);
+        all_files.extend(tray);
+        all_files.extend(screenshots);
 
         FileManifest {
             files: all_files,

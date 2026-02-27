@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
+import type { SyncFolderPermissions } from "../lib/types";
 import * as cmd from "../lib/commands";
 
 export function useSession() {
@@ -11,10 +12,10 @@ export function useSession() {
   const setSyncProgress = useAppStore((s) => s.setSyncProgress);
   const addLog = useLogStore((s) => s.addLog);
 
-  const host = async (name: string, usePin?: boolean) => {
+  const host = async (name: string, usePin?: boolean, allowedFolders?: SyncFolderPermissions) => {
     setIsLoading(true);
     try {
-      const info = await cmd.startHost(name, usePin);
+      const info = await cmd.startHost(name, usePin, allowedFolders);
       const status = await cmd.getSessionStatus();
       setSession(status);
       addLog(`Hosting session as "${name}" on port ${info.port}`, "success");

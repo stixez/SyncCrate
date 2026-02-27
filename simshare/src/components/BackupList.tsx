@@ -112,7 +112,7 @@ export default function BackupList() {
             className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
           <p className="text-xs text-txt-dim">
-            This will back up your entire Mods and Saves folders.
+            This will back up your Mods, Saves, Tray, and Screenshots folders.
           </p>
           <div className="flex gap-2">
             <button
@@ -195,6 +195,8 @@ export default function BackupList() {
                 <span>{formatBytes(backup.total_size)}</span>
                 <span>{backup.mods_count} mods</span>
                 <span>{backup.saves_count} saves</span>
+                {!!backup.tray_count && <span>{backup.tray_count} tray</span>}
+                {!!backup.screenshots_count && <span>{backup.screenshots_count} screenshots</span>}
               </div>
             </div>
           ))

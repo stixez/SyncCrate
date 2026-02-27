@@ -27,6 +27,26 @@ pub async fn compute_sync_plan(
 
     let mut plan = diff::compute_diff(&app_state.local_manifest, remote);
 
+    // Filter out actions for folders disabled by host permissions
+    let perms = &app_state.folder_permissions;
+    plan.actions.retain(|action| {
+        let file_type = match action {
+            SyncAction::SendToRemote(f) => Some(&f.file_type),
+            SyncAction::ReceiveFromRemote(f) => Some(&f.file_type),
+            SyncAction::Conflict { local, .. } => Some(&local.file_type),
+            SyncAction::Delete(_) => None,
+        };
+        file_type.map_or(true, |ft| perms.is_file_allowed(ft))
+    });
+
+    // Recalculate total_bytes after filtering
+    plan.total_bytes = plan.actions.iter().map(|action| match action {
+        SyncAction::SendToRemote(f) => f.size,
+        SyncAction::ReceiveFromRemote(f) => f.size,
+        SyncAction::Conflict { local, remote } => local.size.max(remote.size),
+        SyncAction::Delete(_) => 0,
+    }).sum();
+
     // Apply stored exclude patterns to pre-populate excluded list
     let patterns = read_exclude_patterns();
     if !patterns.is_empty() {

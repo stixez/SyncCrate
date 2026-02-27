@@ -10,11 +10,12 @@ import type {
   SessionInfo,
   SessionStatus,
   SimsGame,
+  SyncFolderPermissions,
   SyncPlan,
 } from "./types";
 
-export async function startHost(name: string, usePin?: boolean): Promise<SessionInfo> {
-  return invoke("start_host", { name, usePin });
+export async function startHost(name: string, usePin?: boolean, allowedFolders?: SyncFolderPermissions): Promise<SessionInfo> {
+  return invoke("start_host", { name, usePin, allowedFolders: allowedFolders ?? null });
 }
 
 export async function startJoin(name: string): Promise<PeerInfo[]> {

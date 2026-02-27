@@ -3,7 +3,7 @@ export interface FileInfo {
   size: number;
   hash: string;
   modified: number;
-  file_type: "Mod" | "CustomContent" | "Save";
+  file_type: "Mod" | "CustomContent" | "Save" | "Tray" | "Screenshot";
 }
 
 export interface FileManifest {
@@ -94,6 +94,13 @@ export interface ProfileComparison {
   extra: string[];
 }
 
+export interface SyncFolderPermissions {
+  mods: boolean;
+  saves: boolean;
+  tray: boolean;
+  screenshots: boolean;
+}
+
 export type Page = "dashboard" | "mods" | "saves" | "profiles" | "backups" | "activity" | "settings";
 
 export type SimsGame = "Sims2" | "Sims3" | "Sims4";
@@ -106,6 +113,8 @@ export interface BackupInfo {
   total_size: number;
   mods_count: number;
   saves_count: number;
+  tray_count?: number;
+  screenshots_count?: number;
   game: SimsGame;
 }
 

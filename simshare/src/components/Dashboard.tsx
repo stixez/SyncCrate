@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle, Lock, Copy, Check } from "lucide-react";
+import { Monitor, Users, Package, Save, HardDrive, RefreshCw, AlertTriangle, Lock, Copy, Check, LayoutGrid, Camera, FolderSync } from "lucide-react";
+import type { SyncFolderPermissions } from "../lib/types";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
@@ -47,6 +48,12 @@ export default function Dashboard() {
   };
   const [hostName, setHostName] = useState("");
   const [usePin, setUsePin] = useState(false);
+  const [folderPerms, setFolderPerms] = useState<SyncFolderPermissions>({
+    mods: true,
+    saves: true,
+    tray: true,
+    screenshots: true,
+  });
   const [pinCopied, setPinCopied] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinPeerId, setPinPeerId] = useState<string | null>(null);
@@ -69,6 +76,12 @@ export default function Dashboard() {
     : 0;
   const saveCount = manifest
     ? Object.values(manifest.files).filter((f) => f.file_type === "Save").length
+    : 0;
+  const trayCount = manifest
+    ? Object.values(manifest.files).filter((f) => f.file_type === "Tray").length
+    : 0;
+  const screenshotCount = manifest
+    ? Object.values(manifest.files).filter((f) => f.file_type === "Screenshot").length
     : 0;
   const totalSize = manifest
     ? Object.values(manifest.files).reduce((sum, f) => sum + f.size, 0)
@@ -145,8 +158,32 @@ export default function Dashboard() {
               <Lock size={14} />
               Require PIN to join
             </label>
+            <div className="mb-3">
+              <div className="flex items-center gap-1.5 mb-1.5 text-sm text-txt-dim">
+                <FolderSync size={14} />
+                Shared folders
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {([
+                  ["mods", "Mods"],
+                  ["saves", "Saves"],
+                  ["tray", "Tray"],
+                  ["screenshots", "Screenshots"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-1.5 cursor-pointer text-sm text-txt-dim">
+                    <input
+                      type="checkbox"
+                      checked={folderPerms[key]}
+                      onChange={(e) => setFolderPerms((p) => ({ ...p, [key]: e.target.checked }))}
+                      className="rounded border-border accent-accent"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <button
-              onClick={() => host(hostName.trim() || "Host", usePin)}
+              onClick={() => host(hostName.trim() || "Host", usePin, folderPerms)}
               disabled={isLoading}
               className="w-full bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             >
@@ -241,11 +278,13 @@ export default function Dashboard() {
         </div>
 
         {manifest && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {[
               { label: "Script Mods", value: modCount, icon: Package, color: "text-accent-light" },
               { label: "Custom Content", value: ccCount, icon: Package, color: "text-pink-400" },
               { label: "Save Files", value: saveCount, icon: Save, color: "text-status-green" },
+              { label: "Tray Items", value: trayCount, icon: LayoutGrid, color: "text-purple-400" },
+              { label: "Screenshots", value: screenshotCount, icon: Camera, color: "text-sky-400" },
               { label: "Total Size", value: formatBytes(totalSize), icon: HardDrive, color: "text-status-yellow" },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="bg-bg-card rounded-xl border border-border p-4">
@@ -346,11 +385,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
           { label: "Script Mods", value: modCount, icon: Package, color: "text-accent-light" },
           { label: "Custom Content", value: ccCount, icon: Package, color: "text-pink-400" },
           { label: "Save Files", value: saveCount, icon: Save, color: "text-status-green" },
+          { label: "Tray Items", value: trayCount, icon: LayoutGrid, color: "text-purple-400" },
+          { label: "Screenshots", value: screenshotCount, icon: Camera, color: "text-sky-400" },
           { label: "Total Size", value: formatBytes(totalSize), icon: HardDrive, color: "text-status-yellow" },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-bg-card rounded-xl border border-border p-4">

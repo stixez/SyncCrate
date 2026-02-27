@@ -1,5 +1,5 @@
 use crate::network::discovery;
-use crate::state::{AppState, PeerInfo, SessionInfo, SessionStatus, SessionType};
+use crate::state::{AppState, PeerInfo, SessionInfo, SessionStatus, SessionType, SyncFolderPermissions};
 use crate::network::protocol::{self, Message};
 use rand::Rng;
 use std::sync::Arc;
@@ -22,6 +22,7 @@ pub async fn start_host(
     app: tauri::AppHandle,
     name: String,
     use_pin: Option<bool>,
+    allowed_folders: Option<SyncFolderPermissions>,
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
 
@@ -60,6 +61,7 @@ pub async fn start_host(
         app_state.session_name = name.clone();
         app_state.local_display_name = name.clone();
         app_state.session_pin = pin.clone();
+        app_state.folder_permissions = allowed_folders.unwrap_or_default();
     }
 
     // Start mDNS broadcast in background
@@ -192,6 +194,7 @@ pub async fn disconnect(
     app_state.session_name.clear();
     app_state.local_display_name.clear();
     app_state.session_pin = None;
+    app_state.folder_permissions = SyncFolderPermissions::default();
     app_state.discovered_peers.clear();
 
     discovery::stop_broadcast().await;

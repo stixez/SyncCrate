@@ -215,7 +215,10 @@ async fn handle_client(
             Message::ManifestRequest => {
                 let manifest = {
                     let app_state = state.lock().await;
-                    app_state.local_manifest.clone()
+                    let perms = &app_state.folder_permissions;
+                    let mut filtered = app_state.local_manifest.clone();
+                    filtered.files.retain(|_, info| perms.is_file_allowed(&info.file_type));
+                    filtered
                 };
                 let mut s = stream.lock().await;
                 protocol::send_message(&mut *s, &Message::ManifestResponse { manifest }).await?;
@@ -229,6 +232,23 @@ async fn handle_client(
             Message::FileRequest { path } => {
                 let base = {
                     let app_state = state.lock().await;
+
+                    // Validate that the requested file is in an allowed folder
+                    let allowed = app_state.local_manifest.files.get(&path)
+                        .map(|info| app_state.folder_permissions.is_file_allowed(&info.file_type))
+                        .unwrap_or(false);
+                    if !allowed {
+                        let mut s = stream.lock().await;
+                        protocol::send_message(
+                            &mut *s,
+                            &Message::Error {
+                                message: "File not available".to_string(),
+                            },
+                        )
+                        .await?;
+                        continue;
+                    }
+
                     match app_state.active_game_path() {
                         Ok(p) => p,
                         Err(e) => {
