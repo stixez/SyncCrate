@@ -68,24 +68,43 @@ pub fn run() {
             let state_clone = state.inner().clone();
 
             tauri::async_runtime::spawn(async move {
-                // Detect paths for all three games
+                // Load saved config first (persisted paths from previous sessions)
+                let saved_config = commands::files::load_game_config();
+
+                // Start with saved paths, then fill gaps with auto-detection
                 let mut game_paths = std::collections::HashMap::new();
+                for (key, path) in &saved_config.game_paths {
+                    if let Ok(game) = commands::files::parse_game(key) {
+                        // Only use saved path if it still exists on disk
+                        if std::path::Path::new(path).exists() {
+                            game_paths.insert(game, path.clone());
+                        }
+                    }
+                }
+                // Auto-detect any games not already loaded from config
                 for game in &[SimsGame::Sims4, SimsGame::Sims3, SimsGame::Sims2] {
-                    if let Some(path) = utils::detect_game_path(game) {
-                        game_paths.insert(game.clone(), path);
+                    if !game_paths.contains_key(game) {
+                        if let Some(path) = utils::detect_game_path(game) {
+                            game_paths.insert(game.clone(), path);
+                        }
                     }
                 }
 
-                // Set active game to first detected (prefer Sims4 > Sims3 > Sims2)
-                let active_game = if game_paths.contains_key(&SimsGame::Sims4) {
-                    SimsGame::Sims4
-                } else if game_paths.contains_key(&SimsGame::Sims3) {
-                    SimsGame::Sims3
-                } else if game_paths.contains_key(&SimsGame::Sims2) {
-                    SimsGame::Sims2
-                } else {
-                    SimsGame::Sims4 // default even if not detected
-                };
+                // Restore saved active game, or pick first detected
+                let active_game = saved_config.active_game
+                    .and_then(|g| commands::files::parse_game(&g).ok())
+                    .filter(|g| game_paths.contains_key(g))
+                    .unwrap_or_else(|| {
+                        if game_paths.contains_key(&SimsGame::Sims4) {
+                            SimsGame::Sims4
+                        } else if game_paths.contains_key(&SimsGame::Sims3) {
+                            SimsGame::Sims3
+                        } else if game_paths.contains_key(&SimsGame::Sims2) {
+                            SimsGame::Sims2
+                        } else {
+                            SimsGame::Sims4
+                        }
+                    });
 
                 // Start file watcher for active game's paths if available
                 let watcher_result = if let Some(path) = game_paths.get(&active_game) {

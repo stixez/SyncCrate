@@ -1,31 +1,77 @@
 use crate::state::SimsGame;
 use std::path::PathBuf;
 
-pub fn detect_sims2_path() -> Option<String> {
+/// Scan all direct children of a directory for a given subfolder path.
+/// Handles localized folder names (e.g. OneDrive/Dokumenti, OneDrive/Documenti).
+fn scan_children_for(parent: &std::path::Path, sub: &std::path::Path) -> Vec<PathBuf> {
+    let mut results = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let candidate = entry.path().join(sub);
+            if candidate.exists() {
+                results.push(candidate);
+            }
+        }
+    }
+    results
+}
+
+/// Build candidate paths for a game's EA data folder.
+/// `ea_parent` is e.g. "Electronic Arts" or "EA Games".
+/// `game_folders` is e.g. &["The Sims 4"].
+fn build_candidates(ea_parent: &str, game_folders: &[&str]) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
+    // 1. System Documents folder (handles Windows Known Folders, localized names)
     if let Some(docs) = dirs::document_dir() {
-        candidates.push(docs.join("EA Games").join("The Sims 2"));
-        candidates.push(docs.join("EA Games").join("The Sims 2 Ultimate Collection"));
+        for folder in game_folders {
+            candidates.push(docs.join(ea_parent).join(folder));
+        }
     }
 
+    // 2. Windows-specific: scan OneDrive subfolders for localized Documents
     #[cfg(target_os = "windows")]
     {
         if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join("OneDrive")
-                    .join("Documents")
-                    .join("EA Games")
-                    .join("The Sims 2"),
-            );
-            candidates.push(
-                home.join("OneDrive")
-                    .join("Documents")
-                    .join("EA Games")
-                    .join("The Sims 2 Ultimate Collection"),
-            );
+            let onedrive = home.join("OneDrive");
+            if onedrive.exists() {
+                for folder in game_folders {
+                    let sub = PathBuf::from(ea_parent).join(folder);
+                    // Scan all children of OneDrive (Documents, Dokumenti, Documenti, etc.)
+                    candidates.extend(scan_children_for(&onedrive, &sub));
+                }
+            }
+            // Also check OneDrive - Personal variant
+            let onedrive_personal = home.join("OneDrive - Personal");
+            if onedrive_personal.exists() {
+                for folder in game_folders {
+                    let sub = PathBuf::from(ea_parent).join(folder);
+                    candidates.extend(scan_children_for(&onedrive_personal, &sub));
+                }
+            }
         }
     }
+
+    // 3. Linux: common alternate locations
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            for folder in game_folders {
+                candidates.push(
+                    home.join("Documents").join(ea_parent).join(folder),
+                );
+            }
+        }
+    }
+
+    candidates
+}
+
+pub fn detect_sims2_path() -> Option<String> {
+    let mut candidates = build_candidates("EA Games", &["The Sims 2", "The Sims 2 Ultimate Collection"]);
+
+    // Sims 2 also stores data under "Electronic Arts" on some installs
+    candidates.extend(build_candidates("Electronic Arts", &["The Sims 2"]));
 
     candidates
         .into_iter()
@@ -34,32 +80,13 @@ pub fn detect_sims2_path() -> Option<String> {
 }
 
 pub fn detect_sims3_path() -> Option<String> {
-    let mut candidates = Vec::new();
+    #[allow(unused_mut)]
+    let mut candidates = build_candidates("Electronic Arts", &["The Sims 3"]);
 
-    if let Some(docs) = dirs::document_dir() {
-        candidates.push(docs.join("Electronic Arts").join("The Sims 3"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join("OneDrive")
-                    .join("Documents")
-                    .join("Electronic Arts")
-                    .join("The Sims 3"),
-            );
-        }
-    }
-
+    // Linux snap
     #[cfg(target_os = "linux")]
     {
         if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join("Documents")
-                    .join("Electronic Arts")
-                    .join("The Sims 3"),
-            );
             candidates.push(
                 home.join("snap")
                     .join("the-sims-3")
@@ -77,36 +104,13 @@ pub fn detect_sims3_path() -> Option<String> {
 }
 
 pub fn detect_sims4_path() -> Option<String> {
-    let mut candidates = Vec::new();
+    #[allow(unused_mut)]
+    let mut candidates = build_candidates("Electronic Arts", &["The Sims 4"]);
 
-    // Standard: Documents/Electronic Arts/The Sims 4 (works on all platforms via dirs)
-    if let Some(docs) = dirs::document_dir() {
-        candidates.push(docs.join("Electronic Arts").join("The Sims 4"));
-    }
-
-    // Windows: also check OneDrive-redirected Documents
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join("OneDrive")
-                    .join("Documents")
-                    .join("Electronic Arts")
-                    .join("The Sims 4"),
-            );
-        }
-    }
-
-    // Linux: common alternate locations
+    // Linux snap
     #[cfg(target_os = "linux")]
     {
         if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join("Documents")
-                    .join("Electronic Arts")
-                    .join("The Sims 4"),
-            );
-            // Snap installation
             candidates.push(
                 home.join("snap")
                     .join("the-sims-4")
@@ -250,6 +254,13 @@ pub fn sync_config_path() -> PathBuf {
     let dir = config.join("simshare");
     std::fs::create_dir_all(&dir).ok();
     dir.join("sync_config.json")
+}
+
+pub fn game_config_path() -> PathBuf {
+    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = config.join("simshare");
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("game_config.json")
 }
 
 /// Validate a profile ID contains no path separators or traversal

@@ -32,3 +32,4 @@ chrono = "0.4"
 base64 = "0.22"
 tokio-util = { version = "0.7", features = ["codec"] }
 rand = "0.8"
+socket2 = "0.5"

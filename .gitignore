@@ -31,5 +31,11 @@ Thumbs.db
 # Claude Code
 CLAUDE.md
 
+# Local Cargo config (machine-specific paths)
+**/.cargo/
+
+# Stray root lockfile
+/package-lock.json
+
 # Private stats
 stats.html

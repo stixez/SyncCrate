@@ -63,8 +63,13 @@ export function useTauriEvents() {
             // Ignore if session status fetch fails
           }
         }),
-        listen<{ name: string }>("peer-disconnected", async (event) => {
-          addLog(`Peer disconnected: ${event.payload.name}`, "warning");
+        listen<{ name: string; clean?: boolean; reason?: string }>("peer-disconnected", async (event) => {
+          const { name, clean, reason } = event.payload;
+          if (clean) {
+            addLog(`Peer disconnected: ${name}`, "info");
+          } else {
+            addLog(`Peer lost: ${name}${reason ? ` (${reason})` : ""}`, "warning");
+          }
           try {
             const status = await cmd.getSessionStatus();
             setSession(status);

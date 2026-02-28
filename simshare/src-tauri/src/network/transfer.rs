@@ -139,6 +139,7 @@ async fn handle_client(
     app: tauri::AppHandle,
     _peer_addr: String,
 ) -> Result<(), String> {
+    protocol::configure_keepalive(&stream);
     let stream = Arc::new(Mutex::new(stream));
 
     // Wait for Hello
@@ -236,18 +237,22 @@ async fn handle_client(
         let active = &app_state.active_game;
         if let Some(info) = app_state.game_info.get(active) {
             let mut s = stream.lock().await;
-            let _ = protocol::send_message(
+            if let Err(e) = protocol::send_message(
                 &mut *s,
                 &Message::GameInfoExchange {
                     game_info: info.clone(),
                 },
             )
-            .await;
+            .await
+            {
+                log::warn!("Failed to send game info to peer '{}': {}", peer_name, e);
+            }
         }
     }
 
     // Handle messages in a loop
     let mut clean_disconnect = false;
+    let mut disconnect_reason = String::new();
     loop {
         let msg = {
             let mut s = stream.lock().await;
@@ -255,6 +260,7 @@ async fn handle_client(
                 Ok(m) => m,
                 Err(e) => {
                     log::warn!("Connection lost for peer '{}' ({}): {}", peer_name, peer_id, e);
+                    disconnect_reason = e;
                     break;
                 }
             }
@@ -425,6 +431,7 @@ async fn handle_client(
             "name": &peer_name,
             "peer_id": &peer_id,
             "clean": clean_disconnect,
+            "reason": if clean_disconnect { "User disconnected".to_string() } else if disconnect_reason.is_empty() { "Unknown".to_string() } else { disconnect_reason },
         }),
     );
 
@@ -454,6 +461,7 @@ pub async fn connect_to_host(
     .map_err(|_| "Connection timed out (10s)".to_string())?
     .map_err(|e| format!("Connection failed: {}", e))?;
 
+    protocol::configure_keepalive(&stream);
     let stream = Arc::new(Mutex::new(stream));
 
     // Send Hello with our display name (not the session/peer name)
@@ -494,13 +502,13 @@ pub async fn connect_to_host(
         let active = &app_state.active_game;
         if let Some(info) = app_state.game_info.get(active) {
             let mut s = stream.lock().await;
-            let _ = protocol::send_message(
+            protocol::send_message(
                 &mut *s,
                 &Message::GameInfoExchange {
                     game_info: info.clone(),
                 },
             )
-            .await;
+            .await?;
         }
     }
 

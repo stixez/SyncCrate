@@ -23,6 +23,39 @@ fn game_to_string(game: &SimsGame) -> String {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct GameConfig {
+    pub game_paths: HashMap<String, String>,
+    pub active_game: Option<String>,
+}
+
+pub fn load_game_config() -> GameConfig {
+    let path = utils::game_config_path();
+    if path.exists() {
+        if let Ok(data) = std::fs::read_to_string(&path) {
+            if let Ok(config) = serde_json::from_str::<GameConfig>(&data) {
+                return config;
+            }
+        }
+    }
+    GameConfig::default()
+}
+
+fn save_game_config(app_state: &AppState) {
+    let mut game_paths = HashMap::new();
+    for (game, path) in &app_state.game_paths {
+        game_paths.insert(game_to_string(game), path.clone());
+    }
+    let config = GameConfig {
+        game_paths,
+        active_game: Some(game_to_string(&app_state.active_game)),
+    };
+    let path = utils::game_config_path();
+    if let Ok(data) = serde_json::to_string_pretty(&config) {
+        let _ = std::fs::write(&path, data);
+    }
+}
+
 fn scan_directory(
     base_path: &str,
     sub_dir: &str,
@@ -207,19 +240,21 @@ pub async fn set_game_path(
     // Canonicalize to resolve symlinks and normalize the path
     let canonical = std::fs::canonicalize(game_dir)
         .map_err(|e| format!("Cannot resolve path: {}", e))?;
-    // Validate this looks like a Sims folder
+    // Validate this looks like a Sims folder — or accept it and create Mods/Saves
     let has_mods = canonical.join("Mods").exists();
     let has_saves = canonical.join("Saves").exists();
     // Sims 2 uses "Downloads" instead of "Mods" sometimes
     let has_downloads = canonical.join("Downloads").exists();
     if !has_mods && !has_saves && !has_downloads {
-        return Err(format!(
-            "This doesn't look like a {} folder (no Mods or Saves directory found)",
-            utils::game_label(&target_game)
-        ));
+        // If the folder exists but has no Mods/Saves, create them so the app can work
+        std::fs::create_dir_all(canonical.join("Mods"))
+            .map_err(|e| format!("Cannot create Mods folder: {}", e))?;
+        std::fs::create_dir_all(canonical.join("Saves"))
+            .map_err(|e| format!("Cannot create Saves folder: {}", e))?;
     }
     let mut app_state = state.lock().await;
     app_state.game_paths.insert(target_game, canonical.to_string_lossy().to_string());
+    save_game_config(&app_state);
     Ok(())
 }
 
@@ -239,6 +274,7 @@ pub async fn set_active_game(
     let target_game = parse_game(&game)?;
     let mut app_state = state.lock().await;
     app_state.active_game = target_game;
+    save_game_config(&app_state);
     Ok(())
 }
 
