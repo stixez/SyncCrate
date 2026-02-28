@@ -199,6 +199,21 @@ export async function getExcludePatterns(): Promise<string[]> {
   return invoke("get_exclude_patterns");
 }
 
+// Open folder in file manager
+export async function openFolder(path: string): Promise<void> {
+  return invoke("open_folder", { path });
+}
+
+// Mod enable/disable
+export async function toggleMod(relativePath: string, enabled: boolean): Promise<string> {
+  return invoke("toggle_mod", { relativePath, enabled });
+}
+
+// Backup rename
+export async function renameBackup(id: string, label: string): Promise<void> {
+  return invoke("rename_backup", { id, label });
+}
+
 // Packs
 export async function detectPacks(game?: SimsGame): Promise<GameInfo> {
   return invoke("detect_packs", { game: game ?? null });

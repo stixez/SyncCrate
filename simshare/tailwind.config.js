@@ -11,26 +11,26 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0a0f14",
-          card: "#121a22",
-          "card-hover": "#1a252e",
-          "card-active": "#1f2e38",
+          DEFAULT: "rgb(var(--color-bg) / <alpha-value>)",
+          card: "rgb(var(--color-bg-card) / <alpha-value>)",
+          "card-hover": "rgb(var(--color-bg-card-hover) / <alpha-value>)",
+          "card-active": "rgb(var(--color-bg-card-active) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "#1ea84b",
-          light: "#2ecc5e",
+          DEFAULT: "rgb(var(--color-accent) / <alpha-value>)",
+          light: "rgb(var(--color-accent-light) / <alpha-value>)",
         },
         border: {
-          DEFAULT: "#1e2d38",
+          DEFAULT: "rgb(var(--color-border) / <alpha-value>)",
         },
         txt: {
-          DEFAULT: "#e8ecf4",
-          dim: "#7a8398",
+          DEFAULT: "rgb(var(--color-txt) / <alpha-value>)",
+          dim: "rgb(var(--color-txt-dim) / <alpha-value>)",
         },
         status: {
-          green: "#10b981",
-          yellow: "#f59e0b",
-          red: "#ef4444",
+          green: "rgb(var(--color-status-green) / <alpha-value>)",
+          yellow: "rgb(var(--color-status-yellow) / <alpha-value>)",
+          red: "rgb(var(--color-status-red) / <alpha-value>)",
         },
       },
     },

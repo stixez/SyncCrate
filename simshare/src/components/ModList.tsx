@@ -2,11 +2,12 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import ModItem from "./ModItem";
+import ModDetailsPanel from "./ModDetailsPanel";
 import ConflictResolver from "./ConflictResolver";
 import { useSync } from "../hooks/useSync";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
-import type { ModCompatibility } from "../lib/types";
+import type { FileInfo, ModCompatibility } from "../lib/types";
 
 type ModSortBy = "name" | "size" | "date" | "status";
 
@@ -32,6 +33,7 @@ export default function ModList() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTagInput, setBulkTagInput] = useState(false);
   const [page, setPage] = useState(0);
+  const [detailFile, setDetailFile] = useState<FileInfo | null>(null);
   const modCompatibility = useAppStore((s) => s.modCompatibility);
   const setModCompatibility = useAppStore((s) => s.setModCompatibility);
 
@@ -362,6 +364,7 @@ export default function ModList() {
               selected={selected.has(mod.relative_path)}
               onSelect={handleSelect}
               compatibility={compatMap.get(mod.relative_path)}
+              onShowDetails={() => setDetailFile(mod)}
             />
           ))
         )}
@@ -392,6 +395,16 @@ export default function ModList() {
             </button>
           </div>
         </div>
+      )}
+
+      {detailFile && (
+        <ModDetailsPanel
+          file={detailFile}
+          syncStatus={getSyncStatus(detailFile.relative_path)}
+          tags={modTags[detailFile.relative_path] || []}
+          compatibility={compatMap.get(detailFile.relative_path)}
+          onClose={() => setDetailFile(null)}
+        />
       )}
     </div>
   );

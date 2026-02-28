@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import { Heart } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
@@ -8,6 +8,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   const showDonate = useAppStore((s) => s.showDonate);
   const setShowDonate = useAppStore((s) => s.setShowDonate);
   const session = useAppStore((s) => s.session);
+  const theme = useAppStore((s) => s.theme);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+  }, [theme]);
 
   const isConnected = session && session.session_type !== "None";
 

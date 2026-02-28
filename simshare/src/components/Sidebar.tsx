@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Package, Save, FolderOpen, Archive, Activity, Settings, Wifi, WifiOff } from "lucide-react";
+import { LayoutDashboard, Package, Save, FolderOpen, Archive, Activity, Settings, Wifi, WifiOff, Sun, Moon } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
@@ -25,6 +25,8 @@ export default function Sidebar() {
   const setPage = useAppStore((s) => s.setPage);
   const session = useAppStore((s) => s.session);
   const activeGame = useAppStore((s) => s.activeGame);
+  const theme = useAppStore((s) => s.theme);
+  const setTheme = useAppStore((s) => s.setTheme);
   const activeGameLabel = GAME_LABELS[activeGame] || "Sims 4";
 
   const [version, setVersion] = useState("...");
@@ -63,7 +65,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-2">
         <div className="flex items-center gap-2 text-xs">
           {isConnected ? (
             <>
@@ -79,6 +81,13 @@ export default function Sidebar() {
               <span className="text-txt-dim">Not connected</span>
             </>
           )}
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="ml-auto p-1 rounded hover:bg-bg-card-hover text-txt-dim hover:text-txt transition-colors"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
         </div>
       </div>
     </aside>

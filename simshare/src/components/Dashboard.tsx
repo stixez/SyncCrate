@@ -441,7 +441,7 @@ export default function Dashboard() {
           </div>
         ) : null}
 
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-2">
           <button
             onClick={handleScan}
             disabled={isScanning}
@@ -450,6 +450,15 @@ export default function Dashboard() {
             <RefreshCw size={14} className={isScanning ? "animate-spin" : ""} />
             {isScanning ? "Scanning..." : "Scan Files"}
           </button>
+          {gamePaths[activeGame] && (
+            <button
+              onClick={() => cmd.openFolder(gamePaths[activeGame]!)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-card border border-border hover:bg-bg-card-hover text-sm transition-colors"
+            >
+              <FolderOpen size={14} />
+              Open Folder
+            </button>
+          )}
         </div>
 
         <ConnectionGuide />
@@ -481,6 +490,15 @@ export default function Dashboard() {
           >
             {isSyncLoading ? (loadingPhase || "Computing...") : "Compare & Sync"}
           </button>
+          {gamePaths[activeGame] && (
+            <button
+              onClick={() => cmd.openFolder(gamePaths[activeGame]!)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card border border-border hover:bg-bg-card-hover text-sm transition-colors"
+            >
+              <FolderOpen size={14} />
+              Open Folder
+            </button>
+          )}
           <button
             onClick={leave}
             disabled={isLoading}

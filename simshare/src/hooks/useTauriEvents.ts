@@ -19,6 +19,9 @@ function sendNotification(title: string, body: string) {
   }
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 4000, 8000];
+
 export function useTauriEvents() {
   const setSyncProgress = useAppStore((s) => s.setSyncProgress);
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
@@ -29,6 +32,10 @@ export function useTauriEvents() {
   const addLog = useLogStore((s) => s.addLog);
 
   const notifRequested = useRef(false);
+  const retryRef = useRef<{ active: boolean; timer: ReturnType<typeof setTimeout> | null }>({
+    active: false,
+    timer: null,
+  });
 
   useEffect(() => {
     if (!notifRequested.current && "Notification" in window && Notification.permission === "default") {
@@ -40,6 +47,53 @@ export function useTauriEvents() {
   useEffect(() => {
     let cancelled = false;
     const unlisteners: UnlistenFn[] = [];
+
+    function cancelRetry() {
+      retryRef.current.active = false;
+      if (retryRef.current.timer) {
+        clearTimeout(retryRef.current.timer);
+        retryRef.current.timer = null;
+      }
+    }
+
+    async function attemptReconnect(hostName: string, localName: string) {
+      cancelRetry();
+      retryRef.current.active = true;
+
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (!retryRef.current.active || cancelled) return;
+
+        const delay = RETRY_DELAYS[attempt] || 8000;
+        addLog(`Reconnecting in ${delay / 1000}s... (attempt ${attempt + 1}/${MAX_RETRIES})`, "info");
+
+        await new Promise<void>((resolve) => {
+          retryRef.current.timer = setTimeout(resolve, delay);
+        });
+
+        if (!retryRef.current.active || cancelled) return;
+
+        try {
+          const peers = await cmd.startJoin(localName);
+          const match = peers.find((p) => p.name === hostName);
+          if (match) {
+            await cmd.connectToPeer(match.id);
+            const status = await cmd.getSessionStatus();
+            setSession(status);
+            addLog(`Reconnected to ${hostName}`, "success");
+            sendNotification("SimShare", `Reconnected to ${hostName}`);
+            retryRef.current.active = false;
+            return;
+          }
+          addLog(`Host "${hostName}" not found on network`, "warning");
+        } catch {
+          addLog(`Reconnect attempt ${attempt + 1} failed`, "warning");
+        }
+      }
+
+      retryRef.current.active = false;
+      addLog("Could not reconnect. Please rejoin manually.", "error");
+      sendNotification("SimShare", "Connection lost. Could not reconnect.");
+    }
 
     async function setup() {
       const appWindow = getCurrentWebviewWindow();
@@ -55,6 +109,7 @@ export function useTauriEvents() {
           }
         }),
         listen<{ name: string }>("peer-connected", async (event) => {
+          cancelRetry();
           addLog(`Peer connected: ${event.payload.name}`, "success");
           sendNotification("SimShare", `${event.payload.name} connected`);
           try {
@@ -72,11 +127,20 @@ export function useTauriEvents() {
           } else {
             addLog(`Peer lost: ${name}${reason ? ` (${reason})` : ""}`, "warning");
           }
+
           try {
             const status = await cmd.getSessionStatus();
             setSession(status);
+
+            // Auto-retry for clients that lost the host
+            if (!clean && status.session_type === "None") {
+              attemptReconnect(name, status.name || "Guest");
+            }
           } catch {
-            // Ignore if session status fetch fails
+            // Session gone — try to reconnect
+            if (!clean) {
+              attemptReconnect(name, "Guest");
+            }
           }
         }),
         listen<{ message: string }>("connection-failed", (event) => {
@@ -160,6 +224,7 @@ export function useTauriEvents() {
 
     return () => {
       cancelled = true;
+      cancelRetry();
       unlisteners.forEach((fn) => fn());
     };
   }, [setSyncProgress, setSyncPlan, setSession, setManifest, setIsDragging, setIsScanning, addLog]);

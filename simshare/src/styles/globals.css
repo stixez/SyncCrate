@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: 10 15 20;
+  --color-bg-card: 18 26 34;
+  --color-bg-card-hover: 26 37 46;
+  --color-bg-card-active: 31 46 56;
+  --color-accent: 30 168 75;
+  --color-accent-light: 46 204 94;
+  --color-border: 30 45 56;
+  --color-txt: 232 236 244;
+  --color-txt-dim: 122 131 152;
+  --color-status-green: 16 185 129;
+  --color-status-yellow: 245 158 11;
+  --color-status-red: 239 68 68;
+}
+
+.light {
+  --color-bg: 248 250 252;
+  --color-bg-card: 255 255 255;
+  --color-bg-card-hover: 241 245 249;
+  --color-bg-card-active: 226 232 240;
+  --color-accent: 30 168 75;
+  --color-accent-light: 22 144 62;
+  --color-border: 226 232 240;
+  --color-txt: 15 23 42;
+  --color-txt-dim: 100 116 139;
+  --color-status-green: 16 185 129;
+  --color-status-yellow: 217 119 6;
+  --color-status-red: 220 38 38;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -10,8 +40,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0a0f14;
-  color: #e8ecf4;
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-txt));
   overflow: hidden;
 }
 
@@ -21,7 +51,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #1ea84b;
+  outline: 2px solid rgb(var(--color-accent));
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -39,30 +69,30 @@ textarea:focus-visible,
 }
 
 ::-webkit-scrollbar-track {
-  background: #121a22;
+  background: rgb(var(--color-bg-card));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e2d38;
+  background: rgb(var(--color-border));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #353a4a;
+  background: rgb(var(--color-bg-card-active));
 }
 
 .glow-green {
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 8px rgb(var(--color-status-green) / 0.4);
 }
 
 .glow-yellow {
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 8px rgb(var(--color-status-yellow) / 0.4);
 }
 
 .glow-red {
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 8px rgb(var(--color-status-red) / 0.4);
 }
 
 .glow-accent {
-  box-shadow: 0 0 12px rgba(30, 168, 75, 0.3);
+  box-shadow: 0 0 12px rgb(var(--color-accent) / 0.3);
 }

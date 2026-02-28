@@ -14,6 +14,7 @@ interface ModItemProps {
   onSelect?: (path: string) => void;
   bulkMode?: boolean;
   compatibility?: ModCompatibility;
+  onShowDetails?: () => void;
 }
 
 export default function ModItem({
@@ -25,18 +26,26 @@ export default function ModItem({
   onSelect,
   bulkMode,
   compatibility,
+  onShowDetails,
 }: ModItemProps) {
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
   const [showTagEditor, setShowTagEditor] = useState(false);
+  const isDisabled = file.relative_path.includes("_Disabled/") || file.relative_path.includes("_Disabled\\");
 
   return (
-    <div className="relative flex items-center gap-3 bg-bg-card rounded-lg border border-border px-4 py-3 hover:bg-bg-card-hover transition-colors">
+    <div
+      className={`relative flex items-center gap-3 bg-bg-card rounded-lg border border-border px-4 py-3 hover:bg-bg-card-hover transition-colors cursor-pointer ${isDisabled ? "opacity-50" : ""}`}
+      onClick={() => {
+        if (!bulkMode && onShowDetails) onShowDetails();
+      }}
+    >
       {bulkMode && (
         <input
           type="checkbox"
           checked={selected}
           onChange={() => onSelect?.(file.relative_path)}
+          onClick={(e) => e.stopPropagation()}
           aria-label={`Select ${name}`}
           className="shrink-0 accent-accent"
         />
@@ -45,7 +54,14 @@ export default function ModItem({
         {isMod ? <Puzzle size={16} className="text-accent-light" /> : <Palette size={16} className="text-pink-400" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium truncate">{name}</p>
+          {isDisabled && (
+            <span className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0">
+              Disabled
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <p className="text-xs text-txt-dim truncate">{file.relative_path}</p>
           {tags.length > 0 && (
@@ -68,7 +84,10 @@ export default function ModItem({
       <span className="text-xs text-txt-dim">{formatBytes(file.size)}</span>
       <span className="text-xs text-txt-dim font-mono">{file.hash.slice(0, 8)}</span>
       <button
-        onClick={() => setShowTagEditor(!showTagEditor)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowTagEditor(!showTagEditor);
+        }}
         className="p-1 rounded hover:bg-bg-card-active transition-colors text-txt-dim hover:text-accent-light"
         title="Edit tags"
       >

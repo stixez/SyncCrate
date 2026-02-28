@@ -370,6 +370,96 @@ pub async fn set_active_game(
 }
 
 #[tauri::command]
+pub async fn toggle_mod(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    relative_path: String,
+    enabled: bool,
+) -> Result<String, String> {
+    let base = {
+        let app_state = state.lock().await;
+        app_state
+            .game_paths
+            .get(&app_state.active_game)
+            .cloned()
+            .ok_or("Game path not set")?
+    };
+
+    let full_path = utils::safe_join(&base, &relative_path)?;
+    if !full_path.exists() {
+        return Err("File not found".into());
+    }
+
+    let mods_dir = utils::mods_path(&base);
+    let disabled_dir = mods_dir.join("_Disabled");
+
+    let filename = full_path
+        .file_name()
+        .ok_or("Invalid filename")?
+        .to_os_string();
+
+    if enabled {
+        // Move from _Disabled back to Mods root
+        let dest = mods_dir.join(&filename);
+        if dest.exists() {
+            return Err("A file with that name already exists in Mods".into());
+        }
+        std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
+        let new_rel = dest
+            .strip_prefix(&base)
+            .unwrap_or(&dest)
+            .to_string_lossy()
+            .replace('\\', "/");
+        Ok(new_rel)
+    } else {
+        // Move to _Disabled
+        std::fs::create_dir_all(&disabled_dir).map_err(|e| e.to_string())?;
+        let dest = disabled_dir.join(&filename);
+        if dest.exists() {
+            return Err("A file with that name already exists in _Disabled".into());
+        }
+        std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
+        let new_rel = dest
+            .strip_prefix(&base)
+            .unwrap_or(&dest)
+            .to_string_lossy()
+            .replace('\\', "/");
+        Ok(new_rel)
+    }
+}
+
+#[tauri::command]
+pub async fn open_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Path does not exist".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_all_game_paths(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<HashMap<String, Option<String>>, String> {

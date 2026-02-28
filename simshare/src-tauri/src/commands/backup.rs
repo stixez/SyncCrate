@@ -382,6 +382,35 @@ pub async fn restore_backup(
 }
 
 #[tauri::command]
+pub async fn rename_backup(id: String, label: String) -> Result<(), String> {
+    utils::sanitize_id(&id)?;
+
+    let label = label.trim().to_string();
+    if label.is_empty() || label.len() > MAX_BACKUP_LABEL_LEN {
+        return Err(format!("Label must be 1-{MAX_BACKUP_LABEL_LEN} characters"));
+    }
+    if label.chars().any(|c| c.is_control()) {
+        return Err("Label contains invalid characters".into());
+    }
+
+    let backup_dir = utils::backups_dir().join(&id);
+    let manifest_path = backup_dir.join("manifest.json");
+
+    if !manifest_path.exists() {
+        return Err("Backup not found".into());
+    }
+
+    let data = std::fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
+    let mut manifest: BackupManifest = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    manifest.info.label = label;
+
+    let updated = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    std::fs::write(&manifest_path, updated).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn delete_backup(id: String) -> Result<(), String> {
     utils::sanitize_id(&id)?;
 

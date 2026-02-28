@@ -72,6 +72,10 @@ One player hosts a session, others join. SimShare compares mod folders, surfaces
 | **Profiles** | Mod profiles | Snapshot your mod setup per game. Export/import as `.simshare-profile` files. |
 | **Perms** | Host permissions | Hosts control which folders (Mods, Saves, Tray, Screenshots) peers can sync. |
 | **SHA-256** | Integrity verification | Every file is hash-verified after transfer. |
+| **Toggle** | Mod enable/disable | Disable mods without deleting them. Moves files to a `_Disabled` folder and back. |
+| **Details** | Mod details panel | Click any mod to view full details — path, size, hash, tags, compatibility, and quick actions. |
+| **Theme** | Light & dark theme | Toggle between dark and light mode from the sidebar. Preference persists across sessions. |
+| **Retry** | Auto-reconnect | Automatic reconnection with exponential backoff if the connection drops unexpectedly. |
 | **Live** | Real-time progress | File counts, byte totals, and percentage during sync. |
 | **Update** | Auto-update | Check for and install updates directly from the app. |
 
@@ -140,6 +144,12 @@ Not on the same network? SimShare works over any virtual LAN. We recommend **[Ta
 
 ---
 
+## Mod Enable / Disable
+
+Temporarily disable a mod without deleting it. Click any mod to open its details panel, then hit **Disable** — the file moves to `Mods/_Disabled/` so the game won't load it. Hit **Enable** to move it back. Disabled mods are visually dimmed in the list.
+
+---
+
 ## Mod Tags
 
 Organize your mods with 12 built-in tags (Hair, Clothing, Build, Gameplay, etc.). Tag mods individually or in bulk, then filter the mod list by tag. Tag filter pills show counts so you can see your collection at a glance.
@@ -148,7 +158,7 @@ Organize your mods with 12 built-in tags (Hair, Clothing, Build, Gameplay, etc.)
 
 ## Backup & Restore
 
-Create a full backup of your Mods, Saves, Tray, and Screenshots folders at any time. Before every restore, SimShare automatically creates a safety backup so you can always roll back. Backups are per-game and shown with a game badge.
+Create a full backup of your Mods, Saves, Tray, and Screenshots folders at any time. Before every restore, SimShare automatically creates a safety backup so you can always roll back. Backups are per-game and shown with a game badge. Rename backups inline to keep them organized.
 
 ---
 

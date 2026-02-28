@@ -71,6 +71,9 @@ interface AppState {
   setModFilter: (filter: "all" | "mod" | "cc") => void;
   modTagFilter: string | null;
   setModTagFilter: (tag: string | null) => void;
+
+  theme: "dark" | "light";
+  setTheme: (theme: "dark" | "light") => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -131,4 +134,11 @@ export const useAppStore = create<AppState>((set) => ({
   setModFilter: (filter) => set({ modFilter: filter }),
   modTagFilter: null,
   setModTagFilter: (tag) => set({ modTagFilter: tag }),
+
+  theme: (localStorage.getItem("simshare-theme") as "dark" | "light") || "dark",
+  setTheme: (theme) => {
+    localStorage.setItem("simshare-theme", theme);
+    document.documentElement.classList.toggle("light", theme === "light");
+    set({ theme });
+  },
 }));

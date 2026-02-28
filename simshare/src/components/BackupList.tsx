@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
-import { Archive, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { formatBytes, formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
+
+function sendNotification(title: string, body: string) {
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body });
+    }
+  } catch {
+    // Notifications not supported
+  }
+}
 
 const GAME_LABELS: Record<string, string> = {
   Sims2: "Sims 2",
@@ -28,6 +38,8 @@ export default function BackupList() {
   const [restoring, setRestoring] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
     cmd.listBackups().then(setBackups).catch(console.error);
@@ -43,6 +55,7 @@ export default function BackupList() {
       setLabel("");
       setShowCreate(false);
       addLog(`Backup "${label.trim()}" created`, "success");
+      sendNotification("SimShare", `Backup "${label.trim()}" created successfully`);
     } catch (e) {
       addLog(`Backup failed: ${e}`, "error");
     } finally {
@@ -67,6 +80,7 @@ export default function BackupList() {
         useAppStore.getState().setManifest(m);
       } catch {}
       addLog("Backup restored (safety backup created)", "success");
+      sendNotification("SimShare", "Backup restored successfully");
     } catch (e) {
       addLog(`Restore failed: ${e}`, "error");
     } finally {
@@ -88,6 +102,23 @@ export default function BackupList() {
     } catch (e) {
       addLog(`Delete failed: ${e}`, "error");
     }
+  };
+
+  const handleRename = async (id: string) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === backups.find((b) => b.id === id)?.label) {
+      setRenaming(null);
+      return;
+    }
+    try {
+      await cmd.renameBackup(id, trimmed);
+      const updated = await cmd.listBackups();
+      setBackups(updated);
+      addLog(`Backup renamed to "${trimmed}"`, "info");
+    } catch (e) {
+      addLog(`Rename failed: ${e}`, "error");
+    }
+    setRenaming(null);
   };
 
   return (
@@ -161,7 +192,48 @@ export default function BackupList() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm">{backup.label}</h3>
+                    {renaming === backup.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          maxLength={128}
+                          className="bg-bg border border-border rounded px-2 py-0.5 text-sm font-semibold focus:outline-none focus:border-accent"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRename(backup.id);
+                            if (e.key === "Escape") setRenaming(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleRename(backup.id)}
+                          className="p-0.5 text-status-green hover:text-status-green/80"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          onClick={() => setRenaming(null)}
+                          className="p-0.5 text-txt-dim hover:text-txt"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-semibold text-sm">{backup.label}</h3>
+                        <button
+                          onClick={() => {
+                            setRenaming(backup.id);
+                            setRenameValue(backup.label);
+                          }}
+                          className="p-0.5 text-txt-dim hover:text-txt transition-colors"
+                          title="Rename backup"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </>
+                    )}
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${GAME_COLORS[backup.game] || GAME_COLORS.Sims4}`}>
                       {GAME_LABELS[backup.game] || "Sims 4"}
                     </span>
