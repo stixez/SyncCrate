@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SimShare — Sync Sims 4 Mods with Friends</title>
-  <meta name="description" content="Free, open-source desktop app to sync Sims 4 mods, CC, and saves with friends over LAN. No cloud, no accounts, no uploads.">
-  <meta property="og:title" content="SimShare — Sync Sims 4 Mods with Friends">
-  <meta property="og:description" content="Free, open-source desktop app to sync Sims 4 mods, CC, and saves with friends over LAN.">
+  <title>SimShare — Sync Sims 2/3/4 Mods with Friends</title>
+  <meta name="description" content="Free, open-source desktop app to sync Sims 2, 3, and 4 mods, CC, and saves with friends over LAN. No cloud, no accounts, no uploads.">
+  <meta property="og:title" content="SimShare — Sync Sims 2/3/4 Mods with Friends">
+  <meta property="og:description" content="Free, open-source desktop app to sync Sims 2, 3, and 4 mods, CC, and saves with friends over LAN.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://stixez.github.io/SimShare/screenshots/dashboard.png">
   <meta property="og:url" content="https://stixez.github.io/SimShare">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="SimShare — Sync Sims 4 Mods with Friends">
-  <meta name="twitter:description" content="Free, open-source desktop app to sync Sims 4 mods, CC, and saves with friends over LAN.">
+  <meta name="twitter:title" content="SimShare — Sync Sims 2/3/4 Mods with Friends">
+  <meta name="twitter:description" content="Free, open-source desktop app to sync Sims 2, 3, and 4 mods, CC, and saves with friends over LAN.">
   <meta name="twitter:image" content="https://stixez.github.io/SimShare/screenshots/dashboard.png">
   <meta name="theme-color" content="#1ea84b">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231ea84b'/><path d='M16 6L10 12L16 18L22 12Z' fill='white' opacity='.9'/></svg>">
@@ -575,7 +575,7 @@
         <path d="M13 21L16 24L19 21" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
       </svg>
       <h1><span>Sim</span>Share</h1>
-      <p class="tagline">Sync your Sims 4 mods, CC, and saves with friends over LAN. No cloud, no accounts, no uploads.</p>
+      <p class="tagline">Sync your Sims 2, 3, and 4 mods, CC, and saves with friends over LAN. No cloud, no accounts, no uploads.</p>
       <div class="downloads">
         <a href="https://github.com/stixez/SimShare/releases/latest" class="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -594,17 +594,17 @@
   <section id="features">
     <div class="container">
       <h2 class="section-title">Why SimShare?</h2>
-      <p class="section-subtitle">Everything you need to keep your Sims 4 mods in sync with friends.</p>
+      <p class="section-subtitle">Everything you need to keep your Sims mods in sync with friends.</p>
       <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F3AE;</div>
+          <h3>Multi-Game Support</h3>
+          <p>Switch between Sims 2, Sims 3, and Sims 4 with per-game paths, profiles, and backups.</p>
+        </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F310;</div>
           <h3>Peer-to-Peer</h3>
           <p>Files transfer directly between computers at full LAN speed. Nothing leaves your network.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F50D;</div>
-          <h3>Auto-Discovery</h3>
-          <p>Finds other SimShare users on your network automatically via mDNS. No IPs to configure.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x26A1;</div>
@@ -612,19 +612,34 @@
           <p>Compares SHA-256 hashes. Only transfers what's actually different &mdash; identical files are skipped.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">&#x1F465;</div>
-          <h3>Multi-Peer</h3>
-          <p>One host, multiple friends. Everyone syncs independently at the same time.</p>
+          <div class="feature-icon">&#x1F3F7;</div>
+          <h3>Mod Tags &amp; Search</h3>
+          <p>Organize mods with 12 built-in tags. Bulk-tag, filter, and search your collection.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">&#x1F4C1;</div>
-          <h3>Mod Profiles</h3>
-          <p>Snapshot your mod setup. Export and share profiles as <code>.simshare-profile</code> files.</p>
+          <div class="feature-icon">&#x1F4E5;</div>
+          <h3>Drag &amp; Drop Install</h3>
+          <p>Drop <code>.package</code>, <code>.ts4script</code>, <code>.zip</code>, or <code>.sims3pack</code> files to install instantly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4BE;</div>
+          <h3>Backup &amp; Restore</h3>
+          <p>Full snapshot of your Mods, Saves, Tray, and Screenshots. Safety backup before every restore.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F6E1;</div>
           <h3>Conflict Resolution</h3>
           <p>Keep yours, use theirs, or keep both. Every conflict is resolved on your terms.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4E6;</div>
+          <h3>DLC &amp; Pack Detection</h3>
+          <p>Detects installed expansion, game, and stuff packs. Warns about mod compatibility issues.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F504;</div>
+          <h3>Auto-Update</h3>
+          <p>Check for and install updates directly from the app. Always stay on the latest version.</p>
         </div>
       </div>
     </div>
@@ -694,7 +709,7 @@
   <section class="platforms">
     <div class="container">
       <h2 class="section-title">Cross-Platform</h2>
-      <p class="section-subtitle">Works on every platform The Sims 4 runs on.</p>
+      <p class="section-subtitle">Works on every platform The Sims runs on.</p>
       <div class="platform-grid">
         <div class="platform-item">
           <div class="platform-icon">
