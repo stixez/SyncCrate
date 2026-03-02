@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { toastError, toastSuccess } from "../lib/toast";
+import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
 
@@ -42,6 +43,11 @@ export function useSync() {
     try {
       await cmd.executeSync();
       toastSuccess("Sync complete!");
+      const count = incrementSyncCount();
+      const milestone = checkMilestone(count);
+      if (milestone) {
+        useAppStore.getState().setDonationMilestone(milestone);
+      }
     } catch (e: any) {
       addLog(`Sync failed: ${e}`, "error");
       toastError(`Sync failed: ${e}`);

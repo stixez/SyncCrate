@@ -12,6 +12,7 @@ import * as cmd from "../lib/commands";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ConnectionGuide from "./ConnectionGuide";
+import DonationBanner from "./DonationBanner";
 
 export default function Dashboard() {
   const session = useAppStore((s) => s.session);
@@ -472,6 +473,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <DonationBanner />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Dashboard</h2>
         <div className="flex gap-2">

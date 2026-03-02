@@ -44,6 +44,9 @@ interface AppState {
   showDonate: boolean;
   setShowDonate: (show: boolean) => void;
 
+  donationMilestone: number | null;
+  setDonationMilestone: (milestone: number | null) => void;
+
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
 
@@ -106,6 +109,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   showDonate: false,
   setShowDonate: (show) => set({ showDonate: show }),
+
+  donationMilestone: null,
+  setDonationMilestone: (milestone) => set({ donationMilestone: milestone }),
 
   isScanning: false,
   setIsScanning: (scanning) => set({ isScanning: scanning }),

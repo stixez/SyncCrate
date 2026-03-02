@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FolderOpen, RefreshCw, Plus, X, ChevronDown } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, ChevronDown, Heart, Coffee, ExternalLink } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -8,6 +8,8 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import type { SimsGame } from "../lib/types";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { getSyncCount, getTimeSaved } from "../lib/donations";
 import * as cmd from "../lib/commands";
 
 const GAMES: { key: SimsGame; label: string }[] = [
@@ -278,6 +280,29 @@ export default function Settings() {
       </div>
 
       <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Application</p>
+
+      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Heart size={16} className="text-pink-400" />
+          <h3 className="font-semibold text-sm">Support SimShare</h3>
+        </div>
+        <p className="text-xs text-txt-dim">
+          SimShare is free, open-source, and ad-free. One-time support helps keep development going.
+        </p>
+        {getSyncCount() > 0 && (
+          <p className="text-xs text-txt-dim">
+            <span className="text-accent-light font-semibold">{getSyncCount()}</span> sync{getSyncCount() !== 1 ? "s" : ""} — <span className="text-accent-light font-semibold">{getTimeSaved(getSyncCount())}</span> saved
+          </p>
+        )}
+        <button
+          onClick={() => openUrl("https://www.buymeacoffee.com/stixe").catch(() => {})}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-status-yellow/10 hover:bg-status-yellow/20 border border-status-yellow/30 text-sm font-medium transition-colors group"
+        >
+          <Coffee size={16} className="text-status-yellow" />
+          Buy Me a Coffee
+          <ExternalLink size={12} className="text-txt-dim opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+        </button>
+      </div>
 
       <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
         <h3 className="font-semibold text-sm">About</h3>
