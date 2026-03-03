@@ -11,9 +11,38 @@ pub async fn compute_sync_plan(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
-    let mut app_state = state.lock().await;
+    let resolved_id = {
+        let app_state = state.lock().await;
+        app_state.resolve_peer_id(peer_id)?
+    };
 
-    let resolved_id = app_state.resolve_peer_id(peer_id)?;
+    // If we don't have the peer's manifest yet (race between connection
+    // and the user clicking "Compare & Sync"), wait briefly for it to
+    // arrive via the normal message loop rather than erroring immediately.
+    {
+        let needs_wait = {
+            let app_state = state.lock().await;
+            let conn = app_state
+                .connections
+                .get(&resolved_id)
+                .ok_or("Peer not found")?;
+            conn.remote_manifest.is_none()
+        };
+        if needs_wait {
+            for _ in 0..30 {
+                // Drop state lock while sleeping so the message loop can store the manifest
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                let app_state = state.lock().await;
+                match app_state.connections.get(&resolved_id) {
+                    Some(conn) if conn.remote_manifest.is_some() => break,
+                    Some(_) => {}
+                    None => return Err("Peer disconnected".to_string()),
+                }
+            }
+        }
+    }
+
+    let mut app_state = state.lock().await;
 
     let conn = app_state
         .connections
@@ -23,7 +52,7 @@ pub async fn compute_sync_plan(
     let remote = conn
         .remote_manifest
         .as_ref()
-        .ok_or("No remote manifest available. Connect to a peer first.")?;
+        .ok_or("Peer's mod list hasn't arrived yet. Please try again in a moment.")?;
 
     let mut plan = diff::compute_diff(&app_state.local_manifest, remote);
 
