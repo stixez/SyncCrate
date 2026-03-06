@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SimShare?color=1ea84b&label=download&style=flat-square" alt="Latest Release" /></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1ea84b&label=download&style=flat-square" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1e2d38?style=flat-square" alt="Platforms" />
-  <img src="https://img.shields.io/github/license/stixez/SimShare?color=1e2d38&style=flat-square" alt="License" />
+  <img src="https://img.shields.io/github/license/stixez/SyncCrate?color=1e2d38&style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <a href="../../releases/latest">Download</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://stixez.github.io/SimShare">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#quick-start">Quick Start</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#building-from-source">Build from Source</a>
+  <a href="../../releases/latest">Download</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://stixez.github.io/SyncCrate">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#quick-start">Quick Start</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#building-from-source">Build from Source</a>
 </p>
 
 ---
@@ -52,22 +52,10 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 </p>
 <p align="center"><em>Dashboard — Session overview, sync plan, and connected peers</em></p>
 
-<details>
-<summary><strong>More screenshots</strong></summary>
-
-<br>
-
-| Mods & CC | Save Files |
+| Content Browser | Profiles |
 |:-:|:-:|
-| ![Mods & CC](docs/screenshots/mods-cc.png) | ![Save Files](docs/screenshots/saves.png) |
-| *Browse mods, resolve conflicts* | *Manage and sync save files* |
-
-| Profiles | Activity Log |
-|:-:|:-:|
-| ![Profiles](docs/screenshots/profiles.png) | ![Activity Log](docs/screenshots/activity-log.png) |
-| *Snapshot and share mod setups* | *Real-time session events* |
-
-</details>
+| ![Content Browser](docs/screenshots/content.png) | ![Profiles](docs/screenshots/profiles.png) |
+| *Browse, tag, and manage mods* | *Snapshot and share mod setups* |
 
 ---
 
@@ -272,8 +260,8 @@ Profiles capture a snapshot of your current mod list, scoped to the active game.
 ### Build
 
 ```bash
-git clone https://github.com/stixez/SimShare.git
-cd SimShare/synccrate
+git clone https://github.com/stixez/SyncCrate.git
+cd SyncCrate/synccrate
 npm install
 npm run tauri dev        # development with hot reload
 npm run tauri build      # production build with installer
