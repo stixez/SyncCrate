@@ -26,6 +26,9 @@ import {
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
 import { toastSuccess, toastError } from "./lib/toast";
+import { toast } from "sonner";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import * as cmd from "./lib/commands";
 
 // Migrate localStorage keys from old simshare-* prefix to synccrate-*
@@ -92,6 +95,30 @@ function App() {
         console.error("Failed to initialize:", e);
       }
       setReady(true);
+
+      // Silent auto-update check
+      try {
+        const update = await check();
+        if (update) {
+          toast(`Update v${update.version} available`, {
+            duration: Infinity,
+            action: {
+              label: "Update Now",
+              onClick: async () => {
+                toast.loading("Downloading update...", { id: "update" });
+                try {
+                  await update.downloadAndInstall();
+                  await relaunch();
+                } catch {
+                  toast.error("Update failed. Try again from Settings.", { id: "update" });
+                }
+              },
+            },
+          });
+        }
+      } catch {
+        // Silent fail — user can still check manually in Settings
+      }
     }
 
     if (isDemoMode()) {
