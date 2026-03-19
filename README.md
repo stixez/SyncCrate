@@ -145,7 +145,7 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 | **RimWorld** | Mods, Saves | Yes |
 | **Cities: Skylines** | Mods, Assets, Saves, Maps | Yes |
 | **Euro Truck Simulator 2** | Mods, Profiles | Yes |
-| **Factorio** | Mods, Saves, Scenarios | Yes |
+| **Factorio** | Mods, Saves, Scenarios, Blueprints | Yes |
 | **Palworld** | Mods | Yes |
 | **Left 4 Dead 2** | Addons & Maps, Configs | Yes |
 

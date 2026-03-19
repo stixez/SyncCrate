@@ -2490,6 +2490,18 @@
           "extensions": [],
           "file_type": "CustomContent",
           "syncable": true
+        },
+        {
+          "id": "blueprints",
+          "label": "Blueprints",
+          "icon": "ruler",
+          "color": "text-blue-400",
+          "folder": ".",
+          "extensions": [
+            "dat"
+          ],
+          "file_type": "CustomContent",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [
