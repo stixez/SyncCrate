@@ -136,6 +136,38 @@ pub fn run() {
             let handle = app.handle().clone();
             let state: tauri::State<'_, Arc<Mutex<AppState>>> = app.state();
             let state_clone = state.inner().clone();
+            let state_for_timer = state_clone.clone();
+
+            // Start scheduled auto-backup timer
+            {
+                let app_handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        let config = crate::commands::sync::read_sync_config();
+                        if !config.auto_backup_scheduled {
+                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                            continue;
+                        }
+
+                        let interval = std::time::Duration::from_secs(
+                            config.auto_backup_interval_hours as u64 * 3600
+                        );
+                        tokio::time::sleep(interval).await;
+
+                        let config = crate::commands::sync::read_sync_config();
+                        if config.auto_backup_scheduled {
+                            log::info!("Creating scheduled auto-backup");
+                            if let Err(e) = crate::commands::backup::create_auto_backup(
+                                &state_for_timer,
+                                &app_handle,
+                                "Scheduled",
+                            ).await {
+                                log::warn!("Scheduled auto-backup failed: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
 
             // Async tasks: file watcher + pack detection
             tauri::async_runtime::spawn(async move {
@@ -231,6 +263,8 @@ pub fn run() {
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
+            commands::sync::get_auto_backup_config,
+            commands::sync::set_auto_backup_config,
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,

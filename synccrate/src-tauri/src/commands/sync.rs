@@ -137,6 +137,20 @@ pub async fn execute_sync(
         (plan, base, resolved_id)
     };
 
+    // Auto-backup before sync if enabled
+    let config = read_sync_config();
+    if config.auto_backup_before_sync {
+        log::info!("Creating pre-sync auto-backup");
+        if let Err(e) = crate::commands::backup::create_auto_backup(
+            state.inner(),
+            &app,
+            "Pre-sync",
+        ).await {
+            log::warn!("Pre-sync auto-backup failed: {}", e);
+            // Don't block sync on backup failure
+        }
+    }
+
     let result = run_sync(&state, &app, &plan, &base_path, &resolved_id).await;
 
     {
