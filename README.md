@@ -24,10 +24,12 @@
 
 - **Peer-to-peer at LAN speed** — Files transfer directly between computers at 100-900 MB/s. No cloud, no uploads, no waiting.
 - **Smart file diffing** — Compares SHA-256 hashes and only transfers what actually changed.
-- **40 games, 24 families** — Sims, WoW, Minecraft, Valheim, Terraria, Satisfactory, and many more. Data-driven registry — adding a game is just JSON.
+- **43 games, 27 families** — Sims, WoW, Minecraft, Valheim, Terraria, Subnautica, KSP, and many more. Data-driven registry — adding a game is just JSON.
+- **Transfer compression** — zstd compression reduces bandwidth by 50-80% for most mod types. Negotiated automatically between peers.
 - **Multi-peer sessions** — One host, multiple friends. Everyone syncs independently.
 - **Conflict resolution** — Keep yours, use theirs, or keep both — per file.
-- **Mod profiles & backups** — Snapshot your setup, export a `.synccrate-profile` file, share it on Discord — friends drag it into the app and they're done. Safety backup before every restore.
+- **Mod profiles & auto-backups** — Snapshot your setup, export profiles, share on Discord. Auto-backup before sync or on a schedule with smart pruning.
+- **Sync resume** — Interrupted syncs pick up where they left off instead of restarting from scratch.
 - **Privacy-first** — No servers, no accounts, no tracking, no data collection. Nothing leaves your network.
 - **Dangerous file warnings** — Flags potentially risky script files (`.ts4script`, `.lua`, `.jar`, `.dll`) per game before sync.
 
@@ -61,7 +63,7 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 
 ## Supported Games
 
-40 games across 24 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
+43 games across 27 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
 
 <details>
 <summary><strong>The Sims</strong> — 3 games</summary>
@@ -125,7 +127,7 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 </details>
 
 <details>
-<summary><strong>Other Games</strong> — 19 games</summary>
+<summary><strong>Other Games</strong> — 22 games</summary>
 
 | Game | Content Types | Auto-Detect |
 |------|--------------|:-----------:|
@@ -148,6 +150,9 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 | **Factorio** | Mods, Saves, Scenarios, Blueprints | Yes |
 | **Palworld** | Mods | Yes |
 | **Left 4 Dead 2** | Addons & Maps, Configs | Yes |
+| **Subnautica** | Mods (QMods), Saves | Yes |
+| **7 Days to Die** | Mods, Saves, Server Configs | Yes |
+| **Kerbal Space Program** | Mods, Saves, Ship Designs | Yes |
 
 </details>
 
@@ -182,7 +187,10 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 |-|---------|-------------|
 | **P2P** | Peer-to-peer transfer | Files move directly between computers. Nothing leaves your network. |
 | **Multi** | Multi-peer sessions | One host, multiple clients. Each client syncs independently. |
-| **Games** | Multi-game support | 40 games across 24 families. Data-driven registry — adding games is just JSON. |
+| **Games** | Multi-game support | 43 games across 27 families. Data-driven registry — adding games is just JSON. |
+| **Zstd** | Transfer compression | zstd compression reduces bandwidth 50-80%. Negotiated per-peer, skips already-compressed files. |
+| **Auto** | Auto-backups | Back up before every sync or on a schedule. Old auto-backups pruned automatically. |
+| **Resume** | Sync resume | Interrupted syncs resume from where they left off. Checkpoint verified by plan hash. |
 | **mDNS** | Auto-discovery | Finds peers on your network automatically. No IPs to configure. |
 | **Diff** | Smart diffing | Compares file hashes. Only transfers what's actually different. |
 | **Resolve** | Conflict resolution | Keep yours, use theirs, or keep both — per file. |
@@ -286,6 +294,8 @@ Organize your mods with 12 built-in tags (Hair, Clothing, Build, Gameplay, etc.)
 
 Create a full backup of your game content folders at any time. Before every restore, SyncCrate automatically creates a safety backup so you can always roll back. Backups are per-game and shown with a game badge. Rename backups inline to keep them organized.
 
+Enable **auto-backups** in Settings to back up before every sync or on a schedule (1-24 hours). Set a max count and old auto-backups are pruned automatically. Auto-backups are labeled with timestamps and marked with an "Auto" badge.
+
 ---
 
 ## Selective Sync
@@ -369,7 +379,7 @@ Yes. One person hosts, multiple friends join. Each client syncs independently wi
 
 <details>
 <summary><strong>Which games are supported?</strong></summary>
-SyncCrate ships with 40 games across 24 families, including The Sims, WoW, Minecraft, Valheim, Terraria, Call of Duty, Stronghold, TrackMania, Satisfactory, and more. Games are defined in a JSON registry — adding new games requires no code changes.
+SyncCrate ships with 43 games across 27 families, including The Sims, WoW, Minecraft, Valheim, Terraria, Subnautica, KSP, Call of Duty, Stronghold, TrackMania, Satisfactory, and more. Games are defined in a JSON registry — adding new games requires no code changes.
 </details>
 
 <details>

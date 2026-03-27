@@ -2617,6 +2617,230 @@
         }
       ],
       "dangerous_script_extensions": []
+    },
+    {
+      "id": "subnautica",
+      "label": "Subnautica",
+      "family": "subnautica",
+      "icon": "waves",
+      "color": "text-cyan-400",
+      "primary_color": "#22d3ee",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Subnautica",
+                "D:\\SteamLibrary\\steamapps\\common\\Subnautica"
+              ],
+              "macos": [
+                "~/Library/Application Support/Steam/steamapps/common/Subnautica"
+              ],
+              "linux": [
+                "~/.steam/steam/steamapps/common/Subnautica"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "QMods",
+          "SNAppData/SavedGames"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (QMods)",
+          "icon": "package",
+          "color": "text-cyan-400",
+          "folder": "QMods",
+          "extensions": [
+            "dll",
+            "json",
+            "png",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "SNAppData/SavedGames",
+          "extensions": [],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ]
+    },
+    {
+      "id": "7daystodie",
+      "label": "7 Days to Die",
+      "family": "7daystodie",
+      "icon": "skull",
+      "color": "text-red-500",
+      "primary_color": "#ef4444",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files (x86)\\Steam\\steamapps\\common\\7 Days To Die",
+                "D:\\SteamLibrary\\steamapps\\common\\7 Days To Die"
+              ],
+              "macos": [],
+              "linux": [
+                "~/.steam/steam/steamapps/common/7 Days To Die"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-red-500",
+          "folder": "Mods",
+          "extensions": [
+            "xml",
+            "dll",
+            "png",
+            "unity3d",
+            "zip"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "%APPDATA%/7DaysToDie/Saves",
+          "extensions": [
+            "ttp",
+            "map",
+            "xml"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "configs",
+          "label": "Server Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "Data/Config",
+          "extensions": [
+            "xml"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ]
+    },
+    {
+      "id": "kerbal_space_program",
+      "label": "Kerbal Space Program",
+      "family": "ksp",
+      "icon": "rocket",
+      "color": "text-green-400",
+      "primary_color": "#4ade80",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Kerbal Space Program",
+                "D:\\SteamLibrary\\steamapps\\common\\Kerbal Space Program"
+              ],
+              "macos": [
+                "~/Library/Application Support/Steam/steamapps/common/Kerbal Space Program"
+              ],
+              "linux": [
+                "~/.steam/steam/steamapps/common/Kerbal Space Program"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "GameData",
+          "saves"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-green-400",
+          "folder": "GameData",
+          "extensions": [
+            "cfg",
+            "dll",
+            "mu",
+            "dds",
+            "png",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "saves",
+          "extensions": [
+            "sfs",
+            "craft",
+            "loadmeta"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "ships",
+          "label": "Ship Designs",
+          "icon": "rocket",
+          "color": "text-blue-400",
+          "folder": "saves/ships",
+          "extensions": [
+            "craft"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ]
     }
   ]
 }

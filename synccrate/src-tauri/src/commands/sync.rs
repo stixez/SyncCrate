@@ -636,6 +636,42 @@ pub async fn get_exclude_patterns() -> Result<Vec<String>, String> {
     Ok(read_exclude_patterns())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_glob_matches_wildcard_all() {
+        assert!(glob_matches("*", "anything/goes/here.txt"));
+    }
+
+    #[test]
+    fn test_glob_matches_extension() {
+        assert!(glob_matches("*.ts4script", "Mods/drama.ts4script"));
+        assert!(glob_matches("*.package", "Mods/sub/cc.package"));
+        assert!(!glob_matches("*.ts4script", "Mods/cc.package"));
+    }
+
+    #[test]
+    fn test_glob_matches_prefix() {
+        assert!(glob_matches("Mods/*", "Mods/file.package"));
+        assert!(glob_matches("Mods/*", "Mods/sub/deep.package"));
+        assert!(!glob_matches("Mods/*", "Saves/game.save"));
+    }
+
+    #[test]
+    fn test_glob_matches_exact() {
+        assert!(glob_matches("Mods/specific.package", "Mods/specific.package"));
+        assert!(!glob_matches("Mods/specific.package", "Mods/other.package"));
+    }
+
+    #[test]
+    fn test_glob_matches_backslash_normalization() {
+        assert!(glob_matches("Mods\\*", "Mods/file.package"));
+        assert!(glob_matches("Mods/*", "Mods\\file.package"));
+    }
+}
+
 #[tauri::command]
 pub async fn get_auto_backup_config() -> Result<serde_json::Value, String> {
     let config = read_sync_config();

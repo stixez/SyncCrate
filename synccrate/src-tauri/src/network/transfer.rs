@@ -935,3 +935,125 @@ pub async fn request_file(
     let _ = expected_hash; // suppress unused warning
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compress_decompress_roundtrip() {
+        // Simulate a typical mod file chunk (repetitive XML-like content)
+        let original = b"<config>\n  <setting name=\"foo\" value=\"bar\" />\n  <setting name=\"baz\" value=\"qux\" />\n</config>\n"
+            .repeat(100);
+
+        let compressed = compress_chunk(&original).expect("compression should succeed");
+        assert!(compressed.len() < original.len(), "compressed should be smaller than original");
+
+        let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
+        assert_eq!(decompressed, original, "roundtrip should produce identical data");
+    }
+
+    #[test]
+    fn test_compress_decompress_random_data() {
+        // Random-ish data that won't compress well
+        let original: Vec<u8> = (0..4096).map(|i| (i * 7 + 13) as u8).collect();
+
+        let compressed = compress_chunk(&original).expect("compression should succeed");
+        let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
+        assert_eq!(decompressed, original, "roundtrip should produce identical data");
+    }
+
+    #[test]
+    fn test_compress_empty() {
+        let compressed = compress_chunk(b"").expect("compression of empty data should succeed");
+        let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
+        assert_eq!(decompressed, b"");
+    }
+
+    #[test]
+    fn test_should_skip_compression() {
+        assert!(should_skip_compression("Mods/texture.png"));
+        assert!(should_skip_compression("Mods/archive.zip"));
+        assert!(should_skip_compression("Mods/TEXTURE.PNG")); // case insensitive
+        assert!(should_skip_compression("audio/music.mp3"));
+        assert!(should_skip_compression("video/intro.mkv"));
+
+        assert!(!should_skip_compression("Mods/mod.package"));
+        assert!(!should_skip_compression("config.xml"));
+        assert!(!should_skip_compression("script.lua"));
+        assert!(!should_skip_compression("data.json"));
+    }
+
+    #[test]
+    fn test_compression_actually_shrinks_text() {
+        // 10KB of repetitive text (typical config/XML file)
+        let data = b"key = value\n".repeat(1000);
+        let compressed = compress_chunk(&data).expect("compression should succeed");
+        let ratio = compressed.len() as f64 / data.len() as f64;
+        assert!(ratio < 0.5, "repetitive text should compress to <50%, got {:.0}%", ratio * 100.0);
+    }
+
+    #[test]
+    fn test_base64_compression_pipeline() {
+        // Simulate the full send/receive pipeline: compress → base64 → base64 decode → decompress
+        let original = b"<mod name=\"test\">\n  <data>lots of repeated content here</data>\n</mod>\n"
+            .repeat(50);
+
+        // Sender side
+        let compressed = compress_chunk(&original).expect("compress");
+        let b64_encoded = BASE64.encode(&compressed);
+
+        // Receiver side
+        let b64_decoded = BASE64.decode(&b64_encoded).expect("base64 decode");
+        let decompressed = decompress_chunk(&b64_decoded).expect("decompress");
+
+        assert_eq!(decompressed, original, "full pipeline roundtrip should match");
+    }
+
+    #[test]
+    fn test_compress_inflation_fallback() {
+        // Random bytes that won't compress well — compressed may be larger
+        let random_data: Vec<u8> = (0..2048).map(|i| ((i * 251 + 67) % 256) as u8).collect();
+        let compressed = compress_chunk(&random_data).expect("compression should succeed");
+        // Even if compressed is larger, the roundtrip still works
+        let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
+        assert_eq!(decompressed, random_data);
+        // The sending logic checks `compressed.len() < n` — verify we can detect inflation
+        // (this is just a property test, the actual fallback is in handle_client)
+    }
+
+    #[test]
+    fn test_multiple_chunks_sequential() {
+        // Simulate sending multiple chunks of a file
+        let chunks: Vec<Vec<u8>> = (0..5).map(|i| {
+            format!("chunk {} data with content {}\n", i, "x".repeat(500)).into_bytes()
+        }).collect();
+
+        let mut reconstructed = Vec::new();
+        for chunk in &chunks {
+            let compressed = compress_chunk(chunk).expect("compress");
+            let decompressed = decompress_chunk(&compressed).expect("decompress");
+            reconstructed.extend_from_slice(&decompressed);
+        }
+
+        let original: Vec<u8> = chunks.into_iter().flatten().collect();
+        assert_eq!(reconstructed, original, "sequential chunks should reconstruct correctly");
+    }
+
+    #[test]
+    fn test_decompress_corrupted_data_returns_error() {
+        let garbage = b"this is not valid zstd data";
+        let result = decompress_chunk(garbage);
+        assert!(result.is_err(), "corrupted data should return an error");
+    }
+
+    #[test]
+    fn test_compress_large_chunk() {
+        // Near MAX_CHUNK_SIZE (1MB)
+        let large_data = vec![b'A'; 1_000_000];
+        let compressed = compress_chunk(&large_data).expect("compression should succeed");
+        assert!(compressed.len() < large_data.len(), "repetitive 1MB should compress well");
+        let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
+        assert_eq!(decompressed, large_data);
+    }
+}

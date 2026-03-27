@@ -367,3 +367,72 @@ pub fn sanitize_id(id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_safe_join_normal_path() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        let result = safe_join(&base_str, "Mods/file.package");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.to_string_lossy().contains("Mods"));
+        assert!(path.to_string_lossy().contains("file.package"));
+    }
+
+    #[test]
+    fn test_safe_join_blocks_traversal() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        let result = safe_join(&base_str, "../../../etc/passwd");
+        assert!(result.is_err(), "path traversal should be rejected");
+    }
+
+    #[test]
+    fn test_safe_join_blocks_absolute_path() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        #[cfg(target_os = "windows")]
+        let result = safe_join(&base_str, "C:\\Windows\\System32\\cmd.exe");
+        #[cfg(not(target_os = "windows"))]
+        let result = safe_join(&base_str, "/etc/passwd");
+        assert!(result.is_err(), "absolute paths should be rejected");
+    }
+
+    #[test]
+    fn test_sanitize_id_valid() {
+        let result = sanitize_id("abc-123-def");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_id_rejects_slashes() {
+        assert!(sanitize_id("../malicious").is_err());
+        assert!(sanitize_id("path/to/file").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_id_rejects_dots() {
+        assert!(sanitize_id("..").is_err());
+    }
+
+    #[test]
+    fn test_dangerous_extension_blocks_executables() {
+        assert!(is_dangerous_extension("file.exe"));
+        assert!(is_dangerous_extension("script.bat"));
+        assert!(is_dangerous_extension("script.cmd"));
+        assert!(is_dangerous_extension("file.scr"));
+    }
+
+    #[test]
+    fn test_dangerous_extension_allows_mod_formats() {
+        assert!(!is_dangerous_extension("mod.jar"));
+        assert!(!is_dangerous_extension("mod.dll"));
+        assert!(!is_dangerous_extension("cc.package"));
+        assert!(!is_dangerous_extension("config.xml"));
+        assert!(!is_dangerous_extension("texture.png"));
+    }
+}

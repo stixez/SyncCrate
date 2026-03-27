@@ -30,6 +30,10 @@ Thumbs.db
 
 # Claude Code
 CLAUDE.md
+.claude/
+
+# Superpowers docs
+docs/superpowers/
 
 # Local Cargo config (machine-specific paths)
 **/.cargo/

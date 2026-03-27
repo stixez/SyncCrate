@@ -63,3 +63,94 @@ pub fn compute_plan_hash(plan: &SyncPlan) -> String {
     }
     hex::encode(hasher.finalize())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{FileInfo, FileManifest};
+    use std::collections::HashMap;
+
+    fn make_file(path: &str, hash: &str, size: u64) -> FileInfo {
+        FileInfo {
+            relative_path: path.to_string(),
+            size,
+            hash: hash.to_string(),
+            modified: 1000,
+            file_type: "Mod".to_string(),
+        }
+    }
+
+    fn make_manifest(files: Vec<FileInfo>) -> FileManifest {
+        let mut map = HashMap::new();
+        for f in files {
+            map.insert(f.relative_path.clone(), f);
+        }
+        FileManifest {
+            files: map,
+            generated_at: 1000,
+        }
+    }
+
+    #[test]
+    fn test_diff_remote_only_receive() {
+        let local = make_manifest(vec![]);
+        let remote = make_manifest(vec![make_file("Mods/a.package", "abc123", 1000)]);
+        let plan = compute_diff(&local, &remote);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/a.package"));
+        assert_eq!(plan.total_bytes, 1000);
+    }
+
+    #[test]
+    fn test_diff_local_only_send() {
+        let local = make_manifest(vec![make_file("Mods/b.package", "def456", 2000)]);
+        let remote = make_manifest(vec![]);
+        let plan = compute_diff(&local, &remote);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::SendToRemote(f) if f.relative_path == "Mods/b.package"));
+        assert_eq!(plan.total_bytes, 2000);
+    }
+
+    #[test]
+    fn test_diff_same_hash_no_action() {
+        let file = make_file("Mods/c.package", "same_hash", 500);
+        let local = make_manifest(vec![file.clone()]);
+        let remote = make_manifest(vec![file]);
+        let plan = compute_diff(&local, &remote);
+        assert_eq!(plan.actions.len(), 0);
+        assert_eq!(plan.total_bytes, 0);
+    }
+
+    #[test]
+    fn test_diff_different_hash_conflict() {
+        let local = make_manifest(vec![make_file("Mods/d.package", "hash_a", 1000)]);
+        let remote = make_manifest(vec![make_file("Mods/d.package", "hash_b", 2000)]);
+        let plan = compute_diff(&local, &remote);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::Conflict { .. }));
+        assert_eq!(plan.total_bytes, 2000); // max(1000, 2000)
+    }
+
+    #[test]
+    fn test_plan_hash_deterministic() {
+        let local = make_manifest(vec![make_file("a.txt", "h1", 100)]);
+        let remote = make_manifest(vec![make_file("b.txt", "h2", 200)]);
+        let plan = compute_diff(&local, &remote);
+        let hash1 = compute_plan_hash(&plan);
+        let hash2 = compute_plan_hash(&plan);
+        assert_eq!(hash1, hash2, "same plan should produce same hash");
+    }
+
+    #[test]
+    fn test_plan_hash_different_plans() {
+        let local1 = make_manifest(vec![]);
+        let remote1 = make_manifest(vec![make_file("a.txt", "h1", 100)]);
+        let plan1 = compute_diff(&local1, &remote1);
+
+        let local2 = make_manifest(vec![]);
+        let remote2 = make_manifest(vec![make_file("b.txt", "h2", 200)]);
+        let plan2 = compute_diff(&local2, &remote2);
+
+        assert_ne!(compute_plan_hash(&plan1), compute_plan_hash(&plan2));
+    }
+}

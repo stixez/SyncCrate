@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SyncCrate — The Easiest Way to Keep Modded Games in Sync</title>
-  <meta name="description" content="Free, open-source desktop app to sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. Works on LAN and virtual LAN (Tailscale, ZeroTier). 40 games supported. No cloud, no accounts.">
+  <meta name="description" content="Free, open-source desktop app to sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. Works on LAN and virtual LAN (Tailscale, ZeroTier). 43 games supported. No cloud, no accounts.">
   <meta property="og:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta property="og:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 40 games supported. No cloud, no accounts.">
+  <meta property="og:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 43 games supported. No cloud, no accounts.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
   <meta property="og:url" content="https://stixez.github.io/SyncCrate">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta name="twitter:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 40 games supported. No cloud, no accounts.">
+  <meta name="twitter:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 43 games supported. No cloud, no accounts.">
   <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
   <meta name="theme-color" content="#1ea84b">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -532,7 +532,7 @@
         background: var(--bg-card); border: 1px dashed var(--border-light);
         color: var(--text-dim); font-size: 0.85rem; font-weight: 500;
         cursor: pointer; transition: all 0.2s;
-      ">Show all 40 games &darr;</button>
+      ">Show all 43 games &darr;</button>
       <div class="game-grid" id="more-games" style="display: none; margin-top: 12px;">
         <div class="game-chip" style="--chip-color: #f87171"><span class="game-dot"></span>Warcraft III</div>
         <div class="game-chip" style="--chip-color: #f97316"><span class="game-dot"></span>Satisfactory</div>
@@ -562,14 +562,17 @@
         <div class="game-chip" style="--chip-color: #fb923c"><span class="game-dot"></span>Factorio</div>
         <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>Palworld</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Left 4 Dead 2</div>
+        <div class="game-chip" style="--chip-color: #22d3ee"><span class="game-dot"></span>Subnautica</div>
+        <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>7 Days to Die</div>
+        <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Kerbal Space Program</div>
       </div>
       <div class="stats-row">
         <div class="stat">
-          <div class="stat-value">40</div>
+          <div class="stat-value">43</div>
           <div class="stat-label">Games supported</div>
         </div>
         <div class="stat">
-          <div class="stat-value">24</div>
+          <div class="stat-value">27</div>
           <div class="stat-label">Game families</div>
         </div>
         <div class="stat">
@@ -635,6 +638,21 @@
           <div class="feature-icon">&#x1F512;</div>
           <h3>Privacy First</h3>
           <p>No servers, no accounts, no tracking, no data collection. Files stay between you and your friends.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4A8;</div>
+          <h3>Transfer Compression</h3>
+          <p>zstd compression reduces bandwidth 50-80%. Negotiated per-peer automatically. Already-compressed files are skipped.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x23F0;</div>
+          <h3>Auto-Backups</h3>
+          <p>Back up before every sync or on a schedule. Old auto-backups are pruned to save disk space. Never lose your mods.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F504;</div>
+          <h3>Sync Resume</h3>
+          <p>Interrupted syncs pick up where they left off. No more restarting large transfers from scratch.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F50D;</div>
