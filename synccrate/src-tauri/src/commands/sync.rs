@@ -414,21 +414,36 @@ fn glob_matches(pattern: &str, path: &str) -> bool {
     pattern == path
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-struct SyncConfig {
-    exclude_patterns: Vec<String>,
+#[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
+pub struct SyncConfig {
+    pub exclude_patterns: Vec<String>,
+    #[serde(default)]
+    pub auto_backup_before_sync: bool,
+    #[serde(default)]
+    pub auto_backup_scheduled: bool,
+    #[serde(default = "default_backup_interval")]
+    pub auto_backup_interval_hours: u32,
+    #[serde(default = "default_backup_max_count")]
+    pub auto_backup_max_count: u32,
 }
 
-fn read_exclude_patterns() -> Vec<String> {
+fn default_backup_interval() -> u32 { 4 }
+fn default_backup_max_count() -> u32 { 5 }
+
+pub fn read_sync_config() -> SyncConfig {
     let path = utils::sync_config_path();
     if path.exists() {
         if let Ok(data) = std::fs::read_to_string(&path) {
             if let Ok(config) = serde_json::from_str::<SyncConfig>(&data) {
-                return config.exclude_patterns;
+                return config;
             }
         }
     }
-    Vec::new()
+    SyncConfig::default()
+}
+
+fn read_exclude_patterns() -> Vec<String> {
+    read_sync_config().exclude_patterns
 }
 
 #[tauri::command]
@@ -493,9 +508,8 @@ pub async fn set_exclude_patterns(patterns: Vec<String>) -> Result<(), String> {
         }
     }
 
-    let config = SyncConfig {
-        exclude_patterns: patterns,
-    };
+    let mut config = read_sync_config();
+    config.exclude_patterns = patterns;
     let path = utils::sync_config_path();
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     std::fs::write(&path, data).map_err(|e| e.to_string())
@@ -504,4 +518,40 @@ pub async fn set_exclude_patterns(patterns: Vec<String>) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_exclude_patterns() -> Result<Vec<String>, String> {
     Ok(read_exclude_patterns())
+}
+
+#[tauri::command]
+pub async fn get_auto_backup_config() -> Result<serde_json::Value, String> {
+    let config = read_sync_config();
+    Ok(serde_json::json!({
+        "auto_backup_before_sync": config.auto_backup_before_sync,
+        "auto_backup_scheduled": config.auto_backup_scheduled,
+        "auto_backup_interval_hours": config.auto_backup_interval_hours,
+        "auto_backup_max_count": config.auto_backup_max_count,
+    }))
+}
+
+#[tauri::command]
+pub async fn set_auto_backup_config(
+    before_sync: bool,
+    scheduled: bool,
+    interval_hours: u32,
+    max_count: u32,
+) -> Result<(), String> {
+    if !(1..=24).contains(&interval_hours) {
+        return Err("Interval must be 1-24 hours".to_string());
+    }
+    if !(1..=20).contains(&max_count) {
+        return Err("Max count must be 1-20".to_string());
+    }
+
+    let mut config = read_sync_config();
+    config.auto_backup_before_sync = before_sync;
+    config.auto_backup_scheduled = scheduled;
+    config.auto_backup_interval_hours = interval_hours;
+    config.auto_backup_max_count = max_count;
+
+    let path = crate::utils::sync_config_path();
+    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())
 }
