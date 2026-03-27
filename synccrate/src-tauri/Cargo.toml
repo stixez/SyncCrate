@@ -34,3 +34,4 @@ tokio-util = { version = "0.7", features = ["codec"] }
 rand = "0.8"
 socket2 = "0.5"
 rayon = "1.10"
+zstd = "0.13"
