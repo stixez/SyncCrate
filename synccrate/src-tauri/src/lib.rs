@@ -59,6 +59,7 @@ pub fn run() {
                 "stronghold_crusader_2", "stronghold_2", "space_engineers",
                 "trackmania2020", "tm2_stadium", "tmnf", "tmuf",
                 "satisfactory", "dst", "conan_exiles", "torchlight2", "riftbreaker",
+                "subnautica", "7daystodie", "kerbal_space_program",
                 "wow_classic",
                 "sims2", "warcraft3", "wow_classic_era",
                 "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom",
