@@ -103,6 +103,8 @@ pub struct SyncPlan {
     pub total_bytes: u64,
     #[serde(default)]
     pub excluded: Vec<String>,
+    #[serde(default)]
+    pub resumed_files: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

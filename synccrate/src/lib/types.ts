@@ -85,6 +85,7 @@ export interface SyncPlan {
   actions: SyncAction[];
   total_bytes: number;
   excluded: string[];
+  resumed_files?: number;
 }
 
 export type Resolution = "KeepMine" | "UseTheirs" | "KeepBoth";

@@ -6,6 +6,44 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct SyncCheckpoint {
+    game: String,
+    peer_id: String,
+    plan_hash: String,
+    completed_files: Vec<String>,
+    total_files: u64,
+    total_bytes: u64,
+    started_at: u64,
+}
+
+fn checkpoint_path() -> std::path::PathBuf {
+    let config = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    config.join("synccrate").join("sync_progress.json")
+}
+
+fn read_checkpoint() -> Option<SyncCheckpoint> {
+    let path = checkpoint_path();
+    if path.exists() {
+        if let Ok(data) = std::fs::read_to_string(&path) {
+            return serde_json::from_str(&data).ok();
+        }
+    }
+    None
+}
+
+fn write_checkpoint(checkpoint: &SyncCheckpoint) {
+    let path = checkpoint_path();
+    if let Ok(data) = serde_json::to_string_pretty(checkpoint) {
+        let _ = std::fs::write(&path, data);
+    }
+}
+
+fn delete_checkpoint() {
+    let path = checkpoint_path();
+    let _ = std::fs::remove_file(&path);
+}
+
 #[tauri::command]
 pub async fn compute_sync_plan(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -97,6 +135,47 @@ pub async fn compute_sync_plan(
             .sum();
     }
 
+    // Check for resumable checkpoint
+    let mut resumed_files: u64 = 0;
+    if let Some(checkpoint) = read_checkpoint() {
+        let plan_hash = diff::compute_plan_hash(&plan);
+        if checkpoint.game == app_state.active_game
+            && checkpoint.peer_id == resolved_id
+            && checkpoint.plan_hash == plan_hash
+            && !checkpoint.completed_files.is_empty()
+        {
+            let completed_set: std::collections::HashSet<&str> = checkpoint
+                .completed_files
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+
+            plan.actions.retain(|action| {
+                let path = match action {
+                    SyncAction::ReceiveFromRemote(f) => &f.relative_path,
+                    SyncAction::Delete(p) => p,
+                    _ => return true,
+                };
+                !completed_set.contains(path.as_str())
+            });
+
+            resumed_files = checkpoint.completed_files.len() as u64;
+
+            plan.total_bytes = plan.actions.iter().map(|action| match action {
+                SyncAction::SendToRemote(f) => f.size,
+                SyncAction::ReceiveFromRemote(f) => f.size,
+                SyncAction::Conflict { local, remote } => local.size.max(remote.size),
+                SyncAction::Delete(_) => 0,
+            }).sum();
+
+            log::info!("Resuming sync: {} files already completed", resumed_files);
+        } else {
+            delete_checkpoint();
+        }
+    }
+
+    plan.resumed_files = resumed_files;
+
     // Store plan on the peer connection
     let conn = app_state
         .connections
@@ -186,6 +265,22 @@ async fn run_sync(
     let mut sync_errors: Vec<String> = Vec::new();
     let state_arc = state.inner().clone();
 
+    let plan_hash = diff::compute_plan_hash(plan);
+    let game_id = {
+        let app_state = state.lock().await;
+        app_state.active_game.clone()
+    };
+    let mut checkpoint = SyncCheckpoint {
+        game: game_id,
+        peer_id: peer_id.to_string(),
+        plan_hash,
+        completed_files: Vec::new(),
+        total_files,
+        total_bytes: plan.total_bytes,
+        started_at: crate::utils::timestamp_now(),
+    };
+    write_checkpoint(&checkpoint);
+
     for action in &plan.actions {
         let action_path = match action {
             SyncAction::SendToRemote(f) => Some(&f.relative_path),
@@ -212,6 +307,8 @@ async fn run_sync(
                     Ok(()) => {
                         files_done += 1;
                         bytes_done += file_info.size;
+                        checkpoint.completed_files.push(file_info.relative_path.clone());
+                        write_checkpoint(&checkpoint);
                     }
                     Err(e) => {
                         files_done += 1;
@@ -254,6 +351,9 @@ async fn run_sync(
                     Ok(full_path) => {
                         if let Err(e) = tokio::fs::remove_file(&full_path).await {
                             sync_errors.push(format!("Delete {}: {}", path, e));
+                        } else {
+                            checkpoint.completed_files.push(path.clone());
+                            write_checkpoint(&checkpoint);
                         }
                     }
                     Err(e) => {
@@ -275,6 +375,8 @@ async fn run_sync(
             "peer_id": peer_id,
         }),
     );
+
+    delete_checkpoint();
 
     if !sync_errors.is_empty() {
         return Err(format!("{} file(s) failed to sync", sync_errors.len()));

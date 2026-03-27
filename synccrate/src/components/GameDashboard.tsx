@@ -542,6 +542,11 @@ export default function GameDashboard({ gameId }: Props) {
               <span className="text-sm text-status-yellow">This sync includes script files. Only sync from peers you trust.</span>
             </div>
           )}
+          {syncPlan.resumed_files && syncPlan.resumed_files > 0 && (
+            <div className="text-sm text-accent-light">
+              Resuming — {syncPlan.resumed_files} files already transferred
+            </div>
+          )}
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} />
         </>
       )}
