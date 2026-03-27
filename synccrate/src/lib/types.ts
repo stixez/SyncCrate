@@ -160,6 +160,14 @@ export interface BackupInfo {
   total_size: number;
   category_counts: Record<string, number>;
   game: Game;
+  auto?: boolean;
+}
+
+export interface AutoBackupConfig {
+  auto_backup_before_sync: boolean;
+  auto_backup_scheduled: boolean;
+  auto_backup_interval_hours: number;
+  auto_backup_max_count: number;
 }
 
 export interface InstallResult {

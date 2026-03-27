@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AutoBackupConfig,
   BackupInfo,
   FileManifest,
   GameDefinition,
@@ -281,6 +282,26 @@ export async function renameBackup(
   label: string,
 ): Promise<void> {
   return invoke("rename_backup", { id, label });
+}
+
+// --- Auto-Backup Config ---
+
+export async function getAutoBackupConfig(): Promise<AutoBackupConfig> {
+  return invoke("get_auto_backup_config");
+}
+
+export async function setAutoBackupConfig(
+  beforeSync: boolean,
+  scheduled: boolean,
+  intervalHours: number,
+  maxCount: number,
+): Promise<void> {
+  return invoke("set_auto_backup_config", {
+    beforeSync,
+    scheduled,
+    intervalHours,
+    maxCount,
+  });
 }
 
 // --- Packs ---

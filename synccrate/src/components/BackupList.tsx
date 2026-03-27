@@ -219,6 +219,11 @@ export default function BackupList({ gameId }: Props) {
                     ) : (
                       <>
                         <h3 className="font-semibold text-sm">{backup.label}</h3>
+                        {backup.auto && (
+                          <span className="ml-2 text-xs bg-accent/20 text-accent-light rounded px-1.5 py-0.5">
+                            Auto
+                          </span>
+                        )}
                         <button
                           onClick={() => {
                             setRenaming(backup.id);

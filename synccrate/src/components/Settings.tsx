@@ -12,6 +12,7 @@ import { getSyncCount, getTimeSaved } from "../lib/donations";
 import { gameLabel, getGameDef } from "../lib/games";
 import { GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
+import type { AutoBackupConfig } from "../lib/types";
 
 export default function Settings() {
   const gamePaths = useAppStore((s) => s.gamePaths);
@@ -28,6 +29,12 @@ export default function Settings() {
   const [pathInputs, setPathInputs] = useState<Record<string, string>>({});
   const [updating, setUpdating] = useState(false);
   const [newPattern, setNewPattern] = useState("");
+  const [autoBackupConfig, setAutoBackupConfigState] = useState<AutoBackupConfig>({
+    auto_backup_before_sync: false,
+    auto_backup_scheduled: false,
+    auto_backup_interval_hours: 4,
+    auto_backup_max_count: 5,
+  });
 
   // Only show games in the user's library
   const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id));
@@ -44,6 +51,21 @@ export default function Settings() {
     }).catch(() => {});
     cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
   }, [setGamePaths, setExcludePatterns]);
+
+  useEffect(() => {
+    cmd.getAutoBackupConfig().then(setAutoBackupConfigState).catch(console.error);
+  }, []);
+
+  const updateAutoBackupConfig = (updates: Partial<AutoBackupConfig>) => {
+    const newConfig = { ...autoBackupConfig, ...updates };
+    setAutoBackupConfigState(newConfig);
+    cmd.setAutoBackupConfig(
+      newConfig.auto_backup_before_sync,
+      newConfig.auto_backup_scheduled,
+      newConfig.auto_backup_interval_hours,
+      newConfig.auto_backup_max_count,
+    ).catch(console.error);
+  };
 
   const handleBrowse = async (gameId: string) => {
     try {
@@ -289,6 +311,86 @@ export default function Settings() {
             <Plus size={14} />
             Add
           </button>
+        </div>
+      </div>
+
+      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Auto-Backups</p>
+
+      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-sm">Auto-Backups</h3>
+        <p className="text-xs text-txt-dim">
+          Automatically create backups before syncing or on a schedule.
+        </p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm">Back up before sync</label>
+            <button
+              role="switch"
+              aria-checked={autoBackupConfig.auto_backup_before_sync}
+              onClick={() => updateAutoBackupConfig({ auto_backup_before_sync: !autoBackupConfig.auto_backup_before_sync })}
+              className={`relative w-10 h-6 rounded-full transition-colors ${
+                autoBackupConfig.auto_backup_before_sync ? "bg-accent" : "bg-bg border border-border"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                  autoBackupConfig.auto_backup_before_sync ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm">Scheduled backups</label>
+            <button
+              role="switch"
+              aria-checked={autoBackupConfig.auto_backup_scheduled}
+              onClick={() => updateAutoBackupConfig({ auto_backup_scheduled: !autoBackupConfig.auto_backup_scheduled })}
+              className={`relative w-10 h-6 rounded-full transition-colors ${
+                autoBackupConfig.auto_backup_scheduled ? "bg-accent" : "bg-bg border border-border"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                  autoBackupConfig.auto_backup_scheduled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          {autoBackupConfig.auto_backup_scheduled && (
+            <div className="flex items-center justify-between">
+              <label className="text-sm">Backup interval</label>
+              <select
+                value={autoBackupConfig.auto_backup_interval_hours}
+                onChange={(e) => updateAutoBackupConfig({ auto_backup_interval_hours: Number(e.target.value) })}
+                aria-label="Backup interval"
+                className="bg-bg border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+              >
+                <option value={1}>Every 1 hour</option>
+                <option value={2}>Every 2 hours</option>
+                <option value={4}>Every 4 hours</option>
+                <option value={8}>Every 8 hours</option>
+                <option value={12}>Every 12 hours</option>
+                <option value={24}>Every 24 hours</option>
+              </select>
+            </div>
+          )}
+          {(autoBackupConfig.auto_backup_before_sync || autoBackupConfig.auto_backup_scheduled) && (
+            <div className="flex items-center justify-between">
+              <label className="text-sm">Max auto-backups</label>
+              <input
+                type="number"
+                value={autoBackupConfig.auto_backup_max_count}
+                min={1}
+                max={20}
+                onChange={(e) => {
+                  const val = Math.min(20, Math.max(1, Number(e.target.value)));
+                  updateAutoBackupConfig({ auto_backup_max_count: val });
+                }}
+                aria-label="Max auto-backups"
+                className="w-20 bg-bg border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+          )}
         </div>
       </div>
 
