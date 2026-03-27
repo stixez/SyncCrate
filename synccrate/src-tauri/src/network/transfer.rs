@@ -28,6 +28,34 @@ const MAX_PEER_PACKS: usize = 200;
 /// Maximum string length for a pack code or name from a peer
 const MAX_PACK_STRING_LEN: usize = 128;
 
+/// Extensions that are already compressed — skip zstd for these.
+const SKIP_COMPRESSION_EXTS: &[&str] = &[
+    "zip", "7z", "rar", "gz", "bz2", "xz", "zst",
+    "png", "jpg", "jpeg", "gif", "webp",
+    "dds", "ogg", "mp3", "mp4", "flac", "avi", "mkv",
+];
+
+/// Minimum file size to bother compressing (1 KB).
+const MIN_COMPRESS_SIZE: u64 = 1024;
+
+/// Check if a file path has an already-compressed extension.
+fn should_skip_compression(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    SKIP_COMPRESSION_EXTS.iter().any(|ext| lower.ends_with(&format!(".{}", ext)))
+}
+
+/// Compress a chunk of data using zstd at level 3.
+fn compress_chunk(data: &[u8]) -> Result<Vec<u8>, String> {
+    zstd::encode_all(std::io::Cursor::new(data), 3)
+        .map_err(|e| format!("Compression failed: {}", e))
+}
+
+/// Decompress a zstd-compressed chunk.
+fn decompress_chunk(data: &[u8]) -> Result<Vec<u8>, String> {
+    zstd::decode_all(std::io::Cursor::new(data))
+        .map_err(|e| format!("Decompression failed: {}", e))
+}
+
 /// Sanitize GameInfo received from an untrusted peer.
 fn sanitize_game_info(info: GameInfo) -> GameInfo {
     let game_version = info.game_version.map(|v| {
@@ -150,13 +178,17 @@ async fn handle_client(
         protocol::recv_message(&mut *s).await?
     };
 
+    let mut use_compression = false;
+
     let (peer_name, peer_version, peer_pin) = match msg {
-        Message::Hello { name, version, pin, .. } => {
+        Message::Hello { name, version, pin, supports_compression } => {
             // Sanitize: truncate and strip control characters
             let sanitized = name.chars()
                 .filter(|c| !c.is_control())
                 .take(MAX_PEER_NAME_LEN)
                 .collect::<String>();
+            let peer_supports_compression = supports_compression;
+            use_compression = peer_supports_compression;
             (sanitized, version, pin)
         }
         _ => return Err("Expected Hello message".to_string()),
@@ -197,7 +229,7 @@ async fn handle_client(
             &Message::Welcome {
                 name: our_name,
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                supports_compression: false,
+                supports_compression: true,
             },
         )
         .await?;
@@ -225,6 +257,7 @@ async fn handle_client(
                 remote_manifest: None,
                 sync_plan: None,
                 is_syncing: false,
+                supports_compression: use_compression,
             },
         );
     }
@@ -360,6 +393,11 @@ async fn handle_client(
                         let metadata = file.metadata().await.map_err(|e| e.to_string())?;
                         let file_size = metadata.len();
 
+                        // Determine if compression should be used for this file
+                        let compress_this_file = use_compression
+                            && file_size >= MIN_COMPRESS_SIZE
+                            && !should_skip_compression(&path);
+
                         // Stream file: read in 64KB chunks, hash incrementally, send immediately
                         let chunk_size = 65536;
                         let mut buf = vec![0u8; chunk_size];
@@ -407,12 +445,22 @@ async fn handle_client(
                         loop {
                             let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
                             if n == 0 { break; }
+
+                            let (send_data, is_compressed) = if compress_this_file {
+                                match compress_chunk(&buf[..n]) {
+                                    Ok(compressed) if compressed.len() < n => (BASE64.encode(&compressed), true),
+                                    _ => (BASE64.encode(&buf[..n]), false),
+                                }
+                            } else {
+                                (BASE64.encode(&buf[..n]), false)
+                            };
+
                             protocol::send_message(
                                 &mut *s,
                                 &Message::FileChunk {
-                                    data: BASE64.encode(&buf[..n]),
+                                    data: send_data,
                                     offset,
-                                    compressed: false,
+                                    compressed: is_compressed,
                                 },
                             )
                             .await?;
@@ -537,18 +585,18 @@ pub async fn connect_to_host(
                 name: our_name,
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 pin: pin.clone(),
-                supports_compression: false,
+                supports_compression: true,
             },
         )
         .await?;
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version) = {
+    let (host_name, host_version, host_supports_compression) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
-            Message::Welcome { name, version, .. } => (name, version),
+            Message::Welcome { name, version, supports_compression } => (name, version, supports_compression),
             Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
         }
@@ -625,6 +673,7 @@ pub async fn connect_to_host(
                 remote_manifest: Some(remote_manifest),
                 sync_plan: None,
                 is_syncing: false,
+                supports_compression: host_supports_compression,
             },
         );
     }
@@ -831,8 +880,13 @@ pub async fn request_file(
         loop {
             let msg = protocol::recv_message(&mut *s).await?;
             match msg {
-                Message::FileChunk { data, .. } => {
-                    let decoded = BASE64.decode(&data).map_err(|e| e.to_string())?;
+                Message::FileChunk { data, compressed, .. } => {
+                    let raw_decoded = BASE64.decode(&data).map_err(|e| e.to_string())?;
+                    let decoded = if compressed {
+                        decompress_chunk(&raw_decoded)?
+                    } else {
+                        raw_decoded
+                    };
                     if decoded.len() > MAX_CHUNK_SIZE {
                         return Err(format!(
                             "Chunk too large: {} bytes (max {})",

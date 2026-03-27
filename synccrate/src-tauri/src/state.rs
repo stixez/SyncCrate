@@ -193,6 +193,7 @@ pub struct PeerConnection {
     pub remote_manifest: Option<FileManifest>,
     pub sync_plan: Option<SyncPlan>,
     pub is_syncing: bool,
+    pub supports_compression: bool,
 }
 
 pub struct AppState {
