@@ -42,10 +42,10 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows
-          - platform: macos-latest
+          - platform: macos-15
             target: aarch64-apple-darwin
             label: macOS (Apple Silicon)
-          - platform: macos-latest
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
             label: macOS (Intel)
           - platform: ubuntu-22.04
