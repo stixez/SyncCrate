@@ -2,7 +2,8 @@ import { ReactNode, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import { Heart } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { getGameDef } from "../lib/games";
+import { gamePrimaryColor, getGameDef } from "../lib/games";
+import { applyAccent, applyAppearanceRoot, applyThemeClass, useMediaPreference } from "../lib/appearance";
 import DonateModal from "./DonateModal";
 import { GameArt, LiveDot } from "./ui";
 
@@ -24,16 +25,31 @@ export default function Layout({ children }: { children: ReactNode }) {
   const page = useAppStore((s) => s.page);
   const selectedGame = useAppStore((s) => s.selectedGame);
 
+  const appearance = useAppStore((s) => s.appearance);
+  const mediaTick = useMediaPreference();
+
+  // mediaTick re-runs these when the OS scheme / reduced-motion setting flips,
+  // so "system" theme and auto effects follow it live.
   useEffect(() => {
-    document.documentElement.classList.toggle("light", theme === "light");
-  }, [theme]);
+    applyThemeClass(theme);
+  }, [theme, mediaTick]);
+
+  useEffect(() => {
+    applyAppearanceRoot(appearance);
+  }, [appearance, mediaTick]);
+
+  // The user's accent by default; per-game recoloring is opt-in.
+  const accentSource = appearance.matchGame && selectedGame ? gamePrimaryColor(selectedGame) : appearance.accent;
+  useEffect(() => {
+    applyAccent(accentSource);
+  }, [accentSource]);
 
   const isConnected = session && session.session_type !== "None";
   const isGlobal = page === "activity" || page === "settings" || page === "game-browser" || !selectedGame;
   const crumbGame = !isGlobal && selectedGame ? getGameDef(selectedGame)?.label ?? selectedGame : null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
+    <div className="flex h-app overflow-hidden bg-bg">
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <header className="h-14 border-b border-border flex items-center justify-between gap-4 px-6 shrink-0 bg-bg">
@@ -80,7 +96,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               imgClassName="object-[50%_28%] saturate-[0.8]"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/55 to-bg/10" />
-              <div className="absolute inset-0 opacity-40 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.4)_2px_3px)]" />
+              <div className="fx-deco absolute inset-0 opacity-40 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.4)_2px_3px)]" />
             </GameArt>
           )}
           <div className="relative z-[1]">{children}</div>

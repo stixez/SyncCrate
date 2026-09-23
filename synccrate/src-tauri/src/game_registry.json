@@ -8,6 +8,7 @@
       "icon": "gamepad-2",
       "color": "text-accent-light",
       "primary_color": "#1fb87e",
+      "genres": ["life-sim"],
       "steam_app_id": 1222670,
       "auto_detect": true,
       "detection": {
@@ -120,6 +121,7 @@
       "icon": "sun",
       "color": "text-pink-400",
       "primary_color": "#1fb87e",
+      "genres": ["life-sim"],
       "steam_app_id": 1222670,
       "auto_detect": true,
       "detection": {
@@ -243,6 +245,7 @@
       "icon": "sparkles",
       "color": "text-violet-400",
       "primary_color": "#1fb87e",
+      "genres": ["life-sim"],
       "steam_app_id": 1222670,
       "auto_detect": true,
       "detection": {
@@ -346,6 +349,7 @@
       "icon": "gamepad-2",
       "color": "text-blue-400",
       "primary_color": "#60a5fa",
+      "genres": ["life-sim"],
       "steam_app_id": 47890,
       "auto_detect": true,
       "detection": {
@@ -449,6 +453,7 @@
       "icon": "gamepad-2",
       "color": "text-orange-400",
       "primary_color": "#fb923c",
+      "genres": ["life-sim"],
       "steam_app_id": 3314070,
       "auto_detect": true,
       "detection": {
@@ -550,6 +555,7 @@
       "icon": "swords",
       "color": "text-yellow-400",
       "primary_color": "#facc15",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -643,6 +649,7 @@
       "icon": "swords",
       "color": "text-amber-400",
       "primary_color": "#fbbf24",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -734,6 +741,7 @@
       "icon": "swords",
       "color": "text-amber-300",
       "primary_color": "#fcd34d",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -823,6 +831,7 @@
       "icon": "swords",
       "color": "text-sky-400",
       "primary_color": "#38bdf8",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -892,6 +901,7 @@
       "icon": "swords",
       "color": "text-emerald-400",
       "primary_color": "#34d399",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -961,6 +971,7 @@
       "icon": "swords",
       "color": "text-stone-400",
       "primary_color": "#a8a29e",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -1030,6 +1041,7 @@
       "icon": "swords",
       "color": "text-gray-400",
       "primary_color": "#9ca3af",
+      "genres": ["mmo", "rpg"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
       },
@@ -1099,6 +1111,7 @@
       "icon": "swords",
       "color": "text-red-400",
       "primary_color": "#f87171",
+      "genres": ["strategy"],
       "art_urls": {
         "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt806d59ff0b4e0508/6aa88158ad9209ba7f5629ef/rebirth_og.png"
       },
@@ -1171,6 +1184,7 @@
       "icon": "box",
       "color": "text-green-400",
       "primary_color": "#4ade80",
+      "genres": ["sandbox", "survival"],
       "art_urls": {
         "cover": "https://store-images.s-microsoft.com/image/apps.808.14492077886571533.be42f4bd-887b-4430-8ed0-622341b4d2b0.c8274c53-105e-478b-9f4b-41b8088210a3",
         "hero": "https://store-images.s-microsoft.com/image/apps.58378.14492077886571533.338a563a-86e7-47b1-b9dc-41cf411f5dcd.dc840f22-6e8f-4a59-b7bc-57958a0740fd"
@@ -1260,6 +1274,7 @@
       "icon": "crosshair",
       "color": "text-orange-500",
       "primary_color": "#f97316",
+      "genres": ["shooter"],
       "steam_app_id": 730,
       "auto_detect": true,
       "detection": {
@@ -1325,6 +1340,7 @@
       "icon": "wrench",
       "color": "text-blue-500",
       "primary_color": "#3b82f6",
+      "genres": ["sandbox"],
       "steam_app_id": 4000,
       "auto_detect": true,
       "detection": {
@@ -1397,6 +1413,7 @@
       "icon": "sprout",
       "color": "text-lime-400",
       "primary_color": "#a3e635",
+      "genres": ["simulation", "life-sim"],
       "steam_app_id": 413150,
       "auto_detect": true,
       "detection": {
@@ -1452,6 +1469,7 @@
       "icon": "axe",
       "color": "text-cyan-400",
       "primary_color": "#22d3ee",
+      "genres": ["survival", "action"],
       "steam_app_id": 892970,
       "auto_detect": true,
       "detection": {
@@ -1522,6 +1540,7 @@
       "icon": "pickaxe",
       "color": "text-emerald-400",
       "primary_color": "#34d399",
+      "genres": ["sandbox", "survival"],
       "steam_app_id": 105600,
       "auto_detect": true,
       "detection": {
@@ -1621,6 +1640,7 @@
       "icon": "target",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["shooter"],
       "steam_app_id": 2620,
       "auto_detect": true,
       "detection": {
@@ -1674,6 +1694,7 @@
       "icon": "target",
       "color": "text-red-400",
       "primary_color": "#f87171",
+      "genres": ["shooter"],
       "steam_app_id": 2630,
       "auto_detect": true,
       "detection": {
@@ -1728,6 +1749,7 @@
       "icon": "target",
       "color": "text-amber-500",
       "primary_color": "#f59e0b",
+      "genres": ["shooter"],
       "steam_app_id": 7940,
       "auto_detect": true,
       "detection": {
@@ -1792,6 +1814,7 @@
       "icon": "castle",
       "color": "text-yellow-600",
       "primary_color": "#ca8a04",
+      "genres": ["strategy", "city-builder"],
       "steam_app_id": 40950,
       "auto_detect": true,
       "detection": {
@@ -1845,6 +1868,7 @@
       "icon": "castle",
       "color": "text-amber-600",
       "primary_color": "#d97706",
+      "genres": ["strategy", "city-builder"],
       "steam_app_id": 40970,
       "auto_detect": true,
       "detection": {
@@ -1898,6 +1922,7 @@
       "icon": "castle",
       "color": "text-stone-500",
       "primary_color": "#78716c",
+      "genres": ["strategy", "city-builder"],
       "steam_app_id": 40960,
       "auto_detect": true,
       "detection": {
@@ -1948,6 +1973,7 @@
       "icon": "castle",
       "color": "text-orange-600",
       "primary_color": "#ea580c",
+      "genres": ["strategy", "city-builder"],
       "steam_app_id": 232890,
       "auto_detect": true,
       "detection": {
@@ -1995,6 +2021,7 @@
       "icon": "rocket",
       "color": "text-indigo-400",
       "primary_color": "#818cf8",
+      "genres": ["sandbox", "simulation"],
       "steam_app_id": 244850,
       "auto_detect": true,
       "detection": {
@@ -2069,6 +2096,7 @@
       "icon": "flag",
       "color": "text-green-500",
       "primary_color": "#22c55e",
+      "genres": ["racing"],
       "steam_app_id": 11020,
       "auto_detect": true,
       "detection": {
@@ -2138,6 +2166,7 @@
       "icon": "flag",
       "color": "text-blue-500",
       "primary_color": "#3b82f6",
+      "genres": ["racing"],
       "steam_app_id": 7200,
       "auto_detect": true,
       "detection": {
@@ -2207,6 +2236,7 @@
       "icon": "flag",
       "color": "text-yellow-500",
       "primary_color": "#eab308",
+      "genres": ["racing"],
       "steam_app_id": 232910,
       "auto_detect": true,
       "detection": {
@@ -2276,6 +2306,7 @@
       "icon": "flag",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["racing"],
       "steam_app_id": 2225070,
       "auto_detect": true,
       "detection": {
@@ -2345,6 +2376,7 @@
       "icon": "flame",
       "color": "text-orange-400",
       "primary_color": "#fb923c",
+      "genres": ["rpg", "action"],
       "steam_app_id": 200710,
       "auto_detect": true,
       "detection": {
@@ -2399,6 +2431,7 @@
       "icon": "zap",
       "color": "text-violet-400",
       "primary_color": "#a78bfa",
+      "genres": ["strategy", "survival", "action"],
       "steam_app_id": 780310,
       "auto_detect": true,
       "detection": {
@@ -2448,6 +2481,7 @@
       "icon": "shield",
       "color": "text-red-600",
       "primary_color": "#dc2626",
+      "genres": ["survival"],
       "steam_app_id": 440900,
       "auto_detect": true,
       "detection": {
@@ -2498,6 +2532,7 @@
       "icon": "flame-kindling",
       "color": "text-amber-400",
       "primary_color": "#fbbf24",
+      "genres": ["survival"],
       "steam_app_id": 322330,
       "auto_detect": true,
       "detection": {
@@ -2556,6 +2591,7 @@
       "icon": "factory",
       "color": "text-orange-500",
       "primary_color": "#f97316",
+      "genres": ["automation", "sandbox"],
       "steam_app_id": 526870,
       "auto_detect": true,
       "detection": {
@@ -2612,6 +2648,7 @@
       "icon": "target",
       "color": "text-yellow-500",
       "primary_color": "#eab308",
+      "genres": ["strategy", "simulation"],
       "steam_app_id": 294100,
       "auto_detect": true,
       "detection": {
@@ -2684,6 +2721,7 @@
       "icon": "building-2",
       "color": "text-cyan-400",
       "primary_color": "#22d3ee",
+      "genres": ["city-builder", "simulation"],
       "steam_app_id": 255710,
       "auto_detect": true,
       "detection": {
@@ -2777,6 +2815,7 @@
       "icon": "truck",
       "color": "text-red-400",
       "primary_color": "#f87171",
+      "genres": ["simulation"],
       "steam_app_id": 227300,
       "auto_detect": true,
       "detection": {
@@ -2850,6 +2889,7 @@
       "icon": "cog",
       "color": "text-orange-400",
       "primary_color": "#fb923c",
+      "genres": ["automation", "strategy"],
       "steam_app_id": 427520,
       "auto_detect": true,
       "detection": {
@@ -2927,6 +2967,7 @@
       "icon": "paw-print",
       "color": "text-blue-400",
       "primary_color": "#60a5fa",
+      "genres": ["survival"],
       "steam_app_id": 1623730,
       "auto_detect": true,
       "detection": {
@@ -2981,6 +3022,7 @@
       "icon": "biohazard",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["shooter", "horror"],
       "steam_app_id": 550,
       "auto_detect": true,
       "detection": {
@@ -3046,6 +3088,7 @@
       "icon": "waves",
       "color": "text-cyan-400",
       "primary_color": "#22d3ee",
+      "genres": ["survival"],
       "steam_app_id": 264710,
       "auto_detect": true,
       "detection": {
@@ -3114,6 +3157,7 @@
       "icon": "skull",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["survival", "horror"],
       "steam_app_id": 251570,
       "auto_detect": true,
       "detection": {
@@ -3198,6 +3242,7 @@
       "icon": "rocket",
       "color": "text-green-400",
       "primary_color": "#4ade80",
+      "genres": ["simulation", "sandbox"],
       "steam_app_id": 220200,
       "auto_detect": true,
       "detection": {
@@ -3286,6 +3331,7 @@
       "icon": "trees",
       "color": "text-emerald-400",
       "primary_color": "#34d399",
+      "genres": ["survival", "horror"],
       "steam_app_id": 108600,
       "auto_detect": true,
       "detection": {
@@ -3354,6 +3400,7 @@
       "icon": "swords",
       "color": "text-slate-300",
       "primary_color": "#cbd5e1",
+      "genres": ["rpg"],
       "steam_app_id": 489830,
       "auto_detect": true,
       "detection": {
@@ -3417,6 +3464,7 @@
       "icon": "shield",
       "color": "text-amber-400",
       "primary_color": "#fbbf24",
+      "genres": ["strategy", "rpg", "action"],
       "steam_app_id": 261550,
       "auto_detect": true,
       "detection": {
@@ -3476,6 +3524,7 @@
       "icon": "swords",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["rpg"],
       "steam_app_id": 1086940,
       "auto_detect": true,
       "detection": {
@@ -3564,6 +3613,7 @@
       "icon": "zap",
       "color": "text-green-400",
       "primary_color": "#4ade80",
+      "genres": ["rpg", "shooter"],
       "steam_app_id": 377160,
       "auto_detect": true,
       "detection": {
@@ -3642,6 +3692,7 @@
       "icon": "target",
       "color": "text-amber-500",
       "primary_color": "#f59e0b",
+      "genres": ["rpg", "shooter"],
       "steam_app_id": 22380,
       "auto_detect": true,
       "detection": {
@@ -3720,6 +3771,7 @@
       "icon": "swords",
       "color": "text-stone-400",
       "primary_color": "#a8a29e",
+      "genres": ["rpg"],
       "steam_app_id": 72850,
       "auto_detect": true,
       "detection": {
@@ -3784,6 +3836,7 @@
       "icon": "shield",
       "color": "text-amber-300",
       "primary_color": "#fcd34d",
+      "genres": ["rpg"],
       "steam_app_id": 22330,
       "auto_detect": true,
       "detection": {
@@ -3859,6 +3912,7 @@
       "icon": "castle",
       "color": "text-stone-500",
       "primary_color": "#78716c",
+      "genres": ["rpg"],
       "steam_app_id": 22320,
       "auto_detect": true,
       "detection": {
@@ -3933,6 +3987,7 @@
       "icon": "swords",
       "color": "text-red-600",
       "primary_color": "#dc2626",
+      "genres": ["rpg", "action"],
       "steam_app_id": 292030,
       "auto_detect": true,
       "detection": {
@@ -4011,6 +4066,7 @@
       "icon": "zap",
       "color": "text-yellow-400",
       "primary_color": "#facc15",
+      "genres": ["rpg", "shooter"],
       "steam_app_id": 1091500,
       "auto_detect": true,
       "detection": {
@@ -4136,6 +4192,7 @@
       "icon": "rocket",
       "color": "text-indigo-400",
       "primary_color": "#818cf8",
+      "genres": ["rpg"],
       "steam_app_id": 1716740,
       "auto_detect": true,
       "detection": {
@@ -4198,6 +4255,7 @@
       "icon": "shield",
       "color": "text-slate-300",
       "primary_color": "#cbd5e1",
+      "genres": ["platformer", "action"],
       "steam_app_id": 367520,
       "auto_detect": true,
       "detection": {
@@ -4268,6 +4326,7 @@
       "icon": "flame-kindling",
       "color": "text-amber-600",
       "primary_color": "#d97706",
+      "genres": ["survival"],
       "steam_app_id": 219740,
       "auto_detect": true,
       "detection": {
@@ -4327,6 +4386,7 @@
       "icon": "shield",
       "color": "text-orange-600",
       "primary_color": "#ea580c",
+      "genres": ["strategy", "rpg", "action"],
       "steam_app_id": 48700,
       "auto_detect": true,
       "detection": {
@@ -4385,6 +4445,7 @@
       "icon": "flag",
       "color": "text-blue-500",
       "primary_color": "#3b82f6",
+      "genres": ["simulation"],
       "steam_app_id": 270880,
       "auto_detect": true,
       "detection": {
@@ -4464,6 +4525,7 @@
       "icon": "sprout",
       "color": "text-green-500",
       "primary_color": "#22c55e",
+      "genres": ["simulation"],
       "steam_app_id": 1248130,
       "auto_detect": true,
       "detection": {
@@ -4527,6 +4589,7 @@
       "icon": "sprout",
       "color": "text-lime-400",
       "primary_color": "#a3e635",
+      "genres": ["simulation"],
       "steam_app_id": 2300320,
       "auto_detect": true,
       "detection": {
@@ -4590,6 +4653,7 @@
       "icon": "factory",
       "color": "text-sky-400",
       "primary_color": "#38bdf8",
+      "genres": ["city-builder", "simulation"],
       "steam_app_id": 949230,
       "auto_detect": true,
       "detection": {
@@ -4672,6 +4736,7 @@
       "icon": "castle",
       "color": "text-yellow-600",
       "primary_color": "#ca8a04",
+      "genres": ["strategy"],
       "steam_app_id": 1158310,
       "auto_detect": true,
       "detection": {
@@ -4749,6 +4814,7 @@
       "icon": "flag",
       "color": "text-amber-400",
       "primary_color": "#fbbf24",
+      "genres": ["strategy"],
       "steam_app_id": 236850,
       "auto_detect": true,
       "detection": {
@@ -4826,6 +4892,7 @@
       "icon": "crosshair",
       "color": "text-stone-400",
       "primary_color": "#a8a29e",
+      "genres": ["strategy"],
       "steam_app_id": 394360,
       "auto_detect": true,
       "detection": {
@@ -4903,6 +4970,7 @@
       "icon": "rocket",
       "color": "text-violet-400",
       "primary_color": "#a78bfa",
+      "genres": ["strategy"],
       "steam_app_id": 281990,
       "auto_detect": true,
       "detection": {
@@ -4980,6 +5048,7 @@
       "icon": "factory",
       "color": "text-orange-500",
       "primary_color": "#f97316",
+      "genres": ["strategy"],
       "steam_app_id": 529340,
       "auto_detect": true,
       "detection": {
@@ -5057,6 +5126,7 @@
       "icon": "crosshair",
       "color": "text-blue-400",
       "primary_color": "#60a5fa",
+      "genres": ["strategy"],
       "steam_app_id": 268500,
       "auto_detect": true,
       "detection": {
@@ -5115,6 +5185,7 @@
       "icon": "castle",
       "color": "text-cyan-400",
       "primary_color": "#22d3ee",
+      "genres": ["strategy"],
       "steam_app_id": 289070,
       "auto_detect": true,
       "detection": {
@@ -5192,6 +5263,7 @@
       "icon": "zap",
       "color": "text-pink-400",
       "primary_color": "#f472b6",
+      "genres": ["rhythm"],
       "steam_app_id": 620980,
       "auto_detect": true,
       "detection": {
@@ -5310,6 +5382,7 @@
       "icon": "crosshair",
       "color": "text-orange-600",
       "primary_color": "#ea580c",
+      "genres": ["shooter"],
       "steam_app_id": 440,
       "auto_detect": true,
       "detection": {
@@ -5386,6 +5459,7 @@
       "icon": "target",
       "color": "text-yellow-500",
       "primary_color": "#eab308",
+      "genres": ["roguelike", "action"],
       "steam_app_id": 632360,
       "auto_detect": true,
       "detection": {
@@ -5456,6 +5530,7 @@
       "icon": "box",
       "color": "text-red-400",
       "primary_color": "#f87171",
+      "genres": ["horror"],
       "steam_app_id": 1966720,
       "auto_detect": true,
       "detection": {
@@ -5527,6 +5602,7 @@
       "icon": "wrench",
       "color": "text-emerald-400",
       "primary_color": "#34d399",
+      "genres": ["simulation", "survival"],
       "steam_app_id": 457140,
       "auto_detect": true,
       "detection": {
@@ -5605,6 +5681,7 @@
       "icon": "swords",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["roguelike", "strategy"],
       "steam_app_id": 646570,
       "auto_detect": true,
       "detection": {
@@ -5684,6 +5761,7 @@
       "icon": "pickaxe",
       "color": "text-amber-500",
       "primary_color": "#f59e0b",
+      "genres": ["sandbox", "survival"],
       "art_urls": {
         "hero": "https://media.vintagestory.at/monthly_2024_12/2022-12-29_21-16-00.jpg.2891475dc036dbf5190cd09cc9812402.jpg"
       },
@@ -5778,6 +5856,7 @@
       "icon": "target",
       "color": "text-green-500",
       "primary_color": "#22c55e",
+      "genres": ["action", "shooter"],
       "steam_app_id": 271590,
       "auto_detect": true,
       "detection": {
@@ -5866,6 +5945,7 @@
       "icon": "rocket",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["party"],
       "steam_app_id": 945360,
       "auto_detect": true,
       "detection": {
@@ -5936,6 +6016,7 @@
       "icon": "crosshair",
       "color": "text-red-600",
       "primary_color": "#dc2626",
+      "genres": ["action"],
       "steam_app_id": 1174180,
       "auto_detect": true,
       "detection": {
@@ -6023,6 +6104,7 @@
       "icon": "sparkles",
       "color": "text-rose-500",
       "primary_color": "#f43f5e",
+      "genres": ["roguelike"],
       "steam_app_id": 2379780,
       "auto_detect": true,
       "detection": {
@@ -6130,6 +6212,7 @@
       "icon": "crosshair",
       "color": "text-lime-600",
       "primary_color": "#65a30d",
+      "genres": ["shooter", "simulation"],
       "steam_app_id": 107410,
       "auto_detect": true,
       "detection": {
@@ -6208,6 +6291,7 @@
       "icon": "box",
       "color": "text-orange-500",
       "primary_color": "#f97316",
+      "genres": ["party", "sandbox"],
       "steam_app_id": 286160,
       "auto_detect": true,
       "detection": {
@@ -6292,6 +6376,7 @@
       "icon": "swords",
       "color": "text-amber-600",
       "primary_color": "#d97706",
+      "genres": ["action", "rpg"],
       "steam_app_id": 582010,
       "auto_detect": true,
       "detection": {
@@ -6343,6 +6428,7 @@
       "icon": "paw-print",
       "color": "text-cyan-600",
       "primary_color": "#0891b2",
+      "genres": ["survival"],
       "steam_app_id": 346110,
       "auto_detect": true,
       "detection": {
@@ -6409,6 +6495,7 @@
       "icon": "flag",
       "color": "text-red-500",
       "primary_color": "#ef4444",
+      "genres": ["racing", "simulation"],
       "steam_app_id": 244210,
       "auto_detect": true,
       "detection": {
@@ -6469,6 +6556,7 @@
       "icon": "shield",
       "color": "text-amber-700",
       "primary_color": "#b45309",
+      "genres": ["rpg", "action"],
       "steam_app_id": 1771300,
       "auto_detect": true,
       "detection": {
@@ -6524,6 +6612,7 @@
       "icon": "box",
       "color": "text-yellow-400",
       "primary_color": "#facc15",
+      "genres": ["horror", "party"],
       "steam_app_id": 3241660,
       "auto_detect": true,
       "detection": {
@@ -6594,6 +6683,7 @@
       "icon": "castle",
       "color": "text-red-700",
       "primary_color": "#b91c1c",
+      "genres": ["survival", "action"],
       "steam_app_id": 1604030,
       "auto_detect": true,
       "detection": {
@@ -6664,6 +6754,7 @@
       "icon": "factory",
       "color": "text-sky-500",
       "primary_color": "#0ea5e9",
+      "genres": ["automation"],
       "steam_app_id": 1366540,
       "auto_detect": true,
       "detection": {
@@ -6734,6 +6825,7 @@
       "icon": "flag",
       "color": "text-pink-500",
       "primary_color": "#ec4899",
+      "genres": ["platformer"],
       "steam_app_id": 504230,
       "auto_detect": true,
       "detection": {
@@ -6804,6 +6896,7 @@
       "icon": "skull",
       "color": "text-red-800",
       "primary_color": "#991b1b",
+      "genres": ["rpg", "roguelike"],
       "steam_app_id": 262060,
       "auto_detect": true,
       "detection": {
@@ -6854,6 +6947,7 @@
       "icon": "waves",
       "color": "text-teal-500",
       "primary_color": "#14b8a6",
+      "genres": ["survival", "simulation"],
       "steam_app_id": 602960,
       "auto_detect": true,
       "detection": {
@@ -6915,6 +7009,7 @@
       "icon": "swords",
       "color": "text-stone-400",
       "primary_color": "#a8a29e",
+      "genres": ["rpg", "sandbox"],
       "steam_app_id": 233860,
       "auto_detect": true,
       "detection": {
@@ -6981,6 +7076,7 @@
       "icon": "rocket",
       "color": "text-indigo-400",
       "primary_color": "#818cf8",
+      "genres": ["sandbox", "survival"],
       "steam_app_id": 211820,
       "auto_detect": true,
       "detection": {
@@ -7066,6 +7162,7 @@
       "icon": "flame",
       "color": "text-orange-600",
       "primary_color": "#ea580c",
+      "genres": ["roguelike", "action"],
       "steam_app_id": 881100,
       "auto_detect": true,
       "detection": {
@@ -7122,6 +7219,7 @@
       "icon": "swords",
       "color": "text-violet-500",
       "primary_color": "#8b5cf6",
+      "genres": ["action"],
       "steam_app_id": 629730,
       "auto_detect": true,
       "detection": {
@@ -7176,6 +7274,7 @@
       "icon": "building-2",
       "color": "text-blue-400",
       "primary_color": "#60a5fa",
+      "genres": ["city-builder", "simulation"],
       "steam_app_id": 24780,
       "auto_detect": true,
       "detection": {
@@ -7251,6 +7350,7 @@
       "icon": "shield",
       "color": "text-red-700",
       "primary_color": "#b91c1c",
+      "genres": ["rpg"],
       "steam_app_id": 47810,
       "auto_detect": true,
       "detection": {

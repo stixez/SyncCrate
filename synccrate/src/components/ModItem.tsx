@@ -42,7 +42,7 @@ export default function ModItem({
   return (
     <div
       className={cx(
-        "group relative flex items-center gap-3 pl-3 pr-3 py-2 cursor-pointer transition-colors hover:bg-bg-card-hover",
+        "row-y group relative flex items-center gap-3 pl-3 pr-3 py-2 cursor-pointer transition-colors hover:bg-bg-card-hover",
         // State rule on the left edge: amber = may be outdated, neon on hover.
         "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
         isOutdated ? "before:bg-amber" : "before:bg-transparent hover:before:bg-neon",

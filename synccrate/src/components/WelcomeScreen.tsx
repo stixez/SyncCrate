@@ -205,7 +205,7 @@ export default function WelcomeScreen() {
 
         {/* Game picker */}
         <div className="corner-brackets min-w-0">
-          <div className="panel flex flex-col max-h-[min(600px,calc(100vh-11rem))]">
+          <div className="panel flex flex-col max-h-[min(600px,calc(var(--app-h)-11rem))]">
             <div className="px-5 pt-4 pb-3 border-b border-border flex items-end justify-between gap-3">
               <div>
                 <p className="hud-label mb-1">// Your games</p>

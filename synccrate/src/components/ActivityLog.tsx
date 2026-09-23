@@ -118,7 +118,7 @@ export default function ActivityLog() {
             </p>
             <p className="hud-label tabular">{logs.length} lines</p>
           </div>
-          <div ref={scrollRef} className="max-h-[calc(100vh-290px)] overflow-y-auto py-2 font-mono text-[12px] leading-[1.6]">
+          <div ref={scrollRef} className="max-h-[calc(var(--app-h)-290px)] overflow-y-auto py-2 font-mono text-[12px] leading-[1.6]">
             {logs.length === 0 ? (
               <p className="px-4 py-6 text-txt-muted">
                 <span className="text-neon">&gt;</span> No activity yet<span className="animate-pulse">_</span>
@@ -137,7 +137,7 @@ export default function ActivityLog() {
       )}
 
       {tab === "history" && (
-        <div className="box max-h-[calc(100vh-250px)] overflow-y-auto">
+        <div className="box max-h-[calc(var(--app-h)-250px)] overflow-y-auto">
           {history.length === 0 ? (
             <p className="px-4 py-8 font-mono text-[11px] uppercase tracking-[0.08em] text-txt-muted">No sync history yet</p>
           ) : (

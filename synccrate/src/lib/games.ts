@@ -49,3 +49,28 @@ export function isFamily(id: string, family: string): boolean {
 export function hasPacks(id: string): boolean {
   return !!_map.get(id)?.packs;
 }
+
+/** Display names for registry `genres` (kept in sync with `GENRES` in registry.rs). */
+export const GENRE_LABELS: Record<string, string> = {
+  action: "Action",
+  automation: "Automation",
+  "city-builder": "City builder",
+  horror: "Horror",
+  "life-sim": "Life sim",
+  mmo: "MMO",
+  party: "Party",
+  platformer: "Platformer",
+  racing: "Racing",
+  rhythm: "Rhythm",
+  roguelike: "Roguelike",
+  rpg: "RPG",
+  sandbox: "Sandbox",
+  shooter: "Shooter",
+  simulation: "Simulation",
+  strategy: "Strategy",
+  survival: "Survival",
+};
+
+export function genreLabel(genre: string): string {
+  return GENRE_LABELS[genre] ?? genre;
+}

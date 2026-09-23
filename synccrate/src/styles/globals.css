@@ -532,3 +532,122 @@
   }
   .live-dot { animation: none; }
 }
+
+/* ---------- appearance (Settings > Appearance, lib/appearance.ts) ----------
+ * Kept outside @layer so Tailwind never purges them: the root classes are
+ * toggled from JS, not written in markup. */
+
+/* UI scale. CSS zoom (Chromium webview) scales px-based arbitrary sizes too,
+ * which a root font-size change would miss. vh units get zoomed as well, so
+ * full-height shells divide by the scale to still fit the window exactly. */
+:root {
+  --app-h: calc(100vh / var(--ui-scale, 1));
+}
+html {
+  zoom: var(--ui-scale, 1);
+}
+.h-app {
+  height: var(--app-h);
+}
+
+/* Density: rows opt in with .row-y (padded rows) / .row-h / .row-h-sm (fixed height). */
+.density-compact .row-y {
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+.density-compact .row-h {
+  height: 1.875rem !important;
+}
+.density-compact .row-h-sm {
+  height: 1.625rem !important;
+}
+
+/* Visual effects off: drop the atmosphere layers and motion. Spinners keep
+ * turning because they are the only sign that work is in progress. */
+.fx-off .hud-grid::after,
+.fx-off .scanlines::after,
+.fx-off .grain::after,
+.fx-off .fx-deco {
+  display: none !important;
+}
+.fx-off *,
+.fx-off *::before,
+.fx-off *::after {
+  animation: none !important;
+  transition: none !important;
+}
+.fx-off .animate-spin {
+  animation: spin 1s linear infinite !important;
+}
+
+/* Accent swatch: square, clipped corner, neon ring + check when selected. */
+.swatch {
+  --cut: 7px;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  background: rgb(var(--color-line-hi));
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  cursor: pointer;
+  transition: transform 0.12s, background-color 0.12s;
+}
+.swatch > span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--swatch);
+  clip-path: polygon(calc(var(--cut) - 2px) 0, 100% 0, 100% calc(100% - var(--cut) + 2px), calc(100% - var(--cut) + 2px) 100%, 0 100%, 0 calc(var(--cut) - 2px));
+  box-shadow: inset 0 0 0 2px rgb(var(--color-bg-card));
+}
+.swatch:hover {
+  transform: translateY(-1px);
+  background: rgb(var(--color-txt-muted));
+}
+.swatch[aria-checked="true"] {
+  background: rgb(var(--color-neon));
+}
+.swatch:focus-visible {
+  outline-offset: 1px;
+}
+.swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Segmented control (theme, scale, density). */
+.seg {
+  display: inline-flex;
+  border: 1px solid rgb(var(--color-line-hi));
+  background: rgb(var(--color-bg));
+}
+.seg > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--color-txt-dim));
+  transition: background-color 0.12s, color 0.12s;
+}
+.seg > button + button {
+  border-left: 1px solid rgb(var(--color-border));
+}
+.seg > button:hover {
+  color: rgb(var(--color-txt));
+}
+.seg > button[aria-checked="true"] {
+  background: rgb(var(--color-neon));
+  color: rgb(var(--color-on-neon));
+}
+.seg > button:focus-visible {
+  outline-offset: -3px;
+}

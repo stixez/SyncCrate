@@ -11,6 +11,9 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./styles/globals.css";
+import { bootAppearance } from "./lib/appearance";
+
+bootAppearance();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

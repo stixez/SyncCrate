@@ -12,6 +12,7 @@
 - [ ] Used `steam_library` detection for mods inside the install folder (forward slashes, e.g. `"Game Name/Mods"`)
 - [ ] Added `process_names` (the game's .exe) so SyncCrate can warn when the game is running
 - [ ] Added `steam_app_id` (from the Steam store URL) for box art, or `art_urls` with official publisher art if the game isn't on Steam
+- [ ] Added `genres` (values from `GENRES` in `registry.rs`)
 - [ ] The game `icon` is one of the keys in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`
 - [ ] Every content type has a real subfolder (not `""` / `"."`)
 

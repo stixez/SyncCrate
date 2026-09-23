@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -11,7 +11,9 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { getSyncCount, getTimeSaved } from "../lib/donations";
 import { gameLabel, getGameDef } from "../lib/games";
 import { GameIcon } from "./Sidebar";
-import { Badge, Button, EmptyState, GameArt, Input, Panel, SectionHeader, Toggle, cx } from "./ui";
+import { Badge, Button, EmptyState, GameArt, Input, LiveDot, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
+import { ACCENT_PRESETS, effectsEnabled, isLightColor } from "../lib/appearance";
+import type { Density, ThemeMode, UiScale } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import type { AutoBackupConfig } from "../lib/types";
@@ -213,10 +215,12 @@ export default function Settings() {
       <SectionHeader
         label={<><b>// Config</b> &nbsp;SyncCrate v{version || "..."}</>}
         title="Settings"
-        description="Game folders, network, backups and app behavior. Changes save as you make them."
+        description="Appearance, game folders, network, backups and app behavior. Changes save as you make them."
       />
 
-      <Section num="01" title="Games" description="Where each game in your library keeps its files.">
+      <AppearanceSection />
+
+      <Section num="02" title="Games" description="Where each game in your library keeps its files.">
         {libraryGames.length === 0 ? (
           <EmptyState
             title="No games in your library yet"
@@ -293,7 +297,7 @@ export default function Settings() {
         )}
       </Section>
 
-      <Section num="02" title="Network & Sync" description="Hosting port and files that never sync.">
+      <Section num="03" title="Network & Sync" description="Hosting port and files that never sync.">
         <Panel title="Session port" label="// TCP">
           <p className="text-xs text-txt-dim mb-3">
             Port used for hosting sessions. Change this if the default port (9847) is in use.
@@ -372,7 +376,7 @@ export default function Settings() {
         </Panel>
       </Section>
 
-      <Section num="03" title="Auto-Backups" description="Automatically create backups before syncing or on a schedule.">
+      <Section num="04" title="Auto-Backups" description="Automatically create backups before syncing or on a schedule.">
         <Panel padded={false}>
           <div className="divide-y divide-border">
             <SettingRow>
@@ -428,7 +432,7 @@ export default function Settings() {
         </Panel>
       </Section>
 
-      <Section num="04" title="Transfer" description="Bandwidth and what happens after a sync finishes.">
+      <Section num="05" title="Transfer" description="Bandwidth and what happens after a sync finishes.">
         <Panel padded={false}>
           <div className="divide-y divide-border">
             <SettingRow label="Max speed" hint="Limit transfer speed to avoid saturating your network. Unlimited is fastest.">
@@ -497,7 +501,7 @@ export default function Settings() {
         </Panel>
       </Section>
 
-      <Section num="05" title="Application" description="Support the project and keep SyncCrate up to date.">
+      <Section num="06" title="Application" description="Support the project and keep SyncCrate up to date.">
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
@@ -571,6 +575,164 @@ export default function Settings() {
           </Panel>
         </div>
       </Section>
+    </div>
+  );
+}
+
+const THEME_OPTIONS: { value: ThemeMode; label: string; icon: ReactNode }[] = [
+  { value: "dark", label: "Dark", icon: <Moon size={12} /> },
+  { value: "light", label: "Light", icon: <Sun size={12} /> },
+  { value: "system", label: "System", icon: <Monitor size={12} /> },
+];
+const SCALE_OPTIONS: UiScale[] = [0.9, 1, 1.1, 1.25];
+const DENSITY_OPTIONS: { value: Density; label: string }[] = [
+  { value: "comfortable", label: "Comfortable" },
+  { value: "compact", label: "Compact" },
+];
+const CUSTOM_SWATCH_BG =
+  "conic-gradient(from 45deg, #e5484d, #f0a020, #8fcc1a, #1fb87e, #12a8c4, #3d7bfd, #8b5cf6, #e8457e, #e5484d)";
+
+function AppearanceSection() {
+  const theme = useAppStore((s) => s.theme);
+  const setTheme = useAppStore((s) => s.setTheme);
+  const appearance = useAppStore((s) => s.appearance);
+  const setAppearance = useAppStore((s) => s.setAppearance);
+  const accent = appearance.accent;
+  const preset = ACCENT_PRESETS.find((p) => p.hex === accent);
+  const checkClass = (hex: string) => (isLightColor(hex) ? "text-black/80" : "text-white");
+
+  return (
+    <Section num="01" title="Appearance" description="Accent color, theme, size and motion. Only affects this PC.">
+      <Panel padded={false}>
+        <div className="divide-y divide-border">
+          <div className="px-5 py-4 flex items-start justify-between gap-5">
+            <div className="min-w-0">
+              <p className="text-sm text-txt leading-5">Accent color</p>
+              <p className="text-xs text-txt-dim mt-0.5">
+                {appearance.matchGame ? "Used when no game is selected." : "Highlights, buttons and progress bars."}
+              </p>
+              <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap gap-2 mt-3">
+                {ACCENT_PRESETS.map((p) => (
+                  <button
+                    key={p.hex}
+                    type="button"
+                    role="radio"
+                    aria-checked={p.hex === accent}
+                    aria-label={p.name}
+                    title={p.name}
+                    className="swatch"
+                    onClick={() => setAppearance({ accent: p.hex })}
+                  >
+                    <span style={{ ["--swatch" as string]: p.hex }}>
+                      {p.hex === accent && <Check size={14} strokeWidth={3} className={checkClass(p.hex)} />}
+                    </span>
+                  </button>
+                ))}
+                {/* The native picker sits invisibly on top of a swatch so the control keeps the HUD look. */}
+                <label className="swatch" role="radio" aria-checked={!preset} title="Custom color">
+                  <span style={{ ["--swatch" as string]: preset ? CUSTOM_SWATCH_BG : accent }}>
+                    {preset ? (
+                      <Pipette size={13} className="text-white drop-shadow-[0_1px_1px_rgb(0_0_0/0.7)]" />
+                    ) : (
+                      <Check size={14} strokeWidth={3} className={checkClass(accent)} />
+                    )}
+                  </span>
+                  <input
+                    type="color"
+                    value={accent}
+                    onChange={(e) => setAppearance({ accent: e.target.value.toLowerCase() })}
+                    aria-label="Custom accent color"
+                  />
+                </label>
+              </div>
+              <p className="font-mono text-[11px] text-txt-muted mt-2.5 uppercase tracking-[0.08em]">
+                {preset?.name ?? "Custom"} <span className="text-txt-dim">{accent}</span>
+              </p>
+            </div>
+            <AccentPreview />
+          </div>
+          <SettingRow>
+            <Toggle
+              checked={appearance.matchGame}
+              onChange={(v) => setAppearance({ matchGame: v })}
+              label="Match each game's color"
+              description="Recolor the app with the selected game's own color instead of your accent."
+            />
+          </SettingRow>
+          <SettingRow label="Theme" hint="System follows your Windows light/dark setting.">
+            <Segmented label="Theme" value={theme} onChange={setTheme} options={THEME_OPTIONS} />
+          </SettingRow>
+          <SettingRow label="UI scale" hint="Make everything larger or smaller.">
+            <Segmented
+              label="UI scale"
+              value={appearance.scale}
+              onChange={(v) => setAppearance({ scale: v })}
+              options={SCALE_OPTIONS.map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }))}
+            />
+          </SettingRow>
+          <SettingRow label="Density" hint="Compact fits more rows in content lists and the sidebar.">
+            <Segmented
+              label="Density"
+              value={appearance.density}
+              onChange={(v) => setAppearance({ density: v })}
+              options={DENSITY_OPTIONS}
+            />
+          </SettingRow>
+          <SettingRow>
+            <Toggle
+              checked={effectsEnabled(appearance)}
+              onChange={(v) => setAppearance({ effects: v })}
+              label="Visual effects"
+              description="Grid backgrounds, scanlines and animations. Off by default when Windows is set to reduce motion."
+            />
+          </SettingRow>
+        </div>
+      </Panel>
+    </Section>
+  );
+}
+
+/** Mini HUD panel built from the live tokens, so it shows the accent in the current theme. */
+function AccentPreview() {
+  return (
+    <div aria-hidden className="panel panel-accent w-[216px] shrink-0">
+      <div className="p-3.5 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="hud-label"><b>// Preview</b></span>
+          <Badge tone="neon">Live</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <LiveDot />
+          <span className="font-display font-semibold uppercase tracking-[0.06em] text-[13px]">Hosting</span>
+          <span className="font-mono text-[11px] text-txt-muted ml-auto">3 peers</span>
+        </div>
+        <ProgressBar value={64} label="Syncing mods" />
+        <Button variant="primary" size="sm" block tabIndex={-1}>Sync now</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Square HUD segmented control (a radio group). */
+function Segmented<T extends string | number>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string; icon?: ReactNode }[];
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="seg">
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} onClick={() => onChange(o.value)}>
+          {o.icon}
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

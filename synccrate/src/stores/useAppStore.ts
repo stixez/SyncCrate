@@ -13,6 +13,8 @@ import type {
   SyncPlan,
   SyncProgress,
 } from "../lib/types";
+import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, type Appearance, type ThemeMode } from "../lib/prefs";
+import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
 
 /** A join/connect attempt with the exact arguments used, for PIN retries. */
 export type ConnectAttempt =
@@ -128,8 +130,11 @@ interface AppState {
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => void;
 
-  theme: "dark" | "light";
-  setTheme: (theme: "dark" | "light") => void;
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
+
+  appearance: Appearance;
+  setAppearance: (patch: Partial<Appearance>) => void;
 
   // Compound navigation helpers
   navigateToGame: (gameId: string, page?: Page) => void;
@@ -153,7 +158,7 @@ function writeStorage(key: string, value: string | null) {
   }
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   page: "dashboard",
   setPage: (page) => set({ page }),
 
@@ -274,12 +279,19 @@ export const useAppStore = create<AppState>((set) => ({
     set({ notificationsEnabled: enabled });
   },
 
-  theme:
-    (localStorage.getItem("synccrate-theme") as "dark" | "light") || "dark",
+  theme: loadThemeMode(),
   setTheme: (theme) => {
-    localStorage.setItem("synccrate-theme", theme);
-    document.documentElement.classList.toggle("light", theme === "light");
+    saveThemeMode(theme);
+    applyThemeClass(theme);
     set({ theme });
+  },
+
+  appearance: loadAppearance(),
+  setAppearance: (patch) => {
+    const appearance = { ...get().appearance, ...patch };
+    saveAppearance(appearance);
+    applyAppearanceRoot(appearance);
+    set({ appearance });
   },
 
   navigateToGame: (gameId, page) =>

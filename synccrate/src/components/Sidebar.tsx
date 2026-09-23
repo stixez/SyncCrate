@@ -39,8 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { gamePrimaryColor } from "../lib/games";
-import { applyGameTheme } from "../lib/theme";
+import { resolveTheme, useMediaPreference } from "../lib/appearance";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
 import { GameArt, LiveDot, cx } from "./ui";
@@ -119,14 +118,10 @@ export default function Sidebar() {
     cmd.getAppVersion().then(setVersion).catch(() => {});
   }, []);
 
-  // Apply dynamic accent color when selected game changes
-  useEffect(() => {
-    if (selectedGame) {
-      applyGameTheme(gamePrimaryColor(selectedGame));
-    } else {
-      applyGameTheme(null);
-    }
-  }, [selectedGame]);
+  // The quick toggle flips whatever is showing now (so from "system" it pins the
+  // opposite look); the full dark/light/system choice lives in Settings.
+  useMediaPreference();
+  const shownTheme = resolveTheme(theme);
 
   const isConnected = session && session.session_type !== "None";
 
@@ -173,7 +168,7 @@ export default function Sidebar() {
       <button
         onClick={() => navigateToGlobal(p)}
         className={cx(
-          "relative w-full flex items-center gap-3 px-4 h-9 font-display font-semibold text-[12px] uppercase tracking-[0.1em] transition-colors",
+          "row-h relative w-full flex items-center gap-3 px-4 h-9 font-display font-semibold text-[12px] uppercase tracking-[0.1em] transition-colors",
           active ? "text-txt bg-bg-card" : "text-txt-dim hover:text-txt hover:bg-bg-card/60",
         )}
       >
@@ -188,7 +183,7 @@ export default function Sidebar() {
   const peerCount = isConnected ? session.peers.length : 0;
 
   return (
-    <aside className="w-[224px] h-screen bg-bg-2 border-r border-border flex flex-col shrink-0">
+    <aside className="w-[224px] h-app bg-bg-2 border-r border-border flex flex-col shrink-0">
       <div className="h-14 px-4 flex items-center gap-2.5 border-b border-border shrink-0">
         <BrandMark />
         <span className="font-display font-bold text-[1.05rem] uppercase tracking-[0.08em] leading-none">SyncCrate</span>
@@ -230,7 +225,7 @@ export default function Sidebar() {
                     }}
                     aria-expanded={isSelected ? isExpanded : undefined}
                     className={cx(
-                      "flex-1 min-w-0 flex items-center gap-3 pl-4 pr-1 py-2 text-left transition-colors",
+                      "row-y flex-1 min-w-0 flex items-center gap-3 pl-4 pr-1 py-2 text-left transition-colors",
                       isSelected ? "text-txt" : "text-txt-dim hover:text-txt hover:bg-bg-card/60",
                     )}
                   >
@@ -280,7 +275,7 @@ export default function Sidebar() {
                             key={p}
                             onClick={() => navigateToGame(game.id, p)}
                             className={cx(
-                              "relative w-full flex items-center gap-2.5 pl-4 pr-3 h-8 font-display font-semibold text-[11.5px] uppercase tracking-[0.1em] transition-colors",
+                              "row-h-sm relative w-full flex items-center gap-2.5 pl-4 pr-3 h-8 font-display font-semibold text-[11.5px] uppercase tracking-[0.1em] transition-colors",
                               active ? "text-neon" : "text-txt-muted hover:text-txt",
                             )}
                           >
@@ -343,12 +338,12 @@ export default function Sidebar() {
         <div className="flex items-center justify-between mt-2 px-1">
           <span className="font-mono text-[10px] text-txt-muted tracking-[0.08em]">v{version}</span>
           <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(shownTheme === "dark" ? "light" : "dark")}
             className="p-1.5 text-txt-muted hover:text-txt hover:bg-bg-card transition-colors"
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={shownTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={shownTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            {shownTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
           </button>
         </div>
       </div>

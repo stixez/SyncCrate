@@ -12,7 +12,7 @@ export default function SaveItem({ file, syncStatus = "local" }: SaveItemProps) 
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
 
   return (
-    <div className="group relative flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-card-hover before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-transparent hover:before:bg-neon">
+    <div className="row-y group relative flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-card-hover before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-transparent hover:before:bg-neon">
       <div className="w-7 h-7 shrink-0 grid place-items-center border border-line-hi bg-bg text-txt-dim">
         <Save size={14} />
       </div>

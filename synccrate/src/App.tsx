@@ -159,14 +159,6 @@ function App() {
           ],
           dangerous_script_extensions: [], legacy_id: "WowRetail",
         },
-        { id: "stardew_valley", label: "Stardew Valley", family: "stardew", icon: "sprout", color: "text-accent-light", primary_color: "#4ade80", steam_app_id: 413150, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "valheim", label: "Valheim", family: "valheim", icon: "axe", color: "text-accent-light", primary_color: "#f59e0b", steam_app_id: 892970, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "baldurs_gate_3", label: "Baldur's Gate 3", family: "larian", icon: "dice-5", color: "text-accent-light", primary_color: "#b91c1c", steam_app_id: 1086940, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "cyberpunk2077", label: "Cyberpunk 2077", family: "cyberpunk", icon: "cpu", color: "text-accent-light", primary_color: "#facc15", steam_app_id: 1091500, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "skyrim_se", label: "Skyrim Special Edition", family: "skyrim", icon: "mountain", color: "text-accent-light", primary_color: "#94a3b8", steam_app_id: 489830, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "rimworld", label: "RimWorld", family: "rimworld", icon: "rocket", color: "text-accent-light", primary_color: "#a16207", steam_app_id: 294100, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "lethal_company", label: "Lethal Company", family: "lethalcompany", icon: "skull", color: "text-accent-light", primary_color: "#ef4444", steam_app_id: 1966720, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "vintage_story", label: "Vintage Story", family: "vintagestory", icon: "pickaxe", color: "text-accent-light", primary_color: "#84cc16", art_urls: {"hero": "https://media.vintagestory.at/monthly_2024_12/2022-12-29_21-16-00.jpg.2891475dc036dbf5190cd09cc9812402.jpg"}, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
       ] as any[];
       setGameRegistry(demoRegistry);
       useAppStore.setState({
@@ -186,6 +178,21 @@ function App() {
         page: "dashboard",
       });
       useLogStore.setState({ logs: demoLogs });
+      // The browser/welcome screens need the full catalog: load the real registry
+      // (demo only, split into its own chunk) and append games not defined above.
+      import("../src-tauri/src/game_registry.json").then(({ default: full }) => {
+        const fullGames = (full as { games: any[] }).games;
+        const byId = new Map(fullGames.map((g) => [g.id, g]));
+        const merged = [
+          ...demoRegistry.map((g) => ({ ...g, genres: byId.get(g.id)?.genres ?? [] })),
+          ...fullGames.filter((g) => !demoRegistry.some((d) => d.id === g.id)),
+        ];
+        setGameRegistry(merged);
+        useAppStore.setState((st) => ({
+          gameRegistry: merged,
+          gamePaths: { ...st.gamePaths, stardew_valley: "C:\\Games\\Stardew Valley", valheim: "C:\\Games\\Valheim" },
+        }));
+      });
 
       // Demo variants for screenshots / UI work: ?demo&offline, &welcome, &light, &page=content
       const q = new URLSearchParams(window.location.search);
@@ -195,6 +202,16 @@ function App() {
         useAppStore.setState({ selectedGame: null, myLibrary: [] });
       }
       if (q.has("light")) useAppStore.getState().setTheme("light");
+      // Appearance variants: &accent=%238b5cf6, &matchgame, &scale=1.25, &compact, &nofx
+      const accent = q.get("accent");
+      const scale = Number(q.get("scale"));
+      useAppStore.getState().setAppearance({
+        ...(accent && /^#[0-9a-f]{6}$/i.test(accent) ? { accent: accent.toLowerCase() } : {}),
+        ...(q.has("matchgame") ? { matchGame: true } : {}),
+        ...([0.9, 1.1, 1.25].includes(scale) ? { scale: scale as 0.9 | 1.1 | 1.25 } : {}),
+        ...(q.has("compact") ? { density: "compact" as const } : {}),
+        ...(q.has("nofx") ? { effects: false } : {}),
+      });
       const demoPage = q.get("page");
       if (demoPage) useAppStore.setState({ page: demoPage as any });
 

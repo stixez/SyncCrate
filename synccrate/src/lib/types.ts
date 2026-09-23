@@ -245,6 +245,8 @@ export interface GameDefinition {
   steam_app_id?: number;
   /** Official publisher art for non-Steam games, by kind (cover/header/hero). */
   art_urls?: Record<string, string>;
+  /** Genre tags (see GENRE_LABELS in lib/games.ts). */
+  genres?: string[];
   auto_detect: boolean;
   detection?: DetectionConfig;
   validation?: ValidationConfig;
