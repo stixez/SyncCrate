@@ -4,14 +4,18 @@
 //! Art is never bundled with the app (it belongs to the publishers). Like
 //! other launchers, we download the official Steam library assets on first
 //! use and keep them in `<config>/synccrate/art/`, so they work offline after
-//! that. Games that aren't on Steam (WoW, Minecraft, ...) fall back to the
-//! app's generated tile unless the user picks a custom cover.
+//! that. Games that aren't on Steam (WoW, Minecraft, ...) use `art_urls` from
+//! the registry instead: official key art hosted by the publisher (Blizzard,
+//! the Microsoft Store, the developer's site). If a link dies, the UI falls
+//! back to its generated tile. A user's custom cover beats both.
 //!
 //! Images are returned as `data:` URLs because the webview CSP only allows
 //! `'self'` and `data:` images, and it avoids enabling the asset protocol.
 
 use crate::state::AppState;
 use base64::Engine;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Semaphore};
@@ -73,18 +77,32 @@ fn custom_cover(dir: &Path, game_id: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// Image type from the file's magic bytes. Publisher CDNs don't always match
+/// the extension (Blizzard serves JPEGs named `.png`), so never trust it.
+fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        Some("image/png")
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
 fn data_url(path: &Path) -> Option<String> {
-    let mime = mime_for(path)?;
     let bytes = std::fs::read(path).ok()?;
+    let mime = sniff_mime(&bytes)?;
     Some(format!(
         "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
     ))
 }
 
-/// Download one Steam asset into `dest`, trying each CDN. Writes to a temp
-/// file first so a half-finished download never looks like a cached image.
-async fn download(app_id: u32, file: &str, dest: &Path) -> Result<(), String> {
+/// Download the first of `urls` that returns a real image into `dest`. Writes
+/// to a temp file first so a half-finished download never looks cached.
+async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
     let _permit = DOWNLOADS.acquire().await.map_err(|e| e.to_string())?;
     if dest.is_file() {
         return Ok(()); // another request finished it while we waited
@@ -100,15 +118,14 @@ async fn download(app_id: u32, file: &str, dest: &Path) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut last_err = String::from("no CDN reachable");
-    for cdn in CDNS {
-        let url = format!("{cdn}/{app_id}/{file}");
-        match client.get(&url).send().await {
+    let mut last_err = String::from("no source reachable");
+    for url in urls {
+        match client.get(url).send().await {
             Ok(resp) if resp.status().is_success() => {
                 let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-                // Guard against error pages served with 200.
-                if bytes.len() < 1024 {
-                    last_err = format!("{url}: response too small");
+                // Guard against error pages / placeholders served with 200.
+                if bytes.len() < 1024 || sniff_mime(&bytes).is_none() {
+                    last_err = format!("{url}: not an image");
                     continue;
                 }
                 let tmp = dest.with_extension("part");
@@ -140,20 +157,42 @@ pub async fn get_game_art(
         return Ok(data_url(&custom));
     }
 
-    let app_id = {
+    let (app_id, art_urls) = {
         let st = state.lock().await;
-        st.game_registry.games.iter().find(|g| g.id == game_id).and_then(|g| g.steam_app_id)
+        match st.game_registry.games.iter().find(|g| g.id == game_id) {
+            Some(g) => (g.steam_app_id, g.art_urls.clone()),
+            None => return Ok(None),
+        }
     };
-    let Some(app_id) = app_id else { return Ok(None) };
 
-    let dest = dir.join(format!("{app_id}_{kind}.jpg"));
+    let (urls, dest) = if let Some(app_id) = app_id {
+        let urls: Vec<String> = CDNS.iter().map(|cdn| format!("{cdn}/{app_id}/{file}")).collect();
+        (urls, dir.join(format!("{app_id}_{kind}.jpg")))
+    } else if let Some(url) = publisher_url(&art_urls, &kind) {
+        // Keyed by URL, so a registry update with a new link fetches fresh art.
+        let key = hex::encode(&Sha256::digest(url.as_bytes())[..8]);
+        (vec![url], dir.join(format!("web_{key}.img")))
+    } else {
+        return Ok(None);
+    };
+
     if !dest.is_file() {
-        if let Err(e) = download(app_id, file, &dest).await {
+        if let Err(e) = download(&urls, &dest).await {
             log::debug!("Game art for {game_id} ({kind}) unavailable: {e}");
             return Ok(None);
         }
     }
     Ok(data_url(&dest))
+}
+
+/// The registry link for an art kind, falling back to the other kinds (most
+/// publishers only have one good wide image). HTTPS only.
+fn publisher_url(art_urls: &HashMap<String, String>, kind: &str) -> Option<String> {
+    [kind, "hero", "header", "cover"]
+        .iter()
+        .filter_map(|k| art_urls.get(*k))
+        .find(|u| u.starts_with("https://"))
+        .cloned()
 }
 
 /// Use a local image as the game's cover (any game, including non-Steam ones).
@@ -230,12 +269,44 @@ mod tests {
     }
 
     #[test]
+    fn sniff_mime_ignores_extension() {
+        assert_eq!(sniff_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(sniff_mime(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A]), Some("image/png"));
+        assert_eq!(sniff_mime(b"RIFF0000WEBPVP8 "), Some("image/webp"));
+        assert_eq!(sniff_mime(b"<!DOCTYPE html>"), None);
+    }
+
+    #[test]
+    fn publisher_url_falls_back_across_kinds() {
+        let mut m = HashMap::new();
+        m.insert("hero".to_string(), "https://example.com/hero.jpg".to_string());
+        assert_eq!(publisher_url(&m, "cover").as_deref(), Some("https://example.com/hero.jpg"));
+        m.insert("cover".to_string(), "https://example.com/cover.jpg".to_string());
+        assert_eq!(publisher_url(&m, "cover").as_deref(), Some("https://example.com/cover.jpg"));
+        m.insert("header".to_string(), "http://insecure.example.com/x.jpg".to_string());
+        assert_eq!(publisher_url(&m, "header").as_deref(), Some("https://example.com/hero.jpg"));
+        assert_eq!(publisher_url(&HashMap::new(), "hero"), None);
+    }
+
+    #[test]
+    fn every_game_has_art_source() {
+        // Steam id or publisher links: no game should be left with only the generated tile.
+        for g in crate::registry::load_registry().games {
+            assert!(
+                g.steam_app_id.is_some() || publisher_url(&g.art_urls, "hero").is_some(),
+                "{} has no art source",
+                g.id
+            );
+        }
+    }
+
+    #[test]
     fn custom_cover_found_and_removed() {
         let dir = std::env::temp_dir().join(format!("synccrate_art_{}", std::process::id()));
         let custom = dir.join("custom");
         std::fs::create_dir_all(&custom).unwrap();
         assert!(custom_cover(&dir, "g1").is_none());
-        std::fs::write(custom.join("g1.png"), b"img").unwrap();
+        std::fs::write(custom.join("g1.png"), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00]).unwrap();
         assert_eq!(custom_cover(&dir, "g1"), Some(custom.join("g1.png")));
         assert!(data_url(&custom.join("g1.png")).unwrap().starts_with("data:image/png;base64,"));
         remove_custom(&custom, "g1");

@@ -46,18 +46,21 @@ const STEAM_FILE: Record<GameArtKind, string> = {
   hero: "library_hero.jpg",
 };
 
-function load(gameId: string, kind: GameArtKind, steamAppId?: number): Promise<string | null> {
+function demoUrl(kind: GameArtKind, steamAppId?: number, artUrls?: Record<string, string>): string | null {
+  if (steamAppId) return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/${STEAM_FILE[kind]}`;
+  // Same fallback order as the backend (`publisher_url`).
+  for (const k of [kind, "hero", "header", "cover"]) if (artUrls?.[k]) return artUrls[k];
+  return null;
+}
+
+function load(gameId: string, kind: GameArtKind, steamAppId?: number, artUrls?: Record<string, string>): Promise<string | null> {
   const key = `${gameId}:${kind}`;
   let p = cache.get(key);
   if (!p) {
     // Demo mode runs in a plain browser without the backend (and without the
     // webview CSP), so point straight at Steam for screenshots.
     p = isDemoMode()
-      ? Promise.resolve(
-          steamAppId
-            ? `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/${STEAM_FILE[kind]}`
-            : null,
-        )
+      ? Promise.resolve(demoUrl(kind, steamAppId, artUrls))
       : cmd.getGameArt(gameId, kind).catch(() => null);
     cache.set(key, p);
   }
@@ -70,7 +73,9 @@ function load(gameId: string, kind: GameArtKind, steamAppId?: number): Promise<s
  */
 export function useGameArt(gameId: string | null | undefined, kind: GameArtKind): string | null {
   const v = useSyncExternalStore(subscribe, () => version);
-  const steamAppId = useAppStore((s) => s.gameRegistry.find((g) => g.id === gameId)?.steam_app_id);
+  const def = useAppStore((s) => s.gameRegistry.find((g) => g.id === gameId));
+  const steamAppId = def?.steam_app_id;
+  const artUrls = def?.art_urls;
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,13 +84,13 @@ export function useGameArt(gameId: string | null | undefined, kind: GameArtKind)
       return;
     }
     let cancelled = false;
-    load(gameId, kind, steamAppId).then((u) => {
+    load(gameId, kind, steamAppId, artUrls).then((u) => {
       if (!cancelled) setUrl(u);
     });
     return () => {
       cancelled = true;
     };
-  }, [gameId, kind, steamAppId, v]);
+  }, [gameId, kind, steamAppId, artUrls, v]);
 
   return url;
 }

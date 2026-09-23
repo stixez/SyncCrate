@@ -42,7 +42,7 @@ Playing modded games with friends usually means passing zip files around until s
 
 **Mods**
 - **100 games** from a JSON registry, auto-detected across every Steam library on every drive.
-- **Game art.** Box art and backgrounds are downloaded from Steam the first time you open a game, then kept on your PC. Set your own cover for any game, or turn art off in Settings.
+- **Game art.** Official box art and backgrounds (from Steam, or the publisher for games like WoW and Minecraft) are downloaded the first time you open a game, then kept on your PC. Set your own cover for any game, or turn art off in Settings.
 - **Mod manager.** Enable/disable without deleting, 12 tags, drag & drop install, pack/DLC detection, duplicate finder.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
@@ -311,7 +311,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art.
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art.
 
 ### Building from Source
 

@@ -25,6 +25,10 @@ pub struct GameDefinition {
     /// games that aren't sold on Steam (WoW, Minecraft, ...).
     #[serde(default)]
     pub steam_app_id: Option<u32>,
+    /// Official publisher-hosted art for non-Steam games, by kind (`cover`,
+    /// `header`, `hero`); missing kinds fall back to the others.
+    #[serde(default)]
+    pub art_urls: HashMap<String, String>,
     #[serde(default)]
     pub auto_detect: bool,
     #[serde(default)]

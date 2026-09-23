@@ -141,7 +141,7 @@ function App() {
         },
         {
           id: "minecraft_java", label: "Minecraft Java", family: "minecraft", icon: "box",
-          color: "text-green-400", primary_color: "#4ade80", auto_detect: true,
+          color: "text-green-400", primary_color: "#4ade80", art_urls: {"cover": "https://store-images.s-microsoft.com/image/apps.808.14492077886571533.be42f4bd-887b-4430-8ed0-622341b4d2b0.c8274c53-105e-478b-9f4b-41b8088210a3", "hero": "https://store-images.s-microsoft.com/image/apps.58378.14492077886571533.338a563a-86e7-47b1-b9dc-41cf411f5dcd.dc840f22-6e8f-4a59-b7bc-57958a0740fd"}, auto_detect: true,
           content_types: [
             { id: "mods", label: "Mods", icon: "package", color: "text-green-400", folder: "mods", extensions: ["jar"], file_type: "Mod", syncable: true },
             { id: "saves", label: "Worlds", icon: "globe", color: "text-status-green", folder: "saves", extensions: [], file_type: "Save", syncable: true },
@@ -152,7 +152,7 @@ function App() {
         },
         {
           id: "wow_retail", label: "WoW Retail", family: "wow", icon: "swords",
-          color: "text-yellow-400", primary_color: "#facc15", auto_detect: true,
+          color: "text-yellow-400", primary_color: "#facc15", art_urls: {"hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"}, auto_detect: true,
           content_types: [
             { id: "addons", label: "Addons", icon: "package", color: "text-yellow-400", folder: "Interface/AddOns", extensions: ["lua", "toc", "xml"], file_type: "Addon", syncable: true },
             { id: "settings", label: "Settings", icon: "settings", color: "text-blue-400", folder: "WTF", extensions: ["lua", "bak"], file_type: "Settings", syncable: true },
@@ -166,7 +166,7 @@ function App() {
         { id: "skyrim_se", label: "Skyrim Special Edition", family: "skyrim", icon: "mountain", color: "text-accent-light", primary_color: "#94a3b8", steam_app_id: 489830, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
         { id: "rimworld", label: "RimWorld", family: "rimworld", icon: "rocket", color: "text-accent-light", primary_color: "#a16207", steam_app_id: 294100, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
         { id: "lethal_company", label: "Lethal Company", family: "lethalcompany", icon: "skull", color: "text-accent-light", primary_color: "#ef4444", steam_app_id: 1966720, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
-        { id: "vintage_story", label: "Vintage Story", family: "vintagestory", icon: "pickaxe", color: "text-accent-light", primary_color: "#84cc16", auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "vintage_story", label: "Vintage Story", family: "vintagestory", icon: "pickaxe", color: "text-accent-light", primary_color: "#84cc16", art_urls: {"hero": "https://media.vintagestory.at/monthly_2024_12/2022-12-29_21-16-00.jpg.2891475dc036dbf5190cd09cc9812402.jpg"}, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
       ] as any[];
       setGameRegistry(demoRegistry);
       useAppStore.setState({

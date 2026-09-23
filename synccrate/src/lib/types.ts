@@ -243,6 +243,8 @@ export interface GameDefinition {
   primary_color: string;
   /** Steam app id for store artwork; absent for non-Steam games. */
   steam_app_id?: number;
+  /** Official publisher art for non-Steam games, by kind (cover/header/hero). */
+  art_urls?: Record<string, string>;
   auto_detect: boolean;
   detection?: DetectionConfig;
   validation?: ValidationConfig;

@@ -550,6 +550,9 @@
       "icon": "swords",
       "color": "text-yellow-400",
       "primary_color": "#facc15",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -640,6 +643,9 @@
       "icon": "swords",
       "color": "text-amber-400",
       "primary_color": "#fbbf24",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -728,6 +734,9 @@
       "icon": "swords",
       "color": "text-amber-300",
       "primary_color": "#fcd34d",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -814,6 +823,9 @@
       "icon": "swords",
       "color": "text-sky-400",
       "primary_color": "#38bdf8",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": false,
       "validation": {
         "check_dirs": [
@@ -880,6 +892,9 @@
       "icon": "swords",
       "color": "text-emerald-400",
       "primary_color": "#34d399",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": false,
       "validation": {
         "check_dirs": [
@@ -946,6 +961,9 @@
       "icon": "swords",
       "color": "text-stone-400",
       "primary_color": "#a8a29e",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": false,
       "validation": {
         "check_dirs": [
@@ -1012,6 +1030,9 @@
       "icon": "swords",
       "color": "text-gray-400",
       "primary_color": "#9ca3af",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
       "auto_detect": false,
       "validation": {
         "check_dirs": [
@@ -1078,6 +1099,9 @@
       "icon": "swords",
       "color": "text-red-400",
       "primary_color": "#f87171",
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt806d59ff0b4e0508/6aa88158ad9209ba7f5629ef/rebirth_og.png"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -1147,6 +1171,10 @@
       "icon": "box",
       "color": "text-green-400",
       "primary_color": "#4ade80",
+      "art_urls": {
+        "cover": "https://store-images.s-microsoft.com/image/apps.808.14492077886571533.be42f4bd-887b-4430-8ed0-622341b4d2b0.c8274c53-105e-478b-9f4b-41b8088210a3",
+        "hero": "https://store-images.s-microsoft.com/image/apps.58378.14492077886571533.338a563a-86e7-47b1-b9dc-41cf411f5dcd.dc840f22-6e8f-4a59-b7bc-57958a0740fd"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -5656,6 +5684,9 @@
       "icon": "pickaxe",
       "color": "text-amber-500",
       "primary_color": "#f59e0b",
+      "art_urls": {
+        "hero": "https://media.vintagestory.at/monthly_2024_12/2022-12-29_21-16-00.jpg.2891475dc036dbf5190cd09cc9812402.jpg"
+      },
       "auto_detect": true,
       "detection": {
         "strategies": [
