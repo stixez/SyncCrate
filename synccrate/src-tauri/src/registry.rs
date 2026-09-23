@@ -18,7 +18,7 @@ pub struct GameDefinition {
     pub icon: String,
     #[serde(default)]
     pub color: String,
-    /// Hex color for dynamic accent theming (e.g., "#1ea84b").
+    /// Hex color for dynamic accent theming (e.g., "#1fb87e").
     #[serde(default)]
     pub primary_color: String,
     /// Steam app id, used to fetch store artwork (`commands::art`). `None` for

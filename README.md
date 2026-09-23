@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1ea84b&label=download&style=flat-square" alt="Latest Release" /></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1fb87e&label=download&style=flat-square" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1e2d38?style=flat-square" alt="Platforms" />
   <img src="https://img.shields.io/github/license/stixez/SyncCrate?color=1e2d38&style=flat-square" alt="License" />
   <a href="https://buymeacoffee.com/stixe"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black&style=flat-square" alt="Buy Me a Coffee" /></a>
