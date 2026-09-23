@@ -1,3 +1,4 @@
+import pkg from "../../package.json";
 import type {
   FileManifest,
   SessionStatus,
@@ -326,6 +327,9 @@ export const demoManifest: FileManifest = demoManifests.sims4;
 
 // --- Session (hosting with PIN) ---
 
+/** Shown instead of the backend's join code in demo mode (no Tauri backend). */
+export const demoJoinCode = "SC-8M2K-0QRT-4F7A-J9XC-WB3N-Q2ZD";
+
 export const demoSession: SessionStatus = {
   session_type: "Host",
   name: "GameNight",
@@ -337,7 +341,7 @@ export const demoSession: SessionStatus = {
       ip: "192.168.1.42",
       port: 9847,
       mod_count: 23,
-      version: "0.3.0",
+      version: pkg.version,
       pin_required: false,
     },
     {
@@ -346,7 +350,7 @@ export const demoSession: SessionStatus = {
       ip: "192.168.1.108",
       port: 9847,
       mod_count: 15,
-      version: "0.3.0",
+      version: pkg.version,
       pin_required: false,
     },
   ],
@@ -436,7 +440,7 @@ export const demoDiscoveredPeers: PeerInfo[] = [
     ip: "192.168.1.10",
     port: 9847,
     mod_count: 34,
-    version: "0.3.0",
+    version: pkg.version,
     pin_required: true,
   },
   {
@@ -445,7 +449,7 @@ export const demoDiscoveredPeers: PeerInfo[] = [
     ip: "192.168.1.22",
     port: 9847,
     mod_count: 12,
-    version: "0.3.0",
+    version: pkg.version,
     pin_required: false,
   },
 ];
@@ -557,4 +561,118 @@ export const demoSyncProgress: SyncProgress = {
 export function isDemoMode(): boolean {
   if (import.meta.env.PROD) return false;
   return new URLSearchParams(window.location.search).has("demo");
+}
+
+// --- Big library (?demo&page=content&big): stress-tests the virtual content list ---
+
+/** Tiny seeded PRNG (mulberry32) so screenshots of the big demo are stable. */
+function rng(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// [folder, relative weight, share of .ts4script files, tag]
+const BIG_FOLDERS: [string, number, number, string | null][] = [
+  ["Mods", 1, 0.1, null],
+  ["Mods/CC_Hair", 12, 0, "CAS"],
+  ["Mods/CC_Hair/Maxis Match", 8, 0, "CAS"],
+  ["Mods/CC_Clothes_Tops", 10, 0, "CAS"],
+  ["Mods/CC_Clothes_Bottoms", 7, 0, "CAS"],
+  ["Mods/CC_Full_Body", 6, 0, "CAS"],
+  ["Mods/CC_Shoes", 5, 0, "CAS"],
+  ["Mods/CC_Accessories", 6, 0, "CAS"],
+  ["Mods/CC_Makeup", 5, 0, "CAS"],
+  ["Mods/CC_Skin", 3, 0, "CAS"],
+  ["Mods/CC_Eyes", 2, 0, "CAS"],
+  ["Mods/CC_Tattoos", 2, 0, "CAS"],
+  ["Mods/CC_Presets", 3, 0, "CAS"],
+  ["Mods/CC_Build", 6, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Kitchen", 5, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Bathroom", 3, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Bedroom", 4, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Decor", 8, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Clutter", 9, 0, "Build/Buy"],
+  ["Mods/CC_Buy_Plants", 3, 0, "Build/Buy"],
+  ["Mods/CC_Poses", 4, 0, null],
+  ["Mods/Creators/Simpliciaty", 4, 0, "CAS"],
+  ["Mods/Creators/Peacemaker", 3, 0, "Build/Buy"],
+  ["Mods/Creators/Felixandre", 3, 0, "Build/Buy"],
+  ["Mods/Creators/Syboulette", 2, 0, "Build/Buy"],
+  ["Mods/Creators/Around the Sims", 3, 0, "Build/Buy"],
+  ["Mods/Scripts/MCCC", 0.3, 0.6, "Script"],
+  ["Mods/Scripts/WickedWhims", 0.3, 0.4, "Script"],
+  ["Mods/Scripts/Basemental", 0.4, 0.3, "Script"],
+  ["Mods/Scripts/LittleMsSam", 1.2, 0.5, "Script"],
+  ["Mods/Scripts/Zerbu", 0.4, 0.5, "Script"],
+  ["Mods/Scripts/TwistedMexi", 0.2, 0.6, "Script"],
+  ["Mods/Scripts/Lumpinou", 0.6, 0.4, "Script"],
+  ["Mods/Scripts/KawaiiStacie", 0.3, 0.5, "Script"],
+  ["Mods/Overrides/Lighting", 0.5, 0, "Override"],
+  ["Mods/Overrides/Default Replacements", 1.5, 0, "Override"],
+  ["Mods/Gameplay/Careers", 1.5, 0.1, "Gameplay"],
+  ["Mods/Gameplay/Traits", 2, 0.05, "Gameplay"],
+  ["Mods/Gameplay/Recipes", 2, 0, "Gameplay"],
+  ["Mods/Gameplay/Lot Traits", 0.8, 0.1, "Gameplay"],
+  ["Mods/_Testing", 0.6, 0.3, null],
+];
+
+const WORDS = [
+  "sunset", "velvet", "maple", "linen", "retro", "boho", "cozy", "nordic", "cottage", "urban",
+  "rose", "sage", "honey", "ember", "misty", "coral", "willow", "oak", "pearl", "noir",
+  "braids", "bob", "curls", "sweater", "jeans", "skirt", "boots", "earrings", "blush", "lashes",
+  "sofa", "lamp", "rug", "shelf", "vase", "counter", "sink", "bed", "curtains", "plant",
+];
+const CREATORS = ["simpliciaty", "peacemaker", "felixandre", "sy", "ats", "okru", "marsosims", "saurus", "joliebean", "qicc"];
+
+/** ~8,000 synthetic Sims 4 CC files across ~40 folders (plus the normal saves/tray), and tags. */
+export function bigSims4Demo(target = 8000): { manifest: FileManifest; tags: Record<string, string[]> } {
+  const rand = rng(4242);
+  const totalWeight = BIG_FOLDERS.reduce((n, f) => n + f[1], 0);
+  const files: FileManifest["files"] = {};
+  const tags: Record<string, string[]> = {};
+  let hashN = 0;
+  for (const [folder, weight, scriptShare, tag] of BIG_FOLDERS) {
+    const count = Math.max(3, Math.round((weight / totalWeight) * target * (0.85 + rand() * 0.3)));
+    for (let i = 0; i < count; i++) {
+      const script = rand() < scriptShare;
+      const creator = CREATORS[Math.floor(rand() * CREATORS.length)];
+      const a = WORDS[Math.floor(rand() * WORDS.length)];
+      const b = WORDS[Math.floor(rand() * WORDS.length)];
+      let path = `${folder}/${creator}_${a}_${b}_${String(i + 1).padStart(3, "0")}.${script ? "ts4script" : "package"}`;
+      // _Testing is mostly switched off; elsewhere a few stragglers are.
+      if (rand() < (folder.endsWith("_Testing") ? 0.6 : 0.05)) path += ".disabled";
+      // Log-ish sizes: most CC is small, meshes and scripts get big.
+      const size = Math.round((script ? 40_000 : 12_000) * Math.pow(10, rand() * (script ? 2.2 : 3.1)));
+      const hash = (++hashN).toString(16).padStart(8, "0").repeat(8);
+      files[path] = {
+        relative_path: path,
+        size,
+        hash,
+        modified: now - Math.floor(Math.pow(rand(), 1.8) * 500 * day),
+        file_type: script ? "Mod" : "CustomContent",
+      };
+      if (tag && rand() < 0.14) tags[path] = rand() < 0.15 ? [tag, "Favorite"] : [tag];
+      else if (rand() < 0.02) tags[path] = ["Favorite"];
+    }
+  }
+  // Keep the regular demo's saves, tray and screenshots.
+  for (const [p, f] of Object.entries(demoManifests.sims4.files)) {
+    if (!p.startsWith("Mods/")) files[p] = f;
+  }
+  return { manifest: { files, generated_at: now }, tags };
+}
+
+/** Demo stand-in for get_outdated_scripts: script mods older than a pretend patch 30 days ago. */
+export function demoOutdatedScripts(manifest: FileManifest | null): { patch_time: number | null; paths: string[] } {
+  const patch = now - 30 * day;
+  if (!manifest) return { patch_time: patch, paths: [] };
+  const paths = Object.values(manifest.files)
+    .filter((f) => f.file_type === "Mod" && f.modified < patch && !f.relative_path.toLowerCase().endsWith(".disabled"))
+    .map((f) => f.relative_path);
+  return { patch_time: patch, paths };
 }

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1ea84b&label=download&style=flat-square" alt="Latest Release" /></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1fb87e&label=download&style=flat-square" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1e2d38?style=flat-square" alt="Platforms" />
   <img src="https://img.shields.io/github/license/stixez/SyncCrate?color=1e2d38&style=flat-square" alt="License" />
   <a href="https://buymeacoffee.com/stixe"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black&style=flat-square" alt="Buy Me a Coffee" /></a>
@@ -41,8 +41,10 @@ Playing modded games with friends usually means passing zip files around until s
 - **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
 
 **Mods**
-- **100 games** from a JSON registry, auto-detected across every Steam library on every drive.
-- **Mod manager.** Enable/disable without deleting, 12 tags, drag & drop install, pack/DLC detection, duplicate finder.
+- **100 games** from a JSON registry, auto-detected across every Steam library on every drive. Browse them by genre, status and name, in a grid or a list.
+- **Game art.** Official box art and backgrounds (from Steam, or the publisher for games like WoW and Minecraft) are downloaded the first time you open a game, then kept on your PC. Set your own cover for any game, or turn art off in Settings.
+- **Make it yours.** Pick an accent color (or let each game use its own), dark/light/system theme, UI scale, compact density, and turn visual effects off.
+- **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. Also 12 tags, drag & drop install, pack/DLC detection and a duplicate finder. Handles 20,000+ files smoothly.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
 **Safety**
@@ -310,7 +312,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`.
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`).
 
 ### Building from Source
 

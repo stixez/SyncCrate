@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Plus, Tag } from "lucide-react";
 import * as cmd from "../lib/commands";
+import { Button, cx } from "./ui";
 
 interface TagEditorProps {
   filePath: string;
@@ -60,14 +61,17 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-1 z-50 bg-bg-card border border-border rounded-xl shadow-lg p-3 w-72"
+      // The editor renders inside a clickable ModItem row; without this every
+      // click in the popover also opened the mod details dialog.
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-full mt-1 z-50 box border-line-hi shadow-[0_18px_40px_-12px_rgb(0_0_0/0.6)] p-3 w-72 cursor-default"
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-txt-dim">
-          <Tag size={12} />
-          Tags
-        </div>
-        <button onClick={onClose} className="text-txt-dim hover:text-txt" aria-label="Close tag editor">
+      <div className="flex items-center justify-between mb-3">
+        <p className="hud-label flex items-center gap-1.5">
+          <Tag size={11} />
+          <b>//</b> Tags
+        </p>
+        <button onClick={onClose} className="text-txt-muted hover:text-txt" aria-label="Close tag editor">
           <X size={14} />
         </button>
       </div>
@@ -77,11 +81,10 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
           <button
             key={tag}
             onClick={() => toggleTag(tag)}
-            className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
-              tags.includes(tag)
-                ? "bg-accent text-white"
-                : "bg-bg border border-border text-txt-dim hover:border-accent/50"
-            }`}
+            className={cx(
+              "tag h-[22px] px-2 transition-colors",
+              tags.includes(tag) ? "text-neon bg-neon/10" : "tag-neutral hover:text-txt hover:border-txt-muted",
+            )}
           >
             {tag}
           </button>
@@ -93,12 +96,9 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
           {tags
             .filter((t) => !predefined.includes(t))
             .map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/20 text-accent-light text-xs font-medium"
-              >
+              <span key={tag} className="tag h-[22px] px-2 text-accent-light">
                 {tag}
-                <button onClick={() => toggleTag(tag)} className="hover:text-white" aria-label={`Remove tag ${tag}`}>
+                <button onClick={() => toggleTag(tag)} className="hover:text-txt" aria-label={`Remove tag ${tag}`}>
                   <X size={10} />
                 </button>
               </span>
@@ -117,15 +117,9 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
           maxLength={32}
           placeholder="Custom tag..."
           aria-label="Custom tag"
-          className="flex-1 bg-bg border border-border rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-accent"
+          className="input input-sm input-mono flex-1"
         />
-        <button
-          onClick={addCustom}
-          className="p-1 rounded-lg bg-bg border border-border hover:bg-bg-card-hover transition-colors"
-          aria-label="Add custom tag"
-        >
-          <Plus size={14} className="text-txt-dim" />
-        </button>
+        <Button size="sm" onClick={addCustom} aria-label="Add custom tag" icon={<Plus size={13} />} className="!h-[30px]" />
       </div>
     </div>
   );

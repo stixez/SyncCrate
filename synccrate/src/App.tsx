@@ -23,6 +23,7 @@ import {
   demoSyncPlan,
   demoProfiles,
   demoLogs,
+  bigSims4Demo,
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
 import { toastSuccess, toastError } from "./lib/toast";
@@ -58,6 +59,7 @@ function App() {
   const page = useAppStore((s) => s.page);
   const selectedGame = useAppStore((s) => s.selectedGame);
   const isDragging = useAppStore((s) => s.isDragging);
+  const theme = useAppStore((s) => s.theme);
   const addLog = useLogStore((s) => s.addLog);
   useTauriEvents();
   useKeyboardShortcuts();
@@ -129,7 +131,7 @@ function App() {
       const demoRegistry = [
         {
           id: "sims4", label: "The Sims 4", family: "sims", icon: "gamepad-2",
-          color: "text-accent-light", primary_color: "#1ea84b", auto_detect: true,
+          color: "text-accent-light", primary_color: "#1fb87e", steam_app_id: 1222670, auto_detect: true,
           content_types: [
             { id: "mods", label: "Script Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: ["package", "ts4script", "zip"], file_type: "CustomContent", classify_by_extension: { ts4script: "Mod", zip: "Mod" }, syncable: true },
             { id: "saves", label: "Save Files", icon: "save", color: "text-status-green", folder: "Saves", extensions: [], file_type: "Save", syncable: true },
@@ -140,7 +142,7 @@ function App() {
         },
         {
           id: "minecraft_java", label: "Minecraft Java", family: "minecraft", icon: "box",
-          color: "text-green-400", primary_color: "#4ade80", auto_detect: true,
+          color: "text-green-400", primary_color: "#4ade80", art_urls: {"cover": "https://store-images.s-microsoft.com/image/apps.808.14492077886571533.be42f4bd-887b-4430-8ed0-622341b4d2b0.c8274c53-105e-478b-9f4b-41b8088210a3", "hero": "https://store-images.s-microsoft.com/image/apps.58378.14492077886571533.338a563a-86e7-47b1-b9dc-41cf411f5dcd.dc840f22-6e8f-4a59-b7bc-57958a0740fd"}, auto_detect: true,
           content_types: [
             { id: "mods", label: "Mods", icon: "package", color: "text-green-400", folder: "mods", extensions: ["jar"], file_type: "Mod", syncable: true },
             { id: "saves", label: "Worlds", icon: "globe", color: "text-status-green", folder: "saves", extensions: [], file_type: "Save", syncable: true },
@@ -151,7 +153,7 @@ function App() {
         },
         {
           id: "wow_retail", label: "WoW Retail", family: "wow", icon: "swords",
-          color: "text-yellow-400", primary_color: "#facc15", auto_detect: true,
+          color: "text-yellow-400", primary_color: "#facc15", art_urls: {"hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"}, auto_detect: true,
           content_types: [
             { id: "addons", label: "Addons", icon: "package", color: "text-yellow-400", folder: "Interface/AddOns", extensions: ["lua", "toc", "xml"], file_type: "Addon", syncable: true },
             { id: "settings", label: "Settings", icon: "settings", color: "text-blue-400", folder: "WTF", extensions: ["lua", "bak"], file_type: "Settings", syncable: true },
@@ -177,6 +179,56 @@ function App() {
         page: "dashboard",
       });
       useLogStore.setState({ logs: demoLogs });
+      // The browser/welcome screens need the full catalog: load the real registry
+      // (demo only, split into its own chunk) and append games not defined above.
+      import("../src-tauri/src/game_registry.json").then(({ default: full }) => {
+        const fullGames = (full as { games: any[] }).games;
+        const byId = new Map(fullGames.map((g) => [g.id, g]));
+        const merged = [
+          ...demoRegistry.map((g) => ({ ...g, genres: byId.get(g.id)?.genres ?? [] })),
+          ...fullGames.filter((g) => !demoRegistry.some((d) => d.id === g.id)),
+        ];
+        setGameRegistry(merged);
+        useAppStore.setState((st) => ({
+          gameRegistry: merged,
+          gamePaths: { ...st.gamePaths, stardew_valley: "C:\\Games\\Stardew Valley", valheim: "C:\\Games\\Valheim" },
+        }));
+      });
+
+      // Demo variants for screenshots / UI work: ?demo&offline, &welcome, &light, &page=content
+      const q = new URLSearchParams(window.location.search);
+      if (q.has("offline")) useAppStore.setState({ session: null, syncPlan: null });
+      if (q.has("welcome")) {
+        try { localStorage.removeItem("synccrate-onboarding-complete"); } catch {}
+        useAppStore.setState({ selectedGame: null, myLibrary: [] });
+      }
+      if (q.has("light")) useAppStore.getState().setTheme("light");
+      // &big: ~8,000 synthetic CC files to exercise the virtual content list.
+      if (q.has("big")) {
+        const big = bigSims4Demo();
+        demoManifests.sims4 = big.manifest;
+        useAppStore.setState({ manifest: big.manifest, modTags: big.tags });
+      }
+      // Appearance variants: &accent=%238b5cf6, &matchgame, &scale=1.25, &compact, &nofx
+      const accent = q.get("accent");
+      const scale = Number(q.get("scale"));
+      useAppStore.getState().setAppearance({
+        ...(accent && /^#[0-9a-f]{6}$/i.test(accent) ? { accent: accent.toLowerCase() } : {}),
+        ...(q.has("matchgame") ? { matchGame: true } : {}),
+        ...([0.9, 1.1, 1.25].includes(scale) ? { scale: scale as 0.9 | 1.1 | 1.25 } : {}),
+        ...(q.has("compact") ? { density: "compact" as const } : {}),
+        ...(q.has("nofx") ? { effects: false } : {}),
+      });
+      const demoPage = q.get("page");
+      if (demoPage) useAppStore.setState({ page: demoPage as any });
+      // &scroll=4000: start scrolled down (headless screenshots of long lists).
+      const scrollTo = Number(q.get("scroll"));
+      // Headless Edge only dispatches scroll events on real frames, so fire one by hand.
+      if (scrollTo > 0) setTimeout(() => {
+        const main = document.querySelector("main");
+        main?.scrollTo(0, scrollTo);
+        main?.dispatchEvent(new Event("scroll"));
+      }, 1500);
 
       // In demo mode, swap manifests when the selected game changes
       useAppStore.subscribe((state, prev) => {
@@ -294,14 +346,9 @@ function App() {
       )}
       <Toaster
         position="bottom-right"
-        theme="dark"
-        toastOptions={{
-          style: {
-            background: "#121a22",
-            border: "1px solid #1e2d38",
-            color: "#e8ecf4",
-          },
-        }}
+        theme={theme}
+        offset={20}
+        toastOptions={{ classNames: { toast: "sc-toast" } }}
       />
     </Layout>
   );

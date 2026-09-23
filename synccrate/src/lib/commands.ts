@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import pkg from "../../package.json";
+import { isDemoMode } from "./demoData";
 import type {
   AutoBackupConfig,
   BackupInfo,
@@ -90,7 +92,28 @@ export async function disconnectPeer(peerId: string): Promise<void> {
   return invoke("disconnect_peer", { peerId });
 }
 
+export type GameArtKind = "cover" | "header" | "hero";
+
+/** Cached Steam art (or the user's custom cover) as a data: URL; null if none. */
+export async function getGameArt(gameId: string, kind: GameArtKind): Promise<string | null> {
+  return invoke("get_game_art", { gameId, kind });
+}
+
+export async function setCustomGameArt(gameId: string, sourcePath: string): Promise<string> {
+  return invoke("set_custom_game_art", { gameId, sourcePath });
+}
+
+export async function listCustomGameArt(): Promise<string[]> {
+  return invoke("list_custom_game_art");
+}
+
+export async function clearCustomGameArt(gameId: string): Promise<void> {
+  return invoke("clear_custom_game_art", { gameId });
+}
+
 export async function getAppVersion(): Promise<string> {
+  // Demo mode has no backend; show the real version so screenshots don't say "v...".
+  if (isDemoMode()) return pkg.version;
   return invoke("get_app_version");
 }
 

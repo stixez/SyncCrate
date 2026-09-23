@@ -8,12 +8,12 @@
   <meta property="og:title" content="SyncCrate — Same Mods. Every PC.">
   <meta property="og:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
+  <meta property="og:image" content="https://stixez.github.io/SyncCrate/social-preview.png">
   <meta property="og:url" content="https://stixez.github.io/SyncCrate">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="SyncCrate — Same Mods. Every PC.">
   <meta name="twitter:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
-  <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
+  <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/social-preview.png">
   <meta name="theme-color" content="#07090b">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,9 +32,9 @@
       --text: #ecf2ee;
       --dim: #9aa6a0;
       --muted: #7d8a84;
-      --brand: #1ea84b;
-      --neon: #39ff88;
-      --neon-dim: rgba(57, 255, 136, 0.14);
+      --brand: #1fb87e;
+      --neon: #4cf0b2;
+      --neon-dim: rgba(76,240,178, 0.14);
       --amber: #ffb547;
       --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
       --body: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -74,8 +74,8 @@
       color: var(--muted); display: inline-flex; align-items: center; gap: 10px;
     }
     .label b { color: var(--neon); font-weight: 500; }
-    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 0 0 rgba(57,255,136,.6); animation: pulse 2s infinite; flex: none; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(57,255,136,.55); } 70% { box-shadow: 0 0 0 8px rgba(57,255,136,0); } 100% { box-shadow: 0 0 0 0 rgba(57,255,136,0); } }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 0 0 rgba(76,240,178,.6); animation: pulse 2s infinite; flex: none; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(76,240,178,.55); } 70% { box-shadow: 0 0 0 8px rgba(76,240,178,0); } 100% { box-shadow: 0 0 0 0 rgba(76,240,178,0); } }
 
     h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: .95; text-transform: uppercase; letter-spacing: -.01em; }
     h2 { font-size: clamp(2.2rem, 5vw, 3.9rem); }
@@ -159,7 +159,7 @@
       border: 1px solid var(--line-hi);
       transform: rotateY(-11deg) rotateX(4deg) translateX(10px);
       transform-origin: left center;
-      box-shadow: 0 0 0 1px rgba(57,255,136,.08), 0 40px 90px -30px rgba(57,255,136,.35), 0 30px 60px -20px #000;
+      box-shadow: 0 0 0 1px rgba(76,240,178,.08), 0 40px 90px -30px rgba(76,240,178,.35), 0 30px 60px -20px #000;
       transition: transform .6s cubic-bezier(.2,.7,.2,1);
       width: 118%;
     }
@@ -185,7 +185,7 @@
     @keyframes marquee { to { transform: translateX(-50%); } }
 
     /* ---------- join showcase ---------- */
-    .join { background: radial-gradient(ellipse 60% 50% at 80% 40%, rgba(57,255,136,.06), transparent 70%); }
+    .join { background: radial-gradient(ellipse 60% 50% at 80% 40%, rgba(76,240,178,.06), transparent 70%); }
     .join-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
     .specs { list-style: none; margin-top: 36px; border-top: 1px solid var(--line); }
     .specs li { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); color: var(--dim); font-size: .95rem; }
@@ -237,6 +237,8 @@
     .t-resume { grid-column: span 2; }
     .t-mods { grid-column: span 3; }
     .t-safe { grid-column: span 3; }
+    .t-library { grid-column: span 3; }
+    .t-look { grid-column: span 3; }
     .t-connect { grid-column: span 6; flex-direction: row; align-items: center; gap: 40px; }
     .t-sync h3 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); }
     .diff { margin-top: auto; font-family: var(--mono); font-size: .82rem; background: var(--bg); border: 1px solid var(--line); padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; overflow: hidden; }
@@ -344,7 +346,7 @@
     /* ---------- final cta ---------- */
     .final { padding: 40px 0 120px; }
     .final-box { --cut: 28px; padding: clamp(40px, 7vw, 88px); overflow: hidden; }
-    .final-box::before { background: radial-gradient(ellipse 70% 90% at 100% 100%, rgba(57,255,136,.12), transparent 60%), var(--surface); }
+    .final-box::before { background: radial-gradient(ellipse 70% 90% at 100% 100%, rgba(76,240,178,.12), transparent 60%), var(--surface); }
     .final-box h2 { font-size: clamp(2.6rem, 7vw, 5.6rem); max-width: 11ch; margin: 18px 0 24px; }
     .final-box .lede { margin-bottom: 36px; }
     .final-meta { margin-top: 28px; font-family: var(--mono); font-size: .78rem; color: var(--muted); letter-spacing: .06em; }
@@ -370,7 +372,7 @@
       .t-sync, .t-connect { grid-column: span 2; }
       .t-sync { grid-row: auto; }
       .t-conflict, .t-resume { grid-column: span 1; }
-      .t-mods, .t-safe { grid-column: span 1; }
+      .t-mods, .t-safe, .t-library, .t-look { grid-column: span 1; }
     }
     @media (max-width: 900px) {
       .menu-btn { display: block; }
@@ -396,7 +398,7 @@
     @media (max-width: 640px) {
       .wrap { padding: 0 16px; }
       .bento { grid-template-columns: minmax(0, 1fr); }
-      .t-sync, .t-connect, .t-conflict, .t-resume, .t-mods, .t-safe { grid-column: auto; }
+      .t-sync, .t-connect, .t-conflict, .t-resume, .t-mods, .t-safe, .t-library, .t-look { grid-column: auto; }
       .t-connect { flex-direction: column; align-items: stretch; gap: 20px; }
       .t-connect .ticks { grid-template-columns: 1fr; flex-basis: auto; }
       .t-connect .c-copy { flex-basis: auto; }
@@ -466,7 +468,7 @@
           <div class="monitor brackets">
             <div class="monitor-bar" aria-hidden="true"><span class="label"><span class="live"></span>Session live</span><span>3 peers</span></div>
             <a href="screenshots/dashboard.png">
-              <img src="screenshots/dashboard.png" width="1898" height="870" alt="SyncCrate dashboard showing the session overview, the sync plan and connected peers">
+              <img src="screenshots/dashboard.png" width="1896" height="870" alt="SyncCrate dashboard showing the session overview, the sync plan and connected peers">
             </a>
           </div>
         </div>
@@ -561,7 +563,7 @@
               <li>12 tags, drag &amp; drop install, pack/DLC detection</li>
               <li>Duplicate finder</li>
             </ul>
-            <div class="shot"><img src="screenshots/content.png" width="1892" height="867" loading="lazy" alt="Content browser listing installed mods with tags and enable toggles"></div>
+            <div class="shot"><img src="screenshots/content.png" width="1896" height="870" loading="lazy" alt="Content browser listing installed mods with tags and enable toggles"></div>
           </article>
 
           <article class="tile t-safe cut reveal">
@@ -572,7 +574,29 @@
               <li>Share a setup as a <code>.synccrate-profile</code> on Discord</li>
               <li>Flags risky scripts (<code>.ts4script</code>, <code>.lua</code>, <code>.jar</code>, <code>.dll</code>)</li>
             </ul>
-            <div class="shot"><img src="screenshots/profiles.png" width="1897" height="867" loading="lazy" alt="Profiles screen with saved mod setups ready to share or restore"></div>
+            <div class="shot"><img src="screenshots/profiles.png" width="1896" height="870" loading="lazy" alt="Profiles screen with saved mod setups ready to share or restore"></div>
+          </article>
+
+          <article class="tile t-library cut reveal">
+            <p class="label"><b>Library</b> Every game, real art</p>
+            <h3>Find your game in seconds.</h3>
+            <ul class="ticks">
+              <li>Official box art for all 100 games</li>
+              <li>Filter by genre, installed or in library</li>
+              <li>Grid or list view, set your own cover</li>
+            </ul>
+            <div class="shot"><img src="screenshots/browser.png" width="1896" height="870" loading="lazy" alt="Game browser with official box art, genre filters and status tabs"></div>
+          </article>
+
+          <article class="tile t-look cut reveal">
+            <p class="label"><b>Appearance</b> Make it yours</p>
+            <h3>Your colors, your layout.</h3>
+            <ul class="ticks">
+              <li>Pick any accent color, or match each game</li>
+              <li>Dark, light or follow Windows</li>
+              <li>UI scale, compact mode, calm mode</li>
+            </ul>
+            <div class="shot"><img src="screenshots/appearance.png" width="1896" height="870" loading="lazy" alt="Appearance settings with accent color swatches and a live preview"></div>
           </article>
 
           <article class="tile t-connect cut reveal">
@@ -640,9 +664,9 @@
               <span class="search-count" id="search-count" aria-live="polite"></span>
             </div>
             <div class="game-grid" id="game-chips">
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4</div>
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (ReShade)</div>
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (GShade)</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4 (ReShade)</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4 (GShade)</div>
         <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>The Sims 3</div>
         <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Minecraft Java</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Baldur&#x27;s Gate 3</div>

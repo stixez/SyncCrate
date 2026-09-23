@@ -1,12 +1,26 @@
-import { useState } from "react";
+import { memo, useState, type CSSProperties } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility } from "../lib/types";
-import { formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
+import { dirOf, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
+import { Badge, Toggle, cx } from "./ui";
+
+/* Column widths shared by the rows and ContentBrowser's column header, so they
+ * line up. Literal strings on purpose: Tailwind only keeps classes it finds. */
+export const COL = {
+  dir: "w-[180px] shrink-0 hidden lg:block",
+  size: "w-[64px] shrink-0 text-right",
+  modified: "w-[64px] shrink-0 text-right",
+  tags: "w-[116px] shrink-0",
+  status: "w-[92px] shrink-0 flex justify-end",
+  toggle: "w-[40px] shrink-0 flex justify-end",
+};
 
 interface ModItemProps {
   file: FileInfo;
+  /** Fixed row height from the virtual list (density-dependent). */
+  style?: CSSProperties;
   syncStatus?: "synced" | "pending" | "conflict" | "local";
   tags?: string[];
   onTagsChanged?: (path: string, tags: string[]) => void;
@@ -14,13 +28,21 @@ interface ModItemProps {
   onSelect?: (path: string) => void;
   bulkMode?: boolean;
   compatibility?: ModCompatibility;
-  onShowDetails?: () => void;
+  onShowDetails?: (file: FileInfo) => void;
   /** Game patch time (unix secs) when this script mod predates it. */
   outdatedSince?: number;
+  /** Flat view shows the folder column; grouped rows sit under a folder header instead. */
+  showDir?: boolean;
+  indent?: boolean;
+  /** Toggle only works for the first content type's folder (backend toggle_mod). */
+  canToggle?: boolean;
+  toggleBusy?: boolean;
+  onToggle?: (path: string, enable: boolean) => void;
 }
 
-export default function ModItem({
+function ModItem({
   file,
+  style,
   syncStatus = "local",
   tags = [],
   onTagsChanged,
@@ -30,89 +52,117 @@ export default function ModItem({
   compatibility,
   onShowDetails,
   outdatedSince,
+  showDir,
+  indent,
+  canToggle,
+  toggleBusy,
+  onToggle,
 }: ModItemProps) {
   const isMod = file.file_type === "Mod";
-  const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
+  const name = fileName(file.relative_path);
   const [showTagEditor, setShowTagEditor] = useState(false);
   const isDisabled = isDisabledPath(file.relative_path);
+  const isOutdated = outdatedSince !== undefined;
+  const missingPacks = compatibility?.status === "MissingPacks";
 
   return (
     <div
-      className={`relative flex items-center gap-3 bg-bg-card rounded-lg border border-border px-4 py-3 hover:bg-bg-card-hover transition-colors cursor-pointer ${isDisabled ? "opacity-50" : ""}`}
+      style={style}
+      className={cx(
+        "group absolute inset-x-0 flex items-center gap-3 pr-3 border-b border-border cursor-pointer transition-colors hover:bg-bg-card-hover",
+        indent ? "pl-9" : "pl-3",
+        // State rule on the left edge: amber = may be outdated, neon on hover / selected.
+        "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
+        isOutdated ? "before:bg-amber" : selected ? "before:bg-neon" : "before:bg-transparent hover:before:bg-neon",
+        selected && "bg-neon/[0.06]",
+        // Lift the row with an open tag editor above the rows positioned after it.
+        showTagEditor && "z-20",
+      )}
       onClick={() => {
-        if (!bulkMode && onShowDetails) onShowDetails();
+        if (bulkMode) onSelect?.(file.relative_path);
+        else onShowDetails?.(file);
       }}
     >
       {bulkMode && (
         <input
           type="checkbox"
-          checked={selected}
+          checked={!!selected}
           onChange={() => onSelect?.(file.relative_path)}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select ${name}`}
-          className="shrink-0 accent-accent"
+          className="check shrink-0"
         />
       )}
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMod ? "bg-accent/20" : "bg-pink-500/20"}`}>
-        {isMod ? <Puzzle size={16} className="text-accent-light" /> : <Palette size={16} className="text-pink-400" />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium truncate">{name}</p>
-          {isDisabled && (
-            <span className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0">
-              Disabled
-            </span>
-          )}
-          {outdatedSince !== undefined && (
-            <span
-              title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}
-              className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0"
-            >
-              May be outdated
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <p className="text-xs text-txt-dim truncate">{file.relative_path}</p>
-          {tags.length > 0 && (
-            <div className="flex gap-1 shrink-0">
-              {tags.slice(0, 3).map((tag) => (
-                <span
-                  key={tag}
-                  className="px-1.5 py-0 rounded-full bg-accent/15 text-accent-light text-[10px] font-medium"
-                >
-                  {tag}
-                </span>
-              ))}
-              {tags.length > 3 && (
-                <span className="text-[10px] text-txt-dim">+{tags.length - 3}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <span className="text-xs text-txt-dim">{formatBytes(file.size)}</span>
-      <span className="text-xs text-txt-dim font-mono">{file.hash.slice(0, 8)}</span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowTagEditor(!showTagEditor);
-        }}
-        className="p-1 rounded hover:bg-bg-card-active transition-colors text-txt-dim hover:text-accent-light"
-        title="Edit tags"
+      <div
+        className={cx(
+          "w-6 h-6 shrink-0 grid place-items-center border",
+          isDisabled ? "border-border text-txt-muted" : isMod ? "border-accent/50 text-accent-light bg-accent/10" : "border-line-hi text-txt-dim bg-bg",
+        )}
+        title={isMod ? "Script mod" : "Custom content"}
       >
-        <Tag size={14} />
-      </button>
-      {compatibility?.status === "MissingPacks" && (
-        <span
-          title={`Missing packs: ${compatibility.missing_packs.map((p) => p.code).join(", ")}`}
-          className="text-status-yellow shrink-0"
+        {isMod ? <Puzzle size={12} /> : <Palette size={12} />}
+      </div>
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <p
+          className={cx("text-[13px] font-medium truncate", isDisabled ? "text-txt-muted line-through decoration-txt-muted/60" : "text-txt")}
+          title={file.relative_path}
         >
-          <AlertTriangle size={14} />
+          {name}
+        </p>
+        {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
+        {isOutdated && (
+          <Badge tone="amber" className="shrink-0" title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}>
+            Outdated
+          </Badge>
+        )}
+        {missingPacks && (
+          <span title={`Missing packs: ${compatibility!.missing_packs.map((p) => p.code).join(", ")}`} className="text-amber shrink-0">
+            <AlertTriangle size={13} />
+          </span>
+        )}
+      </div>
+      {showDir && (
+        <span className={cx(COL.dir, "font-mono text-[11px] text-txt-muted truncate")} title={dirOf(file.relative_path)}>
+          {dirOf(file.relative_path) || "/"}
         </span>
       )}
-      <StatusBadge status={syncStatus} />
+      <span className={cx(COL.size, "font-mono text-[11px] text-txt-dim tabular")}>{formatBytes(file.size)}</span>
+      <span className={cx(COL.modified, "font-mono text-[11px] text-txt-muted tabular")} title={file.modified ? formatDate(file.modified) : undefined}>
+        {formatRelative(file.modified)}
+      </span>
+      <div className={cx(COL.tags, "flex items-center justify-end gap-1.5 min-w-0")}>
+        <span className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.06em] text-accent-light" title={tags.join(", ")}>
+          {tags.slice(0, 2).map((t) => `#${t}`).join(" ")}
+          {tags.length > 2 && <span className="text-txt-muted"> +{tags.length - 2}</span>}
+        </span>
+        {onTagsChanged && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowTagEditor(!showTagEditor);
+            }}
+            className={cx(
+              "w-6 h-6 shrink-0 grid place-items-center border transition-colors",
+              showTagEditor
+                ? "border-neon text-neon"
+                : "border-transparent text-txt-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:border-line-hi hover:text-txt",
+            )}
+            title="Edit tags"
+            aria-label={`Edit tags for ${name}`}
+          >
+            <Tag size={12} />
+          </button>
+        )}
+      </div>
+      <div className={COL.status}>
+        <StatusBadge status={syncStatus} />
+      </div>
+      {canToggle && (
+        // The switch sits inside a clickable row: keep its clicks from opening details.
+        <div className={COL.toggle} onClick={(e) => e.stopPropagation()} title={isDisabled ? "Disabled: click to enable" : "Enabled: click to disable"}>
+          <Toggle checked={!isDisabled} disabled={toggleBusy} onChange={(on) => onToggle?.(file.relative_path, on)} />
+        </div>
+      )}
       {showTagEditor && onTagsChanged && (
         <TagEditor
           filePath={file.relative_path}
@@ -124,3 +174,5 @@ export default function ModItem({
     </div>
   );
 }
+
+export default memo(ModItem);

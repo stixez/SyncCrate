@@ -18,9 +18,20 @@ pub struct GameDefinition {
     pub icon: String,
     #[serde(default)]
     pub color: String,
-    /// Hex color for dynamic accent theming (e.g., "#1ea84b").
+    /// Hex color for dynamic accent theming (e.g., "#1fb87e").
     #[serde(default)]
     pub primary_color: String,
+    /// Steam app id, used to fetch store artwork (`commands::art`). `None` for
+    /// games that aren't sold on Steam (WoW, Minecraft, ...).
+    #[serde(default)]
+    pub steam_app_id: Option<u32>,
+    /// Official publisher-hosted art for non-Steam games, by kind (`cover`,
+    /// `header`, `hero`); missing kinds fall back to the others.
+    #[serde(default)]
+    pub art_urls: HashMap<String, String>,
+    /// Genre tags for the game browser filters; must come from `GENRES`.
+    #[serde(default)]
+    pub genres: Vec<String>,
     #[serde(default)]
     pub auto_detect: bool,
     #[serde(default)]
@@ -176,6 +187,15 @@ pub struct PathCorrection {
     pub nested_corrections: HashMap<String, u32>,
 }
 
+/// Allowed `genres` values. The frontend has matching labels
+/// (`GENRE_LABELS` in `src/lib/games.ts`); add new ones in both places.
+// Only the registry test reads it; the frontend owns filtering.
+#[cfg_attr(not(test), allow(dead_code))]
+pub const GENRES: &[&str] = &[
+    "action", "automation", "city-builder", "horror", "life-sim", "mmo", "party", "platformer",
+    "racing", "rhythm", "roguelike", "rpg", "sandbox", "shooter", "simulation", "strategy", "survival",
+];
+
 /// Load the game registry from the embedded JSON.
 pub fn load_registry() -> GameRegistry {
     let json = include_str!("game_registry.json");
@@ -197,6 +217,16 @@ pub fn build_legacy_map(registry: &GameRegistry) -> HashMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_game_has_known_genres() {
+        for g in load_registry().games {
+            assert!(!g.genres.is_empty(), "{} has no genres", g.id);
+            for genre in &g.genres {
+                assert!(GENRES.contains(&genre.as_str()), "{}: unknown genre {genre}", g.id);
+            }
+        }
+    }
 
     #[test]
     fn test_embedded_registry_deserializes() {
