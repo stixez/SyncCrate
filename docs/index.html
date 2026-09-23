@@ -3,516 +3,643 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SyncCrate — The Easiest Way to Keep Modded Games in Sync</title>
-  <meta name="description" content="Free, open-source desktop app to sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. Works on your network or across the internet with a join code. 100 games supported. No cloud, no accounts.">
-  <meta property="og:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta property="og:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 100 games supported. No cloud, no accounts.">
+  <title>SyncCrate — Keep Your Friends' Modded Games in Sync</title>
+  <meta name="description" content="Free, open-source desktop app that keeps game mods, addons, saves and settings in sync between friends. Peer-to-peer, on your network or across the internet with one join code. 100 games supported. No cloud, no accounts.">
+  <meta property="og:title" content="SyncCrate — Same Mods. Every PC.">
+  <meta property="og:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
   <meta property="og:url" content="https://stixez.github.io/SyncCrate">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta name="twitter:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 100 games supported. No cloud, no accounts.">
+  <meta name="twitter:title" content="SyncCrate — Same Mods. Every PC.">
+  <meta name="twitter:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
   <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
-  <meta name="theme-color" content="#1ea84b">
+  <meta name="theme-color" content="#07090b">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --green: #1ea84b;
-      --green-light: #2ecc5e;
-      --green-glow: rgba(30, 168, 75, 0.4);
-      --green-dim: rgba(30, 168, 75, 0.12);
-      --bg: #060a0e;
-      --bg-card: #0c1218;
-      --bg-card-hover: #111920;
-      --border: #1a2633;
-      --border-light: #243344;
-      --text: #e8ecf4;
-      --text-dim: #7a8b9e;
-      --text-muted: #3d4f63;
-      --yellow: #facc15;
+      --bg: #07090b;
+      --bg-2: #0b0e11;
+      --surface: #0f1316;
+      --surface-2: #151a1e;
+      --line: #222a30;
+      --line-hi: #34403a;
+      --text: #ecf2ee;
+      --dim: #9aa6a0;
+      --muted: #7d8a84;
+      --brand: #1ea84b;
+      --neon: #39ff88;
+      --neon-dim: rgba(57, 255, 136, 0.14);
+      --amber: #ffb547;
+      --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+      --body: "Inter", "Segoe UI", system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      --cut: 14px;
+      --wrap: 1200px;
     }
 
-    html { scroll-behavior: smooth; }
-
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
+      font-family: var(--body);
+      font-size: 16px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
-
-    a { color: var(--green-light); text-decoration: none; transition: color 0.2s; }
-    a:hover { color: #5dde80; }
-
-    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-
-    /* --- Header --- */
-    header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      background: rgba(6, 10, 14, 0.8);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid rgba(26, 38, 51, 0.6);
+    /* film grain */
+    body::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: .06;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; }
+    ::selection { background: var(--neon); color: #04110a; }
+    :focus-visible { outline: 2px solid var(--neon); outline-offset: 3px; }
 
-    .header-inner {
-      max-width: 1100px; margin: 0 auto; padding: 0 24px;
-      display: flex; align-items: center; justify-content: space-between; height: 60px;
-    }
+    .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    .skip { position: absolute; left: 16px; top: -60px; z-index: 200; background: var(--neon); color: #04110a; padding: 8px 14px; font-weight: 600; }
+    .skip:focus { top: 12px; }
 
-    .header-brand {
-      display: flex; align-items: center; gap: 10px;
-      font-weight: 800; font-size: 1.1rem; color: var(--text); letter-spacing: -0.02em;
+    /* ---------- primitives ---------- */
+    .label {
+      font-family: var(--mono); font-size: .75rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--muted); display: inline-flex; align-items: center; gap: 10px;
     }
-    .header-brand svg { width: 28px; height: 28px; filter: drop-shadow(0 0 8px var(--green-glow)); }
-    .header-brand span { color: var(--green-light); }
+    .label b { color: var(--neon); font-weight: 500; }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 0 0 rgba(57,255,136,.6); animation: pulse 2s infinite; flex: none; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(57,255,136,.55); } 70% { box-shadow: 0 0 0 8px rgba(57,255,136,0); } 100% { box-shadow: 0 0 0 0 rgba(57,255,136,0); } }
 
-    .header-nav { display: flex; align-items: center; gap: 28px; }
-    .header-nav a { color: var(--text-dim); font-size: 0.85rem; font-weight: 500; }
-    .header-nav a:hover { color: var(--text); }
+    h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: .95; text-transform: uppercase; letter-spacing: -.01em; }
+    h2 { font-size: clamp(2.2rem, 5vw, 3.9rem); }
+    h3 { font-size: 1.35rem; line-height: 1.1; }
+    .hl { color: var(--neon); }
+    .lede { color: var(--dim); font-size: 1.1rem; max-width: 36em; }
+    code, .code { font-family: var(--mono); font-size: .9em; }
+    p code { color: var(--text); background: var(--surface-2); padding: 1px 6px; }
 
-    .btn-download-sm {
-      padding: 8px 20px; border-radius: 8px; font-size: 0.82rem; font-weight: 700;
-      color: white !important; background: var(--green);
-      box-shadow: 0 0 20px var(--green-glow); transition: all 0.2s;
+    /* clipped panel with a 1px border that follows the cut */
+    .cut {
+      position: relative; isolation: isolate; background: var(--line);
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
     }
-    .btn-download-sm:hover {
-      background: var(--green-light); box-shadow: 0 0 30px var(--green-glow);
-      color: white !important; transform: translateY(-1px);
-    }
-
-    .btn-donate-sm {
-      color: var(--yellow) !important; display: inline-flex; align-items: center; gap: 5px; font-size: 0.85rem;
-    }
-    .btn-donate-sm:hover { color: #fde047 !important; }
-    .btn-donate-sm svg { width: 14px; height: 14px; }
-
-    .menu-toggle { display: none; background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; }
-    .menu-toggle svg { width: 24px; height: 24px; }
-
-    /* --- Hero --- */
-    .hero {
-      text-align: center; padding: 160px 0 100px; position: relative; overflow: hidden;
-    }
-    .hero::before {
-      content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
-      width: 800px; height: 800px;
-      background: radial-gradient(circle, rgba(30, 168, 75, 0.12) 0%, rgba(30, 168, 75, 0.03) 40%, transparent 70%);
-      pointer-events: none;
-    }
-    .hero::after {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      background:
-        radial-gradient(ellipse at 20% 50%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 30%, rgba(250, 204, 21, 0.04) 0%, transparent 50%);
-      pointer-events: none;
-    }
-
-    .hero-content { position: relative; z-index: 1; }
-
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 6px 16px; border-radius: 100px;
-      background: var(--green-dim); border: 1px solid rgba(30, 168, 75, 0.25);
-      color: var(--green-light); font-size: 0.8rem; font-weight: 600;
-      margin-bottom: 32px; letter-spacing: 0.02em;
-    }
-    .hero-badge .dot {
-      width: 6px; height: 6px; border-radius: 50%; background: var(--green-light);
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--green-glow); }
-      50% { opacity: 0.7; box-shadow: 0 0 0 6px transparent; }
-    }
-
-    .hero h1 {
-      font-size: 4.2rem; font-weight: 900; letter-spacing: -0.04em; line-height: 1.05; margin-bottom: 20px;
-    }
-    .hero h1 .gradient {
-      background: linear-gradient(135deg, var(--green-light), #4ade80, var(--yellow));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-
-    .hero .tagline {
-      font-size: 1.15rem; color: var(--text-dim);
-      max-width: 580px; margin: 0 auto 44px; line-height: 1.7;
-    }
-
-    .hero-ctas {
-      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;
+    .cut::before {
+      content: ""; position: absolute; inset: 1px; z-index: -1; background: var(--surface);
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
     }
 
     .btn {
-      display: inline-flex; align-items: center; gap: 10px;
-      padding: 15px 32px; border-radius: 12px; font-size: 0.95rem; font-weight: 700;
-      transition: all 0.25s ease; border: none; cursor: pointer; text-decoration: none;
+      --cut: 10px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      font-family: var(--display); font-weight: 700; font-size: 1rem; letter-spacing: .06em; text-transform: uppercase;
+      padding: 15px 26px; text-decoration: none; border: 0; cursor: pointer; white-space: nowrap;
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+      transition: background .2s, color .2s, transform .2s;
     }
-    .btn:hover { text-decoration: none; }
+    .btn-primary { background: var(--neon); color: #04110a; }
+    .btn-primary:hover { background: #7dffb2; transform: translateY(-2px); }
+    .btn-ghost { background: var(--line-hi); color: var(--text); position: relative; isolation: isolate; }
+    .btn-ghost::before { content: ""; position: absolute; inset: 1px; z-index: -1; background: var(--bg); clip-path: inherit; }
+    .btn-ghost:hover { background: var(--neon); color: var(--neon); }
+    .btn:focus-visible { outline: 2px solid var(--neon); outline-offset: -5px; }
+    .btn-primary:focus-visible { outline-color: #04110a; }
+    .btn svg { width: 18px; height: 18px; flex: none; }
 
-    .btn-primary {
-      background: var(--green); color: white;
-      box-shadow: 0 0 30px var(--green-glow), 0 4px 16px rgba(0,0,0,0.3);
-    }
-    .btn-primary:hover {
-      background: var(--green-light); color: white;
-      box-shadow: 0 0 50px var(--green-glow), 0 6px 24px rgba(0,0,0,0.3);
-      transform: translateY(-2px);
-    }
+    section { position: relative; }
+    .section { padding: 120px 0; }
+    .sec-head { display: grid; gap: 18px; margin-bottom: 56px; max-width: 760px; }
 
-    .btn-secondary {
-      background: var(--bg-card); color: var(--text); border: 1px solid var(--border-light);
+    /* ---------- header ---------- */
+    .header {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(7, 9, 11, .82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
     }
-    .btn-secondary:hover {
-      background: var(--bg-card-hover); color: var(--text);
-      border-color: var(--text-muted); transform: translateY(-2px);
-    }
+    .header .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--display); font-weight: 700; font-size: 1.15rem; letter-spacing: .08em; text-transform: uppercase; }
+    .brand img { width: 30px; height: 30px; }
+    .nav { display: flex; align-items: center; gap: 26px; margin-left: auto; }
+    .nav a { text-decoration: none; color: var(--dim); font-size: .9rem; font-weight: 500; transition: color .2s; }
+    .nav a:hover { color: var(--text); }
+    .nav .btn { color: #04110a; padding: 10px 18px; font-size: .85rem; }
+    .nav .btn:hover { color: #04110a; }
+    .menu-btn { display: none; margin-left: auto; background: none; border: 1px solid var(--line-hi); color: var(--text); width: 42px; height: 42px; cursor: pointer; }
+    .menu-btn span { display: block; width: 18px; height: 2px; background: currentColor; margin: 4px auto; transition: transform .2s, opacity .2s; }
+    .menu-btn[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+    .menu-btn[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .menu-btn[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-    .hero-note { font-size: 0.8rem; color: var(--text-muted); }
+    /* ---------- hero ---------- */
+    .hero { padding: 88px 0 72px; overflow: hidden; }
+    .hero::before { /* HUD grid, fades out */
+      content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+      background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 64px 64px; opacity: .35;
+      -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 85%); mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+    }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 56px; align-items: center; }
+    .hero h1 { font-size: clamp(2.6rem, 4.9vw, 4.9rem); margin: 22px 0 26px; }
+    .hero h1 .ln { display: block; white-space: nowrap; }
+    .hero h1 .out { color: transparent; -webkit-text-stroke: 1.5px var(--text); }
+    .hero .lede { margin-bottom: 36px; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 14px; }
+    .trust { margin-top: 26px; font-family: var(--mono); font-size: .78rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+    .trust span + span::before { content: " / "; color: var(--line-hi); }
 
-    /* --- Divider line --- */
-    .line-divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--border-light), transparent);
+    .monitor-wrap { perspective: 1800px; }
+    .monitor {
+      position: relative; padding: 10px; background: var(--surface);
+      border: 1px solid var(--line-hi);
+      transform: rotateY(-11deg) rotateX(4deg) translateX(10px);
+      transform-origin: left center;
+      box-shadow: 0 0 0 1px rgba(57,255,136,.08), 0 40px 90px -30px rgba(57,255,136,.35), 0 30px 60px -20px #000;
+      transition: transform .6s cubic-bezier(.2,.7,.2,1);
+      width: 118%;
     }
+    .monitor:hover { transform: rotateY(-5deg) rotateX(2deg) translateX(10px); }
+    .monitor img { width: 100%; height: auto; }
+    .monitor::after { /* scanlines */
+      content: ""; position: absolute; inset: 10px; pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px);
+      mix-blend-mode: multiply;
+    }
+    .monitor-bar { display: flex; align-items: center; justify-content: space-between; font-family: var(--mono); font-size: .68rem; color: var(--muted); letter-spacing: .1em; padding: 2px 4px 10px; text-transform: uppercase; }
+    .monitor-bar .label { font-size: .68rem; }
+    .brackets::before, .brackets::after { content: ""; position: absolute; width: 22px; height: 22px; border: 2px solid var(--neon); pointer-events: none; }
+    .brackets::before { top: -8px; left: -8px; border-right: 0; border-bottom: 0; }
+    .brackets::after { bottom: -8px; right: -8px; border-left: 0; border-top: 0; }
 
-    /* --- Section shared --- */
-    .section-label {
-      text-align: center; font-size: 0.75rem; font-weight: 700;
-      letter-spacing: 0.15em; text-transform: uppercase;
-      color: var(--green-light); margin-bottom: 16px;
-    }
-    .section-title {
-      text-align: center; font-size: 2.4rem; font-weight: 800;
-      letter-spacing: -0.03em; margin-bottom: 12px; line-height: 1.15;
-    }
-    .section-subtitle {
-      text-align: center; color: var(--text-dim); font-size: 1rem;
-      margin-bottom: 56px; max-width: 520px; margin-left: auto; margin-right: auto;
-    }
+    /* ---------- ticker ---------- */
+    .ticker { border-block: 1px solid var(--line); background: var(--bg-2); overflow: hidden; padding: 16px 0; }
+    .ticker-track { display: flex; width: max-content; animation: marquee 90s linear infinite; }
+    .ticker:hover .ticker-track { animation-play-state: paused; }
+    .ticker-item { font-family: var(--display); font-weight: 600; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); white-space: nowrap; padding: 0 22px; display: flex; align-items: center; gap: 22px; }
+    .ticker-item::after { content: ""; width: 6px; height: 6px; background: var(--neon); transform: rotate(45deg); opacity: .7; }
+    @keyframes marquee { to { transform: translateX(-50%); } }
 
-    /* --- Problem / Solution --- */
-    .problem-section { padding: 80px 0 0; }
-    .problem-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; margin: 0 auto;
-    }
-    .problem-card, .solution-card {
-      border-radius: 16px; padding: 36px 32px;
-    }
-    .problem-card {
-      background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.15);
-    }
-    .solution-card {
-      background: var(--green-dim); border: 1px solid rgba(30, 168, 75, 0.2);
-    }
-    .problem-card h3, .solution-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
-    .problem-card h3 { color: #f87171; }
-    .solution-card h3 { color: var(--green-light); }
-    .problem-card p, .solution-card p { font-size: 0.88rem; color: var(--text-dim); line-height: 1.7; }
-    .problem-card ul, .solution-card ul {
-      list-style: none; padding: 0; margin: 12px 0 0;
-    }
-    .problem-card li, .solution-card li {
-      font-size: 0.85rem; color: var(--text-dim); padding: 4px 0; padding-left: 20px; position: relative;
-    }
-    .problem-card li::before { content: '✕'; position: absolute; left: 0; color: #f87171; font-weight: 700; font-size: 0.75rem; }
-    .solution-card li::before { content: '✓'; position: absolute; left: 0; color: var(--green-light); font-weight: 700; }
+    /* ---------- join showcase ---------- */
+    .join { background: radial-gradient(ellipse 60% 50% at 80% 40%, rgba(57,255,136,.06), transparent 70%); }
+    .join-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
+    .specs { list-style: none; margin-top: 36px; border-top: 1px solid var(--line); }
+    .specs li { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); color: var(--dim); font-size: .95rem; }
+    .specs li strong { font-family: var(--mono); font-size: .72rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--text); padding-top: 3px; }
+    .tip { margin-top: 24px; display: flex; gap: 12px; font-size: .9rem; color: var(--dim); padding: 14px 16px; border-left: 2px solid var(--amber); background: rgba(255,181,71,.06); }
+    .tip strong { color: var(--amber); font-family: var(--mono); font-size: .72rem; letter-spacing: .12em; padding-top: 3px; font-weight: 500; }
 
-    /* --- Game Showcase --- */
-    .games-section { padding: 80px 0 100px; }
-
-    .game-grid {
-      display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; max-width: 800px; margin: 0 auto;
+    .demo { position: relative; display: grid; gap: 18px; }
+    .win { --cut: 16px; padding: 22px; }
+    .win-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .who { font-family: var(--display); font-weight: 600; font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; }
+    .who small { font-family: var(--mono); font-weight: 400; color: var(--muted); font-size: .7rem; margin-left: 8px; letter-spacing: .1em; }
+    .codebox { display: flex; align-items: stretch; gap: 10px; }
+    .codefield {
+      flex: 1; min-width: 0; font-family: var(--mono); font-size: clamp(.8rem, 2.4vw, 1.1rem); letter-spacing: .06em;
+      background: var(--bg); border: 1px solid var(--line-hi); padding: 13px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: border-color .3s, box-shadow .3s;
     }
+    .host .codefield { color: var(--neon); }
+    .fakebtn {
+      font-family: var(--display); font-weight: 700; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase;
+      padding: 0 18px; display: flex; align-items: center; background: var(--surface-2); border: 1px solid var(--line-hi); color: var(--text);
+      transition: background .2s, color .2s, transform .1s; min-width: 92px; justify-content: center;
+    }
+    .fakebtn.go { background: var(--neon); border-color: var(--neon); color: #04110a; }
+    .fakebtn.press { transform: scale(.94); }
+    .placeholder { color: var(--muted); }
+    .flash { border-color: var(--neon) !important; box-shadow: 0 0 0 3px var(--neon-dim); }
+    .wire { height: 34px; margin-left: 48px; width: 2px; background: repeating-linear-gradient(180deg, var(--line-hi) 0 4px, transparent 4px 8px); position: relative; }
+    .wire::after { content: ""; position: absolute; left: -3px; top: 0; width: 8px; height: 8px; background: var(--neon); transform: rotate(45deg); opacity: 0; }
+    .demo.sending .wire::after { animation: travel .7s ease-in forwards; }
+    @keyframes travel { 0% { top: 0; opacity: 1; } 100% { top: 26px; opacity: 1; } }
+    .status { margin-top: 18px; display: grid; gap: 10px; }
+    .status-line { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: .82rem; color: var(--dim); min-height: 1.4em; }
+    .status-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-hi); flex: none; transition: background .3s; }
+    .demo[data-step="connecting"] .status-line .dot { background: var(--amber); }
+    .demo[data-step="syncing"] .status-line .dot, .demo[data-step="done"] .status-line .dot { background: var(--neon); box-shadow: 0 0 10px var(--neon); }
+    .bar { height: 6px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--brand), var(--neon)); }
+    .route { font-family: var(--mono); font-size: .7rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
 
+    /* ---------- bento ---------- */
+    .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+    .tile { padding: 30px; display: flex; flex-direction: column; gap: 14px; }
+    .tile p { color: var(--dim); font-size: .95rem; }
+    .tile .label { margin-bottom: 4px; }
+    .t-sync { grid-column: span 4; grid-row: span 2; }
+    .t-conflict { grid-column: span 2; }
+    .t-resume { grid-column: span 2; }
+    .t-mods { grid-column: span 3; }
+    .t-safe { grid-column: span 3; }
+    .t-connect { grid-column: span 6; flex-direction: row; align-items: center; gap: 40px; }
+    .t-sync h3 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); }
+    .diff { margin-top: auto; font-family: var(--mono); font-size: .82rem; background: var(--bg); border: 1px solid var(--line); padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; overflow: hidden; }
+    .diff div { display: flex; gap: 12px; white-space: nowrap; }
+    .diff .p { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .diff .s { color: var(--muted); }
+    .diff .a { color: var(--neon); }
+    .diff .m { color: var(--amber); }
+    .diff .k { color: var(--muted); }
+    .nums { display: flex; gap: 40px; flex-wrap: wrap; }
+    .num { font-family: var(--display); font-weight: 700; font-size: 2.2rem; line-height: 1; }
+    .num small { display: block; font-family: var(--mono); font-weight: 400; font-size: .7rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-top: 8px; }
+    .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
+    .seg span { font-family: var(--mono); font-size: .74rem; text-align: center; padding: 9px 6px; border: 1px solid var(--line-hi); color: var(--dim); }
+    .seg span.on { border-color: var(--neon); color: var(--neon); background: var(--neon-dim); }
+    .shot { margin-top: auto; border: 1px solid var(--line-hi); overflow: hidden; }
+    .shot img { width: 100%; height: auto; transition: transform .6s; }
+    .tile:hover .shot img { transform: scale(1.03); }
+    .ticks { list-style: none; display: grid; gap: 6px; font-size: .9rem; color: var(--dim); }
+    .ticks li::before { content: "> "; color: var(--neon); font-family: var(--mono); }
+    .t-connect .c-copy { flex: 1 1 320px; }
+    .t-connect .ticks { flex: 1 1 320px; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+
+    /* ---------- sims ---------- */
+    .sims { background: var(--bg-2); border-block: 1px solid var(--line); overflow: hidden; }
+    .sims-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; }
+    .sims-title { font-size: clamp(3.4rem, 9vw, 7.5rem); line-height: .85; margin-top: 18px; }
+    .sims-title .four { display: block; color: var(--neon); font-size: 1.9em; line-height: .8; }
+    .sims-rows { list-style: none; border-top: 1px solid var(--line-hi); }
+    .sims-rows li { display: grid; grid-template-columns: 64px 1fr; gap: 20px; padding: 28px 0; border-bottom: 1px solid var(--line-hi); }
+    .sims-rows .n { font-family: var(--mono); color: var(--neon); font-size: .85rem; padding-top: 4px; }
+    .sims-rows h3 { font-size: 1.3rem; margin-bottom: 8px; }
+    .sims-rows p { color: var(--dim); font-size: .95rem; }
+
+    /* ---------- games ---------- */
+    .games-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 56px; align-items: start; }
+    .stats { display: grid; gap: 28px; position: sticky; top: 100px; }
+    .stat { border-left: 2px solid var(--neon); padding-left: 20px; }
+    .stat-value { font-family: var(--display); font-weight: 700; font-size: clamp(4rem, 8vw, 6rem); line-height: .9; }
+    .stat-label { font-family: var(--mono); font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+    .stat-note { color: var(--dim); font-size: .9rem; }
+    .stat-note a { color: var(--neon); }
+    .search { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .search-field { position: relative; flex: 1 1 260px; }
+    .search-field svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+    .search input {
+      width: 100%; background: var(--surface); border: 1px solid var(--line-hi); color: var(--text);
+      font: 500 1rem var(--body); padding: 14px 14px 14px 44px; outline: none; transition: border-color .2s, box-shadow .2s;
+    }
+    .search input::placeholder { color: var(--muted); }
+    .search input:focus { border-color: var(--neon); box-shadow: 0 0 0 3px var(--neon-dim); }
+    .search-count { font-family: var(--mono); font-size: .78rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+    .game-grid { display: flex; flex-wrap: wrap; gap: 8px; }
     .game-chip {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 10px 20px; border-radius: 10px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      font-size: 0.88rem; font-weight: 600; color: var(--text);
-      transition: all 0.3s ease; cursor: default;
+      display: inline-flex; align-items: center; gap: 9px; padding: 8px 13px;
+      background: var(--surface); border: 1px solid var(--line); font-size: .88rem; font-weight: 500; color: var(--text);
+      transition: border-color .2s, background .2s;
     }
-    .game-chip:hover {
-      transform: translateY(-3px); border-color: var(--chip-color, var(--border-light));
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3), 0 0 20px color-mix(in srgb, var(--chip-color, var(--green)) 20%, transparent);
+    .game-chip:hover { border-color: var(--chip-color, var(--line-hi)); background: var(--surface-2); }
+    .game-dot { width: 7px; height: 7px; background: var(--chip-color, var(--neon)); flex: none; transform: rotate(45deg); }
+    .game-chip.is-hidden { display: none; }
+    #show-more-games {
+      margin-top: 16px; background: none; border: 1px dashed var(--line-hi); color: var(--dim);
+      font: 500 .8rem var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 12px 20px; cursor: pointer; transition: color .2s, border-color .2s;
     }
-    .game-chip .game-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--chip-color, var(--green));
-      box-shadow: 0 0 8px var(--chip-color, var(--green));
-    }
-    .game-chip-more { color: var(--text-dim); border-style: dashed; font-weight: 500; }
-    #show-more-games:hover { background: var(--bg-card-hover); border-color: var(--text-muted); color: var(--text); }
+    #show-more-games:hover { color: var(--neon); border-color: var(--neon); }
+    .no-match { display: none; color: var(--dim); margin-top: 16px; }
+    .no-match a { color: var(--neon); }
 
-    /* --- Stat highlights --- */
-    .stats-row {
-      display: flex; justify-content: center; gap: 48px; padding: 32px 0 0; flex-wrap: wrap;
+    /* ---------- how ---------- */
+    .how { background: var(--bg-2); border-block: 1px solid var(--line); }
+    .steps { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; counter-reset: s; border-top: 1px solid var(--line-hi); }
+    .step { padding: 36px 32px 8px 0; position: relative; }
+    .step + .step { padding-left: 32px; border-left: 1px solid var(--line); }
+    .step::before {
+      counter-increment: s; content: "0" counter(s);
+      display: block; font-family: var(--display); font-weight: 700; font-size: 5rem; line-height: 1; margin-bottom: 20px;
+      color: transparent; -webkit-text-stroke: 1.5px var(--line-hi);
     }
-    .stat { text-align: center; }
-    .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--green-light); }
-    .stat-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; margin-top: 4px; }
+    .step:hover::before { -webkit-text-stroke-color: var(--neon); }
+    .step::after { content: ""; position: absolute; top: -1px; left: 0; width: 48px; height: 2px; background: var(--neon); }
+    .step + .step::after { left: 32px; }
+    .step h3 { margin-bottom: 10px; }
+    .step p { color: var(--dim); font-size: .95rem; }
+    .step .mock { margin-top: 20px; font-family: var(--mono); font-size: .78rem; color: var(--dim); display: inline-block; border: 1px solid var(--line-hi); padding: 7px 12px; }
+    .step .mock b { color: var(--neon); font-weight: 500; }
 
-    /* --- Screenshot Hero --- */
-    .screenshot-hero { padding: 0 0 100px; }
+    /* ---------- faq ---------- */
+    .faq-grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 64px; align-items: start; }
+    .faq-grid .sec-head { position: sticky; top: 100px; margin-bottom: 0; }
+    .faq-list { border-top: 1px solid var(--line-hi); }
+    details { border-bottom: 1px solid var(--line-hi); }
+    summary {
+      list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 20px;
+      padding: 22px 0; font-family: var(--display); font-weight: 600; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .02em;
+      transition: color .2s;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary:hover { color: var(--neon); }
+    summary::after { content: "+"; font-family: var(--mono); font-size: 1.4rem; color: var(--neon); transition: transform .25s; flex: none; line-height: 1; }
+    details[open] summary::after { transform: rotate(45deg); }
+    details .ans { padding: 0 0 24px; color: var(--dim); max-width: 60ch; display: grid; gap: 12px; }
+    details .ans a { color: var(--neon); }
 
-    .screenshot-frame {
-      display: block; max-width: 900px; margin: 0 auto;
-      border-radius: 16px; overflow: hidden; border: 1px solid var(--border);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(30, 168, 75, 0.08);
-      transition: box-shadow 0.4s;
-    }
-    .screenshot-frame:hover {
-      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(30, 168, 75, 0.12);
-    }
-    .screenshot-frame img { width: 100%; display: block; }
+    /* ---------- final cta ---------- */
+    .final { padding: 40px 0 120px; }
+    .final-box { --cut: 28px; padding: clamp(40px, 7vw, 88px); overflow: hidden; }
+    .final-box::before { background: radial-gradient(ellipse 70% 90% at 100% 100%, rgba(57,255,136,.12), transparent 60%), var(--surface); }
+    .final-box h2 { font-size: clamp(2.6rem, 7vw, 5.6rem); max-width: 11ch; margin: 18px 0 24px; }
+    .final-box .lede { margin-bottom: 36px; }
+    .final-meta { margin-top: 28px; font-family: var(--mono); font-size: .78rem; color: var(--muted); letter-spacing: .06em; }
+    .final-meta a { color: var(--dim); }
 
-    /* --- Features --- */
-    .features-section { padding: 100px 0; }
+    /* ---------- footer ---------- */
+    footer { border-top: 1px solid var(--line); padding: 40px 0; }
+    .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+    .foot-links a { color: var(--dim); text-decoration: none; font-size: .9rem; }
+    .foot-links a:hover { color: var(--neon); }
+    .foot small { display: block; color: var(--muted); font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; margin-top: 6px; }
 
-    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    /* ---------- reveal ---------- */
+    .js .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+    .js .reveal.in { opacity: 1; transform: none; }
 
-    .feature-card {
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
-      padding: 32px 28px; transition: all 0.3s ease; position: relative; overflow: hidden;
+    /* ---------- responsive ---------- */
+    @media (max-width: 1080px) {
+      .nav { gap: 18px; }
+      .monitor { width: 100%; }
+      .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .t-sync, .t-connect { grid-column: span 2; }
+      .t-sync { grid-row: auto; }
+      .t-conflict, .t-resume { grid-column: span 1; }
+      .t-mods, .t-safe { grid-column: span 1; }
     }
-    .feature-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, var(--green), transparent); opacity: 0; transition: opacity 0.3s;
-    }
-    .feature-card:hover {
-      border-color: rgba(30, 168, 75, 0.3); transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
-    }
-    .feature-card:hover::before { opacity: 1; }
-
-    .feature-icon {
-      width: 44px; height: 44px; border-radius: 12px; background: var(--green-dim);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.3rem; margin-bottom: 18px;
-    }
-    .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
-    .feature-card p { font-size: 0.85rem; color: var(--text-dim); line-height: 1.6; }
-
-    /* --- How it works --- */
-    .how-section {
-      padding: 100px 0; background: var(--bg-card);
-      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    }
-
-    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; position: relative; }
-    .steps::before {
-      content: ''; position: absolute; top: 28px; left: 80px; right: 80px; height: 2px;
-      background: linear-gradient(90deg, var(--green), var(--green-dim), var(--border)); z-index: 0;
-    }
-    .step { text-align: center; position: relative; z-index: 1; }
-    .step-number {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 56px; height: 56px; border-radius: 16px;
-      background: var(--bg); border: 2px solid var(--green);
-      color: var(--green-light); font-weight: 800; font-size: 1.2rem; margin-bottom: 20px;
-      box-shadow: 0 0 24px var(--green-glow); transition: all 0.3s;
-    }
-    .step:hover .step-number {
-      background: var(--green); color: white;
-      box-shadow: 0 0 40px var(--green-glow); transform: scale(1.1);
-    }
-    .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
-    .step p { font-size: 0.84rem; color: var(--text-dim); line-height: 1.55; }
-
-    /* --- Screenshots Grid --- */
-    .screenshots-section { padding: 100px 0; }
-
-    .screenshot-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-
-    .screenshot-card {
-      display: block; border-radius: 14px; overflow: hidden;
-      border: 1px solid var(--border); transition: all 0.3s ease; background: var(--bg-card);
-    }
-    .screenshot-card:hover {
-      border-color: rgba(30, 168, 75, 0.3); transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-    }
-    .screenshot-card img { width: 100%; height: auto; display: block; }
-    .screenshot-card .label { padding: 14px 18px; font-size: 0.82rem; font-weight: 600; color: var(--text-dim); }
-    .screenshot-card .label span { color: var(--text-muted); font-weight: 400; }
-
-    /* --- CTA --- */
-    .cta-section { padding: 100px 0; text-align: center; position: relative; }
-    .cta-section::before {
-      content: ''; position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
-      width: 600px; height: 400px;
-      background: radial-gradient(circle, rgba(30, 168, 75, 0.08) 0%, transparent 70%);
-      pointer-events: none;
-    }
-    .cta-section h2 { font-size: 2.6rem; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 16px; }
-    .cta-section p {
-      color: var(--text-dim); font-size: 1.05rem; margin-bottom: 40px;
-      max-width: 480px; margin-left: auto; margin-right: auto;
-    }
-    .cta-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
-
-    .btn-donate {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 13px 28px; border-radius: 12px; font-size: 0.95rem; font-weight: 600;
-      background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.2);
-      color: var(--yellow); transition: all 0.25s;
-    }
-    .btn-donate:hover {
-      background: rgba(250, 204, 21, 0.14); border-color: rgba(250, 204, 21, 0.35);
-      color: var(--yellow); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(250, 204, 21, 0.1);
-    }
-
-    .platforms { display: flex; justify-content: center; gap: 40px; padding: 20px 0; }
-    .platform { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
-    .platform svg { width: 18px; height: 18px; fill: var(--text-muted); }
-
-    /* --- Footer --- */
-    footer { border-top: 1px solid var(--border); padding: 32px 0; }
-    .footer-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-    .footer-left { font-size: 0.8rem; color: var(--text-muted); }
-    .footer-links { display: flex; gap: 24px; }
-    .footer-links a { color: var(--text-dim); font-size: 0.8rem; font-weight: 500; }
-    .footer-links a:hover { color: var(--green-light); }
-
-    /* --- Responsive --- */
-    @media (max-width: 768px) {
-      .hero { padding: 120px 0 64px; }
-      .hero h1 { font-size: 2.8rem; }
-      .hero .tagline { font-size: 1rem; }
-      .feature-grid { grid-template-columns: 1fr 1fr; }
-      .steps { grid-template-columns: 1fr 1fr; gap: 24px; }
-      .steps::before { display: none; }
-      .screenshot-grid { gap: 12px; }
-      .cta-section h2 { font-size: 2rem; }
-      .menu-toggle { display: block; }
-      .header-nav {
-        display: none; position: absolute; top: 60px; left: 0; right: 0;
-        background: rgba(6, 10, 14, 0.95);
-        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-        border-bottom: 1px solid var(--border);
-        flex-direction: column; padding: 16px 24px; gap: 16px;
+    @media (max-width: 900px) {
+      .menu-btn { display: block; }
+      .nav {
+        display: none; position: absolute; top: 68px; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0;
+        background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 24px 20px;
       }
-      .header-nav.open { display: flex; }
-      .header-nav a { font-size: 0.95rem; }
-      .problem-grid { grid-template-columns: 1fr; }
-      .stats-row { gap: 32px; }
+      .nav.open { display: flex; }
+      .nav a { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 1rem; }
+      .nav .btn { margin-top: 14px; border: 0; padding: 14px; }
+      .hero { padding-top: 56px; }
+      .hero-grid, .join-grid, .sims-grid, .faq-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+      .monitor, .monitor:hover { transform: rotateY(-6deg) rotateX(2deg); }
+      .games-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+      .stats { position: static; grid-template-columns: 1fr 1fr; }
+      .stat-note { grid-column: 1 / -1; }
+      .faq-grid .sec-head { position: static; }
+      .steps { grid-template-columns: minmax(0, 1fr); }
+      .step, .step + .step { padding: 32px 0 24px; border-left: 0; border-bottom: 1px solid var(--line); }
+      .step + .step::after { left: 0; }
+      .section { padding: 88px 0; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 0 16px; }
+      .bento { grid-template-columns: minmax(0, 1fr); }
+      .t-sync, .t-connect, .t-conflict, .t-resume, .t-mods, .t-safe { grid-column: auto; }
+      .t-connect { flex-direction: column; align-items: stretch; gap: 20px; }
+      .t-connect .ticks { grid-template-columns: 1fr; flex-basis: auto; }
+      .t-connect .c-copy { flex-basis: auto; }
+      .tile { padding: 24px 20px; }
+      .specs li { grid-template-columns: 1fr; gap: 4px; }
+      .cta-row .btn { flex: 1 1 100%; }
+      .monitor, .monitor:hover { transform: none; }
+      .brackets::before { left: -4px; } .brackets::after { right: -4px; }
+      .win { padding: 18px 16px; }
+      .fakebtn { min-width: 0; padding: 0 12px; }
+      .wire { margin-left: 32px; }
+      .stat-value { font-size: 3.6rem; }
+      .sims-rows li { grid-template-columns: 40px 1fr; gap: 12px; }
+      .step::before { font-size: 4rem; }
     }
 
-    @media (max-width: 480px) {
-      .hero h1 { font-size: 2.2rem; }
-      .hero-ctas, .cta-buttons { flex-direction: column; align-items: center; }
-      .btn, .btn-donate { width: 100%; max-width: 300px; justify-content: center; }
-      .feature-grid, .screenshot-grid, .steps { grid-template-columns: 1fr; }
-      .game-grid { gap: 8px; }
-      .game-chip { padding: 8px 14px; font-size: 0.8rem; }
-      .footer-inner { flex-direction: column; text-align: center; }
-      .platforms { gap: 24px; flex-wrap: wrap; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .js .reveal { opacity: 1; transform: none; }
     }
   </style>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
 
-  <!-- Header -->
-  <header>
-    <div class="header-inner">
-      <div class="header-brand">
-        <svg viewBox="0 0 512 512" width="28" height="28">
-          <defs><linearGradient id="hbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2ecc5e"/><stop offset="100%" stop-color="#1ea84b"/></linearGradient></defs>
-          <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#hbg)"/>
-          <rect x="136" y="248" width="240" height="38" rx="10" fill="white"/>
-          <rect x="152" y="284" width="208" height="126" rx="10" fill="white" opacity="0.93"/>
-          <path d="M 194 140 A 72 72 0 0 1 318 140" fill="none" stroke="white" stroke-width="20" stroke-linecap="round"/>
-          <polygon points="332,162 322,132 300,152" fill="white"/>
-          <path d="M 318 212 A 72 72 0 0 1 194 212" fill="none" stroke="white" stroke-width="20" stroke-linecap="round"/>
-          <polygon points="180,190 190,220 212,200" fill="white"/>
-        </svg>
-        <span>Sync</span>Crate
-      </div>
-      <button class="menu-toggle" aria-label="Menu" onclick="document.querySelector('.header-nav').classList.toggle('open')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <header class="header">
+    <div class="wrap">
+      <a class="brand" href="#top" aria-label="SyncCrate home">
+        <img src="icon.svg" alt="" width="30" height="30">SyncCrate
+      </a>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav" aria-label="Open menu">
+        <span></span><span></span><span></span>
       </button>
-      <nav class="header-nav">
-        <a href="#games">Games</a>
+      <nav class="nav" id="nav" aria-label="Primary">
         <a href="#features">Features</a>
-        <a href="#screenshots">Screenshots</a>
+        <a href="#games">Games</a>
+        <a href="#sims">Sims 4</a>
+        <a href="#faq">FAQ</a>
         <a href="https://github.com/stixez/SyncCrate">GitHub</a>
-        <a href="https://www.buymeacoffee.com/stixe" class="btn-donate-sm">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-          Donate
-        </a>
-        <a href="https://github.com/stixez/SyncCrate/releases/latest" class="btn-download-sm">Download</a>
+        <a class="btn btn-primary" href="https://github.com/stixez/SyncCrate/releases/latest">Download</a>
       </nav>
     </div>
   </header>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="container hero-content">
-      <div class="hero-badge">
-        <span class="dot"></span>
-        Open Source &middot; Free Forever
-      </div>
-      <h1>Never Break a<br><span class="gradient">Modded Session</span> Again</h1>
-      <p class="tagline">SyncCrate compares your game folders with your friends' and copies only what's different, straight from PC to PC at LAN speed. No cloud, no accounts.</p>
-      <div class="hero-ctas">
-        <a href="https://github.com/stixez/SyncCrate/releases/latest" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download for Free
-        </a>
-        <a href="https://github.com/stixez/SyncCrate" class="btn btn-secondary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-          View Source
-        </a>
-      </div>
-      <p class="hero-note">Windows &middot; macOS &middot; Linux</p>
-    </div>
-  </section>
-
-  <!-- Problem / Solution -->
-  <section class="problem-section">
-    <div class="container">
-      <div class="problem-grid">
-        <div class="problem-card">
-          <h3>The Problem</h3>
-          <p>Playing modded games with friends means shared zip files, outdated mods, and broken sessions.</p>
-          <ul>
-            <li>Missing mods crash multiplayer</li>
-            <li>Wrong versions cause incompatibility</li>
-            <li>Manual copying takes hours</li>
-            <li>Cloud uploads are painfully slow</li>
-          </ul>
+  <main id="main">
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="label"><span class="live" aria-hidden="true"></span><b>v0.5.0</b> Join from anywhere with one code</p>
+          <h1><span class="ln">Same mods.</span> <span class="ln hl">Every PC.</span> <span class="ln out">No excuses.</span></h1>
+          <p class="lede">SyncCrate compares your game folders with your friends' and copies only what's different, straight from PC to PC. Mods, saves, addons and configs, for 100 games. No cloud, no accounts.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/stixez/SyncCrate/releases/latest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
+              Download free
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/stixez/SyncCrate">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0023.5 12C23.5 5.7 18.3.5 12 .5z"/></svg>
+              View source
+            </a>
+          </div>
+          <p class="trust"><span>Free</span><span>Open source</span><span>No accounts</span><span>Win · macOS · Linux</span></p>
         </div>
-        <div class="solution-card">
-          <h3>The Solution</h3>
-          <p>SyncCrate scans both sides, shows differences, and transfers only what changed.</p>
-          <ul>
-            <li>Everyone gets the same mods and versions</li>
-            <li>100-900 MB/s transfer speed over LAN</li>
-            <li>No servers, no accounts, no tracking</li>
-            <li>Friends elsewhere join with a code, no VPN needed</li>
-          </ul>
+        <div class="monitor-wrap">
+          <div class="monitor brackets">
+            <div class="monitor-bar" aria-hidden="true"><span class="label"><span class="live"></span>Session live</span><span>3 peers</span></div>
+            <a href="screenshots/dashboard.png">
+              <img src="screenshots/dashboard.png" width="1898" height="870" alt="SyncCrate dashboard showing the session overview, the sync plan and connected peers">
+            </a>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Game Showcase -->
-  <section class="games-section" id="games">
-    <div class="container">
-      <div class="line-divider" style="margin-bottom: 80px"></div>
-      <p class="section-label">Supported Games</p>
-      <h2 class="section-title">One App, All Your Games</h2>
-      <p class="section-subtitle">Add games to your library. Each game gets its own dashboard, content browser, profiles, and backups.</p>
-      <div class="game-grid" id="game-chips">
+    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+
+    <!-- JOIN -->
+    <section class="section join" id="join">
+      <div class="wrap join-grid">
+        <div class="reveal">
+          <p class="label"><b>// 01</b> Join</p>
+          <h2 style="margin-top:18px">One code.<br><span class="hl">Any distance.</span></h2>
+          <p class="lede" style="margin-top:22px">The host clicks Start Hosting and shares an <code>SC-…</code> code. Friends paste it. Same Wi-Fi or the other side of the country, it just connects. No VPN, no port forwarding.</p>
+          <ul class="specs">
+            <li><strong>Direct</strong><span>PC to PC whenever possible, punching through home routers (powered by iroh).</span></li>
+            <li><strong>Fallback</strong><span>If a direct link can't be made, an encrypted relay forwards data it can't read. Files are never stored anywhere.</span></li>
+            <li><strong>LAN</strong><span>On the same network the fast local connection is used automatically. Reconnecting is one click.</span></li>
+          </ul>
+          <p class="tip"><strong>TIP</strong><span>Anyone with your code can join. Posting it publicly? Turn on <em>Use PIN</em>.</span></p>
+        </div>
+
+        <div class="demo reveal" id="demo" data-step="idle">
+          <p class="sr-only">Animated example: the host copies a join code, a friend pastes it into Join a Session, connects, and syncs 42 files.</p>
+          <div class="win host cut" aria-hidden="true">
+            <div class="win-top"><span class="who">Host<small>ALEX-PC</small></span><span class="label"><span class="live"></span>Hosting</span></div>
+            <div class="codebox">
+              <div class="codefield" id="hostCode">SC-8M2K-0QRT-4F7A-…-Q2ZD</div>
+              <span class="fakebtn" id="copyBtn">Copy</span>
+            </div>
+          </div>
+          <div class="wire" aria-hidden="true"></div>
+          <div class="win friend cut" aria-hidden="true">
+            <div class="win-top"><span class="who">Join a session<small>SAM-LAPTOP</small></span><span class="route" id="route">Remote</span></div>
+            <div class="codebox">
+              <div class="codefield" id="friendCode"><span class="placeholder">Paste join code</span></div>
+              <span class="fakebtn go" id="joinBtn">Join</span>
+            </div>
+            <div class="status">
+              <div class="status-line"><span class="dot"></span><span id="statusText">Waiting for a code</span></div>
+              <div class="bar"><i id="bar"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="section" id="features" style="padding-top:40px">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <p class="label"><b>// 02</b> Features</p>
+          <h2>Built for game night,<br>not for IT.</h2>
+        </div>
+        <div class="bento">
+          <article class="tile t-sync cut reveal">
+            <p class="label"><b>Sync</b> Only what changed</p>
+            <h3>Skip the 4 GB zip.<br>Send <span class="hl">only what differs.</span></h3>
+            <p>SHA-256 diffing finds exactly what's different. zstd compression cuts transfers by 50–80%, and every file is hash-verified on arrival. Review the plan with size and time estimates, exclude files or glob patterns, then hit Sync Now.</p>
+            <div class="nums">
+              <div class="num">100–900<small>MB/s on LAN</small></div>
+              <div class="num">50–80%<small>less data</small></div>
+            </div>
+            <div class="diff" aria-label="Example sync plan">
+              <div><span class="a">+ add</span><span class="p">Mods/UI_Cheats_Extension.ts4script</span><span class="s">1.2 MB</span></div>
+              <div><span class="m">~ upd</span><span class="p">Mods/MCCC/mc_settings.cfg</span><span class="s">14 KB</span></div>
+              <div><span class="a">+ add</span><span class="p">Mods/CC/hair_long_waves.package</span><span class="s">8.6 MB</span></div>
+              <div><span class="m">~ upd</span><span class="p">Saves/Slot_00000003.save</span><span class="s">22 MB</span></div>
+              <div><span class="k">= same</span><span class="p">1,204 files identical, skipped</span><span class="s">4.1 GB</span></div>
+            </div>
+          </article>
+
+          <article class="tile t-conflict cut reveal">
+            <p class="label"><b>Conflicts</b> Your call</p>
+            <h3>Both edited it? You pick.</h3>
+            <p>Resolve per file. Nothing is replaced until you approve.</p>
+            <div class="seg" aria-hidden="true"><span>Keep mine</span><span>Use theirs</span><span>Keep both</span><span class="on">Keep newer</span></div>
+          </article>
+
+          <article class="tile t-resume cut reveal">
+            <p class="label"><b>Resume</b> No restarts</p>
+            <h3>Wi-Fi dropped? Pick up where it left off.</h3>
+            <p>Cancel or lose the connection mid-sync and it resumes. Desktop notification when done, tray icon while it runs.</p>
+          </article>
+
+          <article class="tile t-mods cut reveal">
+            <p class="label"><b>Mods</b> Manager built in</p>
+            <h3>Toggle, tag, dedupe.</h3>
+            <ul class="ticks">
+              <li>Enable/disable without deleting</li>
+              <li>12 tags, drag &amp; drop install, pack/DLC detection</li>
+              <li>Duplicate finder</li>
+            </ul>
+            <div class="shot"><img src="screenshots/content.png" width="1892" height="867" loading="lazy" alt="Content browser listing installed mods with tags and enable toggles"></div>
+          </article>
+
+          <article class="tile t-safe cut reveal">
+            <p class="label"><b>Safety</b> Undo button</p>
+            <h3>Backups and profiles.</h3>
+            <ul class="ticks">
+              <li>Backups before every sync or every 1–24 h</li>
+              <li>Share a setup as a <code>.synccrate-profile</code> on Discord</li>
+              <li>Flags risky scripts (<code>.ts4script</code>, <code>.lua</code>, <code>.jar</code>, <code>.dll</code>)</li>
+            </ul>
+            <div class="shot"><img src="screenshots/profiles.png" width="1897" height="867" loading="lazy" alt="Profiles screen with saved mod setups ready to share or restore"></div>
+          </article>
+
+          <article class="tile t-connect cut reveal">
+            <div class="c-copy">
+              <p class="label"><b>Connect</b> Finds each other</p>
+              <h3 style="margin-top:12px">One host. The whole squad.</h3>
+              <p style="margin-top:10px">Every friend syncs independently, and the host decides which folders are shared.</p>
+            </div>
+            <ul class="ticks">
+              <li>Auto-discovery via mDNS + UDP broadcast</li>
+              <li>Tries every address a host has</li>
+              <li>One-click Windows Firewall fix</li>
+              <li>Network Check shows if the host is reachable</li>
+              <li>Warns if the game is still running</li>
+              <li>Never needs admin to run</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIMS 4 -->
+    <section class="section sims" id="sims">
+      <div class="wrap sims-grid">
+        <div class="reveal">
+          <p class="label"><b>// 03</b> Spotlight</p>
+          <h2 class="sims-title">The Sims <span class="four">4</span></h2>
+          <p class="lede" style="margin-top:24px">The game with the most CC on earth gets extra care.</p>
+        </div>
+        <ol class="sims-rows reveal">
+          <li><span class="n">01</span><div><h3>ReShade &amp; GShade presets</h3><p>Add <em>The Sims 4 (ReShade)</em> or <em>(GShade)</em> and everyone's game looks the same. Detected in <code>Game\Bin</code> on EA App, Origin and Steam. Your own <code>ReShade.ini</code> / <code>GShade.ini</code> is never synced.</p></div></li>
+          <li><span class="n">02</span><div><h3>Disabling that sticks</h3><p>The game loads mods from subfolders, so disabled mods are renamed to <code>.disabled</code> instead of moved. Leftovers in an old <code>_Disabled</code> folder are fixed in one click.</p></div></li>
+          <li><span class="n">03</span><div><h3>Fresh thumbnails</h3><p>The thumbnail cache is cleared automatically after new mods arrive.</p></div></li>
+          <li><span class="n">04</span><div><h3>Patch-day warnings</h3><p>Outdated script mods are flagged after a game update.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- GAMES -->
+    <section class="section" id="games">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <p class="label"><b>// 04</b> Games</p>
+          <h2>Your library<br>is <span class="hl">probably</span> here.</h2>
+        </div>
+        <div class="games-grid">
+          <div class="stats reveal">
+            <div class="stat">
+              <div class="stat-value">100</div>
+              <div class="stat-label">Games supported</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">67</div>
+              <div class="stat-label">Game families</div>
+            </div>
+            <p class="stat-note">Auto-detected across every Steam library on every drive. Missing one? <a href="https://github.com/stixez/SyncCrate#adding-a-game">Add it</a> with a few lines of JSON.</p>
+          </div>
+          <div class="reveal">
+            <div class="search">
+              <label class="search-field">
+                <span class="sr-only">Search supported games</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <input type="search" id="game-search" placeholder="Search 100 games…" autocomplete="off">
+              </label>
+              <span class="search-count" id="search-count" aria-live="polite"></span>
+            </div>
+            <div class="game-grid" id="game-chips">
         <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4</div>
         <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (ReShade)</div>
         <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (GShade)</div>
@@ -530,15 +657,8 @@
         <div class="game-chip" style="--chip-color: #a78bfa"><span class="game-dot"></span>Stellaris</div>
         <div class="game-chip" style="--chip-color: #34d399"><span class="game-dot"></span>Terraria</div>
         <div class="game-chip" style="--chip-color: #34d399"><span class="game-dot"></span>Project Zomboid</div>
-      </div>
-      <button id="show-more-games" onclick="document.getElementById('more-games').style.display='flex';this.style.display='none';" style="
-        display: flex; align-items: center; gap: 6px;
-        margin: 16px auto 0; padding: 8px 20px; border-radius: 8px;
-        background: var(--bg-card); border: 1px dashed var(--border-light);
-        color: var(--text-dim); font-size: 0.85rem; font-weight: 500;
-        cursor: pointer; transition: all 0.2s;
-      ">Show all 100 games &darr;</button>
-      <div class="game-grid" id="more-games" style="display: none; margin-top: 12px;">
+            </div>
+            <div class="game-grid" id="more-games" style="display: none; margin-top: 12px;">
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>7 Days to Die</div>
         <div class="game-chip" style="--chip-color: #3b82f6"><span class="game-dot"></span>American Truck Simulator</div>
         <div class="game-chip" style="--chip-color: #0891b2"><span class="game-dot"></span>ARK: Survival Evolved</div>
@@ -622,212 +742,263 @@
         <div class="game-chip" style="--chip-color: #a8a29e"><span class="game-dot"></span>WoW Vanilla (1.12)</div>
         <div class="game-chip" style="--chip-color: #38bdf8"><span class="game-dot"></span>WoW WoTLK (3.3.5)</div>
         <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>XCOM 2</div>
-      </div>
-      <div class="stats-row">
-        <div class="stat">
-          <div class="stat-value">100</div>
-          <div class="stat-label">Games supported</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">67</div>
-          <div class="stat-label">Game families</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">0</div>
-          <div class="stat-label">Servers required</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">0</div>
-          <div class="stat-label">Accounts needed</div>
+            </div>
+            <button id="show-more-games" type="button" aria-controls="more-games" aria-expanded="false">Show all 100 games &darr;</button>
+            <p class="no-match" id="no-match">No match. Set the folder manually in Settings, or <a href="https://github.com/stixez/SyncCrate#adding-a-game">add the game</a>.</p>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Screenshot Hero -->
-  <section class="screenshot-hero">
-    <div class="container">
-      <a href="screenshots/dashboard.png" class="screenshot-frame">
-        <img src="screenshots/dashboard.png" alt="SyncCrate Dashboard" loading="lazy">
-      </a>
-    </div>
-  </section>
+    <!-- HOW -->
+    <section class="section how" id="how">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <p class="label"><b>// 05</b> How it works</p>
+          <h2>Three clicks to<br>the same game.</h2>
+        </div>
+        <ol class="steps reveal">
+          <li class="step">
+            <h3>Install &amp; add your game</h3>
+            <p>Install SyncCrate on every PC and add your game in the Game Browser. Its folder is found automatically.</p>
+            <span class="mock">Game folder <b>detected</b></span>
+          </li>
+          <li class="step">
+            <h3>Host shares a code</h3>
+            <p>One friend clicks Start Hosting. Everyone else pastes the code, or picks the host under Scan for Hosts.</p>
+            <span class="mock"><b>SC-8M2K</b>-0QRT-…</span>
+          </li>
+          <li class="step">
+            <h3>Compare &amp; sync</h3>
+            <p>Check the plan: what's new, what changed, what conflicts. Then Sync Now.</p>
+            <span class="mock">Synced <b>42 files</b></span>
+          </li>
+        </ol>
+      </div>
+    </section>
 
-  <!-- Features -->
-  <section class="features-section" id="features">
-    <div class="container">
-      <div class="line-divider" style="margin-bottom: 100px"></div>
-      <p class="section-label">Features</p>
-      <h2 class="section-title">Built for Modders</h2>
-      <p class="section-subtitle">Everything you need to play modded games together, and nothing you don't.</p>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F511;</div>
-          <h3>Paste a Code, You're In</h3>
-          <p>The host shares one short join code with their addresses, port and PIN. Friends paste it and connect, on the same Wi-Fi or across the internet. No VPN or port forwarding. Reconnecting takes one click.</p>
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="wrap faq-grid">
+        <div class="sec-head reveal">
+          <p class="label"><b>// 06</b> FAQ</p>
+          <h2>Before<br>you ask.</h2>
+          <p class="lede">More in the <a href="https://github.com/stixez/SyncCrate#faq" style="color:var(--neon)">README</a>.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F50C;</div>
-          <h3>Connections That Just Work</h3>
-          <p>Finds hosts via mDNS and UDP broadcast, tries every address, and fixes Windows Firewall in one click. No running as administrator.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F512;</div>
-          <h3>Direct &amp; Private</h3>
-          <p>Files go straight from PC to PC at 100-900 MB/s. No cloud, no accounts, no tracking. Files are never stored on a server.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x26A1;</div>
-          <h3>Only What Changed</h3>
-          <p>SHA-256 diffing skips identical files, and zstd compression cuts the rest by 50-80%. Every file is verified on arrival.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x2611;&#xFE0F;</div>
-          <h3>You Approve Every File</h3>
-          <p>See size and time before you sync. Exclude files or patterns, and resolve conflicts your way: keep yours, use theirs, keep both or keep newer.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F504;</div>
-          <h3>Picks Up Where It Left Off</h3>
-          <p>Cancelled or interrupted syncs resume instead of restarting. A desktop notification tells you when it's done.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F3A8;</div>
-          <h3>ReShade &amp; GShade for Sims 4</h3>
-          <p>Share presets and shaders so everyone's game looks the same. Detected on EA App, Origin and Steam installs. Your own settings file is never synced.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F3AE;</div>
-          <h3>Knows Your Game</h3>
-          <p>Warns if the game is still running, clears The Sims 4's thumbnail cache after new mods, disables Sims mods the way the game respects, and flags outdated script mods.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F50D;</div>
-          <h3>Finds Your Games</h3>
-          <p>Auto-detects installs across every Steam library on any drive, OneDrive-redirected Documents and EA App installs. Or set a path yourself.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F3F7;&#xFE0F;</div>
-          <h3>Tidy Mod Library</h3>
-          <p>Tag, search and filter mods, enable or disable without deleting, drag &amp; drop to install, and find duplicates in one click.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F4E6;</div>
-          <h3>Share Your Setup</h3>
-          <p>Snapshot your mods as a profile and export a .synccrate-profile file. Share it on Discord and friends are set in one drag.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
-          <h3>Safe by Default</h3>
-          <p>Automatic backups before sync or on a schedule, a safety backup before every restore, and warnings for risky script files.</p>
+        <div class="faq-list reveal">
+          <details>
+            <summary>My friend can't connect</summary>
+            <div class="ans"><p>It's almost always Windows Firewall. On the host PC click <strong>Fix Windows Firewall</strong> (shown while hosting and in Network Check), then use <strong>Test</strong> in Network Check. SyncCrate uses TCP port 9847 for sessions and UDP port 47625 for discovery.</p></div>
+          </details>
+          <details>
+            <summary>Does it work over the internet?</summary>
+            <div class="ans"><p>Yes. Paste the host's join code, nothing else needed. SyncCrate connects directly between PCs when it can, and falls back to an encrypted relay when it can't. The relay only forwards data it can't read; your files are never stored anywhere.</p><p>Anyone with your code can join, so turn on <strong>Use PIN</strong> if you post it publicly. Tailscale or ZeroTier also still work with Connect by IP.</p></div>
+          </details>
+          <details>
+            <summary>Will it break my mods?</summary>
+            <div class="ans"><p>Nothing changes until you approve the sync plan, and existing files are only replaced when you choose to. Every file is hash-verified, risky scripts are flagged, and backups let you roll back. Only sync with people you trust, and make sure everyone runs the same SyncCrate version.</p></div>
+          </details>
+          <details>
+            <summary>Do I need admin rights?</summary>
+            <div class="ans"><p>No. The only exception is a game folder Windows protects, like ReShade/GShade under <code>Program Files</code>. SyncCrate tells you and offers to restart as administrator.</p></div>
+          </details>
+          <details>
+            <summary>Is there a file size limit?</summary>
+            <div class="ans"><p>Up to 2 GB per file, no limit on total size.</p></div>
+          </details>
+          <details>
+            <summary>macOS says the app is "damaged"</summary>
+            <div class="ans"><p>The app isn't notarized yet. Run <code>xattr -cr /Applications/SyncCrate.app</code> once, then open it normally.</p></div>
+          </details>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- How it works -->
-  <section class="how-section" id="how-it-works">
-    <div class="container">
-      <p class="section-label">How It Works</p>
-      <h2 class="section-title">Four Steps. Zero Config.</h2>
-      <p class="section-subtitle">No port forwarding, no accounts. Works on your home network or across the internet.</p>
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">1</div>
-          <h3>Host</h3>
-          <p>Click Start Hosting and share your join code.</p>
-        </div>
-        <div class="step">
-          <div class="step-number">2</div>
-          <h3>Join</h3>
-          <p>Friends paste the code, or pick you from the network scan.</p>
-        </div>
-        <div class="step">
-          <div class="step-number">3</div>
-          <h3>Compare</h3>
-          <p>SyncCrate scans both sides and plans what to copy.</p>
-        </div>
-        <div class="step">
-          <div class="step-number">4</div>
-          <h3>Sync</h3>
-          <p>Review the plan, hit Sync Now. Done in minutes.</p>
+    <!-- FINAL CTA -->
+    <section class="final">
+      <div class="wrap">
+        <div class="final-box cut reveal">
+          <p class="label"><span class="live" aria-hidden="true"></span>Ready when your squad is</p>
+          <h2>Next session starts <span class="hl">synced.</span></h2>
+          <p class="lede">Free for Windows, macOS and Linux. Install it on every PC and you're one code away.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/stixez/SyncCrate/releases/latest">Download SyncCrate</a>
+            <a class="btn btn-ghost" href="https://buymeacoffee.com/stixe">Buy me a coffee</a>
+          </div>
+          <p class="final-meta">.exe · .dmg · .AppImage · .deb &nbsp;/&nbsp; <a href="https://github.com/stixez/SyncCrate/releases">All releases</a></p>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </main>
 
-  <!-- Screenshots Grid -->
-  <section class="screenshots-section" id="screenshots">
-    <div class="container">
-      <div class="line-divider" style="margin-bottom: 100px"></div>
-      <p class="section-label">Screenshots</p>
-      <h2 class="section-title">See It In Action</h2>
-      <p class="section-subtitle">Dark, focused interface built for getting things done.</p>
-      <div class="screenshot-grid">
-        <a href="screenshots/content.png" class="screenshot-card">
-          <img src="screenshots/content.png" alt="Content Browser" loading="lazy">
-          <div class="label">Content Browser <span>&mdash; Browse, tag, and manage mods</span></div>
-        </a>
-        <a href="screenshots/profiles.png" class="screenshot-card">
-          <img src="screenshots/profiles.png" alt="Mod Profiles" loading="lazy">
-          <div class="label">Profiles <span>&mdash; Snapshot and share mod setups</span></div>
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
-  <section class="cta-section">
-    <div class="container">
-      <h2>Ready to Sync?</h2>
-      <p>Free and open source. No more zip files, no more mismatched mods.</p>
-      <div class="cta-buttons">
-        <a href="https://github.com/stixez/SyncCrate/releases/latest" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download for Free
-        </a>
-        <a href="https://www.buymeacoffee.com/stixe" class="btn-donate">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-          Support the Project
-        </a>
-      </div>
-      <div class="platforms">
-        <div class="platform">
-          <svg viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
-          Windows
-        </div>
-        <div class="platform">
-          <svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          macOS
-        </div>
-        <div class="platform">
-          <svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a7.1 7.1 0 00.523 1.756c.55 1.187 1.263 2.142 1.973 2.969.713.829 1.423 1.528 1.958 2.088l.073.077c.287.307.553.541.785.654.395.186.583.061.766-.208.119-.174.214-.442.303-.831.046-.202.084-.433.123-.698a22 22 0 00.145-1.448c.019-.326.03-.696.03-1.084 0-.248-.016-.487-.048-.716a4.5 4.5 0 00-.18-.718 5 5 0 00-.14-.37c-.03-.068-.044-.097-.03-.078l.018-.009c.042-.02.123-.04.253-.04.398 0 1.063.128 1.063.128s.668.138 1.063.138c.131 0 .211.019.253.04l.018.008c.014-.02 0 .01-.03.078-.05.125-.098.247-.14.37a4.5 4.5 0 00-.18.718c-.032.23-.048.468-.048.716 0 .388.011.758.03 1.084.022.367.068.898.145 1.448.039.265.077.496.123.698.089.389.184.657.303.831.183.27.371.394.766.208.232-.113.498-.347.785-.654l.073-.077c.535-.56 1.245-1.259 1.958-2.088.71-.827 1.423-1.782 1.973-2.969a7.1 7.1 0 00.523-1.756c.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298A6 6 0 0012.504 0z"/></svg>
-          Linux
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
   <footer>
-    <div class="container">
-      <div class="footer-inner">
-        <div class="footer-left">&copy; 2026 SyncCrate &middot; MIT License</div>
-        <div class="footer-links">
-          <a href="https://github.com/stixez/SyncCrate">GitHub</a>
-          <a href="https://github.com/stixez/SyncCrate/releases">Releases</a>
-          <a href="https://github.com/stixez/SyncCrate/issues">Issues</a>
-          <a href="https://www.buymeacoffee.com/stixe">Donate</a>
-        </div>
+    <div class="wrap foot">
+      <div>
+        <a class="brand" href="#top"><img src="icon.svg" alt="" width="30" height="30">SyncCrate</a>
+        <small>MIT License · Made for game nights</small>
       </div>
+      <nav class="foot-links" aria-label="Footer">
+        <a href="https://github.com/stixez/SyncCrate">GitHub</a>
+        <a href="https://github.com/stixez/SyncCrate/releases/latest">Download</a>
+        <a href="https://github.com/stixez/SyncCrate/issues">Report an issue</a>
+        <a href="https://github.com/stixez/SyncCrate/blob/main/LICENSE">License</a>
+        <a href="https://buymeacoffee.com/stixe">Buy me a coffee</a>
+      </nav>
     </div>
   </footer>
 
   <script>
-    document.querySelectorAll('.header-nav a').forEach(a => {
-      a.addEventListener('click', () => document.querySelector('.header-nav').classList.remove('open'));
-    });
-  </script>
+  (function () {
+    document.documentElement.classList.add('js');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Mobile nav
+    var menuBtn = document.querySelector('.menu-btn');
+    var nav = document.getElementById('nav');
+    menuBtn.addEventListener('click', function () {
+      var open = nav.classList.toggle('open');
+      menuBtn.setAttribute('aria-expanded', String(open));
+      menuBtn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    });
+    nav.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        nav.classList.remove('open');
+        menuBtn.setAttribute('aria-expanded', 'false');
+        menuBtn.setAttribute('aria-label', 'Open menu');
+      });
+    });
+
+    // Reveal on scroll
+    var reveals = document.querySelectorAll('.reveal');
+    if ('IntersectionObserver' in window && !reduce) {
+      var ro = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); ro.unobserve(e.target); } });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+      reveals.forEach(function (el) { ro.observe(el); });
+    } else {
+      reveals.forEach(function (el) { el.classList.add('in'); });
+    }
+
+    // Games: ticker, show-all, search
+    var chips = Array.prototype.slice.call(document.querySelectorAll('.game-chip'));
+    var names = chips.map(function (c) { return c.textContent.trim(); });
+    var ticker = document.getElementById('ticker');
+    var frag = document.createDocumentFragment();
+    for (var k = 0; k < (reduce ? 1 : 2); k++) {
+      names.forEach(function (n) {
+        var s = document.createElement('span');
+        s.className = 'ticker-item';
+        s.textContent = n;
+        frag.appendChild(s);
+      });
+    }
+    ticker.appendChild(frag);
+
+    var more = document.getElementById('more-games');
+    var moreBtn = document.getElementById('show-more-games');
+    var search = document.getElementById('game-search');
+    var count = document.getElementById('search-count');
+    var noMatch = document.getElementById('no-match');
+    var expanded = false;
+
+    function setExpanded(v) {
+      expanded = v;
+      more.style.display = v ? 'flex' : 'none';
+      moreBtn.textContent = v ? 'Show fewer ↑' : 'Show all ' + chips.length + ' games ↓';
+      moreBtn.setAttribute('aria-expanded', String(v));
+    }
+    search.placeholder = 'Search ' + chips.length + ' games…';
+    moreBtn.addEventListener('click', function () { setExpanded(!expanded); });
+
+    search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase();
+      var hits = 0;
+      chips.forEach(function (c, i) {
+        var match = !q || names[i].toLowerCase().indexOf(q) !== -1;
+        c.classList.toggle('is-hidden', !match);
+        if (match) hits++;
+      });
+      if (q) {
+        more.style.display = 'flex';
+        moreBtn.style.display = 'none';
+        count.textContent = hits + (hits === 1 ? ' match' : ' matches');
+      } else {
+        more.style.display = expanded ? 'flex' : 'none';
+        moreBtn.style.display = '';
+        count.textContent = '';
+      }
+      noMatch.style.display = q && hits === 0 ? 'block' : 'none';
+    });
+
+    // Join-code demo
+    var demo = document.getElementById('demo');
+    var CODE = 'SC-8M2K-0QRT-4F7A-…-Q2ZD';
+    var copyBtn = document.getElementById('copyBtn');
+    var hostCode = document.getElementById('hostCode');
+    var friendCode = document.getElementById('friendCode');
+    var joinBtn = document.getElementById('joinBtn');
+    var statusText = document.getElementById('statusText');
+    var route = document.getElementById('route');
+    var bar = document.getElementById('bar');
+    var TOTAL = 42;
+
+    function finalState() {
+      demo.setAttribute('data-step', 'done');
+      friendCode.textContent = CODE;
+      route.textContent = 'Direct · P2P';
+      statusText.textContent = 'Connected · Synced ' + TOTAL + ' of ' + TOTAL + ' files';
+      bar.style.width = '100%';
+    }
+
+    if (reduce) { finalState(); return; }
+
+    var timers = [];
+    function at(ms, fn) { timers.push(setTimeout(fn, ms)); }
+    function press(el) { el.classList.add('press'); setTimeout(function () { el.classList.remove('press'); }, 160); }
+    var raf = 0;
+
+    function run() {
+      timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf);
+      demo.setAttribute('data-step', 'idle');
+      demo.classList.remove('sending');
+      friendCode.innerHTML = '<span class="placeholder">Paste join code</span>';
+      friendCode.classList.remove('flash'); hostCode.classList.remove('flash');
+      copyBtn.textContent = 'Copy'; copyBtn.classList.remove('go');
+      route.textContent = 'Remote';
+      statusText.textContent = 'Waiting for a code';
+      bar.style.width = '0';
+
+      at(900, function () { press(copyBtn); copyBtn.textContent = 'Copied'; copyBtn.classList.add('go'); hostCode.classList.add('flash'); });
+      at(1500, function () { hostCode.classList.remove('flash'); demo.classList.add('sending'); });
+      at(2300, function () { friendCode.textContent = CODE; friendCode.classList.add('flash'); statusText.textContent = 'Code pasted'; });
+      at(3000, function () { friendCode.classList.remove('flash'); press(joinBtn); demo.setAttribute('data-step', 'connecting'); statusText.textContent = 'Connecting…'; });
+      at(4300, function () {
+        demo.setAttribute('data-step', 'syncing');
+        route.textContent = 'Direct · P2P';
+        var start = performance.now(), dur = 3200;
+        (function tick(now) {
+          var p = Math.min(1, (now - start) / dur);
+          var e = 1 - Math.pow(1 - p, 2);
+          bar.style.width = (e * 100).toFixed(1) + '%';
+          statusText.textContent = 'Connected · Syncing ' + Math.round(e * TOTAL) + ' of ' + TOTAL + ' files';
+          if (p < 1) { raf = requestAnimationFrame(tick); }
+          else { demo.setAttribute('data-step', 'done'); statusText.textContent = 'Connected · Synced ' + TOTAL + ' files'; }
+        })(start);
+      });
+      at(10500, run);
+    }
+
+    var running = false;
+    function stop() { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); running = false; }
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting && !running) { running = true; run(); }
+          else if (!e.isIntersecting && running) { stop(); }
+        });
+      }, { threshold: 0.35 }).observe(demo);
+    } else { run(); }
+  })();
+  </script>
 </body>
 </html>
