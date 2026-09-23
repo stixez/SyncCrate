@@ -72,7 +72,7 @@ function deriveTheme(rgb: Rgb) {
 const VARS = ["--game-accent", "--game-accent-light", "--game-neon", "--game-neon-ink", "--game-accent-ink"];
 
 /** SyncCrate's own green: keep the exact website neon rather than a derived one. */
-const BRAND = "#1ea84b";
+const BRAND = "#1fb87e";
 
 /** Apply a game's primary color as the global accent. Pass null to reset to the brand. */
 export function applyGameTheme(hexColor: string | null): void {

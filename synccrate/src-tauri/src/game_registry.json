@@ -7,7 +7,7 @@
       "family": "sims",
       "icon": "gamepad-2",
       "color": "text-accent-light",
-      "primary_color": "#1ea84b",
+      "primary_color": "#1fb87e",
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -118,7 +118,7 @@
       "family": "sims",
       "icon": "sun",
       "color": "text-pink-400",
-      "primary_color": "#1ea84b",
+      "primary_color": "#1fb87e",
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -240,7 +240,7 @@
       "family": "sims",
       "icon": "sparkles",
       "color": "text-violet-400",
-      "primary_color": "#1ea84b",
+      "primary_color": "#1fb87e",
       "auto_detect": true,
       "detection": {
         "strategies": [

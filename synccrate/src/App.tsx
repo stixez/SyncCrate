@@ -130,7 +130,7 @@ function App() {
       const demoRegistry = [
         {
           id: "sims4", label: "The Sims 4", family: "sims", icon: "gamepad-2",
-          color: "text-accent-light", primary_color: "#1ea84b", auto_detect: true,
+          color: "text-accent-light", primary_color: "#1fb87e", auto_detect: true,
           content_types: [
             { id: "mods", label: "Script Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: ["package", "ts4script", "zip"], file_type: "CustomContent", classify_by_extension: { ts4script: "Mod", zip: "Mod" }, syncable: true },
             { id: "saves", label: "Save Files", icon: "save", color: "text-status-green", folder: "Saves", extensions: [], file_type: "Save", syncable: true },

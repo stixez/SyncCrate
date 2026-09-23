@@ -20,12 +20,12 @@
   --color-txt: 236 242 238;
   --color-txt-dim: 154 166 160;
   --color-txt-muted: 125 138 132;
-  --color-accent: var(--game-accent, 30 168 75);
-  --color-accent-light: var(--game-accent-light, 57 214 110);
-  --color-neon: var(--game-neon, 57 255 136);
+  --color-accent: var(--game-accent, 31 184 126);
+  --color-accent-light: var(--game-accent-light, 55 221 158);
+  --color-neon: var(--game-neon, 76 240 178);
   --color-on-neon: 4 17 10;
   --color-amber: 255 181 71;
-  --color-status-green: 57 222 128;
+  --color-status-green: 55 221 158;
   --color-status-yellow: 255 181 71;
   --color-status-red: 255 84 84;
 
@@ -45,12 +45,12 @@
   --color-txt: 10 14 12;
   --color-txt-dim: 70 82 76;
   --color-txt-muted: 104 116 110;
-  --color-accent: var(--game-accent, 30 168 75);
-  --color-accent-light: var(--game-accent-ink, 20 128 56);
-  --color-neon: var(--game-neon-ink, 16 140 64);
+  --color-accent: var(--game-accent, 31 184 126);
+  --color-accent-light: var(--game-accent-ink, 20 121 84);
+  --color-neon: var(--game-neon-ink, 20 121 84);
   --color-on-neon: 255 255 255;
   --color-amber: 176 104 0;
-  --color-status-green: 16 140 64;
+  --color-status-green: 20 121 84;
   --color-status-yellow: 176 104 0;
   --color-status-red: 204 32 32;
   color-scheme: light;

@@ -1,31 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2ecc5e"/>
-      <stop offset="100%" stop-color="#1ea84b"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6ff7c4"/>
+      <stop offset="55%" stop-color="#4cf0b2"/>
+      <stop offset="100%" stop-color="#1fb87e"/>
     </linearGradient>
   </defs>
 
-  <!-- Rounded square background -->
-  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+  <!-- HUD tile: top-left and bottom-right corners clipped, like the app's panels -->
+  <path d="M112 24H488V400L400 488H24V112Z" fill="url(#tile)"/>
+  <path d="M112 24H488V400L400 488H24V112Z" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6"/>
 
-  <!-- Crate lid -->
-  <rect x="136" y="248" width="240" height="38" rx="10" fill="white"/>
-  <!-- Crate body -->
-  <rect x="152" y="284" width="208" height="126" rx="10" fill="white" opacity="0.93"/>
-  <!-- Lid-body separator -->
-  <line x1="156" y1="286" x2="356" y2="286" stroke="#1ea84b" stroke-width="2" opacity="0.15"/>
-
-  <!-- Sync arrows above crate (center: 256,176 radius: 72) -->
-  <!-- Top arc: 10 o'clock to 2 o'clock, clockwise through 12 -->
-  <path d="M 194 140 A 72 72 0 0 1 318 140"
-        fill="none" stroke="white" stroke-width="20" stroke-linecap="round"/>
-  <!-- Arrowhead at 2 o'clock (pointing clockwise: right-down) -->
-  <polygon points="332,162 322,132 300,152" fill="white"/>
-
-  <!-- Bottom arc: 4 o'clock to 8 o'clock, clockwise through 6 -->
-  <path d="M 318 212 A 72 72 0 0 1 194 212"
-        fill="none" stroke="white" stroke-width="20" stroke-linecap="round"/>
-  <!-- Arrowhead at 8 o'clock (pointing clockwise: left-up) -->
-  <polygon points="180,190 190,220 212,200" fill="white"/>
+  <!-- Crate: frame, lid band and diagonal brace (same geometry as BrandMark in Sidebar.tsx) -->
+  <g fill="none" stroke="#04110a" stroke-linecap="square">
+    <rect x="140" y="156" width="232" height="216" stroke-width="36"/>
+    <path d="M140 222H372" stroke-width="36"/>
+    <path d="M166 348 346 240" stroke-width="30"/>
+  </g>
 </svg>

@@ -32,7 +32,7 @@ export function gameColor(id: string): string {
 
 /** Hex color for dynamic accent theming. */
 export function gamePrimaryColor(id: string): string {
-  return _map.get(id)?.primary_color ?? "#1ea84b";
+  return _map.get(id)?.primary_color ?? "#1fb87e";
 }
 
 /** Game family (e.g., "sims", "wow", "minecraft"). */

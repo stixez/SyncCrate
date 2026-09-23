@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import pkg from "../../package.json";
+import { isDemoMode } from "./demoData";
 import type {
   AutoBackupConfig,
   BackupInfo,
@@ -91,6 +93,8 @@ export async function disconnectPeer(peerId: string): Promise<void> {
 }
 
 export async function getAppVersion(): Promise<string> {
+  // Demo mode has no backend; show the real version so screenshots don't say "v...".
+  if (isDemoMode()) return pkg.version;
   return invoke("get_app_version");
 }
 

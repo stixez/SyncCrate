@@ -32,9 +32,9 @@
       --text: #ecf2ee;
       --dim: #9aa6a0;
       --muted: #7d8a84;
-      --brand: #1ea84b;
-      --neon: #39ff88;
-      --neon-dim: rgba(57, 255, 136, 0.14);
+      --brand: #1fb87e;
+      --neon: #4cf0b2;
+      --neon-dim: rgba(76,240,178, 0.14);
       --amber: #ffb547;
       --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
       --body: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -74,8 +74,8 @@
       color: var(--muted); display: inline-flex; align-items: center; gap: 10px;
     }
     .label b { color: var(--neon); font-weight: 500; }
-    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 0 0 rgba(57,255,136,.6); animation: pulse 2s infinite; flex: none; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(57,255,136,.55); } 70% { box-shadow: 0 0 0 8px rgba(57,255,136,0); } 100% { box-shadow: 0 0 0 0 rgba(57,255,136,0); } }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 0 0 rgba(76,240,178,.6); animation: pulse 2s infinite; flex: none; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(76,240,178,.55); } 70% { box-shadow: 0 0 0 8px rgba(76,240,178,0); } 100% { box-shadow: 0 0 0 0 rgba(76,240,178,0); } }
 
     h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: .95; text-transform: uppercase; letter-spacing: -.01em; }
     h2 { font-size: clamp(2.2rem, 5vw, 3.9rem); }
@@ -159,7 +159,7 @@
       border: 1px solid var(--line-hi);
       transform: rotateY(-11deg) rotateX(4deg) translateX(10px);
       transform-origin: left center;
-      box-shadow: 0 0 0 1px rgba(57,255,136,.08), 0 40px 90px -30px rgba(57,255,136,.35), 0 30px 60px -20px #000;
+      box-shadow: 0 0 0 1px rgba(76,240,178,.08), 0 40px 90px -30px rgba(76,240,178,.35), 0 30px 60px -20px #000;
       transition: transform .6s cubic-bezier(.2,.7,.2,1);
       width: 118%;
     }
@@ -185,7 +185,7 @@
     @keyframes marquee { to { transform: translateX(-50%); } }
 
     /* ---------- join showcase ---------- */
-    .join { background: radial-gradient(ellipse 60% 50% at 80% 40%, rgba(57,255,136,.06), transparent 70%); }
+    .join { background: radial-gradient(ellipse 60% 50% at 80% 40%, rgba(76,240,178,.06), transparent 70%); }
     .join-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
     .specs { list-style: none; margin-top: 36px; border-top: 1px solid var(--line); }
     .specs li { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); color: var(--dim); font-size: .95rem; }
@@ -344,7 +344,7 @@
     /* ---------- final cta ---------- */
     .final { padding: 40px 0 120px; }
     .final-box { --cut: 28px; padding: clamp(40px, 7vw, 88px); overflow: hidden; }
-    .final-box::before { background: radial-gradient(ellipse 70% 90% at 100% 100%, rgba(57,255,136,.12), transparent 60%), var(--surface); }
+    .final-box::before { background: radial-gradient(ellipse 70% 90% at 100% 100%, rgba(76,240,178,.12), transparent 60%), var(--surface); }
     .final-box h2 { font-size: clamp(2.6rem, 7vw, 5.6rem); max-width: 11ch; margin: 18px 0 24px; }
     .final-box .lede { margin-bottom: 36px; }
     .final-meta { margin-top: 28px; font-family: var(--mono); font-size: .78rem; color: var(--muted); letter-spacing: .06em; }
@@ -640,9 +640,9 @@
               <span class="search-count" id="search-count" aria-live="polite"></span>
             </div>
             <div class="game-grid" id="game-chips">
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4</div>
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (ReShade)</div>
-        <div class="game-chip" style="--chip-color: #1ea84b"><span class="game-dot"></span>The Sims 4 (GShade)</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4 (ReShade)</div>
+        <div class="game-chip" style="--chip-color: #1fb87e"><span class="game-dot"></span>The Sims 4 (GShade)</div>
         <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>The Sims 3</div>
         <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Minecraft Java</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Baldur&#x27;s Gate 3</div>
