@@ -106,15 +106,20 @@ pub fn run() {
         .manage(app_state)
         .setup(|app| {
             // Set up tray icon
+            let status = MenuItemBuilder::with_id("status", "Idle").enabled(false).build(app)?;
             let show = MenuItemBuilder::with_id("show", "Show SyncCrate").build(app)?;
+            let leave = MenuItemBuilder::with_id("leave", "Disconnect").enabled(false).build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
+                .item(&status)
+                .separator()
                 .item(&show)
+                .item(&leave)
                 .separator()
                 .item(&quit)
                 .build()?;
 
-            let _tray = TrayIconBuilder::new()
+            let tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&menu)
                 .tooltip("SyncCrate")
@@ -126,7 +131,11 @@ pub fn run() {
                                 let _ = window.set_focus();
                             }
                         }
+                        "leave" => {
+                            commands::tray::leave_session_from_tray(app);
+                        }
                         "quit" => {
+                            commands::tray::QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
                             app.exit(0);
                         }
                         _ => {}
@@ -146,6 +155,9 @@ pub fn run() {
             let handle = app.handle().clone();
             let state: tauri::State<'_, Arc<Mutex<AppState>>> = app.state();
             let state_clone = state.inner().clone();
+
+            app.manage(commands::tray::TrayHandles { tray, status, leave });
+            commands::tray::start_tray_status_updates(&handle, state_clone.clone());
             let state_for_timer = state_clone.clone();
 
             // Start scheduled auto-backup timer
@@ -225,6 +237,19 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // Close-to-tray: hide the main window instead of quitting when the
+            // setting is on. Tray "Quit" sets QUITTING and always exits.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main"
+                    && !commands::tray::QUITTING.load(std::sync::atomic::Ordering::SeqCst)
+                    && commands::sync::read_sync_config().close_to_tray
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::session::start_host,
             commands::session::start_join,
@@ -235,6 +260,9 @@ pub fn run() {
             commands::session::disconnect,
             commands::session::disconnect_peer,
             commands::session::get_session_status,
+            commands::session::check_host_updates,
+            commands::tray::get_close_to_tray,
+            commands::tray::set_close_to_tray,
             commands::files::scan_files,
             commands::files::get_game_path,
             commands::files::set_game_path,
@@ -242,6 +270,12 @@ pub fn run() {
             commands::files::set_active_game,
             commands::files::get_all_game_paths,
             commands::files::toggle_mod,
+            commands::files::count_legacy_disabled,
+            commands::files::migrate_legacy_disabled,
+            commands::files::find_duplicates,
+            commands::files::delete_mod_files,
+            commands::files::get_game_patch_time,
+            commands::files::get_outdated_scripts,
             commands::files::open_folder,
             commands::files::get_game_registry,
             commands::files::get_user_library,
@@ -252,6 +286,7 @@ pub fn run() {
             commands::sync::execute_sync,
             commands::sync::resolve_conflict,
             commands::sync::resolve_all_conflicts,
+            commands::sync::cancel_sync,
             commands::profiles::list_profiles,
             commands::profiles::save_profile,
             commands::profiles::load_profile,

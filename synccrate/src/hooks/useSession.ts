@@ -52,7 +52,13 @@ export function useSession() {
   // `connection-failed` event clears the connecting state on failure. Setting it
   // optimistically here previously let users sync into an empty connection
   // ("no active connections").
+  const setLastConnectAttempt = useAppStore((s) => s.setLastConnectAttempt);
+  const setPinPrompt = useAppStore((s) => s.setPinPrompt);
+
   const connectTo = async (peerId: string, pin?: string) => {
+    const label = useAppStore.getState().discoveredPeers.find((p) => p.id === peerId)?.name ?? "host";
+    setLastConnectAttempt({ kind: "peer", peerId, label, pin });
+    setPinPrompt(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog("Connecting to host...", "info");
@@ -67,7 +73,9 @@ export function useSession() {
     }
   };
 
-  const connectByIp = async (ip: string, port: number, name: string, pin?: string) => {
+  const connectByIp = async (ip: string, port: number, name: string, pin?: string, label?: string) => {
+    setLastConnectAttempt({ kind: "ip", ip, port, name, label: label ?? `${ip}:${port}`, pin });
+    setPinPrompt(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog(`Connecting to ${ip}:${port}...`, "info");
@@ -83,6 +91,8 @@ export function useSession() {
   };
 
   const connectByCode = async (code: string, name: string, pin?: string) => {
+    setLastConnectAttempt({ kind: "code", code, name, label: "host", pin });
+    setPinPrompt(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog("Connecting with join code...", "info");
@@ -95,6 +105,16 @@ export function useSession() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /** Retry the attempt the host rejected for a missing/wrong PIN, with `pin`. */
+  const retryWithPin = async (pin: string) => {
+    const prompt = useAppStore.getState().pinPrompt;
+    if (!prompt) return;
+    const a = prompt.attempt;
+    if (a.kind === "peer") await connectTo(a.peerId, pin);
+    else if (a.kind === "ip") await connectByIp(a.ip, a.port, a.name, pin, a.label);
+    else await connectByCode(a.code, a.name, pin);
   };
 
   const leave = async () => {
@@ -116,5 +136,5 @@ export function useSession() {
     }
   };
 
-  return { host, join, connectTo, connectByIp, connectByCode, leave, isLoading };
+  return { host, join, connectTo, connectByIp, connectByCode, retryWithPin, leave, isLoading };
 }

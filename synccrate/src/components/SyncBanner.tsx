@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import { ArrowUpDown, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUpDown, AlertTriangle, ChevronDown, ChevronUp, X } from "lucide-react";
 import type { SyncPlan } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
@@ -41,6 +41,21 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
   const activeGame = useAppStore((s) => s.activeGame);
   const [gameRunning, setGameRunning] = useState(false);
   const [typicalSpeed, setTypicalSpeed] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!syncProgress) setCancelling(false);
+  }, [syncProgress]);
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      const wasSyncing = await cmd.cancelSync();
+      if (!wasSyncing) setCancelling(false);
+    } catch {
+      setCancelling(false);
+    }
+  };
 
   // Warn (don't block) while the game is running: files may be locked or half-loaded.
   useEffect(() => {
@@ -206,9 +221,10 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
               <button
                 onClick={() => onResolveAll("use_newest")}
                 disabled={!!syncProgress}
+                title="Resolve every conflict by keeping whichever copy was modified more recently (ties keep yours)"
                 className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
               >
-                Resolve All: Use Newest
+                Keep newer for all
               </button>
             )}
             <button
@@ -325,13 +341,24 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
               {etaText && ` · ETA ${etaText}`}
             </span>
           </div>
-          <div className="w-full h-1.5 bg-bg rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full transition-all"
-              style={{
-                width: `${syncProgress.bytes_total > 0 ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100 : 0}%`,
-              }}
-            />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-bg rounded-full overflow-hidden">
+              <div
+                className="h-full bg-accent rounded-full transition-all"
+                style={{
+                  width: `${syncProgress.bytes_total > 0 ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              title="Stop after the current file. The next sync resumes where it stopped."
+              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded bg-bg-card border border-border text-[11px] text-txt-dim hover:text-status-red hover:border-status-red/50 transition-colors disabled:opacity-60"
+            >
+              <X size={11} />
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </button>
           </div>
         </div>
       )}

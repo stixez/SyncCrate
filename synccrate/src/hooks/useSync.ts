@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import { toastError, toastSuccess } from "../lib/toast";
+import { toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
@@ -52,8 +52,12 @@ export function useSync() {
       // Early backend errors return before `sync-complete` fires; don't leave
       // the progress bar stuck.
       useAppStore.getState().setSyncProgress(null);
-      addLog(`Sync failed: ${e}`, "error");
-      toastError(`Sync failed: ${e}`);
+      if (String(e).includes("Sync cancelled")) {
+        toastInfo("Sync cancelled. Compute the plan again to resume.");
+      } else {
+        addLog(`Sync failed: ${e}`, "error");
+        toastError(`Sync failed: ${e}`);
+      }
     } finally {
       setIsLoading(false);
       setLoadingPhase("");

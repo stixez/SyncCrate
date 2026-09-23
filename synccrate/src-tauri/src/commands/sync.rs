@@ -17,6 +17,22 @@ struct SyncCheckpoint {
     started_at: u64,
 }
 
+/// Set by `cancel_sync`; checked between files in `run_sync`. Only one sync
+/// runs at a time in practice (clients pull from a single host).
+static CANCEL_SYNC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Ask the running sync to stop after the current file. Never interrupts a
+/// file mid-transfer (the peer stream must stay in sync); the resume
+/// checkpoint is kept so the next sync continues where this one stopped.
+#[tauri::command]
+pub async fn cancel_sync(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    let syncing = state.lock().await.is_any_syncing();
+    if syncing {
+        CANCEL_SYNC.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    Ok(syncing)
+}
+
 fn checkpoint_path() -> std::path::PathBuf {
     let config = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
     config.join("synccrate").join("sync_progress.json")
@@ -221,6 +237,8 @@ pub async fn execute_sync(
         }
 
         conn.is_syncing = true;
+        // A stale request from an earlier sync must not cancel this one.
+        CANCEL_SYNC.store(false, std::sync::atomic::Ordering::SeqCst);
         (plan, base, resolved_id)
     };
 
@@ -249,6 +267,9 @@ pub async fn execute_sync(
 
     result
 }
+
+/// Error returned by `execute_sync` when the user cancelled (the UI matches on it).
+pub const SYNC_CANCELLED: &str = "Sync cancelled";
 
 async fn run_sync(
     state: &tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -299,8 +320,13 @@ async fn run_sync(
         started_at: crate::utils::timestamp_now(),
     };
     write_checkpoint(&checkpoint);
+    let mut cancelled = false;
 
     for action in &plan.actions {
+        if CANCEL_SYNC.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            cancelled = true;
+            break;
+        }
         let action_path = match action {
             SyncAction::SendToRemote(f) => Some(&f.relative_path),
             SyncAction::ReceiveFromRemote(f) => Some(&f.relative_path),
@@ -413,10 +439,14 @@ async fn run_sync(
             "total_bytes": plan.total_bytes,
             "errors": sync_errors,
             "peer_id": peer_id,
+            "cancelled": cancelled,
         }),
     );
 
-    delete_checkpoint();
+    // A cancelled sync keeps its checkpoint so the next plan resumes.
+    if !cancelled {
+        delete_checkpoint();
+    }
 
     // Record sync history
     {
@@ -442,9 +472,13 @@ async fn run_sync(
             errors: sync_errors.clone(),
             direction,
             duration_ms,
+            cancelled,
         });
     }
 
+    if cancelled {
+        return Err(SYNC_CANCELLED.to_string());
+    }
     if !sync_errors.is_empty() {
         return Err(format!("{} file(s) failed to sync", sync_errors.len()));
     }
@@ -682,7 +716,7 @@ pub async fn resolve_all_conflicts(
         let mut to_receive: Vec<FileInfo> = Vec::new();
         plan.actions.retain(|action| {
             if let SyncAction::Conflict { local, remote } = action {
-                if remote.modified > local.modified {
+                if keep_newer_resolution(local, remote) == Resolution::UseTheirs {
                     to_receive.push(remote.clone());
                 }
                 return false;
@@ -704,9 +738,19 @@ pub async fn resolve_all_conflicts(
         .ok_or_else(|| "No sync plan available".to_string())
 }
 
+/// "Keep newer" decision for one conflict: the remote copy wins only when it
+/// is strictly newer; local-newer and equal timestamps keep the local file.
+pub(crate) fn keep_newer_resolution(local: &FileInfo, remote: &FileInfo) -> Resolution {
+    if remote.modified > local.modified {
+        Resolution::UseTheirs
+    } else {
+        Resolution::KeepMine
+    }
+}
+
 // --- Selective Sync helpers ---
 
-fn glob_matches(pattern: &str, path: &str) -> bool {
+pub(crate) fn glob_matches(pattern: &str, path: &str) -> bool {
     let pattern = pattern.replace('\\', "/");
     let path = path.replace('\\', "/");
 
@@ -744,6 +788,9 @@ pub struct SyncConfig {
     /// localthumbcache.package) after a sync that received files.
     #[serde(default = "default_true")]
     pub clear_cache_after_sync: bool,
+    /// Hide to the system tray instead of quitting when the main window is closed.
+    #[serde(default)]
+    pub close_to_tray: bool,
 }
 
 fn default_true() -> bool { true }
@@ -764,6 +811,7 @@ impl Default for SyncConfig {
             auto_backup_max_count: default_backup_max_count(),
             transfer_speed_limit: 0,
             clear_cache_after_sync: true,
+            close_to_tray: false,
         }
     }
 }
@@ -780,7 +828,7 @@ pub fn read_sync_config() -> SyncConfig {
     SyncConfig::default()
 }
 
-fn read_exclude_patterns() -> Vec<String> {
+pub(crate) fn read_exclude_patterns() -> Vec<String> {
     read_sync_config().exclude_patterns
 }
 
@@ -924,6 +972,7 @@ mod tests {
             auto_backup_max_count: 5,
             transfer_speed_limit: 10_485_760, // 10 MB/s
             clear_cache_after_sync: false,
+            close_to_tray: true,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let parsed: SyncConfig = serde_json::from_str(&json).expect("deserialize");
@@ -953,6 +1002,7 @@ mod tests {
             errors: vec![],
             direction: "received".to_string(),
             duration_ms: 0,
+            cancelled: false,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         let parsed: SyncHistoryEntry = serde_json::from_str(&json).expect("deserialize");
@@ -975,6 +1025,7 @@ mod tests {
             errors: vec!["Mods/broken.tmod: hash mismatch".to_string()],
             direction: "bidirectional".to_string(),
             duration_ms: 0,
+            cancelled: false,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         let parsed: SyncHistoryEntry = serde_json::from_str(&json).expect("deserialize");
@@ -1006,7 +1057,22 @@ mod tests {
             errors: vec![],
             direction: "received".to_string(),
             duration_ms: ms,
+            cancelled: false,
         }
+    }
+
+    #[test]
+    fn test_keep_newer_resolution() {
+        let f = |modified: u64| FileInfo {
+            relative_path: "Mods/a.package".into(),
+            size: 1,
+            hash: "h".into(),
+            modified,
+            file_type: "Mod".into(),
+        };
+        assert_eq!(keep_newer_resolution(&f(200), &f(100)), Resolution::KeepMine);
+        assert_eq!(keep_newer_resolution(&f(100), &f(200)), Resolution::UseTheirs);
+        assert_eq!(keep_newer_resolution(&f(100), &f(100)), Resolution::KeepMine);
     }
 
     #[test]
@@ -1141,6 +1207,9 @@ pub struct SyncHistoryEntry {
     /// Wall-clock transfer time; 0 for entries recorded before this existed.
     #[serde(default)]
     pub duration_ms: u64,
+    /// The user stopped the sync before it finished.
+    #[serde(default)]
+    pub cancelled: bool,
 }
 
 fn sync_history_path() -> std::path::PathBuf {

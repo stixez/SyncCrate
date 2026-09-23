@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility } from "../lib/types";
-import { formatBytes, isDisabledPath } from "../lib/utils";
+import { formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
 
@@ -15,6 +15,8 @@ interface ModItemProps {
   bulkMode?: boolean;
   compatibility?: ModCompatibility;
   onShowDetails?: () => void;
+  /** Game patch time (unix secs) when this script mod predates it. */
+  outdatedSince?: number;
 }
 
 export default function ModItem({
@@ -27,6 +29,7 @@ export default function ModItem({
   bulkMode,
   compatibility,
   onShowDetails,
+  outdatedSince,
 }: ModItemProps) {
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
@@ -59,6 +62,14 @@ export default function ModItem({
           {isDisabled && (
             <span className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0">
               Disabled
+            </span>
+          )}
+          {outdatedSince !== undefined && (
+            <span
+              title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}
+              className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0"
+            >
+              May be outdated
             </span>
           )}
         </div>

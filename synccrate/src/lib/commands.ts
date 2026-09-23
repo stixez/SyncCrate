@@ -64,6 +64,19 @@ export async function getSessionStatus(): Promise<SessionStatus> {
   return invoke("get_session_status");
 }
 
+/** Client only: re-fetch the host's manifest and count files we'd download. */
+export async function checkHostUpdates(): Promise<{ files: number; bytes: number }> {
+  return invoke("check_host_updates");
+}
+
+export async function getCloseToTray(): Promise<boolean> {
+  return invoke("get_close_to_tray");
+}
+
+export async function setCloseToTray(enabled: boolean): Promise<void> {
+  return invoke("set_close_to_tray", { enabled });
+}
+
 export async function connectByIp(
   ip: string,
   port: number,
@@ -403,4 +416,41 @@ export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
 
 export async function testConnection(ip: string, port: number): Promise<ConnectionTestResult> {
   return invoke("test_connection", { ip, port });
+}
+
+// --- Content maintenance ---
+
+/** Mods still in a legacy `_Disabled/` folder (loaded anyway by The Sims). */
+export async function countLegacyDisabled(game?: string): Promise<number> {
+  return invoke("count_legacy_disabled", { game: game ?? null });
+}
+
+/** Move legacy `_Disabled/<rel>` mods to `<rel>.disabled`. */
+export async function migrateLegacyDisabled(game?: string): Promise<import("./types").LegacyMigrationResult> {
+  return invoke("migrate_legacy_disabled", { game: game ?? null });
+}
+
+/** Hashed scan + groups of identical files. */
+export async function findDuplicates(game?: string): Promise<import("./types").DuplicateGroup[]> {
+  return invoke("find_duplicates", { game: game ?? null });
+}
+
+/** Delete files inside the active game's content folders. */
+export async function deleteModFiles(paths: string[]): Promise<import("./types").DeleteResult> {
+  return invoke("delete_mod_files", { paths });
+}
+
+/** Unix seconds of the last game patch (games with version detection only). */
+export async function getGamePatchTime(game?: string): Promise<number | null> {
+  return invoke("get_game_patch_time", { game: game ?? null });
+}
+
+/** Script mods of the active game older than its last patch. */
+export async function getOutdatedScripts(): Promise<import("./types").OutdatedScripts> {
+  return invoke("get_outdated_scripts");
+}
+
+/** Stop the running sync after the current file. Resolves false if nothing was syncing. */
+export async function cancelSync(): Promise<boolean> {
+  return invoke("cancel_sync");
 }

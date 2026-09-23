@@ -1026,6 +1026,60 @@ async fn client_message_loop(
     );
 }
 
+/// Client side: re-request the host's manifest over the existing connection and
+/// store it on the peer connection. Holds the stream lock for the whole
+/// request/response (like `request_file`) so `client_message_loop`'s `try_lock`
+/// reads can't steal the response.
+pub async fn refresh_remote_manifest(
+    state: &Arc<Mutex<AppState>>,
+    peer_id: &str,
+) -> Result<crate::state::FileManifest, String> {
+    let stream = {
+        let app_state = state.lock().await;
+        app_state
+            .connections
+            .get(peer_id)
+            .map(|c| c.stream.clone())
+            .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?
+    };
+
+    let manifest = {
+        let mut s = stream.lock().await;
+        protocol::send_message(&mut *s, &Message::ManifestRequest).await?;
+        loop {
+            // The host may re-hash changed files before replying.
+            let msg = match protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(120)).await? {
+                Some(m) => m,
+                None => return Err("Timed out waiting for host manifest".to_string()),
+            };
+            match msg {
+                Message::ManifestResponse { manifest } => break manifest,
+                Message::GameInfoExchange { game_info } => {
+                    let sanitized = sanitize_game_info(game_info);
+                    let mut app_state = state.lock().await;
+                    if let Some(conn) = app_state.connections.get_mut(peer_id) {
+                        conn.info.game_info = Some(sanitized);
+                    }
+                }
+                Message::Error { message } => return Err(message),
+                // The host closes the socket right after this; the message loop's
+                // next read fails and runs the normal disconnect cleanup.
+                Message::Disconnect => return Err("Host disconnected".to_string()),
+                _ => {} // Pong etc.
+            }
+        }
+    };
+
+    let mut app_state = state.lock().await;
+    let conn = app_state
+        .connections
+        .get_mut(peer_id)
+        .ok_or("Peer disconnected")?;
+    conn.info.mod_count = manifest.files.len();
+    conn.remote_manifest = Some(manifest.clone());
+    Ok(manifest)
+}
+
 /// Request a file from a specific peer over their persistent connection
 pub async fn request_file(
     state: &Arc<Mutex<AppState>>,

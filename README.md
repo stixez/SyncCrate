@@ -30,11 +30,13 @@
 - **Reliable connections** — Finds hosts via mDNS *and* UDP broadcast, tries every network address a host has, and fixes Windows Firewall with one click. No need to run as administrator.
 - **Transfer compression** — zstd compression reduces bandwidth by 50-80% for most mod types. Negotiated automatically between peers.
 - **Multi-peer sessions** — One host, multiple friends. Everyone syncs independently.
-- **Conflict resolution** — Keep yours, use theirs, or keep both — per file.
+- **Conflict resolution** — Keep yours, use theirs, or keep both — per file, or "keep newer" for all at once.
 - **Mod profiles & auto-backups** — Snapshot your setup, export profiles, share on Discord. Auto-backup before sync or on a schedule with smart pruning.
 - **Join codes** — The host gets a short code (`SC-…`) that contains their addresses, port and PIN. Friends paste it and connect. One click reconnects to your last host.
 - **Game-aware syncing** — Warns when the game is still running, clears The Sims 4's thumbnail cache after new mods arrive, and shows the size and estimated time before you sync. Desktop notifications fire when a sync finishes.
-- **Sync resume** — Interrupted syncs pick up where they left off instead of restarting from scratch.
+- **Sync resume** — Interrupted syncs pick up where they left off instead of restarting from scratch. Cancel a sync at any time and it resumes later.
+- **Mod housekeeping** — Find duplicate mods, flag script mods that may be outdated after a game patch, and fix Sims mods still loading from an old `_Disabled` folder in one click.
+- **Stays out of your way** — Remembers your name and hosting settings, shows "Host added N files" while connected, asks for the PIN when needed, shows status in the tray, and can keep running in the tray when you close the window.
 - **Privacy-first** — No servers, no accounts, no tracking, no data collection. Nothing leaves your network.
 - **Dangerous file warnings** — Flags potentially risky script files (`.ts4script`, `.lua`, `.jar`, `.dll`) per game before sync.
 

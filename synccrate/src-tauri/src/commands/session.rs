@@ -220,6 +220,14 @@ pub async fn disconnect(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    disconnect_inner(state.inner(), &app).await;
+    Ok(())
+}
+
+/// Leave the current session (stop hosting / disconnect from the host). Shared by
+/// the `disconnect` command and the tray menu; emits `peer-disconnected` with
+/// name "all" so the frontend resets its session view.
+pub async fn disconnect_inner(state: &Arc<Mutex<AppState>>, app: &tauri::AppHandle) {
     let streams: Vec<_> = {
         let app_state = state.lock().await;
         app_state.connections.values().map(|c| c.stream.clone()).collect()
@@ -245,8 +253,6 @@ pub async fn disconnect(
     discovery::stop_broadcast().await;
 
     let _ = app.emit("peer-disconnected", serde_json::json!({"name": "all", "clean": true}));
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -410,6 +416,64 @@ async fn start_direct_connection(
     })
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize)]
+pub struct HostUpdates {
+    pub files: usize,
+    pub bytes: u64,
+}
+
+/// Files the host has that we don't — exactly the `ReceiveFromRemote` actions
+/// `compute_sync_plan` would produce (a missing path; changed files become
+/// conflicts), minus disallowed content types and exclude patterns. Only paths
+/// matter, so a quick-scan local manifest (empty hashes) needs no re-hash.
+pub(crate) fn count_new_host_files(
+    local: &crate::state::FileManifest,
+    remote: &crate::state::FileManifest,
+    allowed: impl Fn(&crate::state::FileInfo) -> bool,
+    exclude_patterns: &[String],
+) -> HostUpdates {
+    let mut out = HostUpdates::default();
+    for (path, info) in &remote.files {
+        if local.files.contains_key(path) || !allowed(info) {
+            continue;
+        }
+        if exclude_patterns.iter().any(|p| crate::commands::sync::glob_matches(p, path)) {
+            continue;
+        }
+        out.files += 1;
+        out.bytes += info.size;
+    }
+    out
+}
+
+/// Client only: re-fetch the host's manifest over the live connection and count
+/// the files we would download. Returns zero while not connected or syncing.
+#[tauri::command]
+pub async fn check_host_updates(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<HostUpdates, String> {
+    let peer_id = {
+        let app_state = state.lock().await;
+        if app_state.session_type != SessionType::Client || app_state.is_any_syncing() {
+            return Ok(HostUpdates::default());
+        }
+        match app_state.connections.keys().next() {
+            Some(id) => id.clone(),
+            None => return Ok(HostUpdates::default()),
+        }
+    };
+
+    let remote = crate::network::transfer::refresh_remote_manifest(state.inner(), &peer_id).await?;
+    let patterns = crate::commands::sync::read_exclude_patterns();
+    let app_state = state.lock().await;
+    Ok(count_new_host_files(
+        &app_state.local_manifest,
+        &remote,
+        |f| app_state.is_file_info_allowed(f),
+        &patterns,
+    ))
+}
+
 #[tauri::command]
 pub async fn get_app_version() -> Result<String, String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
@@ -445,6 +509,38 @@ pub async fn set_session_port(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn manifest(paths: &[(&str, u64)]) -> crate::state::FileManifest {
+        let mut m = crate::state::FileManifest::default();
+        for (p, size) in paths {
+            m.files.insert(p.to_string(), crate::state::FileInfo {
+                relative_path: p.to_string(),
+                size: *size,
+                hash: String::new(),
+                modified: 0,
+                file_type: "Mod".to_string(),
+            });
+        }
+        m
+    }
+
+    #[test]
+    fn count_new_host_files_counts_only_missing_allowed_unexcluded() {
+        let local = manifest(&[("Mods/a.package", 10)]);
+        let remote = manifest(&[
+            ("Mods/a.package", 99),     // present locally (changed = conflict, not counted)
+            ("Mods/b.package", 20),     // new
+            ("Mods/c.tmp", 5),          // excluded by pattern
+            ("Saves/s.save", 7),        // disallowed
+        ]);
+        let out = count_new_host_files(
+            &local,
+            &remote,
+            |f| !f.relative_path.starts_with("Saves/"),
+            &["*.tmp".to_string()],
+        );
+        assert_eq!(out, HostUpdates { files: 1, bytes: 20 });
+    }
 
     #[test]
     fn stale_failed_attempt_does_not_clear_replaced_client_session() {

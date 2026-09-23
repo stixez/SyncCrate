@@ -14,6 +14,12 @@ import type {
   SyncProgress,
 } from "../lib/types";
 
+/** A join/connect attempt with the exact arguments used, for PIN retries. */
+export type ConnectAttempt =
+  | { kind: "peer"; peerId: string; label: string; pin?: string }
+  | { kind: "ip"; ip: string; port: number; name: string; label: string; pin?: string }
+  | { kind: "code"; code: string; name: string; label: string; pin?: string };
+
 interface AppState {
   page: Page;
   setPage: (page: Page) => void;
@@ -50,6 +56,13 @@ interface AppState {
   // True while a join/connect handshake is in flight (before peer-connected fires)
   isConnecting: boolean;
   setIsConnecting: (connecting: boolean) => void;
+
+  // Last connect attempt (exact args) so a PIN rejection can retry it with a PIN
+  lastConnectAttempt: ConnectAttempt | null;
+  setLastConnectAttempt: (attempt: ConnectAttempt | null) => void;
+  // Attempt awaiting a PIN from the user (shown as a PIN prompt on the dashboard)
+  pinPrompt: { attempt: ConnectAttempt; wrongPin: boolean } | null;
+  setPinPrompt: (prompt: { attempt: ConnectAttempt; wrongPin: boolean } | null) => void;
 
   discoveredPeers: PeerInfo[];
   setDiscoveredPeers: (peers: PeerInfo[]) => void;
@@ -168,6 +181,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   isConnecting: false,
   setIsConnecting: (connecting) => set({ isConnecting: connecting }),
+
+  lastConnectAttempt: null,
+  setLastConnectAttempt: (attempt) => set({ lastConnectAttempt: attempt }),
+  pinPrompt: null,
+  setPinPrompt: (prompt) => set({ pinPrompt: prompt }),
 
   discoveredPeers: [],
   setDiscoveredPeers: (peers) => set({ discoveredPeers: peers }),

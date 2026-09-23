@@ -221,6 +221,8 @@ export interface SyncHistoryEntry {
   errors: string[];
   direction: string;
   duration_ms: number;
+  /** The user stopped the sync before it finished. */
+  cancelled?: boolean;
 }
 
 export interface InstallResult {
@@ -298,4 +300,27 @@ export interface VersionDetection {
 export interface PathCorrection {
   known_subfolders: string[];
   nested_corrections?: Record<string, number>;
+}
+
+export interface LegacyMigrationResult {
+  moved: number;
+  collisions: string[];
+  errors: string[];
+}
+
+export interface DuplicateGroup {
+  hash: string;
+  size: number;
+  files: FileInfo[];
+  wasted: number;
+}
+
+export interface DeleteResult {
+  deleted: number;
+  errors: string[];
+}
+
+export interface OutdatedScripts {
+  patch_time: number | null;
+  paths: string[];
 }

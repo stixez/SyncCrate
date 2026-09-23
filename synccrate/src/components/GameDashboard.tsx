@@ -6,6 +6,8 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
+import { useHostUpdates } from "../hooks/useHostUpdates";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
 import { formatBytes } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
@@ -38,8 +40,22 @@ export default function GameDashboard({ gameId }: Props) {
   const lastHostPort = useAppStore((s) => s.lastHostPort);
   const lastHostName = useAppStore((s) => s.lastHostName);
   const clearLastHost = useAppStore((s) => s.clearLastHost);
-  const { host, join, connectTo, connectByIp, connectByCode, leave, isLoading } = useSession();
+  const pinPrompt = useAppStore((s) => s.pinPrompt);
+  const setPinPrompt = useAppStore((s) => s.setPinPrompt);
+  const syncProgress = useAppStore((s) => s.syncProgress);
+  const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, loadingPhase } = useSync();
+
+  // "Host has new files" check: clients only, never while syncing/computing a
+  // plan or while a plan with pending actions is on screen.
+  const hostUpdatesEnabled =
+    session?.session_type === "Client" &&
+    session.peers.length > 0 &&
+    activeGame === gameId &&
+    !syncProgress &&
+    !isSyncLoading &&
+    !(syncPlan && syncPlan.actions.length > 0);
+  const { updates: hostUpdates, dismiss: dismissHostUpdates } = useHostUpdates(hostUpdatesEnabled);
 
   const gameDef = getGameDef(gameId);
   const gameLabel = gameDef?.label ?? gameId;
@@ -93,12 +109,22 @@ export default function GameDashboard({ gameId }: Props) {
     </div>
   );
 
-  const [hostName, setHostName] = useState("");
-  const [usePin, setUsePin] = useState(false);
-  const [folderPerms, setFolderPerms] = useState<SyncFolderPermissions>({});
+  // Display name, "use PIN" and per-game share permissions are remembered locally
+  const [hostName, setHostNameState] = useState(loadDisplayName);
+  const setHostName = (name: string) => { setHostNameState(name); saveDisplayName(name); };
+  const [usePin, setUsePinState] = useState(loadUsePin);
+  const setUsePin = (v: boolean) => { setUsePinState(v); saveUsePin(v); };
+  const [folderPerms, setFolderPermsState] = useState<SyncFolderPermissions>({});
+  const setFolderPerms = (update: (p: SyncFolderPermissions) => SyncFolderPermissions) => {
+    setFolderPermsState((p) => {
+      const next = update(p);
+      saveFolderPerms(gameId, next);
+      return next;
+    });
+  };
   const [pinCopied, setPinCopied] = useState(false);
   const [pinInput, setPinInput] = useState("");
-  const [pinPeerId, setPinPeerId] = useState<string | null>(null);
+  useEffect(() => setPinInput(""), [pinPrompt]);
   const [showManualIp, setShowManualIp] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [hostJoinCode, setHostJoinCode] = useState<string | null>(null);
@@ -124,13 +150,18 @@ export default function GameDashboard({ gameId }: Props) {
   const [packsExpanded, setPacksExpanded] = useState(false);
   const [detectingPacks, setDetectingPacks] = useState(false);
 
-  // Initialize folder permissions from content types
+  // Initialize folder permissions from content types (all shared), overlaid
+  // with this game's saved choices
   useEffect(() => {
     const perms: SyncFolderPermissions = {};
     for (const ct of contentTypes) {
       perms[ct.id] = true;
     }
-    setFolderPerms(perms);
+    const saved = loadFolderPerms(gameId);
+    for (const ct of contentTypes) {
+      if (typeof saved[ct.id] === "boolean") perms[ct.id] = saved[ct.id];
+    }
+    setFolderPermsState(perms);
   }, [gameId]);
 
   const handleDetectPacks = useCallback(async () => {
@@ -338,10 +369,10 @@ export default function GameDashboard({ gameId }: Props) {
               <div className="mb-3">
                 <button
                   onClick={() => {
-                    // Prefill Connect by IP so a PIN can be added there if the host requires one
+                    // A PIN-protected host triggers the PIN prompt automatically
                     setManualIp(lastHostIp);
                     setManualPort(String(lastHostPort));
-                    connectByIp(lastHostIp, lastHostPort, hostName.trim() || "Guest", manualPin || undefined);
+                    connectByIp(lastHostIp, lastHostPort, hostName.trim() || "Guest", manualPin || undefined, lastHostName || undefined);
                   }}
                   disabled={isLoading || isConnecting}
                   className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
@@ -349,8 +380,7 @@ export default function GameDashboard({ gameId }: Props) {
                   <RefreshCw size={14} className={isConnecting ? "animate-spin" : ""} />
                   {isConnecting ? "Connecting..." : `Reconnect to ${lastHostName || lastHostIp}`}
                 </button>
-                <p className="text-[11px] text-txt-dim mt-1 flex justify-between gap-2">
-                  <span>Host uses a PIN? Enter it under Connect by IP first.</span>
+                <p className="text-[11px] text-txt-dim mt-1 flex justify-end gap-2">
                   <button onClick={clearLastHost} className="hover:text-txt shrink-0">Forget</button>
                 </p>
               </div>
@@ -388,7 +418,7 @@ export default function GameDashboard({ gameId }: Props) {
                     key={peer.id}
                     onClick={() => {
                       if (peer.pin_required) {
-                        setPinPeerId(peer.id);
+                        setPinPrompt({ attempt: { kind: "peer", peerId: peer.id, label: peer.name }, wrongPin: false });
                         setPinInput("");
                       } else {
                         connectTo(peer.id);
@@ -411,9 +441,14 @@ export default function GameDashboard({ gameId }: Props) {
                 ))}
               </div>
             )}
-            {pinPeerId && (
-              <div className="mt-3 bg-bg rounded-lg border border-border p-3">
-                <p className="text-sm font-medium mb-2">Enter Session PIN</p>
+            {pinPrompt && (
+              <div className={`mt-3 bg-bg rounded-lg border p-3 ${pinPrompt.wrongPin ? "border-status-red/50" : "border-border"}`}>
+                <p className="text-sm font-medium mb-0.5">Enter Session PIN</p>
+                <p className={`text-xs mb-2 ${pinPrompt.wrongPin ? "text-status-red" : "text-txt-dim"}`}>
+                  {pinPrompt.wrongPin
+                    ? "That PIN was rejected. Ask the host for the PIN shown on their dashboard."
+                    : `${pinPrompt.attempt.label === "host" ? "The host" : pinPrompt.attempt.label} requires a PIN to join.`}
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -425,19 +460,19 @@ export default function GameDashboard({ gameId }: Props) {
                     className="flex-1 bg-bg-card border border-border rounded-lg px-3 py-2 text-center text-lg font-mono tracking-widest focus:outline-none focus:border-accent"
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && pinInput.length === 4) { connectTo(pinPeerId, pinInput); setPinPeerId(null); }
-                      else if (e.key === "Escape") setPinPeerId(null);
+                      if (e.key === "Enter" && pinInput.length === 4 && !isLoading && !isConnecting) retryWithPin(pinInput);
+                      else if (e.key === "Escape") setPinPrompt(null);
                     }}
                   />
                   <button
-                    onClick={() => { connectTo(pinPeerId, pinInput); setPinPeerId(null); }}
-                    disabled={pinInput.length !== 4 || isLoading}
+                    onClick={() => retryWithPin(pinInput)}
+                    disabled={pinInput.length !== 4 || isLoading || isConnecting}
                     className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     Connect
                   </button>
                 </div>
-                <button onClick={() => setPinPeerId(null)} className="text-xs text-txt-dim mt-2 hover:text-txt">Cancel</button>
+                <button onClick={() => setPinPrompt(null)} className="text-xs text-txt-dim mt-2 hover:text-txt">Cancel</button>
               </div>
             )}
             <div className="mt-3 border-t border-border pt-3">
@@ -679,6 +714,24 @@ export default function GameDashboard({ gameId }: Props) {
 
       {hasPacks && (
         <GameInfoCard gameInfo={gameInfo} gameLabel={gameLabel} packsExpanded={packsExpanded} setPacksExpanded={setPacksExpanded} detectingPacks={detectingPacks} onDetect={handleDetectPacks} />
+      )}
+
+      {isClient && hostUpdates && hostUpdates.files > 0 && (
+        <div className="bg-accent/10 border border-accent/30 rounded-xl p-3 flex items-center gap-3">
+          <Package size={16} className="text-accent-light shrink-0" />
+          <p className="flex-1 text-sm">
+            Host added <span className="font-semibold">{hostUpdates.files} file{hostUpdates.files !== 1 ? "s" : ""}</span>{" "}
+            <span className="text-txt-dim">({formatBytes(hostUpdates.bytes)})</span>
+          </p>
+          <button
+            onClick={() => { dismissHostUpdates(); computePlan(); }}
+            disabled={isSyncLoading}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            Compare &amp; Sync
+          </button>
+          <button onClick={dismissHostUpdates} className="shrink-0 text-xs text-txt-dim hover:text-txt">Dismiss</button>
+        </div>
       )}
 
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length > 0 && (

@@ -1,13 +1,15 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown } from "lucide-react";
+import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
 import ModItem from "./ModItem";
 import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
 import ConflictResolver from "./ConflictResolver";
+import DuplicateFinder from "./DuplicateFinder";
 import { useSync } from "../hooks/useSync";
-import { toastSuccess, toastError } from "../lib/toast";
+import { toastSuccess, toastError, toastInfo } from "../lib/toast";
+import { formatDateShort } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import type { FileInfo, ModCompatibility, ContentTypeDefinition } from "../lib/types";
 
@@ -27,7 +29,7 @@ export default function ContentBrowser({ gameId }: Props) {
   const isScanning = useAppStore((s) => s.isScanning);
   const activeContentTab = useAppStore((s) => s.activeContentTab);
   const setActiveContentTab = useAppStore((s) => s.setActiveContentTab);
-  const { resolve } = useSync();
+  const { resolve, resolveAll } = useSync();
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("name");
@@ -38,6 +40,12 @@ export default function ContentBrowser({ gameId }: Props) {
   const [page, setPage] = useState(0);
   const [detailFile, setDetailFile] = useState<FileInfo | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [legacyCount, setLegacyCount] = useState(0);
+  const [legacyDismissed, setLegacyDismissed] = useState<string | null>(null);
+  const [fixingLegacy, setFixingLegacy] = useState(false);
+  const [outdated, setOutdated] = useState<{ patchTime: number | null; paths: Set<string> }>({ patchTime: null, paths: new Set() });
+  const [outdatedOnly, setOutdatedOnly] = useState(false);
 
   const modCompatibility = useAppStore((s) => s.modCompatibility);
   const setModCompatibility = useAppStore((s) => s.setModCompatibility);
@@ -73,6 +81,42 @@ export default function ContentBrowser({ gameId }: Props) {
   useEffect(() => {
     cmd.checkCompatibility(gameId).then(setModCompatibility).catch(() => {});
   }, [manifest, gameId, setModCompatibility]);
+
+  // Legacy `_Disabled/` folder: The Sims loads subfolders, so those mods still load.
+  const renameDisable = gameDef?.disable_method === "rename";
+  useEffect(() => {
+    if (!renameDisable) { setLegacyCount(0); return; }
+    let cancelled = false;
+    cmd.countLegacyDisabled(gameId).then((n) => { if (!cancelled) setLegacyCount(n); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [manifest, gameId, renameDisable]);
+
+  const fixLegacy = async () => {
+    setFixingLegacy(true);
+    try {
+      const r = await cmd.migrateLegacyDisabled(gameId);
+      setManifest(await cmd.scanFiles(gameId));
+      setLegacyCount(await cmd.countLegacyDisabled(gameId));
+      if (r.moved) toastSuccess(`Disabled ${r.moved} mod${r.moved !== 1 ? "s" : ""} properly (renamed to .disabled)`);
+      if (r.collisions.length) toastInfo(`${r.collisions.length} file(s) left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
+      if (r.errors.length) toastError(`${r.errors.length} file(s) could not be moved: ${r.errors[0]}`);
+    } catch (e) {
+      toastError(`Fix failed: ${e}`);
+    } finally {
+      setFixingLegacy(false);
+    }
+  };
+
+  // Script mods older than the last game patch (games with version detection only).
+  const hasVersionDetection = !!gameDef?.version_detection;
+  useEffect(() => {
+    if (!hasVersionDetection) { setOutdated({ patchTime: null, paths: new Set() }); return; }
+    let cancelled = false;
+    cmd.getOutdatedScripts()
+      .then((r) => { if (!cancelled) setOutdated({ patchTime: r.patch_time, paths: new Set(r.paths) }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [manifest, gameId, hasVersionDetection]);
 
   useEffect(() => {
     cmd.getModTags().then(setModTags).catch(console.error);
@@ -171,6 +215,7 @@ export default function ContentBrowser({ gameId }: Props) {
         const fileTags = modTags[f.relative_path] || [];
         return fileTags.includes(tagFilter);
       })
+      .filter((f) => !outdatedOnly || outdated.paths.has(f.relative_path))
       .sort((a, b) => {
         switch (sortBy) {
           case "size": return b.size - a.size;
@@ -179,9 +224,19 @@ export default function ContentBrowser({ gameId }: Props) {
           default: return a.relative_path.localeCompare(b.relative_path);
         }
       });
-  }, [manifest, activeFileTypes, search, tagFilter, modTags, sortBy, getSyncStatus]);
+  }, [manifest, activeFileTypes, search, tagFilter, modTags, sortBy, getSyncStatus, outdatedOnly, outdated]);
 
-  useEffect(() => { setPage(0); }, [search, tagFilter, sortBy, activeTab]);
+  useEffect(() => { setPage(0); }, [search, tagFilter, sortBy, activeTab, outdatedOnly]);
+
+  const outdatedInTab = useMemo(() => {
+    if (!manifest || outdated.paths.size === 0) return 0;
+    let n = 0;
+    for (const p of outdated.paths) {
+      const f = manifest.files[p];
+      if (f && activeFileTypes.has(f.file_type)) n++;
+    }
+    return n;
+  }, [manifest, outdated, activeFileTypes]);
 
   const totalPages = Math.max(1, Math.ceil(files.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages - 1);
@@ -205,6 +260,25 @@ export default function ContentBrowser({ gameId }: Props) {
               <option value="status">Status</option>
             </select>
           </div>
+          {outdatedInTab > 0 && outdated.patchTime !== null && (
+            <button
+              onClick={() => setOutdatedOnly(!outdatedOnly)}
+              title={`Script mods older than the last game update (${formatDateShort(outdated.patchTime)}) often break`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${outdatedOnly ? "bg-status-yellow text-black" : "bg-status-yellow/15 border border-status-yellow/30 text-status-yellow hover:bg-status-yellow/25"}`}
+            >
+              <AlertTriangle size={12} />
+              May be outdated ({outdatedInTab})
+            </button>
+          )}
+          {isModLike && (
+            <button
+              onClick={() => setShowDuplicates(!showDuplicates)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${showDuplicates ? "bg-accent text-white" : "bg-bg-card border border-border text-txt-dim hover:bg-bg-card-hover"}`}
+            >
+              <Copy size={12} />
+              Find duplicates
+            </button>
+          )}
           {isModLike && (
             <button
               onClick={() => { setBulkMode(!bulkMode); setSelected(new Set()); }}
@@ -217,6 +291,28 @@ export default function ContentBrowser({ gameId }: Props) {
           <span className="text-txt-dim text-sm">{files.length} items</span>
         </div>
       </div>
+
+      {legacyCount > 0 && legacyDismissed !== gameId && (
+        <div className="flex items-center gap-2 bg-status-yellow/10 border border-status-yellow/30 rounded-lg px-3 py-2 text-xs">
+          <AlertTriangle size={14} className="text-status-yellow shrink-0" />
+          <span className="flex-1">
+            {legacyCount} mod{legacyCount !== 1 ? "s" : ""} in _Disabled {legacyCount !== 1 ? "are" : "is"} still being loaded by {gameDef?.label ?? gameId}
+          </span>
+          <button
+            onClick={fixLegacy}
+            disabled={fixingLegacy}
+            title="Rename them to .disabled (keeping their folders) so the game really ignores them"
+            className="px-2.5 py-0.5 rounded bg-status-yellow text-black font-medium disabled:opacity-50"
+          >
+            {fixingLegacy ? "Fixing…" : "Fix"}
+          </button>
+          <button onClick={() => setLegacyDismissed(gameId)} className="text-txt-dim hover:text-txt" aria-label="Dismiss">
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {showDuplicates && <DuplicateFinder gameId={gameId} onClose={() => setShowDuplicates(false)} />}
 
       {/* Content type tabs */}
       {contentTypes.length > 1 && (
@@ -295,6 +391,18 @@ export default function ContentBrowser({ gameId }: Props) {
 
       {conflicts.length > 0 && (
         <div className="space-y-3">
+          {conflicts.length > 1 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => resolveAll("use_newest")}
+                title="Resolve every conflict by keeping whichever copy was modified more recently (ties keep yours)"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent hover:bg-accent-light text-white text-xs font-medium transition-colors"
+              >
+                <Sparkles size={12} />
+                Keep newer for all
+              </button>
+            </div>
+          )}
           {conflicts.map((c) => (
             <ConflictResolver key={c.local.relative_path} localFile={c.local} remoteFile={c.remote} onResolve={(resolution) => resolve(c.local.relative_path, resolution)} />
           ))}
@@ -335,6 +443,7 @@ export default function ContentBrowser({ gameId }: Props) {
               onSelect={handleSelect}
               compatibility={compatMap.get(file.relative_path)}
               onShowDetails={() => setDetailFile(file)}
+              outdatedSince={outdated.paths.has(file.relative_path) && outdated.patchTime !== null ? outdated.patchTime : undefined}
             />
           ))
         ) : (

@@ -807,9 +807,434 @@ pub async fn detect_installed_games(
     Ok(result)
 }
 
+// --- Legacy `_Disabled/` cleanup (rename-disable games) ---
+
+/// Game path + first content type (the mods folder) of a `disable_method:
+/// "rename"` game, or `None` for other games / unset paths.
+fn rename_game_mods(
+    app_state: &AppState,
+    game: Option<String>,
+) -> Result<Option<(String, crate::registry::ContentType)>, String> {
+    let game_id = match game {
+        Some(ref g) => resolve_game(app_state, g)?,
+        None => app_state.active_game.clone(),
+    };
+    let def = match get_game_def(&app_state.game_registry, &game_id) {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+    if def.disable_method.as_deref() != Some("rename") {
+        return Ok(None);
+    }
+    let (base, ct) = match (app_state.game_paths.get(&game_id), def.content_types.first()) {
+        (Some(b), Some(ct)) => (b.clone(), ct.clone()),
+        _ => return Ok(None),
+    };
+    Ok(Some((base, ct)))
+}
+
+/// Mod files left in `<mods>/_Disabled/` by versions that disabled by moving.
+/// Never follows symlinks/junctions (a linked `_Disabled` is ignored entirely).
+fn legacy_disabled_files(
+    mods_dir: &std::path::Path,
+    ct: &crate::registry::ContentType,
+) -> Vec<std::path::PathBuf> {
+    let disabled = mods_dir.join("_Disabled");
+    match std::fs::symlink_metadata(&disabled) {
+        Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {}
+        _ => return Vec::new(),
+    }
+    WalkDir::new(&disabled)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .map(|e| e.into_path())
+        .filter(|p| content_type_accepts(ct, p))
+        .collect()
+}
+
+#[derive(serde::Serialize, Debug, Default)]
+pub struct LegacyMigrationResult {
+    pub moved: usize,
+    /// Relative paths (inside `_Disabled/`) left in place because the target existed.
+    pub collisions: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Move every mod in `<mods>/_Disabled/<rel>` to `<mods>/<rel>.disabled`
+/// (subfolders kept), then remove directories under `_Disabled` that are now empty.
+fn migrate_legacy_disabled_in(
+    mods_dir: &std::path::Path,
+    ct: &crate::registry::ContentType,
+) -> LegacyMigrationResult {
+    let mut result = LegacyMigrationResult::default();
+    let disabled = mods_dir.join("_Disabled");
+    let mods_str = mods_dir.to_string_lossy().to_string();
+    for src in legacy_disabled_files(mods_dir, ct) {
+        let rel = match src.strip_prefix(&disabled) {
+            Ok(r) => r.to_string_lossy().replace('\\', "/"),
+            Err(_) => continue,
+        };
+        let target_rel = if rel.to_lowercase().ends_with(DISABLED_SUFFIX) {
+            rel.clone()
+        } else {
+            format!("{}{}", rel, DISABLED_SUFFIX)
+        };
+        // safe_join also rejects a target resolving outside the mods folder
+        // (e.g. through a symlinked subfolder).
+        let dest = match utils::safe_join(&mods_str, &target_rel) {
+            Ok(d) => d,
+            Err(e) => {
+                result.errors.push(format!("{}: {}", rel, e));
+                continue;
+            }
+        };
+        if std::fs::symlink_metadata(&dest).is_ok() {
+            result.collisions.push(rel);
+            continue;
+        }
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                result.errors.push(format!("{}: {}", rel, e));
+                continue;
+            }
+        }
+        match std::fs::rename(&src, &dest) {
+            Ok(()) => result.moved += 1,
+            Err(e) => result.errors.push(format!("{}: {}", rel, e)),
+        }
+    }
+    // Deepest first; remove_dir only succeeds on empty dirs, and symlinked
+    // dirs are reported as symlinks (not dirs) so they are never touched.
+    if std::fs::symlink_metadata(&disabled).map(|m| m.is_dir() && !m.file_type().is_symlink()).unwrap_or(false) {
+        for entry in WalkDir::new(&disabled).follow_links(false).contents_first(true).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                let _ = std::fs::remove_dir(entry.path());
+            }
+        }
+    }
+    result
+}
+
+/// Number of mods still sitting in a legacy `_Disabled/` folder (which The
+/// Sims loads anyway). 0 for games that don't disable by renaming.
+#[tauri::command]
+pub async fn count_legacy_disabled(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game: Option<String>,
+) -> Result<usize, String> {
+    let target = rename_game_mods(&*state.lock().await, game)?;
+    let Some((base, ct)) = target else { return Ok(0) };
+    tokio::task::spawn_blocking(move || {
+        legacy_disabled_files(&std::path::Path::new(&base).join(&ct.folder), &ct).len()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn migrate_legacy_disabled(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game: Option<String>,
+) -> Result<LegacyMigrationResult, String> {
+    let target = {
+        let app_state = state.lock().await;
+        if app_state.is_any_syncing() {
+            return Err("Cannot move mods while a sync is in progress".into());
+        }
+        rename_game_mods(&app_state, game)?
+    };
+    let Some((base, ct)) = target else { return Ok(LegacyMigrationResult::default()) };
+    tokio::task::spawn_blocking(move || {
+        let mods_dir = std::path::Path::new(&base).join(&ct.folder);
+        let mods_dir = std::fs::canonicalize(&mods_dir)
+            .map(utils::clean_path)
+            .map_err(|e| format!("Mods folder not found: {}", e))?;
+        Ok(migrate_legacy_disabled_in(&mods_dir, &ct))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// --- Duplicate finder ---
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct DuplicateGroup {
+    pub hash: String,
+    pub size: u64,
+    /// Sorted by path; the UI keeps the first by default.
+    pub files: Vec<FileInfo>,
+    /// Bytes that would be freed by keeping only one copy.
+    pub wasted: u64,
+}
+
+/// Group files with identical content hash. Files without a hash and
+/// zero-byte files are ignored. Sorted by wasted space, largest first.
+pub(crate) fn group_duplicates(manifest: &FileManifest) -> Vec<DuplicateGroup> {
+    let mut by_hash: HashMap<&str, Vec<&FileInfo>> = HashMap::new();
+    for f in manifest.files.values() {
+        if f.size == 0 || f.hash.is_empty() {
+            continue;
+        }
+        by_hash.entry(f.hash.as_str()).or_default().push(f);
+    }
+    let mut groups: Vec<DuplicateGroup> = by_hash
+        .into_iter()
+        .filter(|(_, v)| v.len() > 1)
+        .map(|(hash, v)| {
+            let mut files: Vec<FileInfo> = v.into_iter().cloned().collect();
+            files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+            let size = files[0].size;
+            DuplicateGroup {
+                hash: hash.to_string(),
+                size,
+                wasted: size * (files.len() as u64 - 1),
+                files,
+            }
+        })
+        .collect();
+    groups.sort_by(|a, b| b.wasted.cmp(&a.wasted).then_with(|| a.hash.cmp(&b.hash)));
+    groups
+}
+
+/// Hashed scan of the game followed by duplicate grouping.
+#[tauri::command]
+pub async fn find_duplicates(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game: Option<String>,
+) -> Result<Vec<DuplicateGroup>, String> {
+    let manifest = scan_files_inner(&*state, game, true).await?;
+    Ok(group_duplicates(&manifest))
+}
+
+#[derive(serde::Serialize, Debug, Default)]
+pub struct DeleteResult {
+    pub deleted: usize,
+    pub errors: Vec<String>,
+}
+
+/// Delete files of the active game. Every path must resolve (via `safe_join`,
+/// no symlinks) to a regular file inside one of the game's content folders
+/// that the content type accepts.
+#[tauri::command]
+pub async fn delete_mod_files(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    paths: Vec<String>,
+) -> Result<DeleteResult, String> {
+    let (base, cts) = {
+        let app_state = state.lock().await;
+        if app_state.is_any_syncing() {
+            return Err("Cannot delete files while a sync is in progress".into());
+        }
+        let base = app_state.active_game_path()?;
+        let cts = get_game_def(&app_state.game_registry, &app_state.active_game)
+            .map(|d| d.content_types.clone())
+            .unwrap_or_default();
+        (base, cts)
+    };
+    tokio::task::spawn_blocking(move || {
+        let mut result = DeleteResult::default();
+        for rel in paths {
+            match delete_content_file(&base, &cts, &rel) {
+                Ok(()) => result.deleted += 1,
+                Err(e) => result.errors.push(format!("{}: {}", rel, e)),
+            }
+        }
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+fn delete_content_file(
+    base: &str,
+    cts: &[crate::registry::ContentType],
+    rel: &str,
+) -> Result<(), String> {
+    let full = utils::safe_join(base, rel)?;
+    let meta = std::fs::symlink_metadata(&full).map_err(|e| e.to_string())?;
+    if !meta.is_file() || meta.file_type().is_symlink() {
+        return Err("Not a regular file".into());
+    }
+    let full_c = utils::clean_path(std::fs::canonicalize(&full).map_err(|e| e.to_string())?);
+    let inside = cts.iter().any(|ct| {
+        let Ok(folder) = std::fs::canonicalize(std::path::Path::new(base).join(&ct.folder)) else {
+            return false;
+        };
+        let folder = utils::clean_path(folder);
+        let in_folder = if ct.recursive {
+            full_c.starts_with(&folder)
+        } else {
+            full_c.parent() == Some(folder.as_path())
+        };
+        in_folder && content_type_accepts(ct, &full_c)
+    });
+    if !inside {
+        return Err("Only files in the game's content folders can be deleted".into());
+    }
+    std::fs::remove_file(&full).map_err(|e| e.to_string())
+}
+
+// --- "May be outdated after a game patch" ---
+
+/// Unix time the game was last patched: mtime of its `version_detection.file`.
+fn patch_time_of(def: &GameDefinition, base: &str) -> Option<u64> {
+    let vd = def.version_detection.as_ref()?;
+    let modified = std::fs::metadata(std::path::Path::new(base).join(&vd.file)).ok()?.modified().ok()?;
+    modified.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs())
+}
+
+/// Script mods (the game's `dangerous_script_extensions`) last modified
+/// before the game patch time.
+pub(crate) fn outdated_script_paths(
+    manifest: &FileManifest,
+    patch_time: u64,
+    script_exts: &[String],
+) -> Vec<String> {
+    let mut paths: Vec<String> = manifest
+        .files
+        .values()
+        .filter(|f| f.modified > 0 && f.modified < patch_time)
+        .filter(|f| {
+            let ext = effective_extension(std::path::Path::new(&f.relative_path));
+            script_exts.iter().any(|e| e.eq_ignore_ascii_case(&ext))
+        })
+        .map(|f| f.relative_path.clone())
+        .collect();
+    paths.sort();
+    paths
+}
+
+#[tauri::command]
+pub async fn get_game_patch_time(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game: Option<String>,
+) -> Result<Option<u64>, String> {
+    let app_state = state.lock().await;
+    let game_id = match game {
+        Some(ref g) => resolve_game(&app_state, g)?,
+        None => app_state.active_game.clone(),
+    };
+    let (Some(def), Some(base)) = (
+        get_game_def(&app_state.game_registry, &game_id),
+        app_state.game_paths.get(&game_id),
+    ) else {
+        return Ok(None);
+    };
+    Ok(patch_time_of(def, base))
+}
+
+#[derive(serde::Serialize, Debug, Default)]
+pub struct OutdatedScripts {
+    pub patch_time: Option<u64>,
+    pub paths: Vec<String>,
+}
+
+/// Script mods of the active game older than its last patch (from the current
+/// local manifest). Empty for games without `version_detection`.
+#[tauri::command]
+pub async fn get_outdated_scripts(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<OutdatedScripts, String> {
+    let app_state = state.lock().await;
+    let (Some(def), Some(base)) = (
+        get_game_def(&app_state.game_registry, &app_state.active_game),
+        app_state.game_paths.get(&app_state.active_game),
+    ) else {
+        return Ok(OutdatedScripts::default());
+    };
+    let Some(patch_time) = patch_time_of(def, base) else {
+        return Ok(OutdatedScripts::default());
+    };
+    Ok(OutdatedScripts {
+        patch_time: Some(patch_time),
+        paths: outdated_script_paths(&app_state.local_manifest, patch_time, &def.dangerous_script_extensions),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mods_ct() -> crate::registry::ContentType {
+        serde_json::from_value(serde_json::json!({
+            "id": "mods", "label": "Mods", "folder": "Mods",
+            "extensions": ["package", "ts4script"], "file_type": "Mod"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn migrate_legacy_disabled_moves_files_and_reports_collisions() {
+        let base = std::env::temp_dir().join(format!("synccrate-legacy-{}", uuid::Uuid::new_v4()));
+        let mods = base.join("Mods");
+        let dis = mods.join("_Disabled");
+        std::fs::create_dir_all(dis.join("Creator").join("Deep")).unwrap();
+        std::fs::create_dir_all(mods.join("Creator")).unwrap();
+        std::fs::write(dis.join("root.package"), b"a").unwrap();
+        std::fs::write(dis.join("Creator").join("Deep").join("hair.package"), b"b").unwrap();
+        std::fs::write(dis.join("Creator").join("clash.package"), b"c").unwrap();
+        std::fs::write(mods.join("Creator").join("clash.package.disabled"), b"old").unwrap();
+        std::fs::write(dis.join("readme.txt"), b"not a mod").unwrap();
+
+        let mods_c = utils::clean_path(std::fs::canonicalize(&mods).unwrap());
+        let ct = mods_ct();
+        assert_eq!(legacy_disabled_files(&mods_c, &ct).len(), 3);
+
+        let r = migrate_legacy_disabled_in(&mods_c, &ct);
+        assert_eq!(r.moved, 2);
+        assert_eq!(r.collisions, vec!["Creator/clash.package".to_string()]);
+        assert!(r.errors.is_empty());
+        assert!(mods.join("root.package.disabled").is_file());
+        assert!(mods.join("Creator").join("Deep").join("hair.package.disabled").is_file());
+        // Emptied subfolder removed; folders still holding files kept.
+        assert!(!dis.join("Creator").join("Deep").exists());
+        assert!(dis.join("Creator").join("clash.package").is_file());
+        assert!(dis.join("readme.txt").is_file());
+        assert_eq!(legacy_disabled_files(&mods_c, &ct).len(), 1);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn group_duplicates_ignores_empty_hashes_and_zero_bytes() {
+        let m = manifest(vec![
+            info("Mods/a.package", "h1", 100, 1),
+            info("Mods/sub/a copy.package", "h1", 100, 2),
+            info("Mods/b.package", "h2", 10, 1),
+            info("Mods/b2.package", "h2", 10, 1),
+            info("Mods/b3.package", "h2", 10, 1),
+            info("Mods/unique.package", "h3", 5, 1),
+            info("Mods/nohash1.package", "", 7, 1),
+            info("Mods/nohash2.package", "", 7, 1),
+            info("Mods/empty1.package", "e", 0, 1),
+            info("Mods/empty2.package", "e", 0, 1),
+        ]);
+        let g = group_duplicates(&m);
+        assert_eq!(g.len(), 2);
+        assert_eq!(g[0].hash, "h1");
+        assert_eq!(g[0].wasted, 100);
+        assert_eq!(g[0].files[0].relative_path, "Mods/a.package");
+        assert_eq!(g[1].files.len(), 3);
+        assert_eq!(g[1].wasted, 20);
+    }
+
+    #[test]
+    fn outdated_scripts_only_flags_old_script_files() {
+        let m = manifest(vec![
+            info("Mods/old.ts4script", "", 1, 100),
+            info("Mods/old_disabled.TS4SCRIPT.disabled", "", 1, 100),
+            info("Mods/new.ts4script", "", 1, 300),
+            info("Mods/old.package", "", 1, 100),
+            info("Mods/unknown_time.ts4script", "", 1, 0),
+        ]);
+        let exts = vec!["ts4script".to_string()];
+        assert_eq!(
+            outdated_script_paths(&m, 200, &exts),
+            vec!["Mods/old.ts4script".to_string(), "Mods/old_disabled.TS4SCRIPT.disabled".to_string()]
+        );
+        assert!(outdated_script_paths(&m, 200, &[]).is_empty());
+    }
 
     #[test]
     fn effective_extension_sees_through_disabled_suffix() {

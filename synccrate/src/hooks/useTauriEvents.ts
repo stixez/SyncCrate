@@ -88,7 +88,12 @@ export function useTauriEvents() {
         // Try direct IP reconnect first (works over VPN/Tailscale)
         if (lastHostIp && lastHostPort) {
           try {
-            await cmd.connectByIp(lastHostIp, lastHostPort, localName);
+            // Reuse the PIN of the attempt that got us connected (if any)
+            const pin = useAppStore.getState().lastConnectAttempt?.pin;
+            useAppStore.getState().setLastConnectAttempt({
+              kind: "ip", ip: lastHostIp, port: lastHostPort, name: localName, label: hostName, pin,
+            });
+            await cmd.connectByIp(lastHostIp, lastHostPort, localName, pin);
             // connectByIp spawns in background — wait briefly for connection-failed or peer-connected
             await new Promise((r) => setTimeout(r, 2000));
             const status = await cmd.getSessionStatus();
@@ -117,7 +122,9 @@ export function useTauriEvents() {
           const peers = await cmd.startJoin(localName);
           const match = peers.find((p) => p.name === hostName);
           if (match) {
-            await cmd.connectToPeer(match.id);
+            const pin = useAppStore.getState().lastConnectAttempt?.pin;
+            useAppStore.getState().setLastConnectAttempt({ kind: "peer", peerId: match.id, label: hostName, pin });
+            await cmd.connectToPeer(match.id, pin);
             const status = await cmd.getSessionStatus();
             setSession(status);
             addLog(`Reconnected to ${hostName}`, "success");
@@ -154,6 +161,7 @@ export function useTauriEvents() {
         listen<{ name: string }>("peer-connected", async (event) => {
           cancelRetry();
           useAppStore.getState().setIsConnecting(false);
+          useAppStore.getState().setPinPrompt(null);
           addLog(`Peer connected: ${event.payload.name}`, "success");
           sendNotification("SyncCrate", `${event.payload.name} connected`);
           try {
@@ -212,6 +220,18 @@ export function useTauriEvents() {
         }),
         listen<{ message: string }>("connection-failed", (event) => {
           const msg = event.payload.message;
+          const attempt = useAppStore.getState().lastConnectAttempt;
+          if (/invalid pin/i.test(msg) && attempt) {
+            // Host requires a PIN (or ours was wrong): ask for it and retry the
+            // exact same attempt instead of failing outright.
+            cancelRetry();
+            addLog(attempt.pin ? "Wrong PIN — enter the host's current PIN" : "This host requires a PIN", "warning");
+            useAppStore.getState().setPinPrompt({ attempt, wrongPin: !!attempt.pin });
+            setIsScanning(false);
+            useAppStore.getState().setIsConnecting(false);
+            setSession(null);
+            return;
+          }
           addLog(`Connection failed: ${msg}`, "error");
           // The backend now explains the likely cause (firewall timeout vs refused
           // vs unreachable), so surface it directly instead of only in the log.
@@ -229,10 +249,14 @@ export function useTauriEvents() {
             setSyncProgress(event.payload);
           },
         ),
-        listen<{ files_synced: number; total_bytes: number; errors: string[] }>("sync-complete", (event) => {
+        listen<{ files_synced: number; total_bytes: number; errors: string[]; cancelled?: boolean }>("sync-complete", (event) => {
           setSyncProgress(null);
           setSyncPlan(null);
-          const { files_synced, errors } = event.payload;
+          const { files_synced, errors, cancelled } = event.payload;
+          if (cancelled) {
+            addLog(`Sync cancelled after ${files_synced} file(s)`, "warning");
+            return;
+          }
           const from = peerName((event.payload as { peer_id?: string }).peer_id);
           if (errors && errors.length > 0) {
             addLog(

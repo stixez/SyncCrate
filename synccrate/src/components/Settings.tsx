@@ -37,6 +37,7 @@ export default function Settings() {
   });
   const [speedLimit, setSpeedLimit] = useState(0);
   const [clearCache, setClearCache] = useState(true);
+  const [closeToTray, setCloseToTrayState] = useState(false);
   const notificationsEnabled = useAppStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useAppStore((s) => s.setNotificationsEnabled);
 
@@ -56,6 +57,7 @@ export default function Settings() {
     cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
     cmd.getTransferSpeedLimit().then(setSpeedLimit).catch(() => {});
     cmd.getClearCacheAfterSync().then(setClearCache).catch(() => {});
+    cmd.getCloseToTray().then(setCloseToTrayState).catch(() => {});
   }, [setGamePaths, setExcludePatterns]);
 
   useEffect(() => {
@@ -450,6 +452,20 @@ export default function Settings() {
             <p className="text-xs text-txt-dim">When SyncCrate is in the background: sync finished, friend connected.</p>
           </div>
           <Toggle checked={notificationsEnabled} label="Desktop notifications" onChange={setNotificationsEnabled} />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <label className="text-sm">Keep running in the tray when the window is closed</label>
+            <p className="text-xs text-txt-dim">Closing the window hides SyncCrate so hosting and syncing continue. Use Quit in the tray menu to exit.</p>
+          </div>
+          <Toggle
+            checked={closeToTray}
+            label="Keep running in the tray when the window is closed"
+            onChange={(v) => {
+              setCloseToTrayState(v);
+              cmd.setCloseToTray(v).catch(console.error);
+            }}
+          />
         </div>
       </div>
 
