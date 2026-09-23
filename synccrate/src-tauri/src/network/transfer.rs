@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
+use crate::network::stream::PeerStream;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -161,35 +162,44 @@ pub async fn run_listener(
 
                 let state = state.clone();
                 let app = app.clone();
-
-                // Enforce connection limit
-                {
-                    let app_state = state.lock().await;
-                    if app_state.connections.len() >= MAX_PEERS {
-                        log::warn!("Rejecting connection from {} — max peers ({}) reached", peer_addr, MAX_PEERS);
-                        // Drop the stream immediately; peer will see a connection reset
-                        drop(stream);
-                        continue;
-                    }
-                }
-
-                tokio::spawn(async move {
-                    if let Err(e) = handle_client(stream, state, app, peer_addr.to_string()).await {
-                        log::error!("Client handler error: {}", e);
-                    }
-                });
+                tokio::spawn(serve_incoming(PeerStream::tcp(stream), state, app, peer_addr.to_string()));
             }
         }
     }
 }
 
-async fn handle_client(
-    stream: TcpStream,
+/// Serve one incoming peer (LAN TCP or internet/iroh) until it disconnects.
+pub async fn serve_incoming(
+    stream: PeerStream,
     state: Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
-    _peer_addr: String,
+    label: String,
+) {
+    // Enforce connection limit
+    {
+        let app_state = state.lock().await;
+        if app_state.connections.len() >= MAX_PEERS {
+            log::warn!("Rejecting connection from {} — max peers ({}) reached", label, MAX_PEERS);
+            // Dropping the stream closes it; the peer sees the connection end
+            return;
+        }
+    }
+    if let Err(e) = handle_client(stream, state, app, label).await {
+        log::error!("Client handler error: {}", e);
+    }
+}
+
+async fn handle_client(
+    stream: PeerStream,
+    state: Arc<Mutex<AppState>>,
+    app: tauri::AppHandle,
+    peer_label: String,
 ) -> Result<(), String> {
-    protocol::configure_keepalive(&stream);
+    let peer_ip = stream
+        .peer_ip()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|| stream.kind().to_string());
+    log::info!("Incoming {} connection from {}", stream.kind(), peer_label);
     let stream = Arc::new(Mutex::new(stream));
 
     // Wait for Hello
@@ -262,7 +272,7 @@ async fn handle_client(
         let peer = crate::state::PeerInfo {
             id: peer_id.clone(),
             name: peer_name.clone(),
-            ip: _peer_addr.split(':').next().unwrap_or("unknown").to_string(),
+            ip: peer_ip.clone(),
             port: 0,
             mod_count: 0,
             version: peer_version.clone(),
@@ -759,22 +769,59 @@ async fn connect_any(addresses: &[String], port: u16) -> Result<TcpStream, Strin
     Err(connect_failure_message(kind, &tried, port, &detail))
 }
 
+/// Connect over the LAN and/or the internet. With both available they race:
+/// LAN gets a short head start (it's faster when it works), and whichever
+/// connects first wins. If both fail, both reasons are reported.
+async fn connect_best(
+    addresses: &[String],
+    port: u16,
+    internet_id: Option<iroh::EndpointId>,
+    state: &Arc<Mutex<AppState>>,
+    app: &tauri::AppHandle,
+) -> Result<PeerStream, String> {
+    let Some(remote) = internet_id else {
+        return connect_any(addresses, port).await.map(PeerStream::tcp);
+    };
+    if addresses.is_empty() {
+        return crate::network::iroh_net::connect(state, app, remote).await;
+    }
+
+    let lan = async { connect_any(addresses, port).await.map(PeerStream::tcp) };
+    let internet = async {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        crate::network::iroh_net::connect(state, app, remote).await
+    };
+    tokio::pin!(lan);
+    tokio::pin!(internet);
+
+    tokio::select! {
+        r = &mut lan => match r {
+            Ok(s) => Ok(s),
+            Err(lan_err) => internet.await.map_err(|net_err| format!("{}\n\nInternet: {}", lan_err, net_err)),
+        },
+        r = &mut internet => match r {
+            Ok(s) => Ok(s),
+            Err(net_err) => lan.await.map_err(|lan_err| format!("{}\n\nInternet: {}", lan_err, net_err)),
+        },
+    }
+}
+
 pub async fn connect_to_host(
     addresses: &[String],
     port: u16,
+    internet_id: Option<iroh::EndpointId>,
     peer_id: &str,
     state: Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
     pin: Option<String>,
 ) -> Result<(), String> {
-    let stream = connect_any(addresses, port).await?;
+    let stream = connect_best(addresses, port, internet_id, &state, &app).await?;
     let ip = stream
-        .peer_addr()
-        .map(|a| a.ip().to_string())
-        .unwrap_or_else(|_| addresses.first().cloned().unwrap_or_default());
+        .peer_ip()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| stream.kind().to_string());
     let ip = ip.as_str();
 
-    protocol::configure_keepalive(&stream);
     let stream = Arc::new(Mutex::new(stream));
 
     // Send Hello with our display name (not the session/peer name)
@@ -924,7 +971,7 @@ pub async fn connect_to_host(
 async fn client_message_loop(
     state: Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
-    stream: Arc<Mutex<TcpStream>>,
+    stream: Arc<Mutex<PeerStream>>,
     peer_id: &str,
     host_name: String,
 ) {
@@ -1170,7 +1217,7 @@ pub async fn request_file(
 /// The temp file handle is always closed before returning so it can be deleted
 /// on Windows.
 async fn receive_file_body(
-    s: &mut TcpStream,
+    s: &mut PeerStream,
     tmp_path: &std::path::Path,
     expected_size: u64,
     expected_hash: &str,
@@ -1225,7 +1272,7 @@ async fn receive_file_body(
 /// Discard messages until the host finishes the current file. Gives up after
 /// a bounded number of messages / a read error (the connection is then
 /// unusable anyway and the loop will notice).
-async fn drain_until_file_end(s: &mut TcpStream) {
+async fn drain_until_file_end(s: &mut PeerStream) {
     // A 2 GB file at 64 KB per chunk is ~32k chunks.
     for _ in 0..40_000 {
         match protocol::recv_message(s).await {

@@ -21,32 +21,20 @@ export default function ConnectionGuide() {
         <div className="bg-bg-card rounded-xl border border-border p-5">
           <div className="flex items-center gap-2 mb-3">
             <Globe size={18} className="text-accent-light" />
-            <h3 className="font-semibold text-sm">Different Location (VPN)</h3>
+            <h3 className="font-semibold text-sm">Different Location</h3>
           </div>
           <p className="text-xs text-txt-dim leading-relaxed">
-            For remote friends, use{" "}
-            <button
-              onClick={() => open("https://tailscale.com").catch(() => {})}
-              className="text-accent-light hover:underline inline"
-            >
-              Tailscale
-            </button>{" "}
-            or{" "}
-            <button
-              onClick={() => open("https://www.zerotier.com").catch(() => {})}
-              className="text-accent-light hover:underline inline"
-            >
-              ZeroTier
-            </button>{" "}
-            (both free). They create a virtual LAN between your devices.
+            Friends somewhere else can join too, with no VPN or port forwarding. The host shares their
+            <span className="font-medium text-txt"> join code</span> and friends paste it. SyncCrate connects directly
+            when it can, and otherwise through an encrypted relay that can't read your files.
           </p>
-          <div className="mt-2 flex items-start gap-1.5 bg-status-yellow/5 rounded-lg p-2">
-            <AlertTriangle size={12} className="text-status-yellow shrink-0 mt-0.5" />
-            <p className="text-[11px] text-status-yellow/80 leading-relaxed">
-              Auto-discovery won't work over VPN. Paste the host's <span className="font-medium">join code</span> instead.
-              It includes their VPN address. You can also use Connect by IP with the host's VPN IP (Tailscale IPs start with 100.).
-            </p>
-          </div>
+          <p className="text-[11px] text-txt-muted leading-relaxed mt-2">
+            Already use{" "}
+            <button onClick={() => open("https://tailscale.com").catch(() => {})} className="text-accent-light hover:underline inline">Tailscale</button>{" "}
+            or{" "}
+            <button onClick={() => open("https://www.zerotier.com").catch(() => {})} className="text-accent-light hover:underline inline">ZeroTier</button>?
+            Connect by IP with the host's VPN address also works.
+          </p>
         </div>
       </div>
       <div className="bg-bg-card rounded-xl border border-border p-4 flex items-start gap-3">

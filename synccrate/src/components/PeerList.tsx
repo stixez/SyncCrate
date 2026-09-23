@@ -70,7 +70,7 @@ export default function PeerList() {
                 <Monitor size={14} className="text-accent-light" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">{peer.name}</p>
-                  <p className="text-xs text-txt-dim">{peer.ip}:{peer.port}</p>
+                  <p className="text-xs text-txt-dim">{/^[0-9a-f.:]+$/i.test(peer.ip) ? (peer.port > 0 ? `${peer.ip}:${peer.port}` : peer.ip) : `${peer.ip} (via join code)`}</p>
                 </div>
                 {peer.game_info?.game_version && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/15 text-accent-light text-xs font-medium">

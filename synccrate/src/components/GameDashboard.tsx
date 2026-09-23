@@ -39,6 +39,7 @@ export default function GameDashboard({ gameId }: Props) {
   const lastHostIp = useAppStore((s) => s.lastHostIp);
   const lastHostPort = useAppStore((s) => s.lastHostPort);
   const lastHostName = useAppStore((s) => s.lastHostName);
+  const lastHostCode = useAppStore((s) => s.lastHostCode);
   const clearLastHost = useAppStore((s) => s.clearLastHost);
   const pinPrompt = useAppStore((s) => s.pinPrompt);
   const setPinPrompt = useAppStore((s) => s.setPinPrompt);
@@ -364,21 +365,26 @@ export default function GameDashboard({ gameId }: Props) {
               </div>
               <h3 className="font-semibold">Join a Session</h3>
             </div>
-            <p className="text-txt-dim text-sm mb-4">Connect to a host on your network and sync files.</p>
-            {lastHostIp && lastHostPort && (
+            <p className="text-txt-dim text-sm mb-4">Paste your friend's join code, or scan your network. Join codes work from anywhere.</p>
+            {(lastHostCode || (lastHostIp && lastHostPort)) && (
               <div className="mb-3">
                 <button
                   onClick={() => {
-                    // A PIN-protected host triggers the PIN prompt automatically
-                    setManualIp(lastHostIp);
-                    setManualPort(String(lastHostPort));
-                    connectByIp(lastHostIp, lastHostPort, hostName.trim() || "Guest", manualPin || undefined, lastHostName || undefined);
+                    // A PIN-protected host triggers the PIN prompt automatically.
+                    // Prefer the join code: it reaches the host over the internet too.
+                    if (lastHostCode) {
+                      connectByCode(lastHostCode, hostName.trim() || "Guest");
+                    } else if (lastHostIp && lastHostPort) {
+                      setManualIp(lastHostIp);
+                      setManualPort(String(lastHostPort));
+                      connectByIp(lastHostIp, lastHostPort, hostName.trim() || "Guest", manualPin || undefined, lastHostName || undefined);
+                    }
                   }}
                   disabled={isLoading || isConnecting}
                   className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   <RefreshCw size={14} className={isConnecting ? "animate-spin" : ""} />
-                  {isConnecting ? "Connecting..." : `Reconnect to ${lastHostName || lastHostIp}`}
+                  {isConnecting ? "Connecting..." : `Reconnect to ${lastHostName || lastHostIp || "last host"}`}
                 </button>
                 <p className="text-[11px] text-txt-dim mt-1 flex justify-end gap-2">
                   <button onClick={clearLastHost} className="hover:text-txt shrink-0">Forget</button>
@@ -663,8 +669,10 @@ export default function GameDashboard({ gameId }: Props) {
       {isHost && hostJoinCode && (
         <div className="bg-bg-card rounded-xl border border-accent/30 p-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-txt-dim">Join code — friends paste this into "Join a Session"{session.pin ? " (includes your PIN)" : ""}:</p>
-            <p className="font-mono text-base font-semibold tracking-wider text-accent-light truncate select-all">{hostJoinCode}</p>
+            <p className="text-xs text-txt-dim">
+              Join code — friends paste this into "Join a Session". Works on your network and over the internet{session.pin ? ", and includes your PIN" : ""}.
+            </p>
+            <p className="font-mono text-sm font-semibold tracking-wide text-accent-light break-all select-all mt-0.5">{hostJoinCode}</p>
           </div>
           <button
             onClick={() => { navigator.clipboard.writeText(hostJoinCode); setJoinCodeCopied(true); setTimeout(() => setJoinCodeCopied(false), 2000); }}

@@ -1,7 +1,7 @@
 use crate::state::{FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crate::network::stream::PeerStream;
 use tokio::net::TcpStream;
 
 /// Maximum message size: 10 MB (sufficient for large manifests)
@@ -49,7 +49,7 @@ pub enum Message {
     Ping,
 }
 
-pub async fn send_message(stream: &mut TcpStream, msg: &Message) -> Result<(), String> {
+pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), String> {
     let json = serde_json::to_vec(msg).map_err(|e| e.to_string())?;
     let len: u32 = json.len().try_into().map_err(|_| "Message too large to send")?;
     tokio::time::timeout(SEND_TIMEOUT, async {
@@ -63,7 +63,7 @@ pub async fn send_message(stream: &mut TcpStream, msg: &Message) -> Result<(), S
 }
 
 /// Internal: reads one length-prefixed JSON message without a timeout wrapper.
-async fn recv_message_raw(stream: &mut TcpStream) -> Result<Message, String> {
+async fn recv_message_raw(stream: &mut PeerStream) -> Result<Message, String> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await.map_err(|e| e.to_string())?;
     let len = u32::from_be_bytes(len_buf) as usize;
@@ -91,7 +91,7 @@ async fn recv_message_raw(stream: &mut TcpStream) -> Result<Message, String> {
     Ok(msg)
 }
 
-pub async fn recv_message(stream: &mut TcpStream) -> Result<Message, String> {
+pub async fn recv_message(stream: &mut PeerStream) -> Result<Message, String> {
     tokio::time::timeout(RECV_TIMEOUT, recv_message_raw(stream))
         .await
         .map_err(|_| "Connection timed out reading message".to_string())?
@@ -100,18 +100,17 @@ pub async fn recv_message(stream: &mut TcpStream) -> Result<Message, String> {
 /// Wait up to `timeout` for a message to *start* arriving, then read it fully.
 /// Returns Ok(Some(msg)) on success, Ok(None) if nothing arrived, Err on connection error.
 ///
-/// Cancel-safe: the wait uses `peek`, which consumes nothing. Previously the
+/// Cancel-safe: the wait buffers whatever a single read returns (see `PeerStream`). Previously the
 /// whole read was wrapped in the timeout, so a timeout that fired after the
 /// length prefix was read (but before the body) silently dropped bytes and
 /// desynchronised the stream — surfacing later as random "connection lost" /
 /// JSON errors, most often on slow Wi-Fi.
-pub async fn try_recv_message(stream: &mut TcpStream, timeout: Duration) -> Result<Option<Message>, String> {
-    let mut probe = [0u8; 1];
-    match tokio::time::timeout(timeout, stream.peek(&mut probe)).await {
-        Err(_) => Ok(None),
-        Ok(Ok(0)) => Err("Connection closed by peer".to_string()),
-        Ok(Ok(_)) => recv_message(stream).await.map(Some),
-        Ok(Err(e)) => Err(e.to_string()),
+pub async fn try_recv_message(stream: &mut PeerStream, timeout: Duration) -> Result<Option<Message>, String> {
+    match stream.wait_readable(timeout).await {
+        Ok(None) => Ok(None),
+        Ok(Some(false)) => Err("Connection closed by peer".to_string()),
+        Ok(Some(true)) => recv_message(stream).await.map(Some),
+        Err(e) => Err(e.to_string()),
     }
 }
 

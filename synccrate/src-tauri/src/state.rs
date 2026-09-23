@@ -2,7 +2,7 @@ use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::net::TcpStream;
+
 use tokio::sync::Mutex as TokioMutex;
 
 use crate::registry::GameRegistry;
@@ -245,7 +245,7 @@ pub struct ProfileComparison {
 
 pub struct PeerConnection {
     pub info: PeerInfo,
-    pub stream: Arc<TokioMutex<TcpStream>>,
+    pub stream: Arc<TokioMutex<crate::network::stream::PeerStream>>,
     pub remote_manifest: Option<FileManifest>,
     pub sync_plan: Option<SyncPlan>,
     pub is_syncing: bool,

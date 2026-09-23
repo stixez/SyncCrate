@@ -36,7 +36,7 @@ Playing modded games with friends usually means passing zip files around until s
 - **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done.
 
 **Connect**
-- **Join codes.** The host gets a short `SC-…` code with their addresses, port and PIN. Friends paste it and join; reconnecting is one click.
+- **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. No VPN or port forwarding needed. Reconnecting takes one click.
 - **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
 - **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
 
@@ -272,7 +272,9 @@ No. The only exception is a game folder Windows protects, such as ReShade/GShade
 <details>
 <summary><strong>Can I sync with friends who aren't on my network?</strong></summary>
 
-Yes, with a virtual LAN like [Tailscale](https://tailscale.com), [ZeroTier](https://www.zerotier.com) or Hamachi. Everyone joins the same virtual network, then pastes the host's join code (it includes the VPN address). Auto-discovery usually doesn't cross a VPN.
+Yes. Paste the host's join code, and nothing else is needed. SyncCrate connects directly between the two PCs when it can (hole punching through home routers, powered by [iroh](https://iroh.computer)). When that isn't possible, it falls back to an encrypted relay server. The relay only forwards data it can't read, and it only helps set up connections; your files are never stored anywhere. On the same network the fast LAN connection is used automatically.
+
+Anyone with your code can join, so turn on **Use PIN** if you post the code publicly. A virtual LAN like Tailscale or ZeroTier also still works with Connect by IP.
 </details>
 
 <details>

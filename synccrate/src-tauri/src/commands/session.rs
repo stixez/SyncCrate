@@ -111,6 +111,25 @@ pub async fn start_host(
         }
     });
 
+    // Bring up internet connectivity (iroh) so friends outside the LAN can join
+    // with the join code. Failure only disables internet joins.
+    {
+        let net_state = state.inner().clone();
+        let net_app = app.clone();
+        tokio::spawn(async move {
+            match crate::network::iroh_net::endpoint(&net_state, &net_app).await {
+                Ok(ep) => {
+                    ep.online().await;
+                    log::info!("Internet joining ready ({})", ep.id().fmt_short());
+                }
+                Err(e) => {
+                    log::warn!("{}", e);
+                    let _ = net_app.emit("internet-unavailable", serde_json::json!({"message": e}));
+                }
+            }
+        });
+    }
+
     // Run TCP accept loop in background (already bound)
     let app_handle = app.clone();
     let state_clone = state.inner().clone();
@@ -191,6 +210,7 @@ pub async fn connect_to_peer(
         if let Err(e) = crate::network::transfer::connect_to_host(
             &addresses,
             peer.port,
+            None,
             &connection_peer_id,
             state_clone.clone(),
             app_handle.clone(),
@@ -315,7 +335,7 @@ pub async fn connect_by_ip(
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
     ip.parse::<std::net::IpAddr>().map_err(|_| "Invalid IP address".to_string())?;
-    start_direct_connection(state.inner(), app, vec![ip.clone()], port, name, pin, ip).await
+    start_direct_connection(state.inner(), app, vec![ip.clone()], port, None, name, pin, ip).await
 }
 
 /// Join using a host's join code (addresses + port + optional PIN in one string).
@@ -339,7 +359,15 @@ pub async fn connect_by_code(
     // A PIN typed by the user wins over the one embedded in the code (e.g. the
     // host restarted hosting and got a new PIN but the code was shared earlier).
     let pin = pin.filter(|p| !p.trim().is_empty()).or(info.pin);
-    start_direct_connection(state.inner(), app, ranked, info.port, name, pin, label).await
+    let internet_id = match info.internet_id {
+        Some(bytes) => Some(
+            iroh::EndpointId::from_bytes(&bytes)
+                .map_err(|_| "That join code isn't valid — check it was copied completely.".to_string())?,
+        ),
+        None => None,
+    };
+    let label = if label.is_empty() { "Internet".to_string() } else { label };
+    start_direct_connection(state.inner(), app, ranked, info.port, internet_id, name, pin, label).await
 }
 
 /// The host's join code for the current session.
@@ -358,7 +386,8 @@ pub async fn get_join_code(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Res
         .iter()
         .filter_map(|ip| ip.parse().ok())
         .collect();
-    crate::network::joincode::encode(&crate::network::joincode::JoinInfo { addresses, port, pin })
+    let internet_id = Some(*crate::network::iroh_net::local_id().as_bytes());
+    crate::network::joincode::encode(&crate::network::joincode::JoinInfo { addresses, port, pin, internet_id })
 }
 
 /// Shared by Connect-by-IP and join codes: mark the pending client session and
@@ -369,6 +398,7 @@ async fn start_direct_connection(
     app: tauri::AppHandle,
     addresses: Vec<String>,
     port: u16,
+    internet_id: Option<iroh::EndpointId>,
     name: String,
     pin: Option<String>,
     label: String,
@@ -395,7 +425,7 @@ async fn start_direct_connection(
     let connect_peer_id = peer_id.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::network::transfer::connect_to_host(
-            &addresses, port, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
+            &addresses, port, internet_id, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
         ).await {
             log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;

@@ -71,7 +71,7 @@ export function useTauriEvents() {
       cancelRetry();
       retryRef.current.active = true;
 
-      const { lastHostIp, lastHostPort } = useAppStore.getState();
+      const { lastHostIp, lastHostPort, lastHostCode } = useAppStore.getState();
 
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (!retryRef.current.active || cancelled) return;
@@ -85,7 +85,29 @@ export function useTauriEvents() {
 
         if (!retryRef.current.active || cancelled) return;
 
-        // Try direct IP reconnect first (works over VPN/Tailscale)
+        // A join code reaches the host on the LAN or over the internet
+        if (lastHostCode) {
+          try {
+            const pin = useAppStore.getState().lastConnectAttempt?.pin;
+            useAppStore.getState().setLastConnectAttempt({
+              kind: "code", code: lastHostCode, name: localName, label: hostName, pin,
+            });
+            await cmd.connectByCode(lastHostCode, localName, pin);
+            await new Promise((r) => setTimeout(r, 4000));
+            const status = await cmd.getSessionStatus();
+            if (status.session_type === "Client" && status.peers.length > 0) {
+              setSession(status);
+              addLog(`Reconnected to ${hostName}`, "success");
+              sendNotification("SyncCrate", `Reconnected to ${hostName}`);
+              retryRef.current.active = false;
+              return;
+            }
+          } catch {
+            // Fall through to the other methods
+          }
+        }
+
+        // Try direct IP reconnect (works over VPN/Tailscale)
         if (lastHostIp && lastHostPort) {
           try {
             // Reuse the PIN of the attempt that got us connected (if any)
@@ -170,8 +192,13 @@ export function useTauriEvents() {
             // Store host info for direct IP reconnect (clients only)
             if (status.session_type === "Client" && status.peers.length > 0) {
               const host = status.peers[0];
-              if (host.ip) {
-                useAppStore.getState().setLastHost(host.ip, host.port, host.name);
+              const attempt = useAppStore.getState().lastConnectAttempt;
+              const code = attempt?.kind === "code" ? attempt.code : null;
+              // Internet peers report "Internet" instead of an IP — only the
+              // join code can reach them again.
+              const isIp = /^[0-9a-f.:]+$/i.test(host.ip);
+              if (isIp || code) {
+                useAppStore.getState().setLastHost(isIp ? host.ip : null, isIp ? host.port : null, host.name, code);
               }
             }
           } catch {
@@ -213,6 +240,10 @@ export function useTauriEvents() {
               attemptReconnect(name, "Guest");
             }
           }
+        }),
+        listen<{ message: string }>("internet-unavailable", (event) => {
+          addLog(`Internet joining is unavailable: ${event.payload.message}`, "warning");
+          toastInfo("Friends outside your network can't join right now — same-network joining still works.");
         }),
         listen<{ message: string }>("discovery-unavailable", (event) => {
           addLog(`LAN auto-discovery is unavailable: ${event.payload.message}`, "warning");

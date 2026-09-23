@@ -119,7 +119,9 @@ interface AppState {
   lastHostIp: string | null;
   lastHostPort: number | null;
   lastHostName: string | null;
-  setLastHost: (ip: string, port: number, name: string) => void;
+  /** Join code of the last host, if we joined with one (works over the internet too). */
+  lastHostCode: string | null;
+  setLastHost: (ip: string | null, port: number | null, name: string, code?: string | null) => void;
   clearLastHost: () => void;
 
   // Desktop notifications when the window is in the background (per-user, localStorage)
@@ -250,17 +252,20 @@ export const useAppStore = create<AppState>((set) => ({
   lastHostIp: readStorage("synccrate-last-host-ip"),
   lastHostPort: Number(readStorage("synccrate-last-host-port")) || null,
   lastHostName: readStorage("synccrate-last-host-name"),
-  setLastHost: (ip, port, name) => {
+  lastHostCode: readStorage("synccrate-last-host-code"),
+  setLastHost: (ip, port, name, code = null) => {
     writeStorage("synccrate-last-host-ip", ip);
-    writeStorage("synccrate-last-host-port", String(port));
+    writeStorage("synccrate-last-host-port", port ? String(port) : null);
     writeStorage("synccrate-last-host-name", name);
-    set({ lastHostIp: ip, lastHostPort: port, lastHostName: name });
+    writeStorage("synccrate-last-host-code", code);
+    set({ lastHostIp: ip, lastHostPort: port, lastHostName: name, lastHostCode: code });
   },
   clearLastHost: () => {
     writeStorage("synccrate-last-host-ip", null);
     writeStorage("synccrate-last-host-port", null);
     writeStorage("synccrate-last-host-name", null);
-    set({ lastHostIp: null, lastHostPort: null, lastHostName: null });
+    writeStorage("synccrate-last-host-code", null);
+    set({ lastHostIp: null, lastHostPort: null, lastHostName: null, lastHostCode: null });
   },
 
   notificationsEnabled: readStorage("synccrate-notifications") !== "off",
