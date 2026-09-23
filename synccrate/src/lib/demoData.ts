@@ -1,3 +1,4 @@
+import pkg from "../../package.json";
 import type {
   FileManifest,
   SessionStatus,
@@ -340,7 +341,7 @@ export const demoSession: SessionStatus = {
       ip: "192.168.1.42",
       port: 9847,
       mod_count: 23,
-      version: "0.3.0",
+      version: pkg.version,
       pin_required: false,
     },
     {
@@ -349,7 +350,7 @@ export const demoSession: SessionStatus = {
       ip: "192.168.1.108",
       port: 9847,
       mod_count: 15,
-      version: "0.3.0",
+      version: pkg.version,
       pin_required: false,
     },
   ],
@@ -439,7 +440,7 @@ export const demoDiscoveredPeers: PeerInfo[] = [
     ip: "192.168.1.10",
     port: 9847,
     mod_count: 34,
-    version: "0.3.0",
+    version: pkg.version,
     pin_required: true,
   },
   {
@@ -448,7 +449,7 @@ export const demoDiscoveredPeers: PeerInfo[] = [
     ip: "192.168.1.22",
     port: 9847,
     mod_count: 12,
-    version: "0.3.0",
+    version: pkg.version,
     pin_required: false,
   },
 ];

@@ -237,6 +237,8 @@
     .t-resume { grid-column: span 2; }
     .t-mods { grid-column: span 3; }
     .t-safe { grid-column: span 3; }
+    .t-library { grid-column: span 3; }
+    .t-look { grid-column: span 3; }
     .t-connect { grid-column: span 6; flex-direction: row; align-items: center; gap: 40px; }
     .t-sync h3 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); }
     .diff { margin-top: auto; font-family: var(--mono); font-size: .82rem; background: var(--bg); border: 1px solid var(--line); padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; overflow: hidden; }
@@ -370,7 +372,7 @@
       .t-sync, .t-connect { grid-column: span 2; }
       .t-sync { grid-row: auto; }
       .t-conflict, .t-resume { grid-column: span 1; }
-      .t-mods, .t-safe { grid-column: span 1; }
+      .t-mods, .t-safe, .t-library, .t-look { grid-column: span 1; }
     }
     @media (max-width: 900px) {
       .menu-btn { display: block; }
@@ -396,7 +398,7 @@
     @media (max-width: 640px) {
       .wrap { padding: 0 16px; }
       .bento { grid-template-columns: minmax(0, 1fr); }
-      .t-sync, .t-connect, .t-conflict, .t-resume, .t-mods, .t-safe { grid-column: auto; }
+      .t-sync, .t-connect, .t-conflict, .t-resume, .t-mods, .t-safe, .t-library, .t-look { grid-column: auto; }
       .t-connect { flex-direction: column; align-items: stretch; gap: 20px; }
       .t-connect .ticks { grid-template-columns: 1fr; flex-basis: auto; }
       .t-connect .c-copy { flex-basis: auto; }
@@ -466,7 +468,7 @@
           <div class="monitor brackets">
             <div class="monitor-bar" aria-hidden="true"><span class="label"><span class="live"></span>Session live</span><span>3 peers</span></div>
             <a href="screenshots/dashboard.png">
-              <img src="screenshots/dashboard.png" width="1898" height="870" alt="SyncCrate dashboard showing the session overview, the sync plan and connected peers">
+              <img src="screenshots/dashboard.png" width="1896" height="870" alt="SyncCrate dashboard showing the session overview, the sync plan and connected peers">
             </a>
           </div>
         </div>
@@ -561,7 +563,7 @@
               <li>12 tags, drag &amp; drop install, pack/DLC detection</li>
               <li>Duplicate finder</li>
             </ul>
-            <div class="shot"><img src="screenshots/content.png" width="1892" height="867" loading="lazy" alt="Content browser listing installed mods with tags and enable toggles"></div>
+            <div class="shot"><img src="screenshots/content.png" width="1896" height="870" loading="lazy" alt="Content browser listing installed mods with tags and enable toggles"></div>
           </article>
 
           <article class="tile t-safe cut reveal">
@@ -572,7 +574,29 @@
               <li>Share a setup as a <code>.synccrate-profile</code> on Discord</li>
               <li>Flags risky scripts (<code>.ts4script</code>, <code>.lua</code>, <code>.jar</code>, <code>.dll</code>)</li>
             </ul>
-            <div class="shot"><img src="screenshots/profiles.png" width="1897" height="867" loading="lazy" alt="Profiles screen with saved mod setups ready to share or restore"></div>
+            <div class="shot"><img src="screenshots/profiles.png" width="1896" height="870" loading="lazy" alt="Profiles screen with saved mod setups ready to share or restore"></div>
+          </article>
+
+          <article class="tile t-library cut reveal">
+            <p class="label"><b>Library</b> Every game, real art</p>
+            <h3>Find your game in seconds.</h3>
+            <ul class="ticks">
+              <li>Official box art for all 100 games</li>
+              <li>Filter by genre, installed or in library</li>
+              <li>Grid or list view, set your own cover</li>
+            </ul>
+            <div class="shot"><img src="screenshots/browser.png" width="1896" height="870" loading="lazy" alt="Game browser with official box art, genre filters and status tabs"></div>
+          </article>
+
+          <article class="tile t-look cut reveal">
+            <p class="label"><b>Appearance</b> Make it yours</p>
+            <h3>Your colors, your layout.</h3>
+            <ul class="ticks">
+              <li>Pick any accent color, or match each game</li>
+              <li>Dark, light or follow Windows</li>
+              <li>UI scale, compact mode, calm mode</li>
+            </ul>
+            <div class="shot"><img src="screenshots/appearance.png" width="1896" height="870" loading="lazy" alt="Appearance settings with accent color swatches and a live preview"></div>
           </article>
 
           <article class="tile t-connect cut reveal">
