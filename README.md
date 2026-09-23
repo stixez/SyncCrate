@@ -5,7 +5,7 @@
 <h1 align="center">SyncCrate</h1>
 
 <p align="center">
-  <strong>The easiest way for friends to keep modded games perfectly in sync.</strong>
+  <strong>Same mods on every PC, for co-op squads and LAN parties.</strong>
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 ---
 
-Playing modded games with friends usually means passing zip files around until someone has the wrong version. **SyncCrate compares your game folders and copies only the files that differ, straight from PC to PC at LAN speed.** No cloud, no accounts, no tracking.
+One mismatched mod and nobody can join. **SyncCrate makes every PC match the host by copying only the files that differ, straight from PC to PC.** At a LAN party one PC feeds the whole room at 100–900 MB/s, no internet needed; from home, friends join with one code. Works for 100 games, from Valheim and Lethal Company to Minecraft and The Sims 4. No cloud, no accounts, no tracking.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" width="100%" alt="SyncCrate dashboard: session overview, sync plan and connected peers">
