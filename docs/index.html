@@ -3,19 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SyncCrate — Keep Your Friends' Modded Games in Sync</title>
-  <meta name="description" content="Free, open-source desktop app that keeps game mods, addons, saves and settings in sync between friends. Peer-to-peer, on your network or across the internet with one join code. 100 games supported. No cloud, no accounts.">
+  <title>SyncCrate — Same Mods on Every PC for Co-op and LAN Parties</title>
+  <meta name="description" content="Free, open-source desktop app that makes every PC in your co-op squad or LAN party match the host's mods, saves and configs. Only the files that differ are copied, PC to PC: 100–900 MB/s on LAN with no internet needed, or one join code across the internet. 100 games. No cloud, no accounts.">
   <meta property="og:title" content="SyncCrate — Same Mods. Every PC.">
-  <meta property="og:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
+  <meta property="og:description" content="Mismatched mods mean nobody can join. SyncCrate makes every PC match the host, peer-to-peer: LAN-speed at a LAN party, one join code over the internet. 100 games. No cloud, no accounts.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://stixez.github.io/SyncCrate/social-preview.png">
   <meta property="og:url" content="https://stixez.github.io/SyncCrate">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="SyncCrate — Same Mods. Every PC.">
-  <meta name="twitter:description" content="Sync game mods, addons, saves and settings with friends, peer-to-peer. Join from anywhere with one code. 100 games supported. No cloud, no accounts.">
+  <meta name="twitter:description" content="Mismatched mods mean nobody can join. SyncCrate makes every PC match the host, peer-to-peer: LAN-speed at a LAN party, one join code over the internet. 100 games. No cloud, no accounts.">
   <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/social-preview.png">
   <meta name="theme-color" content="#07090b">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icon.svg?v=2" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -273,6 +275,53 @@
     .sims-rows h3 { font-size: 1.3rem; margin-bottom: 8px; }
     .sims-rows p { color: var(--dim); font-size: .95rem; }
 
+    /* ---------- spotlight tabs ---------- */
+    .spot-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 40px; }
+    .spot-tab {
+      display: flex; align-items: baseline; gap: 10px; text-align: left; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--line-hi); color: var(--dim);
+      font: 600 1rem var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 16px 18px;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .spot-tab small { font: 500 .72rem var(--mono); color: var(--muted); letter-spacing: .1em; }
+    .spot-tab:hover { color: var(--text); border-color: var(--neon); }
+    .spot-tab[aria-selected="true"] { color: var(--neon); border-color: var(--neon); background: var(--neon-dim); box-shadow: inset 0 -2px 0 var(--neon); }
+    .spot-tab[aria-selected="true"] small { color: var(--neon); }
+    .spot-tab:focus-visible { outline-offset: -5px; }
+    .spot-panel[hidden] { display: none; }
+    .spot-panel:focus-visible { outline-offset: 8px; }
+    .spot-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: start; }
+    .spot-card { --cut: 18px; display: flex; flex-direction: column; }
+    .spot-vis { position: relative; aspect-ratio: 16 / 11; overflow: hidden; }
+    /* mask the whole visual (art + scanlines) so it melts into the card instead of ending on a hard edge */
+    .spot-vis { -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 92%); mask-image: linear-gradient(180deg, #000 30%, transparent 92%); }
+    .spot-vis.is-lan { -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%); mask-image: linear-gradient(180deg, #000 72%, transparent 100%); }
+    /* dimmed, masked backdrop, same treatment as the app's game hero */
+    .spot-vis img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .5; filter: saturate(.85) contrast(1.05); }
+    .spot-vis::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 70% at 0% 100%, rgba(76,240,178,.14), transparent 60%), repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
+    .spot-trio { position: absolute; inset: 0; display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; }
+        .spot-trio img { position: relative; }
+    .spot-trio img:first-child { grid-row: span 2; }
+    .spot-vis svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .spot-body { padding: 0 28px 28px; margin-top: -56px; position: relative; z-index: 1; }
+    .spot-title { font-size: clamp(2.6rem, 5.4vw, 4.4rem); line-height: .88; }
+    .spot-body .lede { font-size: 1rem; margin-top: 16px; }
+    .spot-games { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+    .spot-games span { font: 500 .7rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); border: 1px solid var(--line-hi); padding: 4px 8px; }
+    /* LAN illustration */
+    .lan .gl { stroke: var(--line); stroke-width: 1; fill: none; }
+    .lan .lk { fill: none; stroke: var(--line-hi); stroke-width: 1.5; stroke-dasharray: 4 5; }
+    .lan .lk.on { stroke: var(--neon); stroke-dasharray: 8 7; animation: flow 1s linear infinite; }
+    @keyframes flow { to { stroke-dashoffset: -15; } }
+    .lan .node { fill: var(--surface); stroke: var(--line-hi); stroke-width: 1; }
+    .lan .node.host { stroke: var(--neon); fill: #0c1a15; }
+    .lan text { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; fill: var(--dim); }
+    .lan .big { font-family: var(--display); font-weight: 700; font-size: 17px; fill: var(--text); letter-spacing: .1em; }
+    .lan .ok { fill: var(--neon); }
+    .lan .wait { fill: var(--amber); }
+    .lan .spd { fill: var(--neon); font-size: 9px; }
+
     /* ---------- games ---------- */
     .games-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 56px; align-items: start; }
     .stats { display: grid; gap: 28px; position: sticky; top: 100px; }
@@ -384,7 +433,7 @@
       .nav a { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 1rem; }
       .nav .btn { margin-top: 14px; border: 0; padding: 14px; }
       .hero { padding-top: 56px; }
-      .hero-grid, .join-grid, .sims-grid, .faq-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+      .hero-grid, .join-grid, .sims-grid, .spot-grid, .faq-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
       .monitor, .monitor:hover { transform: rotateY(-6deg) rotateX(2deg); }
       .games-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
       .stats { position: static; grid-template-columns: 1fr 1fr; }
@@ -412,6 +461,9 @@
       .wire { margin-left: 32px; }
       .stat-value { font-size: 3.6rem; }
       .sims-rows li { grid-template-columns: 40px 1fr; gap: 12px; }
+      .spot-tabs { grid-template-columns: 1fr 1fr; margin-bottom: 28px; }
+      .spot-tab { padding: 13px 12px; font-size: .9rem; }
+      .spot-body { padding: 0 20px 22px; margin-top: -40px; }
       .step::before { font-size: 4rem; }
     }
 
@@ -428,7 +480,7 @@
   <header class="header">
     <div class="wrap">
       <a class="brand" href="#top" aria-label="SyncCrate home">
-        <img src="icon.svg" alt="" width="30" height="30">SyncCrate
+        <img src="icon.svg?v=2" alt="" width="30" height="30">SyncCrate
       </a>
       <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav" aria-label="Open menu">
         <span></span><span></span><span></span>
@@ -436,7 +488,7 @@
       <nav class="nav" id="nav" aria-label="Primary">
         <a href="#features">Features</a>
         <a href="#games">Games</a>
-        <a href="#sims">Sims 4</a>
+        <a href="#spotlight">Spotlight</a>
         <a href="#faq">FAQ</a>
         <a href="https://github.com/stixez/SyncCrate">GitHub</a>
         <a class="btn btn-primary" href="https://github.com/stixez/SyncCrate/releases/latest">Download</a>
@@ -449,9 +501,9 @@
     <section class="hero" id="top">
       <div class="wrap hero-grid">
         <div>
-          <p class="label"><span class="live" aria-hidden="true"></span><b>v0.5.0</b> Join from anywhere with one code</p>
+          <p class="label"><span class="live" aria-hidden="true"></span><b>v0.5.0</b> Built for co-op squads &amp; LAN parties</p>
           <h1><span class="ln">Same mods.</span> <span class="ln hl">Every PC.</span> <span class="ln out">No excuses.</span></h1>
-          <p class="lede">SyncCrate compares your game folders with your friends' and copies only what's different, straight from PC to PC. Mods, saves, addons and configs, for 100 games. No cloud, no accounts.</p>
+          <p class="lede">One mismatched mod and nobody can join. SyncCrate makes every PC match the host, copying only the files that differ, PC to PC. At a LAN party one PC feeds the whole room at LAN speed, even with no internet. From home, it's one join code. No cloud, no accounts.</p>
           <div class="cta-row">
             <a class="btn btn-primary" href="https://github.com/stixez/SyncCrate/releases/latest">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
@@ -462,7 +514,7 @@
               View source
             </a>
           </div>
-          <p class="trust"><span>Free</span><span>Open source</span><span>No accounts</span><span>Win · macOS · Linux</span></p>
+          <p class="trust"><span>Free</span><span>Open source</span><span>LAN works offline</span><span>Win · macOS · Linux</span></p>
         </div>
         <div class="monitor-wrap">
           <div class="monitor brackets">
@@ -487,7 +539,7 @@
           <ul class="specs">
             <li><strong>Direct</strong><span>PC to PC whenever possible, punching through home routers (powered by iroh).</span></li>
             <li><strong>Fallback</strong><span>If a direct link can't be made, an encrypted relay forwards data it can't read. Files are never stored anywhere.</span></li>
-            <li><strong>LAN</strong><span>On the same network the fast local connection is used automatically. Reconnecting is one click.</span></li>
+            <li><strong>LAN</strong><span>On the same network the fast local connection is used automatically, and Scan for Hosts finds the host with no internet at all. Reconnecting is one click.</span></li>
           </ul>
           <p class="tip"><strong>TIP</strong><span>Anyone with your code can join. Posting it publicly? Turn on <em>Use PIN</em>.</span></p>
         </div>
@@ -534,11 +586,11 @@
               <div class="num">50–80%<small>less data</small></div>
             </div>
             <div class="diff" aria-label="Example sync plan">
-              <div><span class="a">+ add</span><span class="p">Mods/UI_Cheats_Extension.ts4script</span><span class="s">1.2 MB</span></div>
-              <div><span class="m">~ upd</span><span class="p">Mods/MCCC/mc_settings.cfg</span><span class="s">14 KB</span></div>
-              <div><span class="a">+ add</span><span class="p">Mods/CC/hair_long_waves.package</span><span class="s">8.6 MB</span></div>
-              <div><span class="m">~ upd</span><span class="p">Saves/Slot_00000003.save</span><span class="s">22 MB</span></div>
-              <div><span class="k">= same</span><span class="p">1,204 files identical, skipped</span><span class="s">4.1 GB</span></div>
+              <div><span class="a">+ add</span><span class="p">BepInEx/plugins/MoreCompany/MoreCompany.dll</span><span class="s">1.1 MB</span></div>
+              <div><span class="m">~ upd</span><span class="p">BepInEx/config/MoreCompany.cfg</span><span class="s">3 KB</span></div>
+              <div><span class="a">+ add</span><span class="p">BepInEx/plugins/LethalThings/LethalThings.dll</span><span class="s">6.8 MB</span></div>
+              <div><span class="m">~ upd</span><span class="p">BepInEx/config/BepInEx.cfg</span><span class="s">5 KB</span></div>
+              <div><span class="k">= same</span><span class="p">1,204 files identical, skipped</span><span class="s">2.3 GB</span></div>
             </div>
           </article>
 
@@ -603,7 +655,7 @@
             <div class="c-copy">
               <p class="label"><b>Connect</b> Finds each other</p>
               <h3 style="margin-top:12px">One host. The whole squad.</h3>
-              <p style="margin-top:10px">Every friend syncs independently, and the host decides which folders are shared.</p>
+              <p style="margin-top:10px">Every friend syncs independently, and the host decides which folders are shared. On a LAN it all works without an internet connection.</p>
             </div>
             <ul class="ticks">
               <li>Auto-discovery via mDNS + UDP broadcast</li>
@@ -618,20 +670,131 @@
       </div>
     </section>
 
-    <!-- SIMS 4 -->
-    <section class="section sims" id="sims">
-      <div class="wrap sims-grid">
+    <!-- SPOTLIGHT -->
+    <section class="section sims" id="spotlight">
+      <div class="wrap">
         <div class="reveal">
-          <p class="label"><b>// 03</b> Spotlight</p>
-          <h2 class="sims-title">The Sims <span class="four">4</span></h2>
-          <p class="lede" style="margin-top:24px">The game with the most CC on earth gets extra care.</p>
+          <div class="sec-head" style="margin-bottom:40px">
+            <p class="label"><b>// 03</b> Spotlight</p>
+            <h2>However your<br>squad <span class="hl">plays.</span></h2>
+          </div>
+          <div class="spot-tabs" role="tablist" aria-label="Spotlight">
+            <button class="spot-tab" type="button" role="tab" id="tab-lan" aria-controls="panel-lan" aria-selected="true" tabindex="0"><small>01</small>LAN party</button>
+            <button class="spot-tab" type="button" role="tab" id="tab-coop" aria-controls="panel-coop" aria-selected="false" tabindex="-1"><small>02</small>Co-op survival</button>
+            <button class="spot-tab" type="button" role="tab" id="tab-mc" aria-controls="panel-mc" aria-selected="false" tabindex="-1"><small>03</small>Minecraft</button>
+            <button class="spot-tab" type="button" role="tab" id="tab-sims" aria-controls="panel-sims" aria-selected="false" tabindex="-1"><small>04</small>The Sims 4</button>
+          </div>
+
+          <!-- LAN PARTY -->
+          <div class="spot-panel" role="tabpanel" id="panel-lan" aria-labelledby="tab-lan" tabindex="0">
+            <div class="spot-grid">
+              <div class="spot-card cut">
+                <div class="spot-vis is-lan">
+                  <svg class="lan" viewBox="0 0 480 350" preserveAspectRatio="xMidYMin meet" role="img" aria-label="Illustration: one host PC on the local network, with five friends' PCs syncing from it independently">
+                    <defs><pattern id="lan-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path class="gl" d="M24 0H0V24"/></pattern></defs>
+                    <rect width="480" height="350" fill="url(#lan-grid)" opacity=".45"/>
+                    <path class="lk" d="M128 150 C 220 150 230 38 312 38"/>
+                    <path class="lk on" d="M128 150 C 220 150 230 92 312 92"/>
+                    <path class="lk" d="M128 150 L 312 146"/>
+                    <path class="lk on" d="M128 150 C 220 150 230 200 312 200"/>
+                    <path class="lk" d="M128 150 C 220 150 230 254 312 254"/>
+                    <text class="spd" x="250" y="80">412 MB/S</text>
+                    <text class="spd" x="250" y="222">305 MB/S</text>
+                    <rect class="node host" x="20" y="112" width="108" height="76"/>
+                    <circle class="ok" cx="36" cy="132" r="4"/>
+                    <text x="46" y="136" class="ok">HOSTING</text>
+                    <text x="32" y="162" class="big">HOST</text>
+                    <text x="32" y="178">ALEX-PC</text>
+                    <g><rect class="node" x="312" y="20" width="148" height="36"/><text x="324" y="35">SAM-PC</text><text x="324" y="49" class="ok">SYNCED</text></g>
+                    <g><rect class="node" x="312" y="74" width="148" height="36"/><text x="324" y="89">JO-LAPTOP</text><text x="324" y="103" class="ok">SYNCING 61%</text></g>
+                    <g><rect class="node" x="312" y="128" width="148" height="36"/><text x="324" y="143">RIG-03</text><text x="324" y="157" class="ok">SYNCED</text></g>
+                    <g><rect class="node" x="312" y="182" width="148" height="36"/><text x="324" y="197">MAYA-PC</text><text x="324" y="211" class="ok">SYNCING 24%</text></g>
+                    <g><rect class="node" x="312" y="236" width="148" height="36"/><text x="324" y="251">BEN-DESK</text><text x="324" y="265" class="wait">COMPARING</text></g>
+                    <text x="20" y="34">LOCAL NETWORK · NO INTERNET</text>
+                  </svg>
+                </div>
+                <div class="spot-body">
+                  <h3 class="spot-title">LAN <span class="hl">party</span></h3>
+                  <p class="lede">Bring the PCs, not the zip files. One PC hosts, the rest of the room pulls from it.</p>
+                </div>
+              </div>
+              <ol class="sims-rows">
+                <li><span class="n">01</span><div><h3>LAN speed</h3><p>100–900 MB/s PC to PC on the local network, and only the files that differ are sent. A fresh 20 GB mod folder takes minutes, not the evening.</p></div></li>
+                <li><span class="n">02</span><div><h3>No internet? No problem</h3><p>Hosts are found by mDNS and UDP broadcast, so Scan for Hosts works on a switch with nothing plugged into the wall. Connect by IP if discovery is blocked.</p></div></li>
+                <li><span class="n">03</span><div><h3>One host, the whole room</h3><p>Every friend syncs from the same host, independently, whenever they sit down. The host decides which folders are shared.</p></div></li>
+                <li><span class="n">04</span><div><h3>Identical before the first match</h3><p>Everyone ends up matching the host, every file hash-verified on arrival. No mod mismatch screen when the lobby opens.</p></div></li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- CO-OP SURVIVAL -->
+          <div class="spot-panel" role="tabpanel" id="panel-coop" aria-labelledby="tab-coop" tabindex="0" hidden>
+            <div class="spot-grid">
+              <div class="spot-card cut">
+                <div class="spot-vis">
+                  <div class="spot-trio">
+                    <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/892970/library_hero.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1966720/library_hero.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3241660/library_hero.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">
+                  </div>
+                </div>
+                <div class="spot-body">
+                  <h3 class="spot-title">Co-op <span class="hl">survival</span></h3>
+                  <p class="lede">Modded co-op only works when everyone runs the same mods. Match the host and get in the game.</p>
+                  <div class="spot-games"><span>Valheim</span><span>Lethal Company</span><span>R.E.P.O.</span><span>7 Days to Die</span><span>Project Zomboid</span></div>
+                </div>
+              </div>
+              <ol class="sims-rows">
+                <li><span class="n">01</span><div><h3>Match the host, join the lobby</h3><p>Different mods on different PCs means failed joins, desyncs and missing items. Sync to the host first and everyone plays the same game.</p></div></li>
+                <li><span class="n">02</span><div><h3>The right folders, found for you</h3><p>BepInEx plugins and configs for Valheim, Lethal Company and R.E.P.O. Mods and saves for 7 Days to Die and Project Zomboid.</p></div></li>
+                <li><span class="n">03</span><div><h3>Script warnings</h3><p><code>.dll</code> plugins run code on your PC, so they're flagged before they land. Only sync with people you trust.</p></div></li>
+                <li><span class="n">04</span><div><h3>Mod updates in seconds</h3><p>Host updated a plugin? Friends sync again and get only the changed files, not the whole pack.</p></div></li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- MINECRAFT -->
+          <div class="spot-panel" role="tabpanel" id="panel-mc" aria-labelledby="tab-mc" tabindex="0" hidden>
+            <div class="spot-grid">
+              <div class="spot-card cut">
+                <div class="spot-vis">
+                  <img src="https://store-images.s-microsoft.com/image/apps.58378.14492077886571533.338a563a-86e7-47b1-b9dc-41cf411f5dcd.dc840f22-6e8f-4a59-b7bc-57958a0740fd" alt="" loading="lazy" referrerpolicy="no-referrer">
+                </div>
+                <div class="spot-body">
+                  <h3 class="spot-title">Mine<span class="hl">craft</span></h3>
+                  <p class="lede">Modpack night without walking every friend through the install. Java Edition.</p>
+                </div>
+              </div>
+              <ol class="sims-rows">
+                <li><span class="n">01</span><div><h3>Mods</h3><p>The host's <code>mods</code> folder on every PC: same jars, same versions.</p></div></li>
+                <li><span class="n">02</span><div><h3>Resource &amp; shader packs</h3><p>Everyone sees the same textures and the same shaders.</p></div></li>
+                <li><span class="n">03</span><div><h3>Worlds</h3><p>Hand a single-player world to a friend, or give everyone a copy of last weekend's build.</p></div></li>
+                <li><span class="n">04</span><div><h3>Jar warnings</h3><p><code>.jar</code> mods run code, so they're flagged for review before they arrive.</p></div></li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- THE SIMS 4 -->
+          <div class="spot-panel" role="tabpanel" id="panel-sims" aria-labelledby="tab-sims" tabindex="0" hidden>
+            <div class="spot-grid">
+              <div class="spot-card cut">
+                <div class="spot-vis">
+                  <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1222670/library_hero.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">
+                </div>
+                <div class="spot-body">
+                  <h3 class="spot-title">The Sims <span class="hl">4</span></h3>
+                  <p class="lede">The game with the most CC on earth gets extra care.</p>
+                </div>
+              </div>
+              <ol class="sims-rows">
+                <li><span class="n">01</span><div><h3>ReShade &amp; GShade presets</h3><p>Add <em>The Sims 4 (ReShade)</em> or <em>(GShade)</em> and everyone's game looks the same. Detected in <code>Game\Bin</code> on EA App, Origin and Steam. Your own <code>ReShade.ini</code> / <code>GShade.ini</code> is never synced.</p></div></li>
+                <li><span class="n">02</span><div><h3>Disabling that sticks</h3><p>The game loads mods from subfolders, so disabled mods are renamed to <code>.disabled</code> instead of moved. Leftovers in an old <code>_Disabled</code> folder are fixed in one click.</p></div></li>
+                <li><span class="n">03</span><div><h3>Fresh thumbnails, patch-day warnings</h3><p>The thumbnail cache is cleared after new mods arrive, and outdated script mods are flagged after a game update.</p></div></li>
+                <li><span class="n">04</span><div><h3>Big CC folders</h3><p>Browse by creator folder and enable or disable a whole folder at once. Handles 20,000+ files smoothly.</p></div></li>
+              </ol>
+            </div>
+          </div>
         </div>
-        <ol class="sims-rows reveal">
-          <li><span class="n">01</span><div><h3>ReShade &amp; GShade presets</h3><p>Add <em>The Sims 4 (ReShade)</em> or <em>(GShade)</em> and everyone's game looks the same. Detected in <code>Game\Bin</code> on EA App, Origin and Steam. Your own <code>ReShade.ini</code> / <code>GShade.ini</code> is never synced.</p></div></li>
-          <li><span class="n">02</span><div><h3>Disabling that sticks</h3><p>The game loads mods from subfolders, so disabled mods are renamed to <code>.disabled</code> instead of moved. Leftovers in an old <code>_Disabled</code> folder are fixed in one click.</p></div></li>
-          <li><span class="n">03</span><div><h3>Fresh thumbnails</h3><p>The thumbnail cache is cleared automatically after new mods arrive.</p></div></li>
-          <li><span class="n">04</span><div><h3>Patch-day warnings</h3><p>Outdated script mods are flagged after a game update.</p></div></li>
-        </ol>
       </div>
     </section>
 
@@ -811,6 +974,14 @@
         </div>
         <div class="faq-list reveal">
           <details>
+            <summary>Does it work at a LAN party with no internet?</summary>
+            <div class="ans"><p>Yes. On a local network SyncCrate finds hosts with mDNS and UDP broadcast and syncs PC to PC at 100–900 MB/s, no internet connection needed. Friends pick the host under <strong>Scan for Hosts</strong>, or use <strong>Connect by IP</strong>. Join codes are for connecting over the internet.</p><p>If a PC can't see the host, it's almost always Windows Firewall: see the next answer.</p></div>
+          </details>
+          <details>
+            <summary>How many friends can sync from one host?</summary>
+            <div class="ans"><p>There's no fixed limit. Each friend syncs from the host independently, whenever they're ready, so people can join halfway through the evening.</p><p>The host's upload is the bottleneck: friends syncing at the same time share it. For a big LAN party, sync in waves or have people sync before they arrive.</p></div>
+          </details>
+          <details>
             <summary>My friend can't connect</summary>
             <div class="ans"><p>It's almost always Windows Firewall. On the host PC click <strong>Fix Windows Firewall</strong> (shown while hosting and in Network Check), then use <strong>Test</strong> in Network Check. SyncCrate uses TCP port 9847 for sessions and UDP port 47625 for discovery.</p></div>
           </details>
@@ -858,8 +1029,8 @@
   <footer>
     <div class="wrap foot">
       <div>
-        <a class="brand" href="#top"><img src="icon.svg" alt="" width="30" height="30">SyncCrate</a>
-        <small>MIT License · Made for game nights</small>
+        <a class="brand" href="#top"><img src="icon.svg?v=2" alt="" width="30" height="30">SyncCrate</a>
+        <small>MIT License · Made for game nights and LAN parties</small>
       </div>
       <nav class="foot-links" aria-label="Footer">
         <a href="https://github.com/stixez/SyncCrate">GitHub</a>
@@ -952,6 +1123,29 @@
         count.textContent = '';
       }
       noMatch.style.display = q && hits === 0 ? 'block' : 'none';
+    });
+
+    // Spotlight tabs. Panels 2-4 ship with `hidden`, so without JS the first tab still shows.
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.spot-tab'));
+    function selectTab(t, focus) {
+      tabs.forEach(function (x) {
+        var on = x === t;
+        x.setAttribute('aria-selected', String(on));
+        x.tabIndex = on ? 0 : -1;
+        document.getElementById(x.getAttribute('aria-controls')).hidden = !on;
+      });
+      if (focus) t.focus();
+    }
+    // Deep links like #tab-sims open that tab.
+    tabs.forEach(function (t) { if (location.hash === '#' + t.id) selectTab(t, false); });
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { selectTab(t, false); });
+      t.addEventListener('keydown', function (e) {
+        var j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+        if (j === undefined) return;
+        e.preventDefault();
+        selectTab(tabs[(j + tabs.length) % tabs.length], true);
+      });
     });
 
     // Join-code demo
