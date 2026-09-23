@@ -6,7 +6,7 @@ import { GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
 import { toastSuccess } from "../lib/toast";
 import type { GameDefinition } from "../lib/types";
-import { Button, EmptyState, Input, SectionHeader, cx } from "./ui";
+import { Button, EmptyState, GameArt, Input, SectionHeader, cx } from "./ui";
 
 export default function GameBrowser() {
   const gameRegistry = useAppStore((s) => s.gameRegistry);
@@ -154,18 +154,24 @@ function GameTile({
         inLibrary ? "panel-accent" : "hover:[--panel-line:rgb(var(--color-line-hi))]",
       )}
     >
-      {/* Art strip: tinted field with the game glyph, like a launcher cover */}
-      <div className="relative h-[88px] overflow-hidden mx-px mt-px border-b border-border bg-bg [clip-path:polygon(calc(var(--cut)-1px)_0,100%_0,100%_100%,0_100%,0_calc(var(--cut)-1px))]">
-        <div className="absolute inset-0 opacity-[0.22] bg-[radial-gradient(120%_90%_at_85%_0%,var(--tile),transparent_70%)] group-hover:opacity-35 transition-opacity" />
-        <div className="absolute inset-0 opacity-40 bg-[repeating-linear-gradient(135deg,transparent_0_9px,rgb(var(--color-border)/0.5)_9px_10px)]" />
+      {/* Art strip: the game's Steam banner (or a custom cover); games without art
+          keep the generated tile, tinted with the registry color. */}
+      <div className="relative aspect-[460/215] overflow-hidden mx-px mt-px border-b border-border bg-bg [clip-path:polygon(calc(var(--cut)-1px)_0,100%_0,100%_100%,0_100%,0_calc(var(--cut)-1px))]">
+        <GameArt
+          gameId={game.id}
+          kind="header"
+          className="absolute inset-0"
+          imgClassName="saturate-[0.85] group-hover:saturate-100 group-hover:scale-[1.04] !transition-[opacity,transform,filter] !duration-500"
+          fallback={<GeneratedCover game={game} />}
+        >
+          {/* Fade into the card and add faint scanlines so photos sit inside the HUD */}
+          <div className="absolute inset-0 bg-gradient-to-t from-bg-card via-bg-card/10 to-transparent" />
+          <div className="absolute inset-0 opacity-30 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.35)_2px_3px)]" />
+        </GameArt>
         <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--tile)]" />
-        <GameIcon iconName={game.icon} size={64} className={cx("absolute -right-2 -bottom-3 opacity-25", game.color)} />
-        <div className="absolute left-4 top-4 w-10 h-10 grid place-items-center border border-line-hi bg-bg-card/90">
-          <GameIcon iconName={game.icon} size={20} className={game.color} />
-        </div>
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
-          {inLibrary && <span className="tag text-neon bg-bg/80"><Check size={9} />Library</span>}
-          {detected && <span className="tag text-status-green bg-bg/80"><Radar size={9} />Detected</span>}
+          {inLibrary && <span className="tag text-neon bg-bg/85 backdrop-blur-sm"><Check size={9} />Library</span>}
+          {detected && <span className="tag text-status-green bg-bg/85 backdrop-blur-sm"><Radar size={9} />Detected</span>}
         </div>
       </div>
 
@@ -192,6 +198,27 @@ function GameTile({
             </Button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Poster-style cover for games without Steam art (WoW, Minecraft, ...): the
+ * title set large in the display face over a tinted HUD grid, so these tiles
+ * look designed next to real box art instead of empty.
+ */
+function GeneratedCover({ game }: { game: GameDefinition }) {
+  return (
+    <div className="absolute inset-0">
+      <div className="absolute inset-0 opacity-[0.35] bg-[radial-gradient(110%_120%_at_100%_0%,var(--tile),transparent_65%)] group-hover:opacity-50 transition-opacity" />
+      <div className="absolute inset-0 opacity-60 bg-[linear-gradient(rgb(var(--color-border)/0.55)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--color-border)/0.55)_1px,transparent_1px)] bg-[size:18px_18px]" />
+      <GameIcon iconName={game.icon} size={96} className={cx("absolute -right-3 -bottom-5 opacity-20 group-hover:opacity-30 transition-opacity", game.color)} />
+      <div className="absolute left-4 right-10 bottom-3">
+        <GameIcon iconName={game.icon} size={16} className={cx("mb-1.5", game.color)} />
+        <p className="font-display font-bold uppercase leading-[0.95] tracking-[0.02em] text-[22px] text-txt line-clamp-2 [text-shadow:0_0_24px_var(--tile)]">
+          {game.label}
+        </p>
       </div>
     </div>
   );

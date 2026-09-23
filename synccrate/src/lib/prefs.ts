@@ -6,6 +6,7 @@ import type { SyncFolderPermissions } from "./types";
 const NAME_KEY = "synccrate-display-name";
 const USE_PIN_KEY = "synccrate-host-use-pin";
 const FOLDER_PERMS_KEY = "synccrate-folder-perms";
+const GAME_ART_KEY = "synccrate-game-art";
 
 function read(key: string): string | null {
   try {
@@ -58,4 +59,13 @@ export function saveFolderPerms(gameId: string, perms: SyncFolderPermissions) {
   const all = loadAllFolderPerms();
   all[gameId] = perms;
   write(FOLDER_PERMS_KEY, JSON.stringify(all));
+}
+
+/** Show game artwork (downloaded from Steam on first use). On by default. */
+export function loadShowGameArt(): boolean {
+  return read(GAME_ART_KEY) !== "0";
+}
+
+export function saveShowGameArt(show: boolean) {
+  write(GAME_ART_KEY, show ? "1" : "0");
 }

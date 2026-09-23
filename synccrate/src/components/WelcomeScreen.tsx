@@ -4,7 +4,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { BrandMark, GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
 import type { GameDefinition } from "../lib/types";
-import { Button, Input, LiveDot, cx } from "./ui";
+import { Button, GameArt, Input, LiveDot, cx } from "./ui";
 
 const ONBOARDING_KEY = "synccrate-onboarding-complete";
 
@@ -126,7 +126,20 @@ export default function WelcomeScreen() {
         <span className={cx("check pointer-events-none", isSelected && "!bg-neon !border-neon")} aria-hidden="true">
           {isSelected && <Check size={10} strokeWidth={3.5} className="text-neon-ink" />}
         </span>
-        <GameIcon iconName={game.icon} size={15} className={cx("shrink-0", game.color)} />
+        {/* Art only for detected games: the full list would download ~100 images on first run */}
+        {isDetected ? (
+          <span className="relative overflow-hidden w-6 h-6 shrink-0 grid place-items-center border border-border bg-bg-card">
+            <GameArt
+              gameId={game.id}
+              kind="cover"
+              className="absolute inset-0"
+              imgClassName="object-[50%_22%]"
+              fallback={<GameIcon iconName={game.icon} size={14} className={game.color} />}
+            />
+          </span>
+        ) : (
+          <GameIcon iconName={game.icon} size={15} className={cx("shrink-0", game.color)} />
+        )}
         <span className="truncate flex-1">{game.label}</span>
         {isDetected && <span className="tag text-status-green shrink-0">Found</span>}
       </button>

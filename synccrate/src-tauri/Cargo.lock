@@ -5635,6 +5635,8 @@ dependencies = [
  "notify",
  "rand 0.8.5",
  "rayon",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",

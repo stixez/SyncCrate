@@ -43,7 +43,7 @@ import { gamePrimaryColor } from "../lib/games";
 import { applyGameTheme } from "../lib/theme";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
-import { LiveDot, cx } from "./ui";
+import { GameArt, LiveDot, cx } from "./ui";
 
 const ICON_MAP: Record<string, typeof Gamepad2> = {
   "gamepad-2": Gamepad2,
@@ -236,7 +236,7 @@ export default function Sidebar() {
                   >
                     <span
                       className={cx(
-                        "cut w-8 h-8 shrink-0 grid place-items-center border transition-colors",
+                        "cut relative overflow-hidden w-8 h-8 shrink-0 grid place-items-center border transition-colors",
                         isSelected ? "bg-bg" : "bg-bg-card group-hover:bg-bg",
                       )}
                       style={{
@@ -245,7 +245,13 @@ export default function Sidebar() {
                         borderColor: isSelected && color ? color : "rgb(var(--color-border))",
                       }}
                     >
-                      <GameIcon iconName={game.icon} size={16} />
+                      <GameArt
+                        gameId={game.id}
+                        kind="cover"
+                        className="absolute inset-0"
+                        imgClassName={cx("object-[50%_22%]", !isSelected && "saturate-50 group-hover:saturate-100")}
+                        fallback={<GameIcon iconName={game.icon} size={16} />}
+                      />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium leading-tight">{game.label}</span>

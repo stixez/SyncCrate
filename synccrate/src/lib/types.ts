@@ -241,6 +241,8 @@ export interface GameDefinition {
   icon: string;
   color: string;
   primary_color: string;
+  /** Steam app id for store artwork; absent for non-Steam games. */
+  steam_app_id?: number;
   auto_detect: boolean;
   detection?: DetectionConfig;
   validation?: ValidationConfig;

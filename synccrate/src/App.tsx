@@ -130,7 +130,7 @@ function App() {
       const demoRegistry = [
         {
           id: "sims4", label: "The Sims 4", family: "sims", icon: "gamepad-2",
-          color: "text-accent-light", primary_color: "#1fb87e", auto_detect: true,
+          color: "text-accent-light", primary_color: "#1fb87e", steam_app_id: 1222670, auto_detect: true,
           content_types: [
             { id: "mods", label: "Script Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: ["package", "ts4script", "zip"], file_type: "CustomContent", classify_by_extension: { ts4script: "Mod", zip: "Mod" }, syncable: true },
             { id: "saves", label: "Save Files", icon: "save", color: "text-status-green", folder: "Saves", extensions: [], file_type: "Save", syncable: true },
@@ -159,6 +159,14 @@ function App() {
           ],
           dangerous_script_extensions: [], legacy_id: "WowRetail",
         },
+        { id: "stardew_valley", label: "Stardew Valley", family: "stardew", icon: "sprout", color: "text-accent-light", primary_color: "#4ade80", steam_app_id: 413150, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "valheim", label: "Valheim", family: "valheim", icon: "axe", color: "text-accent-light", primary_color: "#f59e0b", steam_app_id: 892970, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "baldurs_gate_3", label: "Baldur's Gate 3", family: "larian", icon: "dice-5", color: "text-accent-light", primary_color: "#b91c1c", steam_app_id: 1086940, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "cyberpunk2077", label: "Cyberpunk 2077", family: "cyberpunk", icon: "cpu", color: "text-accent-light", primary_color: "#facc15", steam_app_id: 1091500, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "skyrim_se", label: "Skyrim Special Edition", family: "skyrim", icon: "mountain", color: "text-accent-light", primary_color: "#94a3b8", steam_app_id: 489830, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "rimworld", label: "RimWorld", family: "rimworld", icon: "rocket", color: "text-accent-light", primary_color: "#a16207", steam_app_id: 294100, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "lethal_company", label: "Lethal Company", family: "lethalcompany", icon: "skull", color: "text-accent-light", primary_color: "#ef4444", steam_app_id: 1966720, auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
+        { id: "vintage_story", label: "Vintage Story", family: "vintagestory", icon: "pickaxe", color: "text-accent-light", primary_color: "#84cc16", auto_detect: true, content_types: [{ id: "mods", label: "Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: [], file_type: "Mod", syncable: true }], dangerous_script_extensions: [] },
       ] as any[];
       setGameRegistry(demoRegistry);
       useAppStore.setState({

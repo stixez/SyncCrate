@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -11,7 +11,8 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { getSyncCount, getTimeSaved } from "../lib/donations";
 import { gameLabel, getGameDef } from "../lib/games";
 import { GameIcon } from "./Sidebar";
-import { Badge, Button, EmptyState, Input, Panel, SectionHeader, Toggle, cx } from "./ui";
+import { Badge, Button, EmptyState, GameArt, Input, Panel, SectionHeader, Toggle, cx } from "./ui";
+import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import type { AutoBackupConfig } from "../lib/types";
 
@@ -39,6 +40,8 @@ export default function Settings() {
   const [speedLimit, setSpeedLimit] = useState(0);
   const [clearCache, setClearCache] = useState(true);
   const [closeToTray, setCloseToTrayState] = useState(false);
+  const [showArt, setShowArtState] = useState(getShowGameArt);
+  const [customArt, setCustomArt] = useState<string[]>([]);
   const notificationsEnabled = useAppStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useAppStore((s) => s.setNotificationsEnabled);
 
@@ -74,6 +77,36 @@ export default function Settings() {
       newConfig.auto_backup_interval_hours,
       newConfig.auto_backup_max_count,
     ).catch(console.error);
+  };
+
+  useEffect(() => {
+    cmd.listCustomGameArt().then(setCustomArt).catch(() => {});
+  }, []);
+
+  const handleSetCover = async (gameId: string) => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp"] }],
+      });
+      if (typeof selected !== "string") return;
+      await cmd.setCustomGameArt(gameId, selected);
+      invalidateGameArt(gameId);
+      setCustomArt((prev) => [...new Set([...prev, gameId])]);
+      toastSuccess(`${gameLabel(gameId)} cover updated`);
+    } catch (e) {
+      toastError(String(e));
+    }
+  };
+
+  const handleResetCover = async (gameId: string) => {
+    try {
+      await cmd.clearCustomGameArt(gameId);
+      invalidateGameArt(gameId);
+      setCustomArt((prev) => prev.filter((id) => id !== gameId));
+    } catch (e) {
+      toastError(String(e));
+    }
   };
 
   const handleBrowse = async (gameId: string) => {
@@ -203,8 +236,14 @@ export default function Settings() {
                 <Panel key={game.id} padded={false}>
                   <div className="px-5 py-4 space-y-3">
                     <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 grid place-items-center border border-line-hi bg-bg shrink-0">
-                        <GameIcon iconName={game.icon} size={14} className={game.color} />
+                      <span className="relative overflow-hidden w-7 h-7 grid place-items-center border border-line-hi bg-bg shrink-0">
+                        <GameArt
+                          gameId={game.id}
+                          kind="cover"
+                          className="absolute inset-0"
+                          imgClassName="object-[50%_22%]"
+                          fallback={<GameIcon iconName={game.icon} size={14} className={game.color} />}
+                        />
                       </span>
                       <h3 className="font-display font-semibold uppercase tracking-[0.05em] text-[14px]">{game.label}</h3>
                       {gamePaths[game.id] ? (
@@ -212,6 +251,16 @@ export default function Settings() {
                       ) : (
                         <Badge tone="amber" dot>Not set</Badge>
                       )}
+                      <span className="ml-auto flex items-center gap-1">
+                        {customArt.includes(game.id) && (
+                          <Button variant="ghost" size="sm" onClick={() => handleResetCover(game.id)} icon={<RotateCcw size={12} />} title="Go back to the default art">
+                            Reset cover
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => handleSetCover(game.id)} icon={<ImagePlus size={12} />} title="Use your own image for this game">
+                          {customArt.includes(game.id) ? "Change cover" : "Custom cover"}
+                        </Button>
+                      </span>
                     </div>
                     <p className="text-xs text-txt-dim">
                       The root folder for your {game.label} installation
@@ -431,6 +480,17 @@ export default function Settings() {
                 }}
                 label="Keep running in the tray when the window is closed"
                 description="Closing the window hides SyncCrate so hosting and syncing continue. Use Quit in the tray menu to exit."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={showArt}
+                onChange={(v) => {
+                  setShowArtState(v);
+                  setShowGameArt(v);
+                }}
+                label="Show game art"
+                description="Box art and backgrounds from Steam, downloaded once and kept on this PC. Turn off to hide all game art and never contact Steam."
               />
             </SettingRow>
           </div>

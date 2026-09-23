@@ -4,7 +4,7 @@ import { Heart } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
 import DonateModal from "./DonateModal";
-import { LiveDot } from "./ui";
+import { GameArt, LiveDot } from "./ui";
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -68,8 +68,22 @@ export default function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-6 py-6">
-          {children}
+        <main className="relative flex-1 overflow-y-auto px-6 py-6">
+          {/* Game pages get the game's Steam hero art as a dim, masked backdrop
+              behind the header; it scrolls away with the content. */}
+          {!isGlobal && selectedGame && (
+            <GameArt
+              key={selectedGame}
+              gameId={selectedGame}
+              kind="hero"
+              className="absolute inset-x-0 top-0 h-[320px] pointer-events-none opacity-[0.42] [mask-image:linear-gradient(to_bottom,black_20%,transparent_100%)]"
+              imgClassName="object-[50%_28%] saturate-[0.8]"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/55 to-bg/10" />
+              <div className="absolute inset-0 opacity-40 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.4)_2px_3px)]" />
+            </GameArt>
+          )}
+          <div className="relative z-[1]">{children}</div>
         </main>
       </div>
       {showDonate && <DonateModal />}

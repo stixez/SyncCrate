@@ -38,3 +38,6 @@ if-addrs = "0.13"
 rayon = "1.10"
 zstd = "0.13"
 iroh = "1.2"
+# Both already in the tree via iroh / the updater; same versions, ring provider.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }

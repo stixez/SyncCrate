@@ -25,6 +25,7 @@
  * <EmptyState icon title description action label />
  * <Banner tone="info|warn|danger|success" icon title actions>body</Banner>
  * <LiveDot tone="neon|amber|idle" />
+ * <GameArt gameId kind="cover|header|hero" fallback={<GeneratedTile/>}>overlays</GameArt>
  * cx(...classes) — tiny classnames helper.
  */
 export { default as Button } from "./Button";
@@ -38,4 +39,5 @@ export { default as Input } from "./Input";
 export { default as EmptyState } from "./EmptyState";
 export { default as Banner } from "./Banner";
 export { default as LiveDot } from "./LiveDot";
+export { default as GameArt } from "./GameArt";
 export { cx } from "./cx";

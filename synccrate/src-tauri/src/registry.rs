@@ -21,6 +21,10 @@ pub struct GameDefinition {
     /// Hex color for dynamic accent theming (e.g., "#1ea84b").
     #[serde(default)]
     pub primary_color: String,
+    /// Steam app id, used to fetch store artwork (`commands::art`). `None` for
+    /// games that aren't sold on Steam (WoW, Minecraft, ...).
+    #[serde(default)]
+    pub steam_app_id: Option<u32>,
     #[serde(default)]
     pub auto_detect: bool,
     #[serde(default)]
