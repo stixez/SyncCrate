@@ -23,6 +23,7 @@ import {
   demoSyncPlan,
   demoProfiles,
   demoLogs,
+  bigSims4Demo,
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
 import { toastSuccess, toastError } from "./lib/toast";
@@ -202,6 +203,12 @@ function App() {
         useAppStore.setState({ selectedGame: null, myLibrary: [] });
       }
       if (q.has("light")) useAppStore.getState().setTheme("light");
+      // &big: ~8,000 synthetic CC files to exercise the virtual content list.
+      if (q.has("big")) {
+        const big = bigSims4Demo();
+        demoManifests.sims4 = big.manifest;
+        useAppStore.setState({ manifest: big.manifest, modTags: big.tags });
+      }
       // Appearance variants: &accent=%238b5cf6, &matchgame, &scale=1.25, &compact, &nofx
       const accent = q.get("accent");
       const scale = Number(q.get("scale"));
@@ -214,6 +221,14 @@ function App() {
       });
       const demoPage = q.get("page");
       if (demoPage) useAppStore.setState({ page: demoPage as any });
+      // &scroll=4000: start scrolled down (headless screenshots of long lists).
+      const scrollTo = Number(q.get("scroll"));
+      // Headless Edge only dispatches scroll events on real frames, so fire one by hand.
+      if (scrollTo > 0) setTimeout(() => {
+        const main = document.querySelector("main");
+        main?.scrollTo(0, scrollTo);
+        main?.dispatchEvent(new Event("scroll"));
+      }, 1500);
 
       // In demo mode, swap manifests when the selected game changes
       useAppStore.subscribe((state, prev) => {

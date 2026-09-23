@@ -32,3 +32,37 @@ export function isDisabledPath(relativePath: string): boolean {
   const p = relativePath.replace(/\\/g, "/");
   return p.includes("_Disabled/") || p.toLowerCase().endsWith(".disabled");
 }
+
+/** "3d ago" style age for dense tables; pair with formatDate in a title. */
+export function formatRelative(ts: number, nowSecs = Date.now() / 1000): string {
+  if (!ts) return "—";
+  const s = Math.max(0, nowSecs - ts);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo ago`;
+  return `${Math.floor(s / (86400 * 365))}y ago`;
+}
+
+export function fileName(relativePath: string): string {
+  return relativePath.split(/[/\\]/).pop() || relativePath;
+}
+
+/** Directory part of a relative path with forward slashes ("" for top-level files). */
+export function dirOf(relativePath: string): string {
+  const p = relativePath.replace(/\\/g, "/");
+  const i = p.lastIndexOf("/");
+  return i < 0 ? "" : p.slice(0, i);
+}
+
+/**
+ * Lowercase extension with the dot, ignoring a `.disabled` suffix so a disabled
+ * `.package` still counts as a `.package`. "" when the file has none.
+ */
+export function fileKind(relativePath: string): string {
+  let name = fileName(relativePath).toLowerCase();
+  if (name.endsWith(".disabled")) name = name.slice(0, -".disabled".length);
+  const i = name.lastIndexOf(".");
+  return i <= 0 ? "" : name.slice(i);
+}

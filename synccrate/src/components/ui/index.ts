@@ -18,7 +18,7 @@
  * <Panel title label icon actions tone="default|accent|warn|danger|sunken" brackets cut padded />
  * <SectionHeader title label="// 01 Session" description actions size="md|lg" />
  * <Badge tone="neutral|neon|green|amber|red" icon dot>v1.2</Badge>
- * <StatTile value={42} label="Mods" hint icon highlight />
+ * <StatTile value={42} label="Mods" hint icon highlight compact />
  * <ProgressBar value={0-100} label meta />
  * <Toggle checked onChange={(v)=>…} label description kind="switch|check" />
  * <Input mono size="sm|md" label icon … native input props />
