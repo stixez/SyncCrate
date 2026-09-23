@@ -385,6 +385,10 @@ pub async fn get_join_code(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Res
         .map_err(|e| e.to_string())?
         .iter()
         .filter_map(|ip| ip.parse().ok())
+        // Only the best LAN address: the internet id already reaches the host
+        // on the same network too (iroh connects directly), and each extra
+        // address makes the code longer.
+        .take(1)
         .collect();
     let internet_id = Some(*crate::network::iroh_net::local_id().as_bytes());
     crate::network::joincode::encode(&crate::network::joincode::JoinInfo { addresses, port, pin, internet_id })

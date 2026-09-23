@@ -142,6 +142,23 @@ export default function GameDashboard({ gameId }: Props) {
     cmd.getJoinCode().then((c) => { if (!cancelled) setHostJoinCode(c); }).catch(() => {});
     return () => { cancelled = true; };
   }, [hostingKey]);
+  // Paste a join code anywhere on the dashboard (outside text fields) to fill
+  // the join box — people paste codes from chat, nobody types them.
+  useEffect(() => {
+    if (session && session.session_type !== "None") return;
+    const onPaste = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (/^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/i.test(text)) {
+        setJoinCode(text.toUpperCase());
+        toastSuccess("Join code pasted — click Join");
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [session]);
+
   const [manualIp, setManualIp] = useState("");
   const [manualPort, setManualPort] = useState("9847");
   const [manualPin, setManualPin] = useState("");
@@ -670,9 +687,9 @@ export default function GameDashboard({ gameId }: Props) {
         <div className="bg-bg-card rounded-xl border border-accent/30 p-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-txt-dim">
-              Join code — friends paste this into "Join a Session". Works on your network and over the internet{session.pin ? ", and includes your PIN" : ""}.
+              Join code: copy it and send it to friends. It works on your network and over the internet{session.pin ? ", and includes your PIN" : ""}.
             </p>
-            <p className="font-mono text-sm font-semibold tracking-wide text-accent-light break-all select-all mt-0.5">{hostJoinCode}</p>
+            <p className="font-mono text-base font-semibold tracking-wider text-accent-light mt-0.5" title={hostJoinCode}>{shortCode(hostJoinCode)}</p>
           </div>
           <button
             onClick={() => { navigator.clipboard.writeText(hostJoinCode); setJoinCodeCopied(true); setTimeout(() => setJoinCodeCopied(false), 2000); }}
@@ -889,4 +906,11 @@ function GameInfoCard({ gameInfo, gameLabel, packsExpanded, setPacksExpanded, de
       )}
     </div>
   );
+}
+
+/** "SC-8M2K-0QRT-…-Q2ZD": enough to recognise a code; Copy puts the full one on the clipboard. */
+function shortCode(code: string): string {
+  const groups = code.split("-");
+  if (groups.length <= 5) return code;
+  return `${groups.slice(0, 3).join("-")}-…-${groups[groups.length - 1]}`;
 }
