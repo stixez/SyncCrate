@@ -2,97 +2,533 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Colors are RGB triplets so Tailwind's `/ <alpha>` works.
+ * The per-game theme (lib/theme.ts) sets --game-* on :root; the fallbacks
+ * below are the SyncCrate brand. Light mode reads the darker "ink" variants
+ * so a neon game color never ends up as text on white.
+ */
 :root {
-  --color-bg: 10 15 20;
-  --color-bg-card: 18 26 34;
-  --color-bg-card-hover: 26 37 46;
-  --color-bg-card-active: 31 46 56;
-  --color-accent: 30 168 75;
-  --color-accent-light: 46 204 94;
-  --color-border: 30 45 56;
-  --color-txt: 232 236 244;
-  --color-txt-dim: 122 131 152;
-  --color-status-green: 16 185 129;
-  --color-status-yellow: 245 158 11;
-  --color-status-red: 239 68 68;
+  --color-bg: 7 9 11;
+  --color-bg-2: 11 14 17;
+  --color-bg-card: 15 19 22;
+  --color-bg-card-hover: 21 26 30;
+  --color-bg-card-active: 27 33 38;
+  --color-bg-elevated: 24 30 34;
+  --color-border: 34 42 48;
+  --color-line-hi: 52 64 58;
+  --color-txt: 236 242 238;
+  --color-txt-dim: 154 166 160;
+  --color-txt-muted: 125 138 132;
+  --color-accent: var(--game-accent, 30 168 75);
+  --color-accent-light: var(--game-accent-light, 57 214 110);
+  --color-neon: var(--game-neon, 57 255 136);
+  --color-on-neon: 4 17 10;
+  --color-amber: 255 181 71;
+  --color-status-green: 57 222 128;
+  --color-status-yellow: 255 181 71;
+  --color-status-red: 255 84 84;
+
+  --cut: 12px;
+  color-scheme: dark;
 }
 
 .light {
-  --color-bg: 248 250 252;
+  --color-bg: 240 243 241;
+  --color-bg-2: 232 236 234;
   --color-bg-card: 255 255 255;
-  --color-bg-card-hover: 241 245 249;
-  --color-bg-card-active: 226 232 240;
-  --color-accent: 30 168 75;
-  --color-accent-light: 22 144 62;
-  --color-border: 226 232 240;
-  --color-txt: 15 23 42;
-  --color-txt-dim: 100 116 139;
-  --color-status-green: 16 185 129;
-  --color-status-yellow: 217 119 6;
-  --color-status-red: 220 38 38;
+  --color-bg-card-hover: 244 247 245;
+  --color-bg-card-active: 230 236 232;
+  --color-bg-elevated: 248 250 249;
+  --color-border: 214 221 217;
+  --color-line-hi: 178 190 184;
+  --color-txt: 10 14 12;
+  --color-txt-dim: 70 82 76;
+  --color-txt-muted: 104 116 110;
+  --color-accent: var(--game-accent, 30 168 75);
+  --color-accent-light: var(--game-accent-ink, 20 128 56);
+  --color-neon: var(--game-neon-ink, 16 140 64);
+  --color-on-neon: 255 255 255;
+  --color-amber: 176 104 0;
+  --color-status-green: 16 140 64;
+  --color-status-yellow: 176 104 0;
+  --color-status-red: 204 32 32;
+  color-scheme: light;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: rgb(var(--color-bg));
-  color: rgb(var(--color-txt));
-  overflow: hidden;
-}
+  body {
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    background: rgb(var(--color-bg));
+    color: rgb(var(--color-txt));
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid rgb(var(--color-accent));
-  outline-offset: 2px;
-  border-radius: 4px;
-}
+  ::selection {
+    background: rgb(var(--color-neon));
+    color: rgb(var(--color-on-neon));
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-pulse,
-  .animate-spin,
-  .animate-bounce {
-    animation: none !important;
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-neon));
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--color-border));
+    border: 2px solid rgb(var(--color-bg));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--color-line-hi));
   }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
+@layer components {
+  /* ---------- type ---------- */
+  .display {
+    font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: -0.005em;
+    line-height: 0.95;
+  }
+
+  /* `// LABEL` micro caption. Put the highlighted part in <b>. */
+  .hud-label {
+    font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgb(var(--color-txt-muted));
+  }
+  .hud-label b {
+    color: rgb(var(--color-neon));
+    font-weight: 500;
+  }
+
+  /* ---------- clipped panel ----------
+   * The element's own background is the hairline; ::before paints the surface
+   * 1px inside, so the border follows the angled cut. Caveat: clip-path clips
+   * anything that overflows (popovers, focus outlines, brackets) — render
+   * those outside the panel. */
+  .cut {
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .panel {
+    --panel-line: rgb(var(--color-border));
+    --panel-bg: rgb(var(--color-bg-card));
+    position: relative;
+    isolation: isolate;
+    background: var(--panel-line);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    background: var(--panel-bg);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .panel-accent {
+    --panel-line: rgb(var(--color-neon) / 0.45);
+  }
+  .panel-warn {
+    --panel-line: rgb(var(--color-amber) / 0.45);
+    --panel-bg: linear-gradient(90deg, rgb(var(--color-amber) / 0.07), transparent 60%), rgb(var(--color-bg-card));
+  }
+  .panel-danger {
+    --panel-line: rgb(var(--color-status-red) / 0.45);
+    --panel-bg: linear-gradient(90deg, rgb(var(--color-status-red) / 0.07), transparent 60%), rgb(var(--color-bg-card));
+  }
+  .panel-sunken {
+    --panel-bg: rgb(var(--color-bg));
+  }
+
+  /* Flat hairline box (no cut) for secondary groupings / list rows. */
+  .box {
+    background: rgb(var(--color-bg-card));
+    border: 1px solid rgb(var(--color-border));
+  }
+
+  /* Neon L-brackets on two corners. Apply to a wrapper (not a .panel — it would clip them). */
+  .corner-brackets {
+    position: relative;
+  }
+  .corner-brackets::before,
+  .corner-brackets::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgb(var(--color-neon));
+    pointer-events: none;
+    z-index: 1;
+  }
+  .corner-brackets::before {
+    top: -5px;
+    left: -5px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .corner-brackets::after {
+    bottom: -5px;
+    right: -5px;
+    border-left: 0;
+    border-top: 0;
+  }
+
+  /* Left-edge callout strip (tips, warnings) like the website's TIP row. */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    border-left: 2px solid rgb(var(--callout, var(--color-amber)));
+    background: rgb(var(--callout, var(--color-amber)) / 0.07);
+  }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    --cut: 8px;
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 0 16px;
+    height: 36px;
+    cursor: pointer;
+    user-select: none;
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+    transition: background-color 0.15s, color 0.15s, transform 0.15s, filter 0.15s;
+  }
+  .btn:focus-visible {
+    outline-offset: -4px;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+  .btn svg {
+    flex: none;
+  }
+  .btn-sm {
+    --cut: 6px;
+    height: 28px;
+    padding: 0 11px;
+    font-size: 0.72rem;
+    gap: 6px;
+  }
+  .btn-lg {
+    --cut: 10px;
+    height: 44px;
+    padding: 0 22px;
+    font-size: 0.9rem;
+  }
+
+  .btn-primary {
+    background: rgb(var(--color-neon));
+    color: rgb(var(--color-on-neon));
+  }
+  .btn-primary:not(:disabled):hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+  .btn-primary:focus-visible {
+    outline-color: rgb(var(--color-on-neon));
+  }
+
+  /* Hairline outline that follows the cut (same trick as .panel). */
+  .btn-secondary,
+  .btn-danger {
+    --btn-line: rgb(var(--color-line-hi));
+    --btn-fill: rgb(var(--color-bg-card));
+    background: var(--btn-line);
+    color: rgb(var(--color-txt));
+  }
+  .btn-secondary::before,
+  .btn-danger::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    background: var(--btn-fill);
+    clip-path: inherit;
+    transition: background-color 0.15s;
+  }
+  .btn-secondary:not(:disabled):hover {
+    --btn-line: rgb(var(--color-neon));
+    color: rgb(var(--color-neon));
+  }
+  .btn-danger {
+    --btn-line: rgb(var(--color-status-red) / 0.55);
+    color: rgb(var(--color-status-red));
+  }
+  .btn-danger:not(:disabled):hover {
+    --btn-line: rgb(var(--color-status-red));
+    --btn-fill: rgb(var(--color-status-red) / 0.12);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: rgb(var(--color-txt-dim));
+    clip-path: none;
+  }
+  .btn-ghost:not(:disabled):hover {
+    color: rgb(var(--color-txt));
+    background: rgb(var(--color-bg-card-hover));
+  }
+  .btn-ghost:focus-visible {
+    outline-offset: 0;
+  }
+
+  /* ---------- form controls ---------- */
+  .input {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    background: rgb(var(--color-bg));
+    border: 1px solid rgb(var(--color-line-hi));
+    color: rgb(var(--color-txt));
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input::placeholder {
+    color: rgb(var(--color-txt-muted));
+  }
+  .input:focus,
+  .input:focus-visible {
+    border-color: rgb(var(--color-neon));
+    box-shadow: 0 0 0 3px rgb(var(--color-neon) / 0.14);
+    outline: none;
+  }
+  .input-mono {
+    font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+    letter-spacing: 0.06em;
+  }
+  .input-sm {
+    height: 30px;
+    font-size: 0.8125rem;
+    padding: 0 10px;
+  }
+
+  /* Square checkbox styled in the HUD language. */
+  .check {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border: 1px solid rgb(var(--color-line-hi));
+    background: rgb(var(--color-bg));
+    display: inline-grid;
+    place-content: center;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+  }
+  .check::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: rgb(var(--color-on-neon));
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    transform: scale(0);
+    transition: transform 0.12s;
+  }
+  .check:checked {
+    background: rgb(var(--color-neon));
+    border-color: rgb(var(--color-neon));
+  }
+  .check:checked::after {
+    transform: scale(1);
+  }
+
+  /* ---------- tags ---------- */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding: 0 6px;
+    font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border: 1px solid currentColor;
+    color: rgb(var(--color-txt-dim));
+  }
+  .tag-neutral {
+    border-color: rgb(var(--color-line-hi));
+  }
+
+  /* ---------- status dots ---------- */
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+    background: rgb(var(--color-neon));
+    animation: sc-pulse 2s infinite;
+  }
+  .live-dot-amber {
+    background: rgb(var(--color-amber));
+    animation-name: sc-pulse-amber;
+  }
+  .live-dot-idle {
+    background: rgb(var(--color-line-hi));
+    animation: none;
+  }
+
+  /* ---------- progress ---------- */
+  .progress {
+    height: 6px;
+    background: rgb(var(--color-bg));
+    border: 1px solid rgb(var(--color-border));
+    overflow: hidden;
+  }
+  .progress > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, rgb(var(--color-accent)), rgb(var(--color-neon)));
+    transition: width 0.3s ease-out;
+  }
+
+  /* ---------- atmosphere (use in 1-2 hero spots only) ---------- */
+  .hud-grid {
+    position: relative;
+  }
+  .hud-grid::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgb(var(--color-border)) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--color-border)) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.35;
+    -webkit-mask-image: linear-gradient(180deg, #000, transparent 80%);
+    mask-image: linear-gradient(180deg, #000, transparent 80%);
+  }
+  .scanlines {
+    position: relative;
+  }
+  .scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px);
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .light .scanlines::after,
+  .light .grain::after {
+    opacity: 0.03;
+  }
+
+  /* ---------- sonner toasts ---------- */
+  li.sc-toast[data-sonner-toast][data-styled="true"] {
+    background: rgb(var(--color-bg-card));
+    border: 1px solid rgb(var(--color-line-hi));
+    border-left: 2px solid rgb(var(--color-neon));
+    border-radius: 0;
+    color: rgb(var(--color-txt));
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.6);
+    padding: 12px 14px;
+  }
+  li.sc-toast[data-sonner-toast][data-type="error"] {
+    border-left-color: rgb(var(--color-status-red));
+  }
+  li.sc-toast[data-sonner-toast][data-type="error"] [data-icon] {
+    color: rgb(var(--color-status-red));
+  }
+  li.sc-toast[data-sonner-toast][data-type="success"] [data-icon] {
+    color: rgb(var(--color-neon));
+  }
+  li.sc-toast[data-sonner-toast][data-type="warning"] {
+    border-left-color: rgb(var(--color-amber));
+  }
+  li.sc-toast[data-sonner-toast] [data-title] {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  li.sc-toast[data-sonner-toast] [data-button] {
+    border-radius: 0;
+    background: rgb(var(--color-neon));
+    color: rgb(var(--color-on-neon));
+    font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: rgb(var(--color-bg-card));
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgb(var(--color-border));
-  border-radius: 3px;
+@keyframes sc-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(var(--color-neon) / 0.55); }
+  70% { box-shadow: 0 0 0 7px rgb(var(--color-neon) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--color-neon) / 0); }
+}
+@keyframes sc-pulse-amber {
+  0% { box-shadow: 0 0 0 0 rgb(var(--color-amber) / 0.55); }
+  70% { box-shadow: 0 0 0 7px rgb(var(--color-amber) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--color-amber) / 0); }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-bg-card-active));
-}
+/* Legacy helpers still used by un-migrated components. */
+.glow-green { box-shadow: 0 0 8px rgb(var(--color-status-green) / 0.4); }
+.glow-yellow { box-shadow: 0 0 8px rgb(var(--color-status-yellow) / 0.4); }
+.glow-red { box-shadow: 0 0 8px rgb(var(--color-status-red) / 0.4); }
+.glow-accent { box-shadow: 0 0 12px rgb(var(--color-accent) / 0.3); }
 
-.glow-green {
-  box-shadow: 0 0 8px rgb(var(--color-status-green) / 0.4);
-}
-
-.glow-yellow {
-  box-shadow: 0 0 8px rgb(var(--color-status-yellow) / 0.4);
-}
-
-.glow-red {
-  box-shadow: 0 0 8px rgb(var(--color-status-red) / 0.4);
-}
-
-.glow-accent {
-  box-shadow: 0 0 12px rgb(var(--color-accent) / 0.3);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .live-dot { animation: none; }
 }

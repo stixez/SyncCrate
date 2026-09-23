@@ -58,6 +58,7 @@ function App() {
   const page = useAppStore((s) => s.page);
   const selectedGame = useAppStore((s) => s.selectedGame);
   const isDragging = useAppStore((s) => s.isDragging);
+  const theme = useAppStore((s) => s.theme);
   const addLog = useLogStore((s) => s.addLog);
   useTauriEvents();
   useKeyboardShortcuts();
@@ -178,6 +179,17 @@ function App() {
       });
       useLogStore.setState({ logs: demoLogs });
 
+      // Demo variants for screenshots / UI work: ?demo&offline, &welcome, &light, &page=content
+      const q = new URLSearchParams(window.location.search);
+      if (q.has("offline")) useAppStore.setState({ session: null, syncPlan: null });
+      if (q.has("welcome")) {
+        try { localStorage.removeItem("synccrate-onboarding-complete"); } catch {}
+        useAppStore.setState({ selectedGame: null, myLibrary: [] });
+      }
+      if (q.has("light")) useAppStore.getState().setTheme("light");
+      const demoPage = q.get("page");
+      if (demoPage) useAppStore.setState({ page: demoPage as any });
+
       // In demo mode, swap manifests when the selected game changes
       useAppStore.subscribe((state, prev) => {
         if (state.selectedGame !== prev.selectedGame && state.selectedGame) {
@@ -294,14 +306,9 @@ function App() {
       )}
       <Toaster
         position="bottom-right"
-        theme="dark"
-        toastOptions={{
-          style: {
-            background: "#121a22",
-            border: "1px solid #1e2d38",
-            color: "#e8ecf4",
-          },
-        }}
+        theme={theme}
+        offset={20}
+        toastOptions={{ classNames: { toast: "sc-toast" } }}
       />
     </Layout>
   );

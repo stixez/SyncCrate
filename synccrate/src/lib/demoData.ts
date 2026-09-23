@@ -326,6 +326,9 @@ export const demoManifest: FileManifest = demoManifests.sims4;
 
 // --- Session (hosting with PIN) ---
 
+/** Shown instead of the backend's join code in demo mode (no Tauri backend). */
+export const demoJoinCode = "SC-8M2K-0QRT-4F7A-J9XC-WB3N-Q2ZD";
+
 export const demoSession: SessionStatus = {
   session_type: "Host",
   name: "GameNight",

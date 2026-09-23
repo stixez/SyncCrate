@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const c = (v) => `rgb(var(--color-${v}) / <alpha-value>)`;
+
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   safelist: [
@@ -11,27 +13,51 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "rgb(var(--color-bg) / <alpha-value>)",
-          card: "rgb(var(--color-bg-card) / <alpha-value>)",
-          "card-hover": "rgb(var(--color-bg-card-hover) / <alpha-value>)",
-          "card-active": "rgb(var(--color-bg-card-active) / <alpha-value>)",
+          DEFAULT: c("bg"),
+          2: c("bg-2"),
+          card: c("bg-card"),
+          "card-hover": c("bg-card-hover"),
+          "card-active": c("bg-card-active"),
+          elevated: c("bg-elevated"),
         },
         accent: {
-          DEFAULT: "rgb(var(--color-accent) / <alpha-value>)",
-          light: "rgb(var(--color-accent-light) / <alpha-value>)",
+          DEFAULT: c("accent"),
+          light: c("accent-light"),
+        },
+        // Bright HUD accent: active states, live indicators, key numbers. Use sparingly.
+        neon: {
+          DEFAULT: c("neon"),
+          ink: c("on-neon"),
+        },
+        amber: {
+          DEFAULT: c("amber"),
         },
         border: {
-          DEFAULT: "rgb(var(--color-border) / <alpha-value>)",
+          DEFAULT: c("border"),
+          hi: c("line-hi"),
+        },
+        line: {
+          DEFAULT: c("border"),
+          hi: c("line-hi"),
         },
         txt: {
-          DEFAULT: "rgb(var(--color-txt) / <alpha-value>)",
-          dim: "rgb(var(--color-txt-dim) / <alpha-value>)",
+          DEFAULT: c("txt"),
+          dim: c("txt-dim"),
+          muted: c("txt-muted"),
         },
         status: {
-          green: "rgb(var(--color-status-green) / <alpha-value>)",
-          yellow: "rgb(var(--color-status-yellow) / <alpha-value>)",
-          red: "rgb(var(--color-status-red) / <alpha-value>)",
+          green: c("status-green"),
+          yellow: c("status-yellow"),
+          red: c("status-red"),
         },
+      },
+      fontFamily: {
+        sans: ["Inter", "Segoe UI", "system-ui", "sans-serif"],
+        display: ["'Chakra Petch'", "Segoe UI", "system-ui", "sans-serif"],
+        mono: ["'JetBrains Mono'", "ui-monospace", "Consolas", "monospace"],
+      },
+      letterSpacing: {
+        hud: "0.12em",
       },
     },
   },
