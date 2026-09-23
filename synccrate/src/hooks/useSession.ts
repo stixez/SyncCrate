@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { SyncFolderPermissions } from "../lib/types";
 import * as cmd from "../lib/commands";
+import { toastError, toastInfo } from "../lib/toast";
 
 export function useSession() {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +23,7 @@ export function useSession() {
       addLog(`Hosting session as "${name}" on port ${info.port}`, "success");
     } catch (e: any) {
       addLog(`Failed to host: ${e}`, "error");
+      toastError(`Failed to host: ${e}`);
     } finally {
       setIsLoading(false);
     }
@@ -33,8 +35,12 @@ export function useSession() {
       const peers = await cmd.startJoin(name);
       setDiscoveredPeers(peers);
       addLog(`Found ${peers.length} host(s) on LAN`, "info");
+      if (peers.length === 0) {
+        toastInfo("No hosts found. If a friend is hosting, use Connect by IP with an address from their screen.");
+      }
     } catch (e: any) {
       addLog(`Failed to scan: ${e}`, "error");
+      toastError(`Failed to scan: ${e}`);
     } finally {
       setIsLoading(false);
     }
@@ -54,6 +60,7 @@ export function useSession() {
       await cmd.connectToPeer(peerId, pin);
     } catch (e: any) {
       addLog(`Failed to connect: ${e}`, "error");
+      toastError(`Failed to connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);
@@ -68,6 +75,7 @@ export function useSession() {
       await cmd.connectByIp(ip, port, name, pin);
     } catch (e: any) {
       addLog(`Failed to connect: ${e}`, "error");
+      toastError(`Failed to connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);
@@ -83,6 +91,7 @@ export function useSession() {
       setDiscoveredPeers([]);
       setSyncPlan(null);
       setSyncProgress(null);
+      useAppStore.getState().clearPeerDownloadProgress();
       useAppStore.getState().clearLastHost();
       addLog("Disconnected", "info");
     } catch (e: any) {

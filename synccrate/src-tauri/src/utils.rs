@@ -666,12 +666,12 @@ mod tests {
 {
 	"0"
 	{
-		"path"		"C:\Program Files (x86)\Steam"
+		"path"		"C:\\Program Files (x86)\\Steam"
 		"label"		""
 	}
 	"1"
 	{
-		"path"		"D:\SteamLibrary"
+		"path"		"D:\\SteamLibrary"
 	}
 }
 "#;
@@ -683,7 +683,7 @@ mod tests {
 "LibraryFolders"
 {
 	"TimeNextStatsReport"		"1234"
-	"1"		"E:\Games\Steam"
+	"1"		"E:\\Games\\Steam"
 }
 "#;
         let libs = parse_steam_library_vdf(legacy);

@@ -2,6 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AutoBackupConfig,
   BackupInfo,
+  ConnectionTestResult,
+  FirewallStatus,
+  NetworkDiagnostics,
   FileManifest,
   GameDefinition,
   GameInfo,
@@ -339,4 +342,36 @@ export async function checkCompatibility(
   game?: string,
 ): Promise<ModCompatibility[]> {
   return invoke("check_compatibility", { game: game ?? null });
+}
+
+// --- Network / OS integration ---
+
+export async function getFirewallStatus(): Promise<FirewallStatus> {
+  return invoke("get_firewall_status");
+}
+
+/** Replaces SyncCrate's Windows Firewall rules with inbound allow rules (one UAC prompt). */
+export async function fixFirewall(): Promise<FirewallStatus> {
+  return invoke("fix_firewall");
+}
+
+export async function isElevated(): Promise<boolean> {
+  return invoke("is_elevated");
+}
+
+/** Relaunches SyncCrate as administrator and exits this instance. */
+export async function restartAsAdmin(): Promise<void> {
+  return invoke("restart_as_admin");
+}
+
+export async function checkGamePathWritable(): Promise<boolean> {
+  return invoke("check_game_path_writable");
+}
+
+export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
+  return invoke("get_network_diagnostics");
+}
+
+export async function testConnection(ip: string, port: number): Promise<ConnectionTestResult> {
+  return invoke("test_connection", { ip, port });
 }

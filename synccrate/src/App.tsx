@@ -88,7 +88,8 @@ function App() {
 
         // Auto-select first library game if none selected (skip during onboarding)
         if (!useAppStore.getState().selectedGame && library.length > 0 && isOnboardingComplete()) {
-          await cmd.setActiveGame(library[0]);
+          // May be refused if a session is still active (e.g. webview reload).
+          await cmd.setActiveGame(library[0]).catch(() => {});
           useAppStore.getState().navigateToGame(library[0]);
         }
       } catch (e) {

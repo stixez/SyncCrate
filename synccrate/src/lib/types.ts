@@ -55,6 +55,8 @@ export interface PeerInfo {
   version: string;
   pin_required: boolean;
   game_info?: GameInfo | null;
+  /** Every address the host was discovered on, best first (`ip` is the first). */
+  addresses?: string[];
 }
 
 export interface SessionInfo {
@@ -72,6 +74,40 @@ export interface SessionStatus {
   is_syncing: boolean;
   pin: string | null;
   host_ips: string[];
+  /** Host only: whether LAN discovery (mDNS / UDP broadcast) is advertising this session. */
+  discovery_active?: boolean;
+}
+
+export interface FirewallStatus {
+  /** False on macOS/Linux — nothing to manage. */
+  supported: boolean;
+  /** Whether the rule lookup succeeded. */
+  checked: boolean;
+  has_allow_rule: boolean;
+  has_block_rule: boolean;
+  exe_path: string;
+}
+
+export interface LocalInterface {
+  name: string;
+  ip: string;
+  is_virtual: boolean;
+  is_primary: boolean;
+}
+
+export interface NetworkDiagnostics {
+  interfaces: LocalInterface[];
+  firewall: FirewallStatus;
+  session_port: number;
+  discovery_port: number;
+  discovery_active: boolean;
+  is_elevated: boolean;
+}
+
+export interface ConnectionTestResult {
+  reachable: boolean;
+  message: string;
+  latency_ms: number | null;
 }
 
 export interface SyncAction {

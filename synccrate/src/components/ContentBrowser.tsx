@@ -54,13 +54,20 @@ export default function ContentBrowser({ gameId }: Props) {
 
   // Keep backend in sync with the viewed game
   useEffect(() => {
-    cmd.setActiveGame(gameId).catch(() => {});
-    useAppStore.getState().setActiveGame(gameId);
+    // Refused mid-session; only mirror into the store once the backend accepts it.
+    cmd.setActiveGame(gameId)
+      .then(() => useAppStore.getState().setActiveGame(gameId))
+      .catch(() => {
+        cmd.getActiveGame().then((g) => useAppStore.getState().setActiveGame(g)).catch(() => {});
+      });
   }, [gameId]);
 
   // Re-scan when switching games or when manifest is missing
   useEffect(() => {
-    cmd.scanFiles(gameId).then(setManifest).catch(console.error);
+    // Ignore results that land after switching to another game (stale manifest).
+    let cancelled = false;
+    cmd.scanFiles(gameId).then((m) => { if (!cancelled) setManifest(m); }).catch(console.error);
+    return () => { cancelled = true; };
   }, [gameId, setManifest]);
 
   useEffect(() => {

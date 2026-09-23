@@ -25,7 +25,9 @@
 
 - **Peer-to-peer at LAN speed** — Files transfer directly between computers at 100-900 MB/s. No cloud, no uploads, no waiting.
 - **Smart file diffing** — Compares SHA-256 hashes and only transfers what actually changed.
-- **46 games, 30 families** — Sims, WoW, Minecraft, Project Zomboid, Skyrim, Bannerlord, Valheim, Terraria, and many more. Data-driven registry — adding a game is just JSON.
+- **78 games, 45 families** — Sims, WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, Stellaris, Lethal Company, Skyrim, Valheim, Terraria, and many more. Data-driven registry — adding a game is just JSON.
+- **ReShade & GShade for The Sims 4** — Share presets and shaders so everyone's game looks the same. Detected automatically when installed.
+- **Reliable connections** — Finds hosts via mDNS *and* UDP broadcast, tries every network address a host has, and fixes Windows Firewall with one click. No need to run as administrator.
 - **Transfer compression** — zstd compression reduces bandwidth by 50-80% for most mod types. Negotiated automatically between peers.
 - **Multi-peer sessions** — One host, multiple friends. Everyone syncs independently.
 - **Conflict resolution** — Keep yours, use theirs, or keep both — per file.
@@ -64,16 +66,20 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 
 ## Supported Games
 
-46 games across 30 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
+78 games across 45 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
+
+Auto-detection checks the usual install/save locations, **every Steam library on every drive**, and (for Sims 4 ReShade/GShade) the EA App install path from the registry. You can always set a path manually.
 
 <details>
-<summary><strong>The Sims</strong> — 3 games</summary>
+<summary><strong>The Sims</strong> — 5 games</summary>
 
 | Game | Content Types | Auto-Detect |
 |------|--------------|:-----------:|
-| **The Sims 4** | Mods, Saves, Tray, Screenshots | Yes |
-| **The Sims 3** | Mods & CC, Saves, Tray, Screenshots | Yes |
-| **The Sims 2** | Mods & CC, Neighborhoods, Tray, Screenshots | Yes |
+| **The Sims 4** | Script Mods, Save Files, Tray Items, Screenshots | Yes |
+| **The Sims 4 (ReShade)** | ReShade Presets, ReShade Shaders | Yes |
+| **The Sims 4 (GShade)** | GShade Presets, GShade Shaders | Yes |
+| **The Sims 3** | Mods & CC, Save Files, Tray Items, Screenshots | Yes |
+| **The Sims 2** | Mods & CC, Neighborhoods, Tray Items, Screenshots | Yes |
 
 </details>
 
@@ -89,6 +95,34 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 | **WoW TBC (2.4.3)** | Addons, Addon Settings | Manual |
 | **WoW Vanilla (1.12)** | Addons, Addon Settings | Manual |
 | **WoW Custom Server** | Addons, Addon Settings | Manual |
+
+</details>
+
+<details>
+<summary><strong>Bethesda</strong> — 7 games</summary>
+
+| Game | Content Types | Auto-Detect |
+|------|--------------|:-----------:|
+| **Skyrim Special Edition** | Mods & Plugins | Yes |
+| **Fallout 4** | Mods & Plugins | Yes |
+| **Fallout: New Vegas** | Mods & Plugins | Yes |
+| **Skyrim (Legendary Edition)** | Mods & Plugins | Yes |
+| **The Elder Scrolls IV: Oblivion** | Mods & Plugins | Yes |
+| **The Elder Scrolls III: Morrowind** | Mods & Plugins | Yes |
+| **Starfield** | Mods & Plugins | Yes |
+
+</details>
+
+<details>
+<summary><strong>Paradox</strong> — 5 games</summary>
+
+| Game | Content Types | Auto-Detect |
+|------|--------------|:-----------:|
+| **Crusader Kings III** | Mods, Save Files | Yes |
+| **Europa Universalis IV** | Mods, Save Files | Yes |
+| **Hearts of Iron IV** | Mods, Save Files | Yes |
+| **Stellaris** | Mods, Save Files | Yes |
+| **Victoria 3** | Mods, Save Files | Yes |
 
 </details>
 
@@ -128,35 +162,53 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 </details>
 
 <details>
-<summary><strong>Other Games</strong> — 25 games</summary>
+<summary><strong>Other Games</strong> — 43 games</summary>
 
 | Game | Content Types | Auto-Detect |
 |------|--------------|:-----------:|
-| **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs | Yes |
-| **Counter-Strike 2** | Maps, Configs | Yes |
-| **Garry's Mod** | Addons, Maps, Saves | Yes |
-| **Stardew Valley** | SMAPI Mods | Yes |
-| **Valheim** | Plugins (BepInEx), Mod Configs | Yes |
-| **Terraria** | Worlds, Players, tModLoader Mods, Resource Packs | Yes |
-| **Warcraft III** | Custom Maps | Yes |
-| **Space Engineers** | Mods, Worlds, Blueprints | Yes |
-| **Satisfactory** | Mods (SMM) | Yes |
-| **Don't Starve Together** | Mods | Yes |
+| **7 Days to Die** | Mods, Save Files, Server Configs | Yes |
+| **American Truck Simulator** | Mods, Profiles | Yes |
+| **Baldur's Gate 3** | Mods, Mod Load Order, Save Files | Yes |
+| **Beat Saber** | Custom Songs, Plugins (BSIPA), Plugin Libraries, Custom Sabers, Mod Configs | Yes |
+| **Cities: Skylines** | Mods, Assets, Save Files, Maps | Yes |
+| **Cities: Skylines II** | Local Mods, Save Files, Maps | Yes |
 | **Conan Exiles** | Mods | Yes |
-| **Torchlight II** | Mods | Yes |
-| **The Riftbreaker** | Mods | Yes |
-| **RimWorld** | Mods, Saves | Yes |
-| **Cities: Skylines** | Mods, Assets, Saves, Maps | Yes |
+| **Counter-Strike 2** | Maps, Configs | Yes |
+| **Cyberpunk 2077** | Archive Mods, Redscript Mods, TweakXL Tweaks, Cyber Engine Tweaks Mods, RED4ext Plugins | Yes |
+| **Don't Starve** | Mods | Yes |
+| **Don't Starve Together** | Mods | Yes |
 | **Euro Truck Simulator 2** | Mods, Profiles | Yes |
-| **Factorio** | Mods, Saves, Scenarios, Blueprints | Yes |
-| **Palworld** | Mods | Yes |
+| **Factorio** | Mods, Save Files, Scenarios | Yes |
+| **Farming Simulator 22** | Mods | Yes |
+| **Farming Simulator 25** | Mods | Yes |
+| **Garry's Mod** | Addons, Maps, Saves | Yes |
+| **Hollow Knight** | Mods | Yes |
+| **Kerbal Space Program** | Mods, Save Files, Ship Designs | Yes |
 | **Left 4 Dead 2** | Addons & Maps, Configs | Yes |
-| **Subnautica** | Mods (QMods), Saves | Yes |
-| **7 Days to Die** | Mods, Saves, Server Configs | Yes |
-| **Kerbal Space Program** | Mods, Saves, Ship Designs | Yes |
-| **Project Zomboid** | Mods, Saves | Yes |
-| **Skyrim Special Edition** | Mods & Plugins | Yes |
+| **Lethal Company** | Plugins (BepInEx), Mod Configs | Yes |
+| **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs | Yes |
 | **Mount & Blade II: Bannerlord** | Modules | Yes |
+| **Mount & Blade: Warband** | Modules | Yes |
+| **Oxygen Not Included** | Local Mods, Save Files | Yes |
+| **Palworld** | Mods | Yes |
+| **Project Zomboid** | Mods, Save Files | Yes |
+| **RimWorld** | Mods, Save Files | Yes |
+| **Risk of Rain 2** | Plugins (BepInEx), Mod Configs | Yes |
+| **Satisfactory** | Mods (SMM) | Yes |
+| **Sid Meier's Civilization VI** | Mods, Save Files | Yes |
+| **Slay the Spire** | Mods, Save Files, Preferences & Profiles | Yes |
+| **Space Engineers** | Mods, Worlds, Blueprints | Yes |
+| **Stardew Valley** | SMAPI Mods | Yes |
+| **Subnautica** | Mods (QMods), Save Files | Yes |
+| **Team Fortress 2** | Custom (HUDs, Skins, Sounds), Maps, Configs | Yes |
+| **Terraria** | Worlds, Players, tModLoader Mods, Resource Packs | Yes |
+| **The Riftbreaker** | Mods | Yes |
+| **The Witcher 3: Wild Hunt** | Mods, Mod Menus | Yes |
+| **Torchlight II** | Mods | Yes |
+| **Valheim** | Plugins (BepInEx), Mod Configs | Yes |
+| **Vintage Story** | Mods, Save Files, Mod Configs | Yes |
+| **Warcraft III** | Custom Maps | Yes |
+| **XCOM 2** | Mods (Base Game), Mods (War of the Chosen) | Yes |
 
 </details>
 
@@ -176,7 +228,7 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 
 ## How SyncCrate Works
 
-1. **Discover peers** — SyncCrate finds other users on the network via mDNS (or connect manually by IP).
+1. **Discover peers** — SyncCrate finds other users on the network via mDNS and UDP broadcast (or connect manually by IP).
 2. **Scan game folders** — Both sides generate SHA-256 file hashes.
 3. **Compare files** — Differences are detected and categorized: download, upload, or conflict.
 4. **Build sync plan** — Review what will transfer. Exclude files, resolve conflicts, apply filters.
@@ -191,11 +243,12 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 |-|---------|-------------|
 | **P2P** | Peer-to-peer transfer | Files move directly between computers. Nothing leaves your network. |
 | **Multi** | Multi-peer sessions | One host, multiple clients. Each client syncs independently. |
-| **Games** | Multi-game support | 46 games across 30 families. Data-driven registry — adding games is just JSON. |
+| **Games** | Multi-game support | 78 games across 45 families. Data-driven registry — adding games is just JSON. |
 | **Zstd** | Transfer compression | zstd compression reduces bandwidth 50-80%. Negotiated per-peer, skips already-compressed files. |
 | **Auto** | Auto-backups | Back up before every sync or on a schedule. Old auto-backups pruned automatically. |
 | **Resume** | Sync resume | Interrupted syncs resume from where they left off. Checkpoint verified by plan hash. |
-| **mDNS** | Auto-discovery | Finds peers on your network automatically. No IPs to configure. |
+| **Discovery** | Auto-discovery | Finds peers on your network via mDNS + UDP broadcast, and tries every address a host has. No IPs to configure. |
+| **Network** | Firewall fix & diagnostics | One-click Windows Firewall fix, reachability test, clear connection error messages. |
 | **Diff** | Smart diffing | Compares file hashes. Only transfers what's actually different. |
 | **Resolve** | Conflict resolution | Keep yours, use theirs, or keep both — per file. |
 | **Tags** | Mod tagging | Organize mods with 12 built-in tags. Bulk-tag, filter, and search. |
@@ -254,6 +307,10 @@ Both players need to be on the **same network** — same Wi-Fi, same router, or 
 | **Host** | Enter a display name > **Start Hosting** |
 | **Client** | Enter a display name > **Scan for Hosts** > click the host to connect |
 
+If the host doesn't show up, use **Connect by IP** with one of the addresses shown on the host's screen.
+
+**Can't connect?** On the **host** PC, click **Fix Windows Firewall** (shown while hosting, and in *Network Check* on the Dashboard). It asks for administrator permission once, removes any rule blocking SyncCrate, and allows it on Private and Public networks. You don't need to run SyncCrate as administrator. Use **Test** in Network Check to see whether a host is reachable before joining.
+
 ### 4. Compare & Sync
 
 Click **Compare & Sync** on the Dashboard. SyncCrate scans both mod folders and categorizes every file:
@@ -278,7 +335,7 @@ Not on the same physical network? SyncCrate works over any virtual LAN network. 
 - **[ZeroTier](https://www.zerotier.com)** — Free for up to 25 devices
 - **Hamachi** or any VPN-based LAN solution
 
-Both players install the virtual LAN tool and join the same network, then use SyncCrate normally — mDNS discovery works through virtual LANs.
+Both players install the virtual LAN tool and join the same network. Auto-discovery usually doesn't cross a VPN, so the client uses **Connect by IP** with the host's VPN address, which the host's screen lists (Tailscale addresses start with `100.`).
 
 ---
 
@@ -364,12 +421,22 @@ Output: `src-tauri/target/release/bundle/`
 | Frontend | React 19 + TypeScript + Vite |
 | Styling | Tailwind CSS |
 | State | Zustand |
-| Networking | TCP (transfer) + mDNS (discovery) |
+| Networking | TCP (transfer) + mDNS & UDP broadcast (discovery) |
 | Integrity | SHA-256 |
 
 ---
 
 ## FAQ
+
+<details>
+<summary><strong>How do I share ReShade or GShade presets for The Sims 4?</strong></summary>
+Add <em>The Sims 4 (ReShade)</em> or <em>The Sims 4 (GShade)</em> from the game library. It's detected automatically when ReShade/GShade is installed in the game's <code>Game\Bin</code> folder (EA App, Origin or Steam, on any drive). SyncCrate syncs shaders (<code>reshade-shaders</code> / <code>gshade-shaders</code>) and presets (<code>reshade-presets</code> / <code>gshade-presets</code>). For ReShade, put the presets you want to share in the <code>reshade-presets</code> folder. Your own <code>ReShade.ini</code> / <code>GShade.ini</code> settings are never synced. If the game is under <code>Program Files</code>, SyncCrate offers to restart as administrator because Windows protects that folder.
+</details>
+
+<details>
+<summary><strong>Do I need to run SyncCrate as administrator?</strong></summary>
+No. Connection problems are almost always Windows Firewall. Use <strong>Fix Windows Firewall</strong>, which asks for permission once. The only time you need administrator rights is when the game folder itself is protected, for example ReShade/GShade in <code>Program Files</code>, and SyncCrate tells you when that's the case.
+</details>
 
 <details>
 <summary><strong>Is there a file size limit?</strong></summary>
@@ -383,7 +450,7 @@ Yes. One person hosts, multiple friends join. Each client syncs independently wi
 
 <details>
 <summary><strong>Which games are supported?</strong></summary>
-SyncCrate ships with 46 games across 30 families, including The Sims, WoW, Minecraft, Project Zomboid, Skyrim Special Edition, Bannerlord, Valheim, Terraria, Subnautica, KSP, and more. Games are defined in a JSON registry — adding new games requires no code changes.
+SyncCrate ships with 78 games across 45 families, including The Sims (plus ReShade/GShade presets for Sims 4), WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, the Paradox grand-strategy games, Skyrim, Valheim, Terraria, and more. Games are defined in a JSON registry — adding new games requires no code changes.
 </details>
 
 <details>
@@ -433,6 +500,17 @@ SyncCrate flags potentially dangerous script files (like <code>.ts4script</code>
 Contributions are welcome. Open an [issue](../../issues) for bugs or feature requests, or submit a pull request.
 
 **Want to add support for a new game?** The game registry is a single [JSON file](synccrate/src-tauri/src/game_registry.json). Define the game's detection paths, content types, and file extensions — no Rust or TypeScript changes needed.
+
+Detection strategies (tried in order, first existing path wins):
+
+| Strategy | Example |
+|----------|---------|
+| `documents_relative` | `{"type": "documents_relative", "base": "My Games", "folders": ["Fallout4"]}` |
+| `absolute_paths` | `{"type": "absolute_paths", "paths": {"windows": ["%APPDATA%\\VintagestoryData"], "linux": ["~/.config/VintagestoryData"]}}` |
+| `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` — checked in every Steam library |
+| `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
+
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders that contain one of those files or folders (used for add-ons like ReShade/GShade). Every content type needs a real subfolder, and its `icon` must be one of the icons in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`.
 
 ---
 

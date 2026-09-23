@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toastError, toastInfo } from "../lib/toast";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
@@ -137,7 +138,7 @@ export function useTauriEvents() {
           try {
             const gameId = useAppStore.getState().selectedGame ?? undefined;
             const manifest = await cmd.scanFiles(gameId);
-            setManifest(manifest);
+            if ((useAppStore.getState().selectedGame ?? undefined) === gameId) setManifest(manifest);
           } catch {
             // Ignore scan failures from file watcher
           }
@@ -175,6 +176,12 @@ export function useTauriEvents() {
           try {
             const status = await cmd.getSessionStatus();
             setSession(status);
+            if (status.session_type === "None") {
+              // The plan/progress belonged to the dropped connection; the backend
+              // discarded it, so don't leave a stale plan or progress bar behind.
+              setSyncPlan(null);
+              setSyncProgress(null);
+            }
 
             // Auto-retry for clients that lost the host
             if (!clean && status.session_type === "None") {
@@ -187,13 +194,18 @@ export function useTauriEvents() {
             }
           }
         }),
+        listen<{ message: string }>("discovery-unavailable", (event) => {
+          addLog(`LAN auto-discovery is unavailable: ${event.payload.message}`, "warning");
+          toastInfo("Auto-discovery couldn't start — friends can still join using Connect by IP.");
+        }),
         listen<{ message: string }>("connection-failed", (event) => {
           const msg = event.payload.message;
           addLog(`Connection failed: ${msg}`, "error");
-          // Detect firewall / connection-reset errors and show guidance
-          const isFirewall = /10054|10061|forcibly closed|connection refused|connection reset/i.test(msg);
-          if (isFirewall) {
-            addLog("This is usually a firewall issue. The HOST must allow SyncCrate through Windows Firewall (both Private and Public networks). See the connection guide below for steps.", "warning");
+          // The backend now explains the likely cause (firewall timeout vs refused
+          // vs unreachable), so surface it directly instead of only in the log.
+          toastError(msg);
+          if (/forcibly closed|connection reset|10054/i.test(msg)) {
+            addLog("The host dropped the connection. Ask the host to click \"Fix Windows Firewall\" in SyncCrate and try again.", "warning");
           }
           setIsScanning(false);
           useAppStore.getState().setIsConnecting(false);

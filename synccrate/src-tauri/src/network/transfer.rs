@@ -695,7 +695,7 @@ fn connect_failure_message(kind: ConnectFailure, tried: &[String], port: u16, de
             addrs, port
         ),
         ConnectFailure::Timeout => format!(
-            "No response from {} on port {}. This is almost always Windows Firewall on the host blocking SyncCrate — on the host PC, open Settings → Network and click \"Fix Windows Firewall\", then try again.",
+            "No response from {} on port {}. This is almost always Windows Firewall on the host blocking SyncCrate — on the host PC, click \"Fix Windows Firewall\" (shown on the hosting screen and in Network Check), then try again.",
             addrs, port
         ),
         ConnectFailure::Unreachable => format!(

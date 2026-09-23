@@ -14,6 +14,7 @@ import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ConnectionGuide from "./ConnectionGuide";
 import DonationBanner from "./DonationBanner";
+import { FirewallCheck } from "./NetworkHealth";
 
 interface Props {
   gameId: string;
@@ -32,6 +33,7 @@ export default function GameDashboard({ gameId }: Props) {
   const gamePaths = useAppStore((s) => s.gamePaths);
   const setGamePaths = useAppStore((s) => s.setGamePaths);
   const setPage = useAppStore((s) => s.setPage);
+  const activeGame = useAppStore((s) => s.activeGame);
   const { host, join, connectTo, connectByIp, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, loadingPhase } = useSync();
 
@@ -41,9 +43,51 @@ export default function GameDashboard({ gameId }: Props) {
 
   // Ensure backend active game matches the selected game
   useEffect(() => {
-    cmd.setActiveGame(gameId).catch(() => {});
-    useAppStore.getState().setActiveGame(gameId);
+    // Only mirror into the store once the backend accepts it — switching games
+    // is refused mid-session, and the store must keep tracking the game that is
+    // actually being synced.
+    cmd.setActiveGame(gameId)
+      .then(() => useAppStore.getState().setActiveGame(gameId))
+      .catch((e) => {
+        addLog(`Could not switch active game: ${e}`, "warning");
+        cmd.getActiveGame().then((g) => useAppStore.getState().setActiveGame(g)).catch(() => {});
+      });
   }, [gameId]);
+
+  // Protected install folders (e.g. Sims 4 Game\Bin under Program Files, used by
+  // ReShade/GShade) can't be written without elevation — warn up front instead
+  // of failing mid-sync.
+  const [pathWritable, setPathWritable] = useState(true);
+  const [restartingAdmin, setRestartingAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setPathWritable(true);
+    if (!gamePaths[gameId]) return;
+    cmd.checkGamePathWritable()
+      .then((w) => { if (!cancelled) setPathWritable(w); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [gameId, gamePaths]);
+
+  const writeAccessBanner = !pathWritable && (
+    <div className="bg-status-yellow/10 border border-status-yellow/30 rounded-xl p-3 flex items-center gap-3">
+      <Lock size={16} className="text-status-yellow shrink-0" />
+      <p className="flex-1 text-xs text-txt-dim leading-relaxed">
+        <span className="font-medium text-txt">SyncCrate can't write to this folder.</span> It's in a protected
+        location (like Program Files), so received files can't be saved. Restart SyncCrate as administrator to sync it.
+      </p>
+      <button
+        onClick={async () => {
+          setRestartingAdmin(true);
+          try { await cmd.restartAsAdmin(); } catch (e) { toastError(String(e)); setRestartingAdmin(false); }
+        }}
+        disabled={restartingAdmin}
+        className="shrink-0 px-3 py-1.5 rounded-lg bg-status-yellow/15 hover:bg-status-yellow/25 text-status-yellow text-xs font-medium transition-colors disabled:opacity-50"
+      >
+        {restartingAdmin ? "Restarting..." : "Restart as admin"}
+      </button>
+    </div>
+  );
 
   const [hostName, setHostName] = useState("");
   const [usePin, setUsePin] = useState(false);
@@ -129,6 +173,8 @@ export default function GameDashboard({ gameId }: Props) {
     setIsScanning(true);
     try {
       const m = await cmd.scanFiles(gameId);
+      // Don't overwrite the manifest if the user switched games mid-scan.
+      if (useAppStore.getState().selectedGame !== gameId) return;
       setManifest(m);
       const count = Object.keys(m.files).length;
       toastSuccess(`Scan complete \u2014 ${count} file(s) found`);
@@ -153,6 +199,8 @@ export default function GameDashboard({ gameId }: Props) {
           <h2 className="text-2xl font-bold mb-2">{gameLabel}</h2>
           <p className="text-txt-dim">Sync your files with friends over LAN</p>
         </div>
+
+        {writeAccessBanner}
 
         {isConnecting && (
           <div className="bg-accent/10 border border-accent/30 rounded-xl p-4 flex items-center gap-3">
@@ -432,10 +480,23 @@ export default function GameDashboard({ gameId }: Props) {
   const isHost = session.session_type === "Host";
   const isClient = session.session_type === "Client";
   const hostPeer = isClient && session.peers.length > 0 ? session.peers[0] : null;
+  // The backend refuses to switch games mid-session, so this page may be showing
+  // a different game than the one the session syncs.
+  const sessionGameMismatch = activeGame !== gameId;
+  const sessionGameLabel = getGameDef(activeGame)?.label ?? activeGame;
 
   return (
     <div className="space-y-6">
       <DonationBanner />
+      {writeAccessBanner}
+      {sessionGameMismatch && (
+        <div className="bg-status-yellow/10 border border-status-yellow/30 rounded-xl p-3 flex items-center gap-3">
+          <AlertTriangle size={16} className="text-status-yellow shrink-0" />
+          <p className="flex-1 text-xs text-txt-dim leading-relaxed">
+            This session is syncing <span className="font-medium text-txt">{sessionGameLabel}</span>. Disconnect to sync {gameLabel} instead.
+          </p>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">{gameLabel} Dashboard</h2>
         <div className="flex gap-2">
@@ -443,7 +504,7 @@ export default function GameDashboard({ gameId }: Props) {
             <RefreshCw size={14} className={isScanning ? "animate-spin" : ""} />
             Scan Files
           </button>
-          {isClient && (
+          {isClient && !sessionGameMismatch && (
             <button onClick={computePlan} disabled={isSyncLoading} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm transition-colors disabled:opacity-50">
               {isSyncLoading ? (loadingPhase || "Computing...") : "Compare & Sync"}
             </button>
@@ -503,6 +564,8 @@ export default function GameDashboard({ gameId }: Props) {
         </div>
       )}
 
+      {isHost && <FirewallCheck compact />}
+
       {isHost && session.host_ips && session.host_ips.length > 0 && (
         <div className="bg-bg-card rounded-xl border border-border p-3">
           <div className="flex items-center gap-2 mb-2">
@@ -543,7 +606,7 @@ export default function GameDashboard({ gameId }: Props) {
         <GameInfoCard gameInfo={gameInfo} gameLabel={gameLabel} packsExpanded={packsExpanded} setPacksExpanded={setPacksExpanded} detectingPacks={detectingPacks} onDetect={handleDetectPacks} />
       )}
 
-      {syncPlan && syncPlan.actions.length > 0 && (
+      {syncPlan && !sessionGameMismatch && syncPlan.actions.length > 0 && (
         <>
           {gameDef?.dangerous_script_extensions && gameDef.dangerous_script_extensions.length > 0 && syncPlan.actions.some((a) => {
             const p = a.ReceiveFromRemote?.relative_path ?? a.Conflict?.remote.relative_path ?? "";
@@ -555,7 +618,7 @@ export default function GameDashboard({ gameId }: Props) {
               <span className="text-sm text-status-yellow">This sync includes script files. Only sync from peers you trust.</span>
             </div>
           )}
-          {syncPlan.resumed_files && syncPlan.resumed_files > 0 && (
+          {!!syncPlan.resumed_files && syncPlan.resumed_files > 0 && (
             <div className="text-sm text-accent-light">
               Resuming — {syncPlan.resumed_files} files already transferred
             </div>
@@ -563,7 +626,7 @@ export default function GameDashboard({ gameId }: Props) {
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} />
         </>
       )}
-      {syncPlan && syncPlan.actions.length === 0 && (
+      {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         <div className="bg-status-green/10 border border-status-green/30 rounded-xl p-4 text-center">
           <span className="text-sm text-status-green font-medium">Everything is in sync!</span>
         </div>

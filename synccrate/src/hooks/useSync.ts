@@ -49,6 +49,9 @@ export function useSync() {
         useAppStore.getState().setDonationMilestone(milestone);
       }
     } catch (e: any) {
+      // Early backend errors return before `sync-complete` fires; don't leave
+      // the progress bar stuck.
+      useAppStore.getState().setSyncProgress(null);
       addLog(`Sync failed: ${e}`, "error");
       toastError(`Sync failed: ${e}`);
     } finally {
