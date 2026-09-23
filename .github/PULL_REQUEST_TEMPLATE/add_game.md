@@ -8,7 +8,11 @@
 - [ ] Added a new entry to [`game_registry.json`](../../synccrate/src-tauri/src/game_registry.json)
 - [ ] Tested that the game is auto-detected on my machine
 - [ ] Verified the content folders exist and files are scanned correctly
-- [ ] Added dangerous script extensions if the game uses executable mods
+- [ ] Added dangerous script extensions if the game uses executable mods (e.g. `dll` for BepInEx)
+- [ ] Used `steam_library` detection for mods inside the install folder (forward slashes, e.g. `"Game Name/Mods"`)
+- [ ] Added `process_names` (the game's .exe) so SyncCrate can warn when the game is running
+- [ ] The game `icon` is one of the keys in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`
+- [ ] Every content type has a real subfolder (not `""` / `"."`)
 
 ### My registry entry
 
