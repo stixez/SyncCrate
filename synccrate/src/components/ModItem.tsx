@@ -4,6 +4,7 @@ import type { FileInfo, ModCompatibility } from "../lib/types";
 import { formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
+import { Badge, cx } from "./ui";
 
 interface ModItemProps {
   file: FileInfo;
@@ -35,10 +36,18 @@ export default function ModItem({
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
   const [showTagEditor, setShowTagEditor] = useState(false);
   const isDisabled = isDisabledPath(file.relative_path);
+  const isOutdated = outdatedSince !== undefined;
+  const dir = file.relative_path.slice(0, Math.max(0, file.relative_path.length - name.length)).replace(/[/\\]$/, "");
 
   return (
     <div
-      className={`relative flex items-center gap-3 bg-bg-card rounded-lg border border-border px-4 py-3 hover:bg-bg-card-hover transition-colors cursor-pointer ${isDisabled ? "opacity-50" : ""}`}
+      className={cx(
+        "group relative flex items-center gap-3 pl-3 pr-3 py-2 cursor-pointer transition-colors hover:bg-bg-card-hover",
+        // State rule on the left edge: amber = may be outdated, neon on hover.
+        "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
+        isOutdated ? "before:bg-amber" : "before:bg-transparent hover:before:bg-neon",
+        selected && "bg-neon/[0.06]",
+      )}
       onClick={() => {
         if (!bulkMode && onShowDetails) onShowDetails();
       }}
@@ -50,69 +59,67 @@ export default function ModItem({
           onChange={() => onSelect?.(file.relative_path)}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select ${name}`}
-          className="shrink-0 accent-accent"
+          className="check"
         />
       )}
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMod ? "bg-accent/20" : "bg-pink-500/20"}`}>
-        {isMod ? <Puzzle size={16} className="text-accent-light" /> : <Palette size={16} className="text-pink-400" />}
+      <div
+        className={cx(
+          "w-7 h-7 shrink-0 grid place-items-center border",
+          isDisabled ? "border-border text-txt-muted" : isMod ? "border-accent/50 text-accent-light bg-accent/10" : "border-line-hi text-txt-dim bg-bg",
+        )}
+        title={isMod ? "Script mod" : "Custom content"}
+      >
+        {isMod ? <Puzzle size={14} /> : <Palette size={14} />}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium truncate">{name}</p>
-          {isDisabled && (
-            <span className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0">
-              Disabled
-            </span>
-          )}
-          {outdatedSince !== undefined && (
-            <span
-              title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}
-              className="px-1.5 py-0 rounded-full bg-status-yellow/15 text-status-yellow text-[10px] font-medium shrink-0"
-            >
+      <div className={cx("flex-1 min-w-0", isDisabled && "opacity-60")}>
+        <div className="flex items-center gap-2">
+          <p className={cx("text-[13px] font-medium truncate", isDisabled ? "text-txt-dim line-through decoration-txt-muted" : "text-txt")}>{name}</p>
+          {isDisabled && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
+          {isOutdated && (
+            <Badge tone="amber" className="shrink-0" title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}>
               May be outdated
-            </span>
+            </Badge>
           )}
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <p className="text-xs text-txt-dim truncate">{file.relative_path}</p>
+        <div className="flex items-center gap-2 mt-0.5 min-w-0">
+          <p className="font-mono text-[11px] text-txt-muted truncate">{dir || "/"}</p>
           {tags.length > 0 && (
             <div className="flex gap-1 shrink-0">
               {tags.slice(0, 3).map((tag) => (
-                <span
-                  key={tag}
-                  className="px-1.5 py-0 rounded-full bg-accent/15 text-accent-light text-[10px] font-medium"
-                >
-                  {tag}
+                <span key={tag} className="font-mono text-[10px] uppercase tracking-[0.06em] text-accent-light">
+                  #{tag}
                 </span>
               ))}
-              {tags.length > 3 && (
-                <span className="text-[10px] text-txt-dim">+{tags.length - 3}</span>
-              )}
+              {tags.length > 3 && <span className="font-mono text-[10px] text-txt-muted">+{tags.length - 3}</span>}
             </div>
           )}
         </div>
       </div>
-      <span className="text-xs text-txt-dim">{formatBytes(file.size)}</span>
-      <span className="text-xs text-txt-dim font-mono">{file.hash.slice(0, 8)}</span>
+      <span className="w-[72px] shrink-0 text-right font-mono text-[11px] text-txt-dim tabular">{formatBytes(file.size)}</span>
+      <span className="w-[70px] shrink-0 font-mono text-[11px] text-txt-muted">{file.hash.slice(0, 8)}</span>
+      <div className="w-5 shrink-0 flex justify-center">
+        {compatibility?.status === "MissingPacks" && (
+          <span title={`Missing packs: ${compatibility.missing_packs.map((p) => p.code).join(", ")}`} className="text-amber">
+            <AlertTriangle size={14} />
+          </span>
+        )}
+      </div>
       <button
         onClick={(e) => {
           e.stopPropagation();
           setShowTagEditor(!showTagEditor);
         }}
-        className="p-1 rounded hover:bg-bg-card-active transition-colors text-txt-dim hover:text-accent-light"
+        className={cx(
+          "w-7 h-7 shrink-0 grid place-items-center border transition-colors",
+          showTagEditor ? "border-neon text-neon" : "border-transparent text-txt-muted hover:border-line-hi hover:text-txt",
+        )}
         title="Edit tags"
       >
-        <Tag size={14} />
+        <Tag size={13} />
       </button>
-      {compatibility?.status === "MissingPacks" && (
-        <span
-          title={`Missing packs: ${compatibility.missing_packs.map((p) => p.code).join(", ")}`}
-          className="text-status-yellow shrink-0"
-        >
-          <AlertTriangle size={14} />
-        </span>
-      )}
-      <StatusBadge status={syncStatus} />
+      <div className="w-[92px] shrink-0 flex justify-end">
+        <StatusBadge status={syncStatus} />
+      </div>
       {showTagEditor && onTagsChanged && (
         <TagEditor
           filePath={file.relative_path}

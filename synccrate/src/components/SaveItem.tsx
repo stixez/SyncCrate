@@ -12,16 +12,19 @@ export default function SaveItem({ file, syncStatus = "local" }: SaveItemProps) 
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
 
   return (
-    <div className="flex items-center gap-3 bg-bg-card rounded-lg border border-border px-4 py-3 hover:bg-bg-card-hover transition-colors">
-      <div className="w-8 h-8 rounded-lg bg-status-green/20 flex items-center justify-center">
-        <Save size={16} className="text-status-green" />
+    <div className="group relative flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-card-hover before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-transparent hover:before:bg-neon">
+      <div className="w-7 h-7 shrink-0 grid place-items-center border border-line-hi bg-bg text-txt-dim">
+        <Save size={14} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{name}</p>
-        <p className="text-xs text-txt-dim">{formatDate(file.modified)}</p>
+        <p className="text-[13px] font-medium truncate text-txt">{name}</p>
+        <p className="font-mono text-[11px] text-txt-muted truncate">{file.relative_path}</p>
       </div>
-      <span className="text-xs text-txt-dim">{formatBytes(file.size)}</span>
-      <StatusBadge status={syncStatus} />
+      <span className="w-[150px] shrink-0 font-mono text-[11px] text-txt-dim">{formatDate(file.modified)}</span>
+      <span className="w-[72px] shrink-0 text-right font-mono text-[11px] text-txt-dim tabular">{formatBytes(file.size)}</span>
+      <div className="w-[92px] shrink-0 flex justify-end">
+        <StatusBadge status={syncStatus} />
+      </div>
     </div>
   );
 }

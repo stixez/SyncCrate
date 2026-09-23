@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles } from "lucide-react";
+import { Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
 import ModItem from "./ModItem";
@@ -7,6 +7,7 @@ import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
 import ConflictResolver from "./ConflictResolver";
 import DuplicateFinder from "./DuplicateFinder";
+import { Banner, Button, EmptyState, Input, SectionHeader, cx } from "./ui";
 import { useSync } from "../hooks/useSync";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { formatDateShort } from "../lib/utils";
@@ -246,108 +247,154 @@ export default function ContentBrowser({ gameId }: Props) {
   // Determine if this content type looks like "mods" (has tagging, details panel)
   const isModLike = activeCt && (activeCt.file_type === "Mod" || activeCt.file_type === "CustomContent" || activeCt.file_type === "Addon");
 
+  // Per-tab file counts for the HUD tab strip.
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!manifest) return counts;
+    const byType: Record<string, number> = {};
+    for (const f of Object.values(manifest.files)) byType[f.file_type] = (byType[f.file_type] || 0) + 1;
+    for (const ct of contentTypes) {
+      const types = new Set<string>([ct.file_type, ...Object.values(ct.classify_by_extension ?? {})]);
+      let n = 0;
+      for (const t of types) n += byType[t] || 0;
+      counts[ct.id] = n;
+    }
+    return counts;
+  }, [manifest, contentTypes]);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">{gameDef?.label ?? gameId} Content</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-bg-card border border-border rounded-lg px-2.5 py-1">
-            <ArrowUpDown size={12} className="text-txt-dim" />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)} className="bg-transparent text-xs text-txt-dim focus:outline-none cursor-pointer">
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-              <option value="date">Date</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
-          {outdatedInTab > 0 && outdated.patchTime !== null && (
-            <button
-              onClick={() => setOutdatedOnly(!outdatedOnly)}
-              title={`Script mods older than the last game update (${formatDateShort(outdated.patchTime)}) often break`}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${outdatedOnly ? "bg-status-yellow text-black" : "bg-status-yellow/15 border border-status-yellow/30 text-status-yellow hover:bg-status-yellow/25"}`}
-            >
-              <AlertTriangle size={12} />
-              May be outdated ({outdatedInTab})
-            </button>
-          )}
-          {isModLike && (
-            <button
-              onClick={() => setShowDuplicates(!showDuplicates)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${showDuplicates ? "bg-accent text-white" : "bg-bg-card border border-border text-txt-dim hover:bg-bg-card-hover"}`}
-            >
-              <Copy size={12} />
-              Find duplicates
-            </button>
-          )}
-          {isModLike && (
-            <button
-              onClick={() => { setBulkMode(!bulkMode); setSelected(new Set()); }}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${bulkMode ? "bg-accent text-white" : "bg-bg-card border border-border text-txt-dim hover:bg-bg-card-hover"}`}
-            >
-              <CheckSquare size={12} />
-              {bulkMode ? "Cancel" : "Bulk Select"}
-            </button>
-          )}
-          <span className="text-txt-dim text-sm">{files.length} items</span>
-        </div>
-      </div>
+      <SectionHeader
+        label={<><b>// Content</b> &nbsp;{activeCt?.label ?? "Files"} · {files.length} item{files.length !== 1 ? "s" : ""}</>}
+        title={<>{gameDef?.label ?? gameId} <span className="text-neon">Content</span></>}
+        actions={
+          <>
+            {outdatedInTab > 0 && outdated.patchTime !== null && (
+              <button
+                onClick={() => setOutdatedOnly(!outdatedOnly)}
+                title={`Script mods older than the last game update (${formatDateShort(outdated.patchTime)}) often break`}
+                className={cx(
+                  "btn btn-sm",
+                  outdatedOnly ? "bg-amber text-bg" : "text-amber bg-amber/10 hover:bg-amber/20",
+                )}
+              >
+                <AlertTriangle size={12} />
+                May be outdated ({outdatedInTab})
+              </button>
+            )}
+            {isModLike && (
+              <Button
+                size="sm"
+                variant={showDuplicates ? "primary" : "secondary"}
+                onClick={() => setShowDuplicates(!showDuplicates)}
+                icon={<Copy size={12} />}
+              >
+                Find duplicates
+              </Button>
+            )}
+            {isModLike && (
+              <Button
+                size="sm"
+                variant={bulkMode ? "primary" : "secondary"}
+                onClick={() => { setBulkMode(!bulkMode); setSelected(new Set()); }}
+                icon={bulkMode ? <X size={12} /> : <CheckSquare size={12} />}
+              >
+                {bulkMode ? "Cancel" : "Bulk Select"}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {legacyCount > 0 && legacyDismissed !== gameId && (
-        <div className="flex items-center gap-2 bg-status-yellow/10 border border-status-yellow/30 rounded-lg px-3 py-2 text-xs">
-          <AlertTriangle size={14} className="text-status-yellow shrink-0" />
-          <span className="flex-1">
-            {legacyCount} mod{legacyCount !== 1 ? "s" : ""} in _Disabled {legacyCount !== 1 ? "are" : "is"} still being loaded by {gameDef?.label ?? gameId}
-          </span>
-          <button
-            onClick={fixLegacy}
-            disabled={fixingLegacy}
-            title="Rename them to .disabled (keeping their folders) so the game really ignores them"
-            className="px-2.5 py-0.5 rounded bg-status-yellow text-black font-medium disabled:opacity-50"
-          >
-            {fixingLegacy ? "Fixing…" : "Fix"}
-          </button>
-          <button onClick={() => setLegacyDismissed(gameId)} className="text-txt-dim hover:text-txt" aria-label="Dismiss">
-            <X size={12} />
-          </button>
-        </div>
+        <Banner
+          tone="warn"
+          icon={<AlertTriangle size={14} />}
+          title={`${legacyCount} mod${legacyCount !== 1 ? "s" : ""} in _Disabled ${legacyCount !== 1 ? "are" : "is"} still being loaded by ${gameDef?.label ?? gameId}`}
+          actions={
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={fixLegacy}
+                disabled={fixingLegacy}
+                title="Rename them to .disabled (keeping their folders) so the game really ignores them"
+              >
+                {fixingLegacy ? "Fixing…" : "Fix"}
+              </Button>
+              <button onClick={() => setLegacyDismissed(gameId)} className="p-1 text-txt-muted hover:text-txt" aria-label="Dismiss">
+                <X size={13} />
+              </button>
+            </>
+          }
+        >
+          The game loads subfolders, so these mods aren't really disabled.
+        </Banner>
       )}
 
       {showDuplicates && <DuplicateFinder gameId={gameId} onClose={() => setShowDuplicates(false)} />}
 
-      {/* Content type tabs */}
-      {contentTypes.length > 1 && (
-        <div className="flex rounded-lg border border-border overflow-hidden w-fit">
-          {contentTypes.map((ct) => (
-            <button
-              key={ct.id}
-              onClick={() => { setActiveContentTab(ct.id); setSearch(""); setTagFilter(null); }}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === ct.id ? "bg-accent text-white" : "bg-bg-card text-txt-dim hover:bg-bg-card-hover"}`}
-            >
-              {ct.label}
-            </button>
-          ))}
+      {/* Content type tabs + sort */}
+      <div className="flex items-end justify-between gap-4 border-b border-border">
+        <div className="flex items-end gap-0 overflow-x-auto -mb-px">
+          {contentTypes.length > 1 &&
+            contentTypes.map((ct) => {
+              const active = activeTab === ct.id;
+              return (
+                <button
+                  key={ct.id}
+                  onClick={() => { setActiveContentTab(ct.id); setSearch(""); setTagFilter(null); }}
+                  className={cx(
+                    "flex items-center gap-2 px-3.5 h-9 border-b-2 font-display font-semibold uppercase tracking-[0.06em] text-[12px] whitespace-nowrap transition-colors",
+                    active ? "border-neon text-txt" : "border-transparent text-txt-muted hover:text-txt hover:border-line-hi",
+                  )}
+                >
+                  {ct.label}
+                  <span className={cx("font-mono font-normal text-[10px] tracking-normal tabular", active ? "text-neon" : "text-txt-muted")}>
+                    {tabCounts[ct.id] ?? 0}
+                  </span>
+                </button>
+              );
+            })}
         </div>
-      )}
+        <label className="flex items-center gap-2 pb-2 shrink-0">
+          <ArrowUpDown size={12} className="text-txt-muted" />
+          <span className="hud-label">Sort</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            className="bg-bg border border-line-hi h-7 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-txt focus:outline-none focus:border-neon cursor-pointer"
+          >
+            <option value="name">Name</option>
+            <option value="size">Size</option>
+            <option value="date">Date</option>
+            <option value="status">Status</option>
+          </select>
+        </label>
+      </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-dim" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${activeCt?.label ?? "files"}...`}
-            className="w-full bg-bg-card border border-border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-accent"
-          />
-        </div>
+      <div className="flex items-center gap-3">
+        <Input
+          icon={<Search size={15} />}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={`Search ${activeCt?.label ?? "files"}...`}
+          wrapperClassName="flex-1"
+        />
+        {isModLike && !bulkMode && !search && (
+          <p className="hud-label flex items-center gap-1.5 shrink-0">
+            <Upload size={12} />
+            Drop files here to install
+          </p>
+        )}
       </div>
 
       {isModLike && allTags.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <Tag size={14} className="text-txt-dim shrink-0" />
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <Tag size={13} className="text-txt-muted shrink-0 mr-1" />
           <button
             onClick={() => setTagFilter(null)}
-            className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${tagFilter === null ? "bg-accent text-white" : "bg-bg-card border border-border text-txt-dim hover:border-accent/50"}`}
+            className={cx("tag h-[22px] px-2 transition-colors", tagFilter === null ? "text-neon bg-neon/10" : "tag-neutral hover:text-txt")}
           >
             All Tags
           </button>
@@ -355,35 +402,29 @@ export default function ContentBrowser({ gameId }: Props) {
             <button
               key={tag}
               onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
-              className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${tagFilter === tag ? "bg-accent text-white" : "bg-bg-card border border-border text-txt-dim hover:border-accent/50"}`}
+              className={cx("tag h-[22px] px-2 transition-colors", tagFilter === tag ? "text-neon bg-neon/10" : "tag-neutral hover:text-txt")}
             >
-              {tag} ({tagCounts[tag] || 0})
+              {tag} <span className="opacity-60">{tagCounts[tag] || 0}</span>
             </button>
           ))}
         </div>
       )}
 
-      {isModLike && !bulkMode && !search && (
-        <p className="flex items-center gap-1.5 text-xs text-txt-dim">
-          <Upload size={12} />
-          Drop files here to install
-        </p>
-      )}
-
       {bulkMode && selected.size > 0 && (
-        <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg p-2">
-          <span className="text-xs font-medium text-accent-light">{selected.size} selected</span>
+        <div className="flex items-center gap-3 border-l-2 border-l-neon bg-neon/[0.06] px-3 py-2">
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-neon">{selected.size} selected</span>
           {!bulkTagInput ? (
-            <button onClick={() => setBulkTagInput(true)} className="flex items-center gap-1 px-2 py-0.5 rounded bg-accent text-white text-xs font-medium">
-              <Tag size={10} />
+            <Button size="sm" variant="primary" onClick={() => setBulkTagInput(true)} icon={<Tag size={11} />}>
               Tag Selected
-            </button>
+            </Button>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {predefinedTags.slice(0, 6).map((tag) => (
-                <button key={tag} onClick={() => handleBulkTag(tag)} className="px-2 py-0.5 rounded-full bg-bg-card border border-border text-xs text-txt-dim hover:border-accent/50">{tag}</button>
+                <button key={tag} onClick={() => handleBulkTag(tag)} className="tag tag-neutral h-[22px] px-2 hover:text-neon hover:border-neon transition-colors">
+                  {tag}
+                </button>
               ))}
-              <button onClick={() => setBulkTagInput(false)} className="text-txt-dim hover:text-txt"><X size={12} /></button>
+              <button onClick={() => setBulkTagInput(false)} className="p-1 text-txt-muted hover:text-txt" aria-label="Cancel"><X size={12} /></button>
             </div>
           )}
         </div>
@@ -393,14 +434,15 @@ export default function ContentBrowser({ gameId }: Props) {
         <div className="space-y-3">
           {conflicts.length > 1 && (
             <div className="flex justify-end">
-              <button
+              <Button
+                size="sm"
+                variant="primary"
                 onClick={() => resolveAll("use_newest")}
                 title="Resolve every conflict by keeping whichever copy was modified more recently (ties keep yours)"
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent hover:bg-accent-light text-white text-xs font-medium transition-colors"
+                icon={<Sparkles size={12} />}
               >
-                <Sparkles size={12} />
                 Keep newer for all
-              </button>
+              </Button>
             </div>
           )}
           {conflicts.map((c) => (
@@ -409,63 +451,93 @@ export default function ContentBrowser({ gameId }: Props) {
         </div>
       )}
 
-      <div className="space-y-1">
-        {isScanning && files.length === 0 ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-card">
-              <div className="w-8 h-8 rounded animate-pulse bg-bg-card-hover" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-1/3 rounded animate-pulse bg-bg-card-hover" />
-                <div className="h-2 w-1/5 rounded animate-pulse bg-bg-card-hover" />
+      {isScanning && files.length === 0 ? (
+        <div className="box divide-y divide-border">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+              <div className="w-7 h-7 animate-pulse bg-bg-card-hover" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-2.5 w-1/3 animate-pulse bg-bg-card-hover" />
+                <div className="h-2 w-1/5 animate-pulse bg-bg-card-hover" />
               </div>
-              <div className="h-5 w-16 rounded animate-pulse bg-bg-card-hover" />
+              <div className="h-[18px] w-16 animate-pulse bg-bg-card-hover" />
             </div>
-          ))
-        ) : files.length === 0 ? (
-          <div className="text-center py-12 text-txt-dim">
-            <Package size={40} className="mx-auto mb-3 opacity-40" />
-            <p>No {activeCt?.label?.toLowerCase() ?? "files"} found</p>
-            <p className="text-xs mt-1">Make sure your game folder path is correct</p>
-            <button onClick={() => useAppStore.getState().navigateToGlobal("settings")} className="text-accent-light hover:underline text-xs cursor-pointer mt-2 inline-block">
+          ))}
+        </div>
+      ) : files.length === 0 ? (
+        <EmptyState
+          icon={<Package size={18} />}
+          label={<><b>//</b> 0 results</>}
+          title={`No ${activeCt?.label?.toLowerCase() ?? "files"} found`}
+          description="Make sure your game folder path is correct."
+          action={
+            <Button size="sm" onClick={() => useAppStore.getState().navigateToGlobal("settings")}>
               Go to Settings
-            </button>
+            </Button>
+          }
+        />
+      ) : (
+        // Plain hairline box, not a clipped .panel: the tag editor popover
+        // hangs out of its row and clip-path would cut it off.
+        <div className="box">
+          <div className="flex items-center gap-3 px-3 h-8 border-b border-border bg-bg-2 hud-label !text-[10px]">
+            {bulkMode && isModLike && <span className="w-[14px]" />}
+            <span className="w-7" />
+            <span className="flex-1">Name</span>
+            {isModLike ? (
+              <>
+                <span className="w-[72px] text-right">Size</span>
+                <span className="w-[70px]">Hash</span>
+                <span className="w-5" />
+                <span className="w-7" />
+              </>
+            ) : (
+              <>
+                <span className="w-[150px]">Modified</span>
+                <span className="w-[72px] text-right">Size</span>
+              </>
+            )}
+            <span className="w-[92px] text-right">Status</span>
           </div>
-        ) : isModLike ? (
-          pageFiles.map((file) => (
-            <ModItem
-              key={file.relative_path}
-              file={file}
-              syncStatus={getSyncStatus(file.relative_path)}
-              tags={modTags[file.relative_path] || []}
-              onTagsChanged={handleTagsChanged}
-              bulkMode={bulkMode}
-              selected={selected.has(file.relative_path)}
-              onSelect={handleSelect}
-              compatibility={compatMap.get(file.relative_path)}
-              onShowDetails={() => setDetailFile(file)}
-              outdatedSince={outdated.paths.has(file.relative_path) && outdated.patchTime !== null ? outdated.patchTime : undefined}
-            />
-          ))
-        ) : (
-          pageFiles.map((file) => (
-            <SaveItem key={file.relative_path} file={file} syncStatus={getSyncStatus(file.relative_path)} />
-          ))
-        )}
-      </div>
+          <div className="divide-y divide-border">
+            {isModLike
+              ? pageFiles.map((file) => (
+                  <ModItem
+                    key={file.relative_path}
+                    file={file}
+                    syncStatus={getSyncStatus(file.relative_path)}
+                    tags={modTags[file.relative_path] || []}
+                    onTagsChanged={handleTagsChanged}
+                    bulkMode={bulkMode}
+                    selected={selected.has(file.relative_path)}
+                    onSelect={handleSelect}
+                    compatibility={compatMap.get(file.relative_path)}
+                    onShowDetails={() => setDetailFile(file)}
+                    outdatedSince={outdated.paths.has(file.relative_path) && outdated.patchTime !== null ? outdated.patchTime : undefined}
+                  />
+                ))
+              : pageFiles.map((file) => (
+                  <SaveItem key={file.relative_path} file={file} syncStatus={getSyncStatus(file.relative_path)} />
+                ))}
+          </div>
+        </div>
+      )}
 
       {files.length > ITEMS_PER_PAGE && (
-        <div className="flex items-center justify-between pt-2">
-          <span className="text-xs text-txt-dim">
-            {pageStart + 1}\u2013{Math.min(pageStart + ITEMS_PER_PAGE, files.length)} of {files.length}
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] text-txt-muted tabular">
+            {pageStart + 1}{"–"}{Math.min(pageStart + ITEMS_PER_PAGE, files.length)} <span className="text-txt-muted/70">of</span> {files.length}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0} className="px-3 py-1 rounded-lg bg-bg-card border border-border text-xs font-medium transition-colors hover:bg-bg-card-hover disabled:opacity-40 disabled:cursor-not-allowed">
+            <Button size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0} icon={<ChevronLeft size={12} />}>
               Previous
-            </button>
-            <span className="text-xs text-txt-dim">Page {safePage + 1} / {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1} className="px-3 py-1 rounded-lg bg-bg-card border border-border text-xs font-medium transition-colors hover:bg-bg-card-hover disabled:opacity-40 disabled:cursor-not-allowed">
-              Next
-            </button>
+            </Button>
+            <span className="font-mono text-[11px] text-txt-dim tabular px-1">
+              {String(safePage + 1).padStart(2, "0")} / {String(totalPages).padStart(2, "0")}
+            </span>
+            <Button size="sm" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1}>
+              Next <ChevronRight size={12} />
+            </Button>
           </div>
         </div>
       )}

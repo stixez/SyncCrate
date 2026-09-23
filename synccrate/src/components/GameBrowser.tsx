@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
-import { Search, Plus, Check } from "lucide-react";
+import { useState, useMemo, type CSSProperties } from "react";
+import { Search, Plus, Check, ArrowRight, Radar } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
 import { toastSuccess } from "../lib/toast";
+import type { GameDefinition } from "../lib/types";
+import { Button, EmptyState, Input, SectionHeader, cx } from "./ui";
 
 export default function GameBrowser() {
   const gameRegistry = useAppStore((s) => s.gameRegistry);
@@ -26,16 +28,25 @@ export default function GameBrowser() {
     );
   }, [gameRegistry, search]);
 
-  // Group by family
-  const grouped = useMemo(() => {
-    const map = new Map<string, typeof filtered>();
+  // Launcher shelves instead of one header per family: with ~70 families most would
+  // hold a single game, so the family moves onto the tile and the shelves answer
+  // "what's mine / what's on this PC / what else is there".
+  const shelves = useMemo(() => {
+    const library: GameDefinition[] = [];
+    const detected: GameDefinition[] = [];
+    const rest: GameDefinition[] = [];
     for (const g of filtered) {
-      const list = map.get(g.family) || [];
-      list.push(g);
-      map.set(g.family, list);
+      if (myLibrary.includes(g.id)) library.push(g);
+      else if (gamePaths[g.id]) detected.push(g);
+      else rest.push(g);
     }
-    return Array.from(map.entries());
-  }, [filtered]);
+    const byLabel = (a: GameDefinition, b: GameDefinition) => a.label.localeCompare(b.label);
+    return [
+      { key: "library", label: "Your library", games: library },
+      { key: "detected", label: "Detected on this PC", games: detected.sort(byLabel) },
+      { key: "rest", label: library.length || detected.length ? "More supported games" : "Supported games", games: rest.sort(byLabel) },
+    ].filter((s) => s.games.length > 0);
+  }, [filtered, myLibrary, gamePaths]);
 
   const handleAdd = async (gameId: string) => {
     try {
@@ -59,93 +70,129 @@ export default function GameBrowser() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Game Browser</h2>
-        <p className="text-sm text-txt-dim mt-1">
-          Browse supported games and add them to your library.
-        </p>
-      </div>
+    <div className="max-w-5xl mx-auto space-y-7">
+      <SectionHeader
+        label={<><b>//</b> {gameRegistry.length} supported games</>}
+        title={<>Game <span className="text-neon">browser</span></>}
+        description="Browse supported games and add them to your library."
+        actions={
+          <Input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search games..."
+            aria-label="Search games"
+            icon={<Search size={15} />}
+            wrapperClassName="w-72"
+          />
+        }
+      />
 
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-dim" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search games..."
-          className="w-full bg-bg-card border border-border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-accent"
-        />
-      </div>
-
-      {grouped.map(([family, games]) => (
-        <div key={family}>
-          <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">
-            {family}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {games.map((game) => {
-              const inLibrary = myLibrary.includes(game.id);
-              const detected = !!gamePaths[game.id];
-
-              return (
-                <div
-                  key={game.id}
-                  className={`bg-bg-card rounded-xl border p-4 transition-colors ${
-                    inLibrary ? "border-accent/50" : "border-border hover:border-border"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <GameIcon iconName={game.icon} size={18} className={game.color} />
-                    <span className="font-medium text-sm truncate">{game.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mb-3">
-                    {detected && (
-                      <span className="text-[10px] bg-status-green/20 text-status-green px-1.5 py-0.5 rounded-full font-medium">
-                        Detected
-                      </span>
-                    )}
-                    <span className="text-[10px] text-txt-dim">
-                      {game.content_types.length} content type{game.content_types.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  {inLibrary ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => navigateToGame(game.id)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/20 text-accent-light text-xs font-medium transition-colors hover:bg-accent/30"
-                      >
-                        <Check size={12} />
-                        Added
-                      </button>
-                      <button
-                        onClick={() => handleRemove(game.id)}
-                        className="px-2 py-1.5 rounded-lg bg-bg border border-border text-txt-dim text-xs hover:bg-bg-card-hover hover:text-status-red transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleAdd(game.id)}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-xs font-medium transition-colors"
-                    >
-                      <Plus size={12} />
-                      Add to Library
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+      {shelves.map((shelf) => (
+        <section key={shelf.key}>
+          <div className="flex items-center gap-3 mb-3">
+            <p className="hud-label">
+              <b>//</b> {shelf.label}
+            </p>
+            <span className="font-mono text-[10.5px] text-txt-muted tabular">{String(shelf.games.length).padStart(2, "0")}</span>
+            <span className="flex-1 h-px bg-border" />
           </div>
-        </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {shelf.games.map((game) => (
+              <GameTile
+                key={game.id}
+                game={game}
+                inLibrary={myLibrary.includes(game.id)}
+                detected={!!gamePaths[game.id]}
+                onOpen={() => navigateToGame(game.id)}
+                onAdd={() => handleAdd(game.id)}
+                onRemove={() => handleRemove(game.id)}
+              />
+            ))}
+          </div>
+        </section>
       ))}
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-txt-dim">
-          <p>No games match your search</p>
-        </div>
+        <EmptyState
+          icon={<Search size={18} />}
+          label="// No match"
+          title="No games match your search"
+          description={<>Nothing called "{search}". Try the series name, e.g. "sims" or "minecraft".</>}
+          action={<Button size="sm" onClick={() => setSearch("")}>Clear search</Button>}
+        />
       )}
+    </div>
+  );
+}
+
+function GameTile({
+  game,
+  inLibrary,
+  detected,
+  onOpen,
+  onAdd,
+  onRemove,
+}: {
+  game: GameDefinition;
+  inLibrary: boolean;
+  detected: boolean;
+  onOpen: () => void;
+  onAdd: () => void;
+  onRemove: () => void;
+}) {
+  // The registry's hex color tints the tile art so every game reads as its own box,
+  // while neon stays reserved for "this one is yours".
+  const style = { "--tile": game.primary_color || "rgb(var(--color-accent))" } as CSSProperties;
+  const types = game.content_types.length;
+
+  return (
+    <div
+      style={style}
+      className={cx(
+        "group panel flex flex-col transition-[filter]",
+        inLibrary ? "panel-accent" : "hover:[--panel-line:rgb(var(--color-line-hi))]",
+      )}
+    >
+      {/* Art strip: tinted field with the game glyph, like a launcher cover */}
+      <div className="relative h-[88px] overflow-hidden mx-px mt-px border-b border-border bg-bg [clip-path:polygon(calc(var(--cut)-1px)_0,100%_0,100%_100%,0_100%,0_calc(var(--cut)-1px))]">
+        <div className="absolute inset-0 opacity-[0.22] bg-[radial-gradient(120%_90%_at_85%_0%,var(--tile),transparent_70%)] group-hover:opacity-35 transition-opacity" />
+        <div className="absolute inset-0 opacity-40 bg-[repeating-linear-gradient(135deg,transparent_0_9px,rgb(var(--color-border)/0.5)_9px_10px)]" />
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--tile)]" />
+        <GameIcon iconName={game.icon} size={64} className={cx("absolute -right-2 -bottom-3 opacity-25", game.color)} />
+        <div className="absolute left-4 top-4 w-10 h-10 grid place-items-center border border-line-hi bg-bg-card/90">
+          <GameIcon iconName={game.icon} size={20} className={game.color} />
+        </div>
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+          {inLibrary && <span className="tag text-neon bg-bg/80"><Check size={9} />Library</span>}
+          {detected && <span className="tag text-status-green bg-bg/80"><Radar size={9} />Detected</span>}
+        </div>
+      </div>
+
+      <div className="px-4 pt-3 pb-4 flex-1 flex flex-col">
+        <p className="font-display font-bold uppercase tracking-[0.03em] text-[15px] leading-tight truncate" title={game.label}>
+          {game.label}
+        </p>
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-txt-muted mt-1 truncate">
+          {game.family} · {types} content type{types !== 1 ? "s" : ""}
+        </p>
+        <div className="mt-auto pt-3.5">
+          {inLibrary ? (
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" onClick={onOpen} icon={<ArrowRight size={12} />}>
+                Open
+              </Button>
+              <Button variant="ghost" size="sm" className="hover:!text-status-red" onClick={onRemove}>
+                Remove
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" block onClick={onAdd} icon={<Plus size={12} />}>
+              Add to Library
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { X, Coffee, Heart } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { dismissMilestone, getMilestoneMessage } from "../lib/donations";
 import { open } from "@tauri-apps/plugin-shell";
+import { Button } from "./ui";
 
 export default function DonationBanner() {
   const milestone = useAppStore((s) => s.donationMilestone);
@@ -22,39 +23,31 @@ export default function DonationBanner() {
   };
 
   return (
-    <div className="bg-bg-card border border-accent/30 rounded-xl p-4 mb-4">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-accent/10 shrink-0">
-          <Heart size={18} className="text-accent-light" />
+    <div className="panel panel-accent mb-4">
+      <div className="px-5 py-4 flex items-start gap-4">
+        <div className="w-10 h-10 grid place-items-center border border-neon/40 bg-neon/10 shrink-0">
+          <Heart size={17} className="text-neon" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="font-semibold text-sm">{title}</h4>
-            <button
-              onClick={handleDismiss}
-              className="p-1 rounded-lg hover:bg-bg-card-hover transition-colors shrink-0"
-              aria-label="Dismiss"
-            >
-              <X size={14} className="text-txt-dim" />
-            </button>
-          </div>
-          <p className="text-xs text-txt-dim mt-1">{message}</p>
+          <p className="hud-label mb-1"><b>//</b> Milestone</p>
+          <h4 className="font-display font-semibold uppercase tracking-[0.05em] text-[0.95rem] leading-tight">{title}</h4>
+          <p className="text-xs text-txt-dim mt-1.5">{message}</p>
           <div className="flex items-center gap-2 mt-3">
-            <button
-              onClick={handleDonate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-xs font-medium transition-colors"
-            >
-              <Coffee size={12} />
+            <Button variant="primary" size="sm" onClick={handleDonate} icon={<Coffee size={12} />}>
               Buy a Coffee
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="px-3 py-1.5 rounded-lg text-xs text-txt-dim hover:bg-bg-card-hover transition-colors"
-            >
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDismiss}>
               Maybe later
-            </button>
+            </Button>
           </div>
         </div>
+        <button
+          onClick={handleDismiss}
+          className="w-7 h-7 grid place-items-center text-txt-dim hover:text-txt hover:bg-bg-card-hover transition-colors shrink-0"
+          aria-label="Dismiss"
+        >
+          <X size={14} />
+        </button>
       </div>
     </div>
   );

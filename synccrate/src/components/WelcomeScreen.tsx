@@ -1,8 +1,10 @@
-import { useState, useMemo } from "react";
-import { Gamepad2, Plus, Check, ArrowRight, RefreshCw } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Plus, Check, ArrowRight, RefreshCw, Search, Radar } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { GameIcon } from "./Sidebar";
+import { BrandMark, GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
+import type { GameDefinition } from "../lib/types";
+import { Button, Input, LiveDot, cx } from "./ui";
 
 const ONBOARDING_KEY = "synccrate-onboarding-complete";
 
@@ -38,6 +40,17 @@ export default function WelcomeScreen() {
     () => gameRegistry.filter((g) => gamePaths[g.id] && !myLibrary.includes(g.id)),
     [gameRegistry, gamePaths, myLibrary],
   );
+
+  // The registry and detected paths usually load after first render, so the
+  // initializer above sees nothing. Pre-select each detected game once, and
+  // never re-check one the user has unchecked.
+  const autoSelected = useRef(new Set<string>(selected));
+  useEffect(() => {
+    const fresh = detected.filter((g) => !autoSelected.current.has(g.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((g) => autoSelected.current.add(g.id));
+    setSelected((prev) => new Set([...prev, ...fresh.map((g) => g.id)]));
+  }, [detected]);
 
   const otherGames = useMemo(
     () => gameRegistry.filter((g) => !gamePaths[g.id] && !myLibrary.includes(g.id)),
@@ -89,131 +102,154 @@ export default function WelcomeScreen() {
     navigateToGlobal("game-browser");
   };
 
+  // With ~100 supported games the "other" list needs a filter to stay usable.
+  const [filter, setFilter] = useState("");
+  const q = filter.trim().toLowerCase();
+  const visibleOthers = q
+    ? otherGames.filter((g) => g.label.toLowerCase().includes(q) || g.family.toLowerCase().includes(q))
+    : otherGames;
+
+  const renderGame = (game: GameDefinition, isDetected: boolean) => {
+    const isSelected = selected.has(game.id);
+    return (
+      <button
+        key={game.id}
+        onClick={() => toggleGame(game.id)}
+        aria-pressed={isSelected}
+        className={cx(
+          "group relative flex items-center gap-3 pl-3 pr-3 py-2.5 border text-sm transition-colors text-left min-w-0",
+          isSelected
+            ? "bg-neon/[0.08] border-neon/60 text-txt"
+            : "bg-bg border-border text-txt-dim hover:border-line-hi hover:text-txt",
+        )}
+      >
+        <span className={cx("check pointer-events-none", isSelected && "!bg-neon !border-neon")} aria-hidden="true">
+          {isSelected && <Check size={10} strokeWidth={3.5} className="text-neon-ink" />}
+        </span>
+        <GameIcon iconName={game.icon} size={15} className={cx("shrink-0", game.color)} />
+        <span className="truncate flex-1">{game.label}</span>
+        {isDetected && <span className="tag text-status-green shrink-0">Found</span>}
+      </button>
+    );
+  };
+
   return (
-    <div className="flex items-center justify-center h-full">
-      <div className="max-w-lg w-full text-center">
-        {/* Logo + header */}
-        <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
-          <Gamepad2 size={32} className="text-accent-light" />
-        </div>
-        <h2 className="text-2xl font-bold mb-1">Welcome to SyncCrate</h2>
-        <p className="text-txt-dim text-sm mb-8">
-          Sync your game mods, saves, and settings with friends over LAN.
-        </p>
-
-        {/* Detected games */}
-        {detected.length > 0 && (
-          <div className="mb-6 text-left">
-            <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-3 text-center">
-              Games detected on your system
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {detected.map((game) => {
-                const isSelected = selected.has(game.id);
-                return (
-                  <button
-                    key={game.id}
-                    onClick={() => toggleGame(game.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm transition-all text-left ${
-                      isSelected
-                        ? "bg-accent/15 border-accent/50 text-txt"
-                        : "bg-bg-card border-border text-txt-dim hover:border-border hover:text-txt"
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
-                      isSelected ? "bg-accent text-white" : "bg-bg border border-border"
-                    }`}>
-                      {isSelected && <Check size={12} />}
-                    </div>
-                    <GameIcon iconName={game.icon} size={14} className={game.color} />
-                    <span className="truncate">{game.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+    <div className="relative h-[calc(100%+3rem)] min-h-[560px] -mx-6 -my-6 px-10 py-10 hud-grid overflow-hidden">
+      <div className="relative z-[1] h-full grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-10 items-center max-w-6xl mx-auto">
+        {/* Hero */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 mb-8">
+            <BrandMark size={40} />
+            <span className="font-display font-bold uppercase tracking-[0.08em] text-lg">SyncCrate</span>
           </div>
-        )}
+          <p className="hud-label mb-4 flex items-center gap-2">
+            <LiveDot />
+            <span><b>Setup</b> &nbsp;01 / Pick your games</span>
+          </p>
+          <h1 className="display text-[3.4rem] leading-[0.92]">
+            <span className="block">Same mods.</span>
+            <span className="block text-neon">Every PC.</span>
+            <span className="block text-transparent [-webkit-text-stroke:1.5px_rgb(var(--color-txt))]">No excuses.</span>
+          </h1>
+          <p className="text-txt-dim text-[15px] leading-relaxed mt-6 max-w-[44ch]">
+            Welcome to SyncCrate. Sync your game mods, saves, and settings with friends — on your LAN or over the internet
+            with a join code.
+          </p>
 
-        {/* Other games (collapsed) */}
-        {otherGames.length > 0 && (
-          <div className="mb-6 text-left">
-            <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-3 text-center">
-              {detected.length > 0 ? "Other supported games" : "Supported games"}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {otherGames.map((game) => {
-                const isSelected = selected.has(game.id);
-                return (
-                  <button
-                    key={game.id}
-                    onClick={() => toggleGame(game.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm transition-all text-left ${
-                      isSelected
-                        ? "bg-accent/15 border-accent/50 text-txt"
-                        : "bg-bg-card border-border text-txt-dim hover:border-border hover:text-txt"
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
-                      isSelected ? "bg-accent text-white" : "bg-bg border border-border"
-                    }`}>
-                      {isSelected && <Check size={12} />}
-                    </div>
-                    <GameIcon iconName={game.icon} size={14} className={game.color} />
-                    <span className="truncate">{game.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="flex items-center gap-3 mt-8">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleGetStarted}
+              disabled={adding}
+              icon={adding ? <RefreshCw size={16} className="animate-spin" /> : selected.size > 0 ? undefined : <Plus size={16} />}
+            >
+              {adding ? (
+                "Adding..."
+              ) : selected.size > 0 ? (
+                <>
+                  Get Started
+                  <ArrowRight size={16} />
+                </>
+              ) : (
+                "Browse Games"
+              )}
+            </Button>
+            {selected.size > 0 && (
+              <Button variant="ghost" size="lg" onClick={handleSkip}>
+                Skip
+              </Button>
+            )}
           </div>
-        )}
-
-        {/* No games at all (registry not loaded yet) */}
-        {gameRegistry.length === 0 && (
-          <div className="mb-6 flex items-center justify-center gap-2 text-txt-dim text-sm">
-            <RefreshCw size={14} className="animate-spin" />
-            Loading game registry...
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={handleGetStarted}
-            disabled={adding}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-accent hover:bg-accent-light text-white font-medium transition-colors disabled:opacity-50"
-          >
-            {adding ? (
+          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted mt-4 h-4">
+            {selected.size > 0 && (
               <>
-                <RefreshCw size={16} className="animate-spin" />
-                Adding...
-              </>
-            ) : selected.size > 0 ? (
-              <>
-                Get Started
-                <ArrowRight size={16} />
-              </>
-            ) : (
-              <>
-                <Plus size={16} />
-                Browse Games
+                <span className="text-neon tabular">{String(selected.size).padStart(2, "0")}</span> game{selected.size !== 1 ? "s" : ""} selected
               </>
             )}
-          </button>
-          {selected.size > 0 && (
-            <button
-              onClick={handleSkip}
-              className="text-sm text-txt-dim hover:text-txt transition-colors"
-            >
-              Skip
-            </button>
-          )}
+          </p>
         </div>
 
-        {selected.size > 0 && (
-          <p className="text-xs text-txt-dim mt-3">
-            {selected.size} game{selected.size !== 1 ? "s" : ""} selected
-          </p>
-        )}
+        {/* Game picker */}
+        <div className="corner-brackets min-w-0">
+          <div className="panel flex flex-col max-h-[min(600px,calc(100vh-11rem))]">
+            <div className="px-5 pt-4 pb-3 border-b border-border flex items-end justify-between gap-3">
+              <div>
+                <p className="hud-label mb-1">// Your games</p>
+                <h2 className="font-display font-semibold uppercase tracking-[0.06em] text-[0.95rem]">Choose what to sync</h2>
+              </div>
+              {otherGames.length > 8 && (
+                <Input
+                  size="sm"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter games..."
+                  aria-label="Filter games"
+                  icon={<Search size={13} />}
+                  wrapperClassName="w-44"
+                />
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5">
+              {/* Detected games */}
+              {detected.length > 0 && (
+                <div>
+                  <p className="hud-label mb-2.5 flex items-center gap-2">
+                    <Radar size={12} className="text-neon" />
+                    <span><b>Detected</b> &nbsp;on your system</span>
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {detected.map((game) => renderGame(game, true))}
+                  </div>
+                </div>
+              )}
+
+              {/* Other games */}
+              {otherGames.length > 0 && (
+                <div>
+                  <p className="hud-label mb-2.5">
+                    {detected.length > 0 ? "Other supported games" : "Supported games"}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {visibleOthers.map((game) => renderGame(game, false))}
+                  </div>
+                  {visibleOthers.length === 0 && (
+                    <p className="font-mono text-[11px] text-txt-muted">No games match "{filter}".</p>
+                  )}
+                </div>
+              )}
+
+              {/* No games at all (registry not loaded yet) */}
+              {gameRegistry.length === 0 && (
+                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-dim py-6">
+                  <RefreshCw size={13} className="animate-spin text-neon" />
+                  Loading game registry...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { ArrowUp, ArrowDown, AlertTriangle, Trash2, Puzzle, Save, Palette } from "lucide-react";
 import type { SyncAction } from "../lib/types";
 import { formatBytes } from "../lib/utils";
+import { cx } from "./ui";
 
 interface SyncActionItemProps {
   action: SyncAction;
@@ -49,28 +50,33 @@ export default function SyncActionItem({ action, excluded, onToggle }: SyncActio
   if (!info) return null;
 
   const fileName = info.path.split(/[/\\]/).pop() || info.path;
+  const folder = info.path.slice(0, Math.max(0, info.path.length - fileName.length - 1));
 
   return (
-    <label className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-bg-card-hover transition-colors cursor-pointer ${excluded ? "opacity-50" : ""}`}>
-      <input
-        type="checkbox"
-        checked={!excluded}
-        onChange={() => onToggle(info.path)}
-        className="shrink-0 accent-accent"
-      />
-      {info.fileType === "Mod" ? (
-        <Puzzle size={12} className="text-accent-light shrink-0" />
-      ) : info.fileType === "Save" ? (
-        <Save size={12} className="text-status-yellow shrink-0" />
-      ) : (
-        <Palette size={12} className="text-pink-400 shrink-0" />
+    <label
+      className={cx(
+        "group flex items-center gap-2.5 px-2.5 py-1.5 border-l-2 hover:bg-bg-card-hover transition-colors cursor-pointer",
+        info.direction === "conflict" ? "border-l-amber" : info.direction === "delete" ? "border-l-status-red" : "border-l-transparent",
+        excluded && "opacity-45",
       )}
-      {info.direction === "upload" && <ArrowUp size={12} className="text-status-green shrink-0" />}
-      {info.direction === "download" && <ArrowDown size={12} className="text-accent-light shrink-0" />}
-      {info.direction === "conflict" && <AlertTriangle size={12} className="text-status-yellow shrink-0" />}
-      {info.direction === "delete" && <Trash2 size={12} className="text-status-red shrink-0" />}
-      <span className="text-xs truncate flex-1" title={info.path}>{fileName}</span>
-      <span className="text-[10px] text-txt-dim shrink-0">{formatBytes(info.size)}</span>
+    >
+      <input type="checkbox" checked={!excluded} onChange={() => onToggle(info.path)} className="check" />
+      {info.direction === "upload" && <ArrowUp size={12} className="text-neon shrink-0" aria-label="Upload" />}
+      {info.direction === "download" && <ArrowDown size={12} className="text-accent-light shrink-0" aria-label="Download" />}
+      {info.direction === "conflict" && <AlertTriangle size={12} className="text-amber shrink-0" aria-label="Conflict" />}
+      {info.direction === "delete" && <Trash2 size={12} className="text-status-red shrink-0" aria-label="Delete" />}
+      {info.fileType === "Mod" ? (
+        <Puzzle size={12} className="text-txt-muted shrink-0" />
+      ) : info.fileType === "Save" ? (
+        <Save size={12} className="text-amber shrink-0" />
+      ) : (
+        <Palette size={12} className="text-txt-muted shrink-0" />
+      )}
+      <span className="text-xs truncate flex-1 min-w-0" title={info.path}>
+        <span className={cx("text-txt", excluded && "line-through")}>{fileName}</span>
+        {folder && <span className="font-mono text-[10px] text-txt-muted ml-2">{folder}</span>}
+      </span>
+      <span className="font-mono text-[10.5px] text-txt-dim tabular shrink-0">{formatBytes(info.size)}</span>
     </label>
   );
 }

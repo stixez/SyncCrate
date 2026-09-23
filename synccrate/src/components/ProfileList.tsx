@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Upload, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import ProfileCard from "./ProfileCard";
+import { Button, Input, Panel, SectionHeader, StatTile } from "./ui";
 import * as cmd from "../lib/commands";
 import type { ProfileComparison } from "../lib/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -106,73 +107,64 @@ export default function ProfileList({ gameId }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Mod Profiles</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handleImport}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-card border border-border hover:bg-bg-card-hover text-sm transition-colors"
-          >
-            <Upload size={14} />
+    <div className="space-y-5">
+      <SectionHeader
+        label={<><b>// Loadouts</b> &nbsp;{filteredProfiles.length} saved</>}
+        title={<>Mod <span className="text-neon">Profiles</span></>}
+        description="Snapshot your current mod setup, share it as a file, and compare it against what's installed."
+        actions={
+          <Button size="sm" onClick={handleImport} icon={<Upload size={13} />}>
             Import
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
       {comparison && (
-        <div className="bg-bg-card rounded-xl border border-accent/50 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm">Profile Comparison: {comparison.profile_name}</h3>
-            <button
-              onClick={() => setComparison(null)}
-              className="text-xs text-txt-dim hover:text-txt"
-            >
+        <Panel
+          tone="accent"
+          brackets
+          label={<><b>// Compare</b> &nbsp;Profile vs installed</>}
+          title={comparison.profile_name}
+          actions={
+            <Button size="sm" variant="ghost" onClick={() => setComparison(null)} icon={<X size={13} />}>
               Close
-            </button>
-          </div>
+            </Button>
+          }
+        >
           <div className="grid grid-cols-4 gap-3">
-            <div className="text-center">
-              <p className="text-lg font-bold text-status-green">{comparison.matched}</p>
-              <p className="text-xs text-txt-dim">Matched</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-status-red">{comparison.missing.length}</p>
-              <p className="text-xs text-txt-dim">Missing</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-status-yellow">{comparison.modified.length}</p>
-              <p className="text-xs text-txt-dim">Modified</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-txt-dim">{comparison.extra.length}</p>
-              <p className="text-xs text-txt-dim">Extra</p>
-            </div>
+            <StatTile value={comparison.matched} label="Matched" highlight />
+            <StatTile value={comparison.missing.length} label="Missing" className={comparison.missing.length ? "[&_p]:text-status-red" : undefined} />
+            <StatTile value={comparison.modified.length} label="Modified" className={comparison.modified.length ? "[&_p]:text-amber" : undefined} />
+            <StatTile value={comparison.extra.length} label="Extra" />
           </div>
-          {comparison.missing.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-status-red mb-1">Missing mods:</p>
-              <div className="max-h-32 overflow-y-auto space-y-0.5">
-                {comparison.missing.map((p) => (
-                  <p key={p} className="text-xs text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
-                ))}
-              </div>
+          {(comparison.missing.length > 0 || comparison.modified.length > 0) && (
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {comparison.missing.length > 0 && (
+                <div className="bg-bg border border-border">
+                  <p className="hud-label px-3 py-2 border-b border-border !text-status-red">Missing mods</p>
+                  <div className="max-h-32 overflow-y-auto px-3 py-2 space-y-0.5">
+                    {comparison.missing.map((p) => (
+                      <p key={p} className="text-[11px] text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {comparison.modified.length > 0 && (
+                <div className="bg-bg border border-border">
+                  <p className="hud-label px-3 py-2 border-b border-border !text-amber">Modified mods</p>
+                  <div className="max-h-32 overflow-y-auto px-3 py-2 space-y-0.5">
+                    {comparison.modified.map((p) => (
+                      <p key={p} className="text-[11px] text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          {comparison.modified.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-status-yellow mb-1">Modified mods:</p>
-              <div className="max-h-32 overflow-y-auto space-y-0.5">
-                {comparison.modified.map((p) => (
-                  <p key={p} className="text-xs text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        </Panel>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredProfiles.map((profile) => (
           <ProfileCard
             key={profile.id}
@@ -186,53 +178,55 @@ export default function ProfileList({ gameId }: Props) {
         ))}
 
         {showCreate ? (
-          <div className="bg-bg-card rounded-xl border border-accent/50 p-4 space-y-3">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={64}
-              placeholder="Profile name..."
-              aria-label="Profile name"
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-            />
-            <textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              maxLength={256}
-              placeholder="Description..."
-              aria-label="Profile description"
-              rows={2}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreate}
-                className="flex-1 bg-accent hover:bg-accent-light text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-              >
-                Save Profile
-              </button>
-              <button
-                onClick={() => setShowCreate(false)}
-                className="px-3 py-2 rounded-lg bg-bg-card-hover text-txt-dim text-sm transition-colors"
-              >
-                Cancel
-              </button>
+          <Panel tone="accent" label={<b>// New loadout</b>} title="Snapshot current mods">
+            <div className="space-y-3">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={64}
+                placeholder="Profile name..."
+                aria-label="Profile name"
+                autoFocus
+              />
+              <textarea
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                maxLength={256}
+                placeholder="Description..."
+                aria-label="Profile description"
+                rows={2}
+                className="input !h-auto py-2 resize-none"
+              />
+              <div className="flex gap-2">
+                <Button variant="primary" block onClick={handleCreate} disabled={!name.trim()}>
+                  Save Profile
+                </Button>
+                <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
+          </Panel>
         ) : (
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-bg-card rounded-xl border border-dashed border-border hover:border-accent/50 p-6 flex flex-col items-center justify-center gap-2 text-txt-dim hover:text-accent-light transition-colors min-h-[140px]"
+            className="group border border-dashed border-line-hi hover:border-neon p-6 flex flex-col items-start justify-end gap-3 text-left transition-colors min-h-[196px]"
           >
-            <Plus size={24} />
-            <span className="text-sm">Create New Profile</span>
+            <span className="w-10 h-10 grid place-items-center border border-line-hi text-txt-muted group-hover:border-neon group-hover:text-neon transition-colors">
+              <Plus size={18} />
+            </span>
+            <span>
+              <span className="hud-label block mb-1">// Slot empty</span>
+              <span className="font-display font-semibold uppercase tracking-[0.05em] text-[15px] text-txt group-hover:text-neon transition-colors">
+                Create New Profile
+              </span>
+            </span>
           </button>
         )}
       </div>
 
       {filteredProfiles.length === 0 && !showCreate && (
-        <p className="text-center text-sm text-txt-dim py-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-muted">
           No profiles for this game yet. Create one to snapshot your current mod setup.
         </p>
       )}

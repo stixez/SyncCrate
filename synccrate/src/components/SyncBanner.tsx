@@ -1,11 +1,12 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import { ArrowUpDown, AlertTriangle, ChevronDown, ChevronUp, X } from "lucide-react";
+import { useRef, useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
+import { ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, ChevronDown, ChevronUp, Gamepad2, X } from "lucide-react";
 import type { SyncPlan } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { gameLabel } from "../lib/games";
 import SyncActionItem from "./SyncActionItem";
 import * as cmd from "../lib/commands";
+import { Banner, Button, LiveDot, ProgressBar, cx } from "./ui";
 
 interface SyncBannerProps {
   plan: SyncPlan;
@@ -197,171 +198,219 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
 
   const excludedCount = excluded.size;
 
+  const pct = syncProgress && syncProgress.bytes_total > 0
+    ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100
+    : 0;
+  const blocked = conflictCount > 0;
+  const state = syncProgress ? "Syncing" : blocked ? "Blocked" : "Ready";
+
+  const QUICK_FILTERS: { id: string; label: string }[] = [
+    { id: "select_all", label: "Select all" },
+    { id: "deselect_all", label: "Deselect all" },
+    { id: "mods_only", label: "Mods only" },
+    { id: "saves_only", label: "Saves only" },
+  ];
+
   return (
-    <div className="bg-accent/10 border border-accent/30 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <ArrowUpDown size={16} className="text-accent-light" />
-          <span className="font-medium text-sm">Sync Plan Ready</span>
-          {excludedCount > 0 && (
-            <span className="text-[10px] text-txt-dim">({excludedCount} excluded)</span>
+    <div className={cx("panel", blocked && !syncProgress ? "panel-warn" : "panel-accent")}>
+      {/* Header: state + primary actions */}
+      <div className="px-5 pt-4 pb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <p className="hud-label mb-1.5 flex items-center gap-2">
+            {syncProgress ? <LiveDot /> : blocked ? <LiveDot tone="amber" /> : <ArrowUpDown size={12} className="text-neon" />}
+            <span>// Sync plan</span>
+            <span className={blocked && !syncProgress ? "text-amber" : "text-neon"}>{state}</span>
+            {excludedCount > 0 && <span className="text-txt-muted">· {excludedCount} excluded</span>}
+          </p>
+          <h3 className="display text-[1.5rem] text-txt">
+            {syncProgress ? (
+              <>Syncing <span className="text-neon">{Math.round(pct)}%</span></>
+            ) : blocked ? (
+              <>{conflictCount} conflict{conflictCount !== 1 ? "s" : ""} <span className="text-amber">to resolve</span></>
+            ) : (
+              <>Ready to <span className="text-neon">sync</span></>
+            )}
+          </h3>
+          {conflictCount > 0 && (
+            <p className="text-xs text-txt-dim mt-2">
+              {conflictCount} conflict{conflictCount !== 1 ? "s" : ""} must be resolved before syncing
+              {modConflicts > 0 && saveConflicts > 0 && ` (${modConflicts} mod, ${saveConflicts} save)`}
+            </p>
           )}
         </div>
         {conflictCount === 0 ? (
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={onSync}
             disabled={!!syncProgress}
-            className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
+            icon={<ArrowUpDown size={15} />}
           >
             {syncProgress ? "Syncing..." : "Sync Now"}
-          </button>
+          </Button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {onResolveAll && (
-              <button
+              <Button
+                variant="primary"
                 onClick={() => onResolveAll("use_newest")}
                 disabled={!!syncProgress}
                 title="Resolve every conflict by keeping whichever copy was modified more recently (ties keep yours)"
-                className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 Keep newer for all
-              </button>
+              </Button>
             )}
-            <button
-              onClick={() => setPage("content")}
-              className="bg-bg-card border border-border hover:bg-bg-card-hover text-txt rounded-lg px-4 py-1.5 text-sm font-medium transition-colors"
-            >
-              View Conflicts
-            </button>
+            <Button onClick={() => setPage("content")}>View Conflicts</Button>
           </div>
         )}
       </div>
-      {conflictCount > 0 && (
-        <div className="flex items-center gap-2 mb-2 text-status-yellow text-xs">
-          <AlertTriangle size={14} className="shrink-0" />
-          <span>
-            {conflictCount} conflict{conflictCount !== 1 ? "s" : ""} must be resolved before syncing
-            {modConflicts > 0 && saveConflicts > 0 && ` (${modConflicts} mod, ${saveConflicts} save)`}
-          </span>
-        </div>
-      )}
-      {gameRunning && (
-        <div className="flex items-center gap-2 mb-2 text-status-yellow text-xs">
-          <AlertTriangle size={14} className="shrink-0" />
-          <span>
-            {gameLabel(activeGame)} is running — close it before syncing so files aren't locked or half-loaded.
-          </span>
-        </div>
-      )}
-      <div className="flex items-center gap-4 text-xs text-txt-dim">
-        <div className="flex gap-4 flex-1">
-          {sendCount > 0 && <span>Upload: {sendCount} files</span>}
-          {receiveCount > 0 && <span>Download: {receiveCount} files</span>}
-          {conflictCount > 0 && <span className="text-status-red">Conflicts: {conflictCount}</span>}
-          <span>
-            Total: {formatBytes(plan.total_bytes)}
-            {typicalSpeed && plan.total_bytes > 0 && !syncProgress
-              ? ` · ${formatEstimate(plan.total_bytes / typicalSpeed)}`
-              : ""}
-          </span>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 text-accent-light hover:text-accent text-xs"
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {expanded ? "Hide" : "Details"}
-        </button>
+
+      {/* Telemetry strip */}
+      <div className="grid grid-cols-4 border-y border-border bg-bg/60">
+        <Readout label="Upload" value={sendCount} unit="files" icon={<ArrowUp size={11} />} />
+        <Readout label="Download" value={receiveCount} unit="files" icon={<ArrowDown size={11} />} />
+        <Readout
+          label="Conflicts"
+          value={conflictCount}
+          unit={modConflicts > 0 && saveConflicts > 0 ? `${modConflicts} mod · ${saveConflicts} save` : "files"}
+          icon={<AlertTriangle size={11} />}
+          warn={conflictCount > 0}
+        />
+        <Readout
+          label="Total"
+          value={formatBytes(plan.total_bytes)}
+          unit={
+            typicalSpeed && plan.total_bytes > 0 && !syncProgress
+              ? formatEstimate(plan.total_bytes / typicalSpeed)
+              : "to transfer"
+          }
+          last
+        />
       </div>
 
-      {expanded && (
-        <div className="mt-3 border-t border-accent/20 pt-3">
-          <div className="flex gap-1.5 mb-2 flex-wrap">
-            {["select_all", "deselect_all", "mods_only", "saves_only"].map((f) => (
-              <button
-                key={f}
-                onClick={() => applyQuickFilter(f)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  quickFilter === f
-                    ? "bg-accent text-white"
-                    : "bg-bg border border-border text-txt-dim hover:border-accent/50"
-                }`}
-              >
-                {f === "select_all"
-                  ? "Select All"
-                  : f === "deselect_all"
-                  ? "Deselect All"
-                  : f === "mods_only"
-                  ? "Mods Only"
-                  : "Saves Only"}
-              </button>
-            ))}
-          </div>
-          <div className="max-h-48 overflow-y-auto space-y-0.5">
-            {plan.actions.slice(0, visibleCount).map((action, i) => {
-              const path = action.SendToRemote?.relative_path
-                || action.ReceiveFromRemote?.relative_path
-                || action.Conflict?.local.relative_path
-                || action.Delete
-                || "";
-              return (
-                <SyncActionItem
-                  key={path || i}
-                  action={action}
-                  excluded={excluded.has(path)}
-                  onToggle={toggleExclusion}
-                />
-              );
-            })}
-            {plan.actions.length > visibleCount && (
-              <button
-                onClick={() => setVisibleCount((c) => c + 50)}
-                className="w-full text-center py-1.5 text-xs text-accent-light hover:text-accent transition-colors"
-              >
-                Show more ({plan.actions.length - visibleCount} remaining)
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="px-5 py-3 space-y-2">
+        {gameRunning && (
+          <Banner tone="warn" icon={<Gamepad2 size={14} />}>
+            {gameLabel(activeGame)} is running — close it before syncing so files aren't locked or half-loaded.
+          </Banner>
+        )}
 
-      {syncProgress && (
-        <div className="mt-3">
-          <div className="flex justify-between text-xs text-txt-dim mb-1">
-            <span className="truncate mr-3">{syncProgress.file}</span>
-            <span className="shrink-0">
-              {syncProgress.files_done}/{syncProgress.files_total} files
-              {" · "}
-              {formatBytes(syncProgress.bytes_sent)} / {formatBytes(syncProgress.bytes_total)}
-              {" · "}
-              {syncProgress.bytes_total > 0
-                ? Math.round((syncProgress.bytes_sent / syncProgress.bytes_total) * 100)
-                : 0}%
-              {speedText && ` · ${speedText}`}
-              {etaText && ` · ETA ${etaText}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-bg rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all"
-                style={{
-                  width: `${syncProgress.bytes_total > 0 ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100 : 0}%`,
-                }}
-              />
+        {syncProgress && (
+          <div className="pt-1">
+            <div className="flex items-end justify-between gap-4 mb-2">
+              <div className="min-w-0">
+                <p className="hud-label mb-0.5">Now transferring</p>
+                <p className="font-mono text-xs text-txt truncate" title={syncProgress.file}>{syncProgress.file}</p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleCancel}
+                disabled={cancelling}
+                title="Stop after the current file. The next sync resumes where it stopped."
+                icon={<X size={12} />}
+              >
+                {cancelling ? "Cancelling…" : "Cancel"}
+              </Button>
             </div>
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              title="Stop after the current file. The next sync resumes where it stopped."
-              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded bg-bg-card border border-border text-[11px] text-txt-dim hover:text-status-red hover:border-status-red/50 transition-colors disabled:opacity-60"
-            >
-              <X size={11} />
-              {cancelling ? "Cancelling…" : "Cancel"}
-            </button>
+            <ProgressBar value={pct} />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 font-mono text-[11px] text-txt-dim tabular">
+              <span><span className="text-txt">{syncProgress.files_done}</span>/{syncProgress.files_total} files</span>
+              <span>
+                <span className="text-txt">{formatBytes(syncProgress.bytes_sent)}</span> / {formatBytes(syncProgress.bytes_total)}
+              </span>
+              <span className="text-neon">{Math.round(pct)}%</span>
+              {speedText && <span>{speedText}</span>}
+              {etaText && <span>ETA <span className="text-txt">{etaText}</span></span>}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        <button
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
+        >
+          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          {expanded ? "Hide files" : `Files in this sync (${plan.actions.length})`}
+        </button>
+
+        {expanded && (
+          <div className="pt-1 pb-1">
+            <div className="flex mb-2 flex-wrap">
+              {QUICK_FILTERS.map((f, i) => (
+                <button
+                  key={f.id}
+                  onClick={() => applyQuickFilter(f.id)}
+                  className={cx(
+                    "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
+                    i > 0 && "-ml-px",
+                    quickFilter === f.id
+                      ? "relative z-[1] bg-neon/10 border-neon text-neon"
+                      : "bg-bg border-line-hi text-txt-dim hover:text-txt",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="max-h-48 overflow-y-auto border border-border bg-bg divide-y divide-border/60">
+              {plan.actions.slice(0, visibleCount).map((action, i) => {
+                const path = action.SendToRemote?.relative_path
+                  || action.ReceiveFromRemote?.relative_path
+                  || action.Conflict?.local.relative_path
+                  || action.Delete
+                  || "";
+                return (
+                  <SyncActionItem
+                    key={path || i}
+                    action={action}
+                    excluded={excluded.has(path)}
+                    onToggle={toggleExclusion}
+                  />
+                );
+              })}
+              {plan.actions.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount((c) => c + 50)}
+                  className="w-full text-center py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim hover:text-neon transition-colors"
+                >
+                  Show more ({plan.actions.length - visibleCount} remaining)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Readout({
+  label,
+  value,
+  unit,
+  icon,
+  warn,
+  last,
+}: {
+  label: string;
+  value: ReactNode;
+  unit: string;
+  icon?: ReactNode;
+  warn?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div className={cx("px-5 py-3 min-w-0", !last && "border-r border-border")}>
+      <p className={cx("hud-label flex items-center gap-1.5", warn && "!text-amber")}>
+        {icon}
+        {label}
+      </p>
+      <p className={cx("font-display font-bold text-[1.5rem] leading-none tabular mt-1.5 truncate", warn ? "text-amber" : "text-txt")}>
+        {value}
+      </p>
+      <p className="font-mono text-[10px] text-txt-muted mt-1 truncate">{unit}</p>
     </div>
   );
 }

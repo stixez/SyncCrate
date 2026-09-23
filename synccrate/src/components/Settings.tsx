@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
@@ -11,6 +11,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { getSyncCount, getTimeSaved } from "../lib/donations";
 import { gameLabel, getGameDef } from "../lib/games";
 import { GameIcon } from "./Sidebar";
+import { Badge, Button, EmptyState, Input, Panel, SectionHeader, Toggle, cx } from "./ui";
 import * as cmd from "../lib/commands";
 import type { AutoBackupConfig } from "../lib/types";
 
@@ -172,400 +173,372 @@ export default function Settings() {
     }
   };
 
+  const selectClass = "input input-sm w-auto pr-8 font-mono text-[12px] cursor-pointer";
+
   return (
-    <div className="max-w-xl mx-auto space-y-6">
-      <h2 className="text-xl font-bold">Settings</h2>
+    <div className="max-w-[920px] mx-auto space-y-8 pb-6">
+      <SectionHeader
+        label={<><b>// Config</b> &nbsp;SyncCrate v{version || "..."}</>}
+        title="Settings"
+        description="Game folders, network, backups and app behavior. Changes save as you make them."
+      />
 
-      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Game Configuration</p>
-
-      {libraryGames.length === 0 ? (
-        <div className="bg-bg-card rounded-xl border border-border p-5 text-center space-y-3">
-          <p className="text-sm text-txt-dim">No games in your library yet.</p>
-          <button
-            onClick={() => navigateToGlobal("game-browser")}
-            className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-medium transition-colors"
-          >
-            <Plus size={14} />
-            Browse Games
-          </button>
-        </div>
-      ) : (
-        libraryGames.map((game) => {
-          const gameDef = getGameDef(game.id);
-          const contentFolders = gameDef?.content_types.map((ct) => ct.folder).join(", ") ?? "";
-          return (
-            <div key={game.id} className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <GameIcon iconName={game.icon} size={16} className={game.color} />
-                <h3 className="font-semibold text-sm">{game.label} Path</h3>
-                {gamePaths[game.id] && (
-                  <span className="text-[10px] bg-status-green/20 text-status-green px-1.5 py-0.5 rounded-full font-medium">
-                    Detected
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-txt-dim">
-                The root folder for your {game.label} installation
-                {contentFolders && ` (contains ${contentFolders} folders)`}.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={pathInputs[game.id] || ""}
-                  onChange={(e) =>
-                    setPathInputs((prev) => ({ ...prev, [game.id]: e.target.value }))
-                  }
-                  onBlur={() => handlePathSubmit(game.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handlePathSubmit(game.id);
-                  }}
-                  placeholder={`Path to ${game.label} folder...`}
-                  aria-label={`${game.label} folder path`}
-                  className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                />
-                <button
-                  onClick={() => handleBrowse(game.id)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg border border-border hover:bg-bg-card-hover text-sm transition-colors"
-                >
-                  <FolderOpen size={14} />
-                  Browse
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-
-      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Network & Sync</p>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-sm">Network</h3>
-        <p className="text-xs text-txt-dim">
-          Port used for hosting sessions. Change this if the default port (9847) is in use.
-        </p>
-        <div className="flex gap-2 items-center">
-          <input
-            type="number"
-            value={port}
-            onChange={(e) => {
-              setPort(e.target.value);
-              checkPort(e.target.value);
-            }}
-            min={1024}
-            max={65535}
-            aria-label="Session port"
-            className={`w-32 bg-bg border rounded-lg px-3 py-2 text-sm focus:outline-none ${
-              portStatus === "taken"
-                ? "border-status-red focus:border-status-red"
-                : portStatus === "available"
-                ? "border-status-green focus:border-status-green"
-                : "border-border focus:border-accent"
-            }`}
-          />
-          <button
-            onClick={handlePortSave}
-            disabled={portStatus === "taken"}
-            className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Save Port
-          </button>
-        </div>
-        {portStatus === "taken" && (
-          <p className="text-xs text-status-red">Port is already in use. Choose a different port.</p>
-        )}
-        {portStatus === "available" && (
-          <p className="text-xs text-status-green">Port is available.</p>
-        )}
-      </div>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-sm">Sync Exclusions</h3>
-        <p className="text-xs text-txt-dim">
-          Patterns for files to exclude from sync by default. Use <code className="bg-bg px-1 rounded">*.ext</code> for extensions, <code className="bg-bg px-1 rounded">folder/*</code> for directories.
-        </p>
-        <div className="space-y-1.5">
-          {excludePatterns.map((pattern) => (
-            <div
-              key={pattern}
-              className="flex items-center gap-2 bg-bg rounded-lg px-3 py-1.5"
-            >
-              <code className="text-xs flex-1 text-txt-dim">{pattern}</code>
-              <button
-                onClick={() => handleRemovePattern(pattern)}
-                className="text-txt-dim hover:text-status-red transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newPattern}
-            onChange={(e) => setNewPattern(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleAddPattern();
-            }}
-            maxLength={256}
-            placeholder="e.g. *.ts4script or Saves/*"
-            aria-label="Sync exclusion pattern"
-            className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={handleAddPattern}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm transition-colors"
-          >
-            <Plus size={14} />
-            Add
-          </button>
-        </div>
-      </div>
-
-      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Auto-Backups</p>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-sm">Auto-Backups</h3>
-        <p className="text-xs text-txt-dim">
-          Automatically create backups before syncing or on a schedule.
-        </p>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm">Back up before sync</label>
-            <button
-              role="switch"
-              aria-checked={autoBackupConfig.auto_backup_before_sync}
-              onClick={() => updateAutoBackupConfig({ auto_backup_before_sync: !autoBackupConfig.auto_backup_before_sync })}
-              className={`relative w-10 h-6 rounded-full transition-colors ${
-                autoBackupConfig.auto_backup_before_sync ? "bg-accent" : "bg-bg border border-border"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                  autoBackupConfig.auto_backup_before_sync ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm">Scheduled backups</label>
-            <button
-              role="switch"
-              aria-checked={autoBackupConfig.auto_backup_scheduled}
-              onClick={() => updateAutoBackupConfig({ auto_backup_scheduled: !autoBackupConfig.auto_backup_scheduled })}
-              className={`relative w-10 h-6 rounded-full transition-colors ${
-                autoBackupConfig.auto_backup_scheduled ? "bg-accent" : "bg-bg border border-border"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                  autoBackupConfig.auto_backup_scheduled ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
-          {autoBackupConfig.auto_backup_scheduled && (
-            <div className="flex items-center justify-between">
-              <label className="text-sm">Backup interval</label>
-              <select
-                value={autoBackupConfig.auto_backup_interval_hours}
-                onChange={(e) => updateAutoBackupConfig({ auto_backup_interval_hours: Number(e.target.value) })}
-                aria-label="Backup interval"
-                className="bg-bg border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
-              >
-                <option value={1}>Every 1 hour</option>
-                <option value={2}>Every 2 hours</option>
-                <option value={4}>Every 4 hours</option>
-                <option value={8}>Every 8 hours</option>
-                <option value={12}>Every 12 hours</option>
-                <option value={24}>Every 24 hours</option>
-              </select>
-            </div>
-          )}
-          {(autoBackupConfig.auto_backup_before_sync || autoBackupConfig.auto_backup_scheduled) && (
-            <div className="flex items-center justify-between">
-              <label className="text-sm">Max auto-backups</label>
-              <input
-                type="number"
-                value={autoBackupConfig.auto_backup_max_count}
-                min={1}
-                max={20}
-                onChange={(e) => {
-                  const val = Math.min(20, Math.max(1, Number(e.target.value)));
-                  updateAutoBackupConfig({ auto_backup_max_count: val });
-                }}
-                aria-label="Max auto-backups"
-                className="w-20 bg-bg border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Transfer</p>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-sm">Bandwidth Limit</h3>
-        <p className="text-xs text-txt-dim">
-          Limit transfer speed to avoid saturating your network. Set to Unlimited for maximum speed.
-        </p>
-        <div className="flex items-center justify-between">
-          <label className="text-sm">Max speed</label>
-          <select
-            value={speedLimit}
-            onChange={(e) => {
-              const val = Number(e.target.value);
-              setSpeedLimit(val);
-              cmd.setTransferSpeedLimit(val).catch(console.error);
-            }}
-            aria-label="Transfer speed limit"
-            className="bg-bg border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
-          >
-            <option value={0}>Unlimited</option>
-            <option value={1048576}>1 MB/s</option>
-            <option value={2097152}>2 MB/s</option>
-            <option value={5242880}>5 MB/s</option>
-            <option value={10485760}>10 MB/s</option>
-            <option value={26214400}>25 MB/s</option>
-            <option value={52428800}>50 MB/s</option>
-            <option value={104857600}>100 MB/s</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-sm">After Sync</h3>
-        <div className="flex items-center justify-between gap-4">
-          <label className="text-sm">Clear game caches after sync (e.g. Sims 4 localthumbcache)</label>
-          <Toggle
-            checked={clearCache}
-            label="Clear game caches after sync"
-            onChange={(v) => {
-              setClearCache(v);
-              cmd.setClearCacheAfterSync(v).catch(console.error);
-            }}
-          />
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <label className="text-sm">Desktop notifications</label>
-            <p className="text-xs text-txt-dim">When SyncCrate is in the background: sync finished, friend connected.</p>
-          </div>
-          <Toggle checked={notificationsEnabled} label="Desktop notifications" onChange={setNotificationsEnabled} />
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <label className="text-sm">Keep running in the tray when the window is closed</label>
-            <p className="text-xs text-txt-dim">Closing the window hides SyncCrate so hosting and syncing continue. Use Quit in the tray menu to exit.</p>
-          </div>
-          <Toggle
-            checked={closeToTray}
-            label="Keep running in the tray when the window is closed"
-            onChange={(v) => {
-              setCloseToTrayState(v);
-              cmd.setCloseToTray(v).catch(console.error);
-            }}
-          />
-        </div>
-      </div>
-
-      <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Application</p>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Heart size={16} className="text-pink-400" />
-          <h3 className="font-semibold text-sm">Support SyncCrate</h3>
-        </div>
-        <p className="text-xs text-txt-dim">
-          SyncCrate is free, open-source, and ad-free. One-time support helps keep development going.
-        </p>
-        {getSyncCount() > 0 && (
-          <p className="text-xs text-txt-dim">
-            <span className="text-accent-light font-semibold">{getSyncCount()}</span> sync{getSyncCount() !== 1 ? "s" : ""} — <span className="text-accent-light font-semibold">{getTimeSaved(getSyncCount())}</span> saved
-          </p>
-        )}
-        <button
-          onClick={() => openUrl("https://www.buymeacoffee.com/stixe").catch(() => {})}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-status-yellow/10 hover:bg-status-yellow/20 border border-status-yellow/30 text-sm font-medium transition-colors group"
-        >
-          <Coffee size={16} className="text-status-yellow" />
-          Buy Me a Coffee
-          <ExternalLink size={12} className="text-txt-dim opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
-        </button>
-      </div>
-
-      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
-        <h3 className="font-semibold text-sm">About</h3>
-        <p className="text-sm text-txt-dim">SyncCrate v{version || "..."}</p>
-        <p className="text-xs text-txt-dim">
-          Free and open-source. Licensed under MIT.
-        </p>
-        <button
-          onClick={async () => {
-            setUpdating(true);
-            try {
-              const update = await check();
-              if (update?.available) {
-                const yes = await ask(
-                  `Update to v${update.version} is available!\n\n${update.body ?? ""}`,
-                  {
-                    title: "Update Available",
-                    kind: "info",
-                    okLabel: "Update",
-                    cancelLabel: "Cancel",
-                  }
-                );
-                if (yes) {
-                  addLog(`Downloading update v${update.version}...`, "info");
-                  try { await cmd.disconnect(); } catch {}
-                  await update.downloadAndInstall();
-                  await relaunch();
-                }
-              } else {
-                await message("You're on the latest version!", {
-                  title: "No Update Available",
-                  kind: "info",
-                  okLabel: "OK",
-                });
-              }
-            } catch (e) {
-              addLog(`Update check failed: ${e}`, "error");
-              await message("Failed to check for updates.\nPlease try again later.", {
-                title: "Update Error",
-                kind: "error",
-                okLabel: "OK",
-              });
-            } finally {
-              setUpdating(false);
+      <Section num="01" title="Games" description="Where each game in your library keeps its files.">
+        {libraryGames.length === 0 ? (
+          <EmptyState
+            title="No games in your library yet"
+            description="Add a game to set its folder here."
+            action={
+              <Button size="sm" variant="primary" onClick={() => navigateToGlobal("game-browser")} icon={<Plus size={13} />}>
+                Browse Games
+              </Button>
             }
-          }}
-          disabled={updating}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-bg border border-border hover:bg-bg-card-hover text-sm transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={updating ? "animate-spin" : ""} />
-          {updating ? "Checking..." : "Check for Updates"}
-        </button>
-      </div>
+          />
+        ) : (
+          <div className="space-y-3">
+            {libraryGames.map((game) => {
+              const gameDef = getGameDef(game.id);
+              const contentFolders = gameDef?.content_types.map((ct) => ct.folder).join(", ") ?? "";
+              return (
+                <Panel key={game.id} padded={false}>
+                  <div className="px-5 py-4 space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 grid place-items-center border border-line-hi bg-bg shrink-0">
+                        <GameIcon iconName={game.icon} size={14} className={game.color} />
+                      </span>
+                      <h3 className="font-display font-semibold uppercase tracking-[0.05em] text-[14px]">{game.label}</h3>
+                      {gamePaths[game.id] ? (
+                        <Badge tone="green" dot>Detected</Badge>
+                      ) : (
+                        <Badge tone="amber" dot>Not set</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-txt-dim">
+                      The root folder for your {game.label} installation
+                      {contentFolders && <> (contains <span className="font-mono text-[11px] text-txt-muted">{contentFolders}</span> folders)</>}.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        mono
+                        size="sm"
+                        value={pathInputs[game.id] || ""}
+                        onChange={(e) => setPathInputs((prev) => ({ ...prev, [game.id]: e.target.value }))}
+                        onBlur={() => handlePathSubmit(game.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handlePathSubmit(game.id);
+                        }}
+                        placeholder={`Path to ${game.label} folder...`}
+                        aria-label={`${game.label} folder path`}
+                        wrapperClassName="flex-1"
+                        className="!text-[12px] !tracking-[0.02em]"
+                      />
+                      <Button size="sm" onClick={() => handleBrowse(game.id)} icon={<FolderOpen size={13} />} className="!h-[30px]">
+                        Browse
+                      </Button>
+                    </div>
+                  </div>
+                </Panel>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <Section num="02" title="Network & Sync" description="Hosting port and files that never sync.">
+        <Panel title="Session port" label="// TCP">
+          <p className="text-xs text-txt-dim mb-3">
+            Port used for hosting sessions. Change this if the default port (9847) is in use.
+          </p>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number"
+              value={port}
+              onChange={(e) => {
+                setPort(e.target.value);
+                checkPort(e.target.value);
+              }}
+              min={1024}
+              max={65535}
+              aria-label="Session port"
+              className={cx(
+                "input input-mono w-32",
+                portStatus === "taken" && "!border-status-red",
+                portStatus === "available" && "!border-status-green",
+              )}
+            />
+            <Button variant="primary" onClick={handlePortSave} disabled={portStatus === "taken"}>
+              Save Port
+            </Button>
+            {portStatus === "checking" && <span className="hud-label">Checking…</span>}
+          </div>
+          {portStatus === "taken" && (
+            <p className="mt-2 font-mono text-[11px] text-status-red">Port is already in use. Choose a different port.</p>
+          )}
+          {portStatus === "available" && (
+            <p className="mt-2 font-mono text-[11px] text-status-green">Port is available.</p>
+          )}
+        </Panel>
+
+        <Panel title="Sync exclusions" label="// Ignore list">
+          <p className="text-xs text-txt-dim mb-3">
+            Patterns for files to exclude from sync by default. Use <code className="font-mono text-[11px] text-txt bg-bg border border-border px-1">*.ext</code> for extensions,{" "}
+            <code className="font-mono text-[11px] text-txt bg-bg border border-border px-1">folder/*</code> for directories.
+          </p>
+          {excludePatterns.length > 0 && (
+            <div className="bg-bg border border-border divide-y divide-border mb-3">
+              {excludePatterns.map((pattern) => (
+                <div key={pattern} className="flex items-center gap-2 px-3 h-8 group">
+                  <span className="font-mono text-[11px] text-txt-muted">-</span>
+                  <code className="font-mono text-[12px] flex-1 text-txt-dim truncate">{pattern}</code>
+                  <button
+                    onClick={() => handleRemovePattern(pattern)}
+                    className="text-txt-muted hover:text-status-red transition-colors"
+                    aria-label={`Remove ${pattern}`}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              mono
+              size="sm"
+              value={newPattern}
+              onChange={(e) => setNewPattern(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddPattern();
+              }}
+              maxLength={256}
+              placeholder="e.g. *.ts4script or Saves/*"
+              aria-label="Sync exclusion pattern"
+              wrapperClassName="flex-1"
+              className="!text-[12px]"
+            />
+            <Button size="sm" onClick={handleAddPattern} icon={<Plus size={13} />} className="!h-[30px]">
+              Add
+            </Button>
+          </div>
+        </Panel>
+      </Section>
+
+      <Section num="03" title="Auto-Backups" description="Automatically create backups before syncing or on a schedule.">
+        <Panel padded={false}>
+          <div className="divide-y divide-border">
+            <SettingRow>
+              <Toggle
+                checked={autoBackupConfig.auto_backup_before_sync}
+                onChange={(v) => updateAutoBackupConfig({ auto_backup_before_sync: v })}
+                label="Back up before sync"
+                description="Snapshot your content folders right before files are received."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={autoBackupConfig.auto_backup_scheduled}
+                onChange={(v) => updateAutoBackupConfig({ auto_backup_scheduled: v })}
+                label="Scheduled backups"
+                description="Take a backup every few hours while SyncCrate is running."
+              />
+            </SettingRow>
+            {autoBackupConfig.auto_backup_scheduled && (
+              <SettingRow label="Backup interval">
+                <select
+                  value={autoBackupConfig.auto_backup_interval_hours}
+                  onChange={(e) => updateAutoBackupConfig({ auto_backup_interval_hours: Number(e.target.value) })}
+                  aria-label="Backup interval"
+                  className={selectClass}
+                >
+                  <option value={1}>Every 1 hour</option>
+                  <option value={2}>Every 2 hours</option>
+                  <option value={4}>Every 4 hours</option>
+                  <option value={8}>Every 8 hours</option>
+                  <option value={12}>Every 12 hours</option>
+                  <option value={24}>Every 24 hours</option>
+                </select>
+              </SettingRow>
+            )}
+            {(autoBackupConfig.auto_backup_before_sync || autoBackupConfig.auto_backup_scheduled) && (
+              <SettingRow label="Max auto-backups" hint="Oldest auto-backups are removed past this count.">
+                <input
+                  type="number"
+                  value={autoBackupConfig.auto_backup_max_count}
+                  min={1}
+                  max={20}
+                  onChange={(e) => {
+                    const val = Math.min(20, Math.max(1, Number(e.target.value)));
+                    updateAutoBackupConfig({ auto_backup_max_count: val });
+                  }}
+                  aria-label="Max auto-backups"
+                  className="input input-sm input-mono w-20"
+                />
+              </SettingRow>
+            )}
+          </div>
+        </Panel>
+      </Section>
+
+      <Section num="04" title="Transfer" description="Bandwidth and what happens after a sync finishes.">
+        <Panel padded={false}>
+          <div className="divide-y divide-border">
+            <SettingRow label="Max speed" hint="Limit transfer speed to avoid saturating your network. Unlimited is fastest.">
+              <select
+                value={speedLimit}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setSpeedLimit(val);
+                  cmd.setTransferSpeedLimit(val).catch(console.error);
+                }}
+                aria-label="Transfer speed limit"
+                className={selectClass}
+              >
+                <option value={0}>Unlimited</option>
+                <option value={1048576}>1 MB/s</option>
+                <option value={2097152}>2 MB/s</option>
+                <option value={5242880}>5 MB/s</option>
+                <option value={10485760}>10 MB/s</option>
+                <option value={26214400}>25 MB/s</option>
+                <option value={52428800}>50 MB/s</option>
+                <option value={104857600}>100 MB/s</option>
+              </select>
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={clearCache}
+                onChange={(v) => {
+                  setClearCache(v);
+                  cmd.setClearCacheAfterSync(v).catch(console.error);
+                }}
+                label="Clear game caches after sync"
+                description="For example the Sims 4 localthumbcache, so new CC shows up correctly."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={notificationsEnabled}
+                onChange={setNotificationsEnabled}
+                label="Desktop notifications"
+                description="When SyncCrate is in the background: sync finished, friend connected."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={closeToTray}
+                onChange={(v) => {
+                  setCloseToTrayState(v);
+                  cmd.setCloseToTray(v).catch(console.error);
+                }}
+                label="Keep running in the tray when the window is closed"
+                description="Closing the window hides SyncCrate so hosting and syncing continue. Use Quit in the tray menu to exit."
+              />
+            </SettingRow>
+          </div>
+        </Panel>
+      </Section>
+
+      <Section num="05" title="Application" description="Support the project and keep SyncCrate up to date.">
+        <div className="grid grid-cols-2 gap-3 items-stretch">
+          <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
+            <p className="text-xs text-txt-dim mb-3">
+              SyncCrate is free, open-source, and ad-free. One-time support helps keep development going.
+            </p>
+            {getSyncCount() > 0 && (
+              <p className="font-mono text-[11px] text-txt-muted mb-3">
+                <span className="text-neon tabular">{getSyncCount()}</span> sync{getSyncCount() !== 1 ? "s" : ""} &middot;{" "}
+                <span className="text-neon">{getTimeSaved(getSyncCount())}</span> saved
+              </p>
+            )}
+            <Button
+              onClick={() => openUrl("https://www.buymeacoffee.com/stixe").catch(() => {})}
+              icon={<Coffee size={14} className="text-amber" />}
+              className="group"
+            >
+              Buy Me a Coffee
+              <ExternalLink size={11} className="text-txt-muted" />
+            </Button>
+          </Panel>
+
+          <Panel title="About" label="// Build">
+            <p className="font-display font-bold text-[1.6rem] leading-none tabular">
+              v<span className="text-neon">{version || "..."}</span>
+            </p>
+            <p className="text-xs text-txt-dim mt-2 mb-3">Free and open-source. Licensed under MIT.</p>
+            <Button
+              onClick={async () => {
+                setUpdating(true);
+                try {
+                  const update = await check();
+                  if (update?.available) {
+                    const yes = await ask(
+                      `Update to v${update.version} is available!\n\n${update.body ?? ""}`,
+                      {
+                        title: "Update Available",
+                        kind: "info",
+                        okLabel: "Update",
+                        cancelLabel: "Cancel",
+                      }
+                    );
+                    if (yes) {
+                      addLog(`Downloading update v${update.version}...`, "info");
+                      try { await cmd.disconnect(); } catch {}
+                      await update.downloadAndInstall();
+                      await relaunch();
+                    }
+                  } else {
+                    await message("You're on the latest version!", {
+                      title: "No Update Available",
+                      kind: "info",
+                      okLabel: "OK",
+                    });
+                  }
+                } catch (e) {
+                  addLog(`Update check failed: ${e}`, "error");
+                  await message("Failed to check for updates.\nPlease try again later.", {
+                    title: "Update Error",
+                    kind: "error",
+                    okLabel: "OK",
+                  });
+                } finally {
+                  setUpdating(false);
+                }
+              }}
+              disabled={updating}
+              icon={<RefreshCw size={14} className={updating ? "animate-spin" : ""} />}
+            >
+              {updating ? "Checking..." : "Check for Updates"}
+            </Button>
+          </Panel>
+        </div>
+      </Section>
     </div>
   );
 }
 
-function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
+/** Two-column settings block: numbered caption + blurb on the left, controls on the right. */
+function Section({ num, title, description, children }: { num: string; title: string; description?: string; children: ReactNode }) {
   return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${
-        checked ? "bg-accent" : "bg-bg border border-border"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0"
-        }`}
-      />
-    </button>
+    <section className="grid grid-cols-[200px_1fr] gap-6 pt-6 border-t border-border first-of-type:border-t-0">
+      <div>
+        <p className="hud-label mb-1.5"><b>// {num}</b></p>
+        <h3 className="font-display font-bold uppercase tracking-[0.04em] text-[1.05rem] leading-tight">{title}</h3>
+        {description && <p className="text-xs text-txt-dim mt-2 leading-relaxed">{description}</p>}
+      </div>
+      <div className="min-w-0 space-y-3">{children}</div>
+    </section>
+  );
+}
+
+/** One row inside a settings panel: a Toggle alone, or a label/hint with a control on the right. */
+function SettingRow({ label, hint, children }: { label?: string; hint?: string; children: ReactNode }) {
+  if (!label) return <div className="px-5 py-3.5">{children}</div>;
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+      <div className="min-w-0">
+        <p className="text-sm text-txt leading-5">{label}</p>
+        {hint && <p className="text-xs text-txt-dim mt-0.5">{hint}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
   );
 }
