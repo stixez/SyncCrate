@@ -462,7 +462,7 @@
         Open Source &middot; Free Forever
       </div>
       <h1>Never Break a<br><span class="gradient">Modded Session</span> Again</h1>
-      <p class="tagline">SyncCrate compares game folders between players and transfers only what's different. Peer-to-peer at LAN speed. Works on local networks and virtual LANs like Tailscale.</p>
+      <p class="tagline">SyncCrate compares your game folders with your friends' and copies only what's different, straight from PC to PC at LAN speed. No cloud, no accounts.</p>
       <div class="hero-ctas">
         <a href="https://github.com/stixez/SyncCrate/releases/latest" class="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -659,97 +659,67 @@
       <div class="line-divider" style="margin-bottom: 100px"></div>
       <p class="section-label">Features</p>
       <h2 class="section-title">Built for Modders</h2>
-      <p class="section-subtitle">Everything you need to keep your game mods in sync with friends.</p>
+      <p class="section-subtitle">Everything you need to play modded games together, and nothing you don't.</p>
       <div class="feature-grid">
         <div class="feature-card">
-          <div class="feature-icon">&#x1F3A8;</div>
-          <h3>ReShade &amp; GShade for Sims 4</h3>
-          <p>Share ReShade or GShade presets and shaders so everyone's game looks the same. Detected automatically on EA App, Origin and Steam installs. Your own settings file is never synced.</p>
+          <div class="feature-icon">&#x1F511;</div>
+          <h3>Paste a Code, You're In</h3>
+          <p>The host shares one short join code with their addresses, port and PIN. Friends paste it and connect, even over Tailscale. Reconnecting takes one click.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F50C;</div>
           <h3>Connections That Just Work</h3>
-          <p>Finds hosts via mDNS and UDP broadcast, tries every network address, and fixes Windows Firewall in one click. No running as administrator.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F310;</div>
-          <h3>Peer-to-Peer</h3>
-          <p>Files transfer directly between computers at 100-900 MB/s. Nothing leaves your network. No cloud, no uploads.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x26A1;</div>
-          <h3>Smart Diffing</h3>
-          <p>SHA-256 hash comparison. Only transfers what's different — identical files are skipped automatically.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
-          <h3>Conflict Resolution</h3>
-          <p>Keep yours, use theirs, or keep both. Every conflict is resolved on your terms before any files move.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F3F7;&#xFE0F;</div>
-          <h3>Tags & Search</h3>
-          <p>Organize mods with built-in tags. Bulk-tag, filter, and search across your entire collection.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F4E6;</div>
-          <h3>Profiles & Sharing</h3>
-          <p>Snapshot your mod setup, export as a .synccrate-profile file, share on Discord. Friends drag it in and they're set.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F4BE;</div>
-          <h3>Backup & Restore</h3>
-          <p>Full snapshot of your game content. Safety backup created automatically before every restore.</p>
+          <p>Finds hosts via mDNS and UDP broadcast, tries every address, and fixes Windows Firewall in one click. No running as administrator.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F512;</div>
-          <h3>Privacy First</h3>
-          <p>No servers, no accounts, no tracking, no data collection. Files stay between you and your friends.</p>
+          <h3>Direct &amp; Private</h3>
+          <p>Files go straight from PC to PC at 100-900 MB/s. No cloud, no accounts, no tracking. Nothing leaves your network.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">&#x1F4A8;</div>
-          <h3>Transfer Compression</h3>
-          <p>zstd compression reduces bandwidth 50-80%. Negotiated per-peer automatically. Already-compressed files are skipped.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x23F0;</div>
-          <h3>Auto-Backups</h3>
-          <p>Back up before every sync or on a schedule. Old auto-backups are pruned to save disk space. Never lose your mods.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F504;</div>
-          <h3>Sync Resume</h3>
-          <p>Interrupted syncs pick up where they left off. No more restarting large transfers from scratch.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x1F50D;</div>
-          <h3>Auto-Detection</h3>
-          <p>Finds your games automatically, including Steam libraries on any drive, OneDrive-redirected Documents, and EA App installs.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#x26A0;&#xFE0F;</div>
-          <h3>Script Warnings</h3>
-          <p>Flags potentially risky files (.ts4script, .lua, .jar, .dll) per game before syncing so you can review them.</p>
+          <div class="feature-icon">&#x26A1;</div>
+          <h3>Only What Changed</h3>
+          <p>SHA-256 diffing skips identical files, and zstd compression cuts the rest by 50-80%. Every file is verified on arrival.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x2611;&#xFE0F;</div>
-          <h3>Selective Sync</h3>
-          <p>Pick exactly what syncs. Exclude single files or glob patterns, and hosts can choose which folders to share, like mods but not saves.</p>
+          <h3>You Approve Every File</h3>
+          <p>See size and time before you sync. Exclude files or patterns, and resolve conflicts your way: keep yours, use theirs, keep both or keep newer.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">&#x1F511;</div>
-          <h3>Join Codes</h3>
-          <p>The host shares one short code that includes their addresses, port and PIN. Friends paste it and they're in, even over Tailscale. Reconnecting takes one click.</p>
+          <div class="feature-icon">&#x1F504;</div>
+          <h3>Picks Up Where It Left Off</h3>
+          <p>Cancelled or interrupted syncs resume instead of restarting. A desktop notification tells you when it's done.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F3A8;</div>
+          <h3>ReShade &amp; GShade for Sims 4</h3>
+          <p>Share presets and shaders so everyone's game looks the same. Detected on EA App, Origin and Steam installs. Your own settings file is never synced.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F3AE;</div>
-          <h3>Game-Aware Syncing</h3>
-          <p>Warns when the game is still running and clears The Sims 4's thumbnail cache after new mods arrive. Sims mods are disabled the way the game actually respects.</p>
+          <h3>Knows Your Game</h3>
+          <p>Warns if the game is still running, clears The Sims 4's thumbnail cache after new mods, disables Sims mods the way the game respects, and flags outdated script mods.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">&#x1F514;</div>
-          <h3>Notifications &amp; Estimates</h3>
-          <p>See the download size and estimated time before you sync, and get a desktop notification when it's done, even when SyncCrate is minimized.</p>
+          <div class="feature-icon">&#x1F50D;</div>
+          <h3>Finds Your Games</h3>
+          <p>Auto-detects installs across every Steam library on any drive, OneDrive-redirected Documents and EA App installs. Or set a path yourself.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F3F7;&#xFE0F;</div>
+          <h3>Tidy Mod Library</h3>
+          <p>Tag, search and filter mods, enable or disable without deleting, drag &amp; drop to install, and find duplicates in one click.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4E6;</div>
+          <h3>Share Your Setup</h3>
+          <p>Snapshot your mods as a profile and export a .synccrate-profile file. Share it on Discord and friends are set in one drag.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
+          <h3>Safe by Default</h3>
+          <p>Automatic backups before sync or on a schedule, a safety backup before every restore, and warnings for risky script files.</p>
         </div>
       </div>
     </div>
@@ -760,27 +730,27 @@
     <div class="container">
       <p class="section-label">How It Works</p>
       <h2 class="section-title">Four Steps. Zero Config.</h2>
-      <p class="section-subtitle">No setup files, no port forwarding, no accounts. Works on any network where devices can see each other.</p>
+      <p class="section-subtitle">No port forwarding, no accounts. Works on your home network or a virtual LAN like Tailscale or ZeroTier.</p>
       <div class="steps">
         <div class="step">
           <div class="step-number">1</div>
           <h3>Host</h3>
-          <p>Start a session and broadcast on your network.</p>
+          <p>Click Start Hosting and share your join code.</p>
         </div>
         <div class="step">
           <div class="step-number">2</div>
           <h3>Join</h3>
-          <p>Friends discover your session and connect instantly.</p>
+          <p>Friends paste the code, or pick you from the network scan.</p>
         </div>
         <div class="step">
           <div class="step-number">3</div>
           <h3>Compare</h3>
-          <p>SyncCrate scans both sides and shows what's different.</p>
+          <p>SyncCrate scans both sides and plans what to copy.</p>
         </div>
         <div class="step">
           <div class="step-number">4</div>
           <h3>Sync</h3>
-          <p>Resolve conflicts, hit sync. Files transfer at LAN speed.</p>
+          <p>Review the plan, hit Sync Now. Done in minutes.</p>
         </div>
       </div>
     </div>
@@ -810,7 +780,7 @@
   <section class="cta-section">
     <div class="container">
       <h2>Ready to Sync?</h2>
-      <p>Free, open-source, and built with love. No more zip files, no more mismatched mods.</p>
+      <p>Free and open source. No more zip files, no more mismatched mods.</p>
       <div class="cta-buttons">
         <a href="https://github.com/stixez/SyncCrate/releases/latest" class="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

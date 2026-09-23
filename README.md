@@ -15,64 +15,74 @@
   <a href="https://buymeacoffee.com/stixe"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black&style=flat-square" alt="Buy Me a Coffee" /></a>
 </p>
 
+
 <p align="center">
-  <a href="../../releases/latest">Download</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://stixez.github.io/SyncCrate">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#quick-start">Quick Start</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#building-from-source">Build from Source</a>
+  <a href="../../releases/latest"><strong>Download</strong></a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://stixez.github.io/SyncCrate">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#get-started">Get started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#supported-games">Games</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#faq">FAQ</a>
 </p>
 
 ---
 
-### Highlights
-
-- **Peer-to-peer at LAN speed** — Files transfer directly between computers at 100-900 MB/s. No cloud, no uploads, no waiting.
-- **Smart file diffing** — Compares SHA-256 hashes and only transfers what actually changed.
-- **100 games, 67 families** — Sims, WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, Stellaris, Lethal Company, Skyrim, Valheim, Terraria, and many more. Data-driven registry — adding a game is just JSON.
-- **ReShade & GShade for The Sims 4** — Share presets and shaders so everyone's game looks the same. Detected automatically when installed.
-- **Reliable connections** — Finds hosts via mDNS *and* UDP broadcast, tries every network address a host has, and fixes Windows Firewall with one click. No need to run as administrator.
-- **Transfer compression** — zstd compression reduces bandwidth by 50-80% for most mod types. Negotiated automatically between peers.
-- **Multi-peer sessions** — One host, multiple friends. Everyone syncs independently.
-- **Conflict resolution** — Keep yours, use theirs, or keep both — per file, or "keep newer" for all at once.
-- **Mod profiles & auto-backups** — Snapshot your setup, export profiles, share on Discord. Auto-backup before sync or on a schedule with smart pruning.
-- **Join codes** — The host gets a short code (`SC-…`) that contains their addresses, port and PIN. Friends paste it and connect. One click reconnects to your last host.
-- **Game-aware syncing** — Warns when the game is still running, clears The Sims 4's thumbnail cache after new mods arrive, and shows the size and estimated time before you sync. Desktop notifications fire when a sync finishes.
-- **Sync resume** — Interrupted syncs pick up where they left off instead of restarting from scratch. Cancel a sync at any time and it resumes later.
-- **Mod housekeeping** — Find duplicate mods, flag script mods that may be outdated after a game patch, and fix Sims mods still loading from an old `_Disabled` folder in one click.
-- **Stays out of your way** — Remembers your name and hosting settings, shows "Host added N files" while connected, asks for the PIN when needed, shows status in the tray, and can keep running in the tray when you close the window.
-- **Privacy-first** — No servers, no accounts, no tracking, no data collection. Nothing leaves your network.
-- **Dangerous file warnings** — Flags potentially risky script files (`.ts4script`, `.lua`, `.jar`, `.dll`) per game before sync.
-
----
-
-## The Problem
-
-Playing modded games with friends often turns into a mess of shared zip files, outdated mods, and broken saves. Someone always ends up with a missing mod, a different version, or incompatible configs. Multiplayer sessions break before they even start.
-
-## The Solution
-
-SyncCrate compares game folders between players and transfers only the files that differ. Everyone ends up with the same mods, the same versions, and the same configuration — in minutes, not hours.
-
-No cloud services. No accounts. No file uploads. Files move peer-to-peer at full LAN speed, verified with SHA-256 checksums.
-
----
-
-## Screenshots
+Playing modded games with friends usually means passing zip files around until someone has the wrong version. **SyncCrate compares your game folders and copies only the files that differ, straight from PC to PC at LAN speed.** No cloud, no accounts, no tracking.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="100%" alt="Dashboard">
+  <img src="docs/screenshots/dashboard.png" width="100%" alt="SyncCrate dashboard: session overview, sync plan and connected peers">
 </p>
-<p align="center"><em>Dashboard — Session overview, sync plan, and connected peers</em></p>
 
-| Content Browser | Profiles |
-|:-:|:-:|
-| ![Content Browser](docs/screenshots/content.png) | ![Profiles](docs/screenshots/profiles.png) |
-| *Browse, tag, and manage mods* | *Snapshot and share mod setups* |
+## Features
 
----
+**Sync**
+- **Only what changed.** SHA-256 diffing, zstd compression (50–80% less data), 100–900 MB/s peer-to-peer on LAN.
+- **You decide.** Review the plan with size and time estimate, exclude files or glob patterns, and resolve conflicts per file: keep yours, use theirs, keep both, or keep newer.
+- **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done.
+
+**Connect**
+- **Join codes.** The host gets a short `SC-…` code with their addresses, port and PIN. Friends paste it and join; reconnecting is one click.
+- **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
+- **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
+
+**Mods**
+- **100 games** from a JSON registry, auto-detected across every Steam library on every drive.
+- **Mod manager.** Enable/disable without deleting, 12 tags, drag & drop install, pack/DLC detection, duplicate finder.
+- **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
+
+**Safety**
+- **Backups.** Manual or automatic (before every sync or every 1–24 h) with pruning, plus a safety backup before every restore.
+- **Script warnings.** Flags risky files (`.ts4script`, `.lua`, `.jar`, `.dll`) before syncing.
+- **Private.** Files never leave your network. Warns you if the game is still running.
+
+## Get Started
+
+1. **Download** SyncCrate for Windows, macOS or Linux from [Releases](../../releases/latest) and install it on every PC.
+2. **Add your game** in the Game Browser. Its folder is detected automatically, or set it manually.
+3. **One friend clicks Start Hosting** and shares the join code. Everyone else pastes it into *Join a Session* (or picks the host under **Scan for Hosts**).
+4. **Click Compare & Sync**, check the plan, then **Sync Now**.
+
+> [!TIP]
+> Can't connect? On the **host** PC click **Fix Windows Firewall** (shown while hosting and in *Network Check*). It asks for admin permission once; SyncCrate itself never needs to run as administrator.
+
+> [!NOTE]
+> **macOS:** the app isn't notarized yet, so macOS may call it "damaged". Run `xattr -cr /Applications/SyncCrate.app` once, then open it normally.
+
+| Platform | Format |
+|---|---|
+| Windows | `.exe` installer |
+| macOS (Apple Silicon / Intel) | `.dmg` |
+| Linux | `.AppImage` / `.deb` |
+
+<details>
+<summary><strong>Keyboard shortcuts</strong></summary>
+
+| Shortcut | Action |
+|---|---|
+| <kbd>Ctrl/Cmd+Shift+S</kbd> | Settings |
+| <kbd>Ctrl/Cmd+Shift+F</kbd> or <kbd>/</kbd> | Focus search |
+| <kbd>Esc</kbd> | Close dialogs / clear search |
+
+</details>
 
 ## Supported Games
 
-100 games across 67 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
-
-Auto-detection checks the usual install/save locations, **every Steam library on every drive**, and (for Sims 4 ReShade/GShade) the EA App install path from the registry. You can always set a path manually.
+**100 games across 67 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
 
 <details>
 <summary><strong>The Sims</strong> — 5 games</summary>
@@ -238,314 +248,82 @@ Auto-detection checks the usual install/save locations, **every Steam library on
 
 </details>
 
----
+## The Sims 4
 
-## Common Use Cases
+- **ReShade & GShade presets.** Add *The Sims 4 (ReShade)* or *(GShade)* to share shaders and presets so everyone's game looks the same. Detected in `Game\Bin` on EA App, Origin and Steam installs. Your own `ReShade.ini` / `GShade.ini` is never synced.
+- **Thumbnail cache** is cleared automatically after new mods arrive.
+- **Disabling that sticks.** The game loads mods from subfolders, so disabled mods are renamed to `.disabled` instead of moved. Mods left in an old `_Disabled` folder are fixed in one click.
+- **Outdated script mods** are flagged after a game patch.
 
-**Playing modded games with friends** — Keep everyone's mods, saves, and configs synchronized so multiplayer sessions never break.
+## FAQ
 
-**Sharing mod collections** — Select the mods you want, click export, and share the `.synccrate-profile` file on Discord or anywhere else. Friends just drag it into the app and they're set.
+<details>
+<summary><strong>My friend can't connect. What do I do?</strong></summary>
 
-**WoW private server addon sync** — WoTLK, TBC, Vanilla, and custom server communities can't use official addon managers. SyncCrate fills that gap.
+It's almost always Windows Firewall. On the host PC click **Fix Windows Firewall**, then use **Test** in *Network Check* to see whether the host is reachable. SyncCrate uses TCP port 9847 for sessions and UDP port 47625 for discovery.
+</details>
 
-**Managing large mod libraries** — Organize with tags, enable/disable mods without deleting, create backups, and filter by category.
+<details>
+<summary><strong>Do I need to run it as administrator?</strong></summary>
 
----
+No. The only exception is a game folder Windows protects, such as ReShade/GShade under `Program Files`. SyncCrate tells you and offers to restart as administrator.
+</details>
 
-## How SyncCrate Works
+<details>
+<summary><strong>Can I sync with friends who aren't on my network?</strong></summary>
 
-1. **Discover peers** — SyncCrate finds other users on the network via mDNS and UDP broadcast (or connect manually by IP).
-2. **Scan game folders** — Both sides generate SHA-256 file hashes.
-3. **Compare files** — Differences are detected and categorized: download, upload, or conflict.
-4. **Build sync plan** — Review what will transfer. Exclude files, resolve conflicts, apply filters.
-5. **Transfer files** — Files move peer-to-peer over TCP at full LAN speed.
-6. **Verify integrity** — Every file is hash-verified after transfer.
+Yes, with a virtual LAN like [Tailscale](https://tailscale.com), [ZeroTier](https://www.zerotier.com) or Hamachi. Everyone joins the same virtual network, then pastes the host's join code (it includes the VPN address). Auto-discovery usually doesn't cross a VPN.
+</details>
 
----
+<details>
+<summary><strong>Is there a file size limit?</strong></summary>
 
-## Features
+Up to 2 GB per file, no limit on total size.
+</details>
 
-| | Feature | Description |
-|-|---------|-------------|
-| **P2P** | Peer-to-peer transfer | Files move directly between computers. Nothing leaves your network. |
-| **Multi** | Multi-peer sessions | One host, multiple clients. Each client syncs independently. |
-| **Games** | Multi-game support | 100 games across 67 families. Data-driven registry — adding games is just JSON. |
-| **Zstd** | Transfer compression | zstd compression reduces bandwidth 50-80%. Negotiated per-peer, skips already-compressed files. |
-| **Auto** | Auto-backups | Back up before every sync or on a schedule. Old auto-backups pruned automatically. |
-| **Resume** | Sync resume | Interrupted syncs resume from where they left off. Checkpoint verified by plan hash. |
-| **Discovery** | Auto-discovery | Finds peers on your network via mDNS + UDP broadcast, and tries every address a host has. No IPs to configure. |
-| **Network** | Firewall fix & diagnostics | One-click Windows Firewall fix, reachability test, clear connection error messages. |
-| **Diff** | Smart diffing | Compares file hashes. Only transfers what's actually different. |
-| **Resolve** | Conflict resolution | Keep yours, use theirs, or keep both — per file. |
-| **Tags** | Mod tagging | Organize mods with 12 built-in tags. Bulk-tag, filter, and search. |
-| **Selective** | Selective sync | Exclude individual files or use glob patterns. Quick filters by category. |
-| **Backup** | Backup & restore | Full snapshot of game content folders. Safety backup before every restore. |
-| **DnD** | Drag & drop install | Drop mod files onto the mod list to install. |
-| **DLC** | Pack detection | Detects installed expansion/game/stuff packs and warns about mod compatibility. |
-| **Profiles** | Mod profiles | Snapshot your mod setup per game. Export/import as `.synccrate-profile` files. |
-| **Perms** | Host permissions | Hosts control which folders peers can sync. |
-| **SHA-256** | Integrity verification | Every file is hash-verified after transfer. |
-| **Security** | Dangerous file warnings | Flags risky script files (`.ts4script`, `.lua`, `.jar`, `.dll`) before syncing. |
-| **Toggle** | Mod enable/disable | Disable mods without deleting them. Moves files to a `_Disabled` folder and back. |
-| **Details** | Mod details panel | Click any mod to view full details — path, size, hash, tags, compatibility, and quick actions. |
-| **Theme** | Light & dark theme | Toggle between dark and light mode from the sidebar. Preference persists across sessions. |
-| **Retry** | Auto-reconnect | Automatic reconnection with exponential backoff if the connection drops unexpectedly. |
-| **Live** | Real-time progress | File counts, byte totals, and percentage during sync. |
-| **Update** | Auto-update | Check for and install updates directly from the app. |
+<details>
+<summary><strong>Is it safe? Will it break my mods?</strong></summary>
 
----
+Nothing changes until you approve the sync plan, and existing files are only replaced when you choose to. Every file is hash-verified after transfer, risky script files are flagged, and backups let you roll back. Only sync with people you trust, and make sure everyone runs the same SyncCrate version.
+</details>
 
-## Download
+<details>
+<summary><strong>My game isn't detected or supported.</strong></summary>
 
-Get the latest release for your platform from the **[Releases](../../releases/latest)** page.
+Set the folder manually in Settings; any install with the expected folder structure works, Steam or not. To add a new game, see [Adding a game](#adding-a-game).
+</details>
 
-| Platform | Format |
-|----------|--------|
-| Windows | `.exe` installer |
-| macOS (Apple Silicon) | `.dmg` |
-| macOS (Intel) | `.dmg` |
-| Linux | `.AppImage` / `.deb` |
+## Contributing
 
-> **macOS users:** The app is not signed/notarized yet. macOS will show "app is damaged" on first launch. To fix this, open Terminal and run:
-> ```
-> xattr -cr /Applications/SyncCrate.app
-> ```
-> Then open SyncCrate normally. You only need to do this once.
+Issues and pull requests are welcome.
 
----
+### Adding a Game
 
-## Quick Start
+Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detection paths, content types and file extensions. No Rust or TypeScript changes needed. Detection strategies are tried in order and the first existing path wins:
 
-### 1. Install
+| Strategy | Example |
+|---|---|
+| `documents_relative` | `{"type": "documents_relative", "base": "My Games", "folders": ["Fallout4"]}` |
+| `absolute_paths` | `{"type": "absolute_paths", "paths": {"windows": ["%APPDATA%\\VintagestoryData"], "linux": ["~/.config/VintagestoryData"]}}` |
+| `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
+| `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Download and run SyncCrate on each computer. On first launch a welcome screen helps you add games to your personal library.
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`.
 
-### 2. Add Games
+### Building from Source
 
-Browse the Game Browser to add supported games to your library. SyncCrate auto-detects installed game folders where possible. Each game in your library gets its own sidebar entry with Dashboard, Content, Profiles, and Backups pages.
-
-### 3. Connect
-
-Both players need to be on the **same network** — same Wi-Fi, same router, or a virtual LAN like [Tailscale](https://tailscale.com) or [ZeroTier](https://www.zerotier.com).
-
-| Role | Action |
-|------|--------|
-| **Host** | Enter a display name > **Start Hosting** |
-| **Client** | Enter a display name > **Scan for Hosts** > click the host to connect |
-
-The easiest way to join is the **join code** on the host's screen. Paste it into *Join a Session* and click **Join**. It includes every address the host has, plus the port and the PIN, so it also works over Tailscale/ZeroTier. If you prefer, **Connect by IP** with one of the addresses shown on the host's screen still works. After you've connected once, **Reconnect to …** takes a single click.
-
-**Can't connect?** On the **host** PC, click **Fix Windows Firewall** (shown while hosting, and in *Network Check* on the Dashboard). It asks for administrator permission once, removes any rule blocking SyncCrate, and allows it on Private and Public networks. You don't need to run SyncCrate as administrator. Use **Test** in Network Check to see whether a host is reachable before joining.
-
-### 4. Compare & Sync
-
-Click **Compare & Sync** on the Dashboard. SyncCrate scans both mod folders and categorizes every file:
-
-- **Download** — files the peer has that you don't
-- **Upload** — files you have that the peer doesn't
-- **Conflict** — same file exists on both sides with different contents
-
-Use selective sync to exclude files you don't want, resolve conflicts in the **Content** tab, then click **Sync Now**.
-
-### 5. Done
-
-Click **Disconnect** when finished. All transferred files are already saved.
-
----
-
-## Remote Players
-
-Not on the same physical network? SyncCrate works over any virtual LAN network. Popular options:
-
-- **[Tailscale](https://tailscale.com)** — Free for personal use, easiest setup
-- **[ZeroTier](https://www.zerotier.com)** — Free for up to 25 devices
-- **Hamachi** or any VPN-based LAN solution
-
-Both players install the virtual LAN tool and join the same network. Auto-discovery usually doesn't cross a VPN, so the client pastes the host's **join code**, which includes the host's VPN address. Connecting by IP with the host's VPN address also works (Tailscale addresses start with `100.`).
-
----
-
-## Mod Enable / Disable
-
-Temporarily disable a mod without deleting it. Click any mod to open its details panel, then hit **Disable**. For most games the file moves to `Mods/_Disabled/`. The Sims 3 and 4 load mods from subfolders too, so for them the file is renamed to `name.package.disabled` instead, which the game ignores. Hit **Enable** to undo, including for Sims mods disabled by older versions into `_Disabled/`. Disabled mods are dimmed in the list.
-
----
-
-## Mod Tags
-
-Organize your mods with 12 built-in tags (Hair, Clothing, Build, Gameplay, etc.). Tag mods individually or in bulk, then filter the mod list by tag. Tag filter pills show counts so you can see your collection at a glance.
-
----
-
-## Backup & Restore
-
-Create a full backup of your game content folders at any time. Before every restore, SyncCrate automatically creates a safety backup so you can always roll back. Backups are per-game and shown with a game badge. Rename backups inline to keep them organized.
-
-Enable **auto-backups** in Settings to back up before every sync or on a schedule (1-24 hours). Set a max count and old auto-backups are pruned automatically. Auto-backups are labeled with timestamps and marked with an "Auto" badge.
-
----
-
-## Selective Sync
-
-Not every file needs to sync. Exclude individual files from the sync plan with a checkbox, or set persistent glob patterns (e.g. `*.ts4script`) in Settings to always skip certain files. Quick filter buttons let you toggle entire categories.
-
----
-
-## Mod Profiles
-
-Profiles capture a snapshot of your current mod list, scoped to the active game.
-
-| Action | How |
-|--------|-----|
-| Create | Profiles tab > **+** card > name & description |
-| Export | Select mods or a profile > click export > share the `.synccrate-profile` file anywhere (Discord, email, etc.) |
-| Import | Drag a `.synccrate-profile` file into the app, or click **Import** and select one |
-| Compare | Click **Compare** on a profile card to diff against your current mods |
-| Delete | Click the trash icon on a profile card |
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| <kbd>Ctrl+Shift+S</kbd> / <kbd>Cmd+Shift+S</kbd> | Settings |
-| <kbd>Ctrl+Shift+F</kbd> / <kbd>Cmd+Shift+F</kbd> | Focus search |
-| <kbd>/</kbd> | Focus search (when not in a text field) |
-| <kbd>Esc</kbd> | Close dialogs / clear search |
-
----
-
-## Building from Source
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) stable
-- Platform dependencies per [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/)
-
-### Build
+Requires [Node.js](https://nodejs.org/) 18+, [Rust](https://rustup.rs/) stable and the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```bash
 git clone https://github.com/stixez/SyncCrate.git
 cd SyncCrate/synccrate
 npm install
-npm run tauri dev        # development with hot reload
-npm run tauri build      # production build with installer
+npm run tauri dev     # dev with hot reload
+npm run tauri build   # installer in src-tauri/target/release/bundle/
 ```
 
-Output: `src-tauri/target/release/bundle/`
+Stack: Tauri v2 · Rust · React 19 + TypeScript + Vite · Tailwind CSS · Zustand · TCP transfer with mDNS + UDP discovery.
 
----
+## Support & License
 
-## Architecture
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | [Tauri v2](https://v2.tauri.app/) |
-| Backend | Rust |
-| Frontend | React 19 + TypeScript + Vite |
-| Styling | Tailwind CSS |
-| State | Zustand |
-| Networking | TCP (transfer) + mDNS & UDP broadcast (discovery) |
-| Integrity | SHA-256 |
-
----
-
-## FAQ
-
-<details>
-<summary><strong>How do I share ReShade or GShade presets for The Sims 4?</strong></summary>
-Add <em>The Sims 4 (ReShade)</em> or <em>The Sims 4 (GShade)</em> from the game library. It's detected automatically when ReShade/GShade is installed in the game's <code>Game\Bin</code> folder (EA App, Origin or Steam, on any drive). SyncCrate syncs shaders (<code>reshade-shaders</code> / <code>gshade-shaders</code>) and presets (<code>reshade-presets</code> / <code>gshade-presets</code>). For ReShade, put the presets you want to share in the <code>reshade-presets</code> folder. Your own <code>ReShade.ini</code> / <code>GShade.ini</code> settings are never synced. If the game is under <code>Program Files</code>, SyncCrate offers to restart as administrator because Windows protects that folder.
-</details>
-
-<details>
-<summary><strong>Do I need to run SyncCrate as administrator?</strong></summary>
-No. Connection problems are almost always Windows Firewall. Use <strong>Fix Windows Firewall</strong>, which asks for permission once. The only time you need administrator rights is when the game folder itself is protected, for example ReShade/GShade in <code>Program Files</code>, and SyncCrate tells you when that's the case.
-</details>
-
-<details>
-<summary><strong>Is there a file size limit?</strong></summary>
-Individual files up to 2 GB. No limit on total sync size.
-</details>
-
-<details>
-<summary><strong>Can more than two people sync at once?</strong></summary>
-Yes. One person hosts, multiple friends join. Each client syncs independently with the host.
-</details>
-
-<details>
-<summary><strong>Which games are supported?</strong></summary>
-SyncCrate ships with 100 games across 67 families, including The Sims (plus ReShade/GShade presets for Sims 4), WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, the Paradox grand-strategy games, Skyrim, Valheim, Terraria, and more. Games are defined in a JSON registry — adding new games requires no code changes.
-</details>
-
-<details>
-<summary><strong>Does it work over the internet?</strong></summary>
-Yes — with a virtual LAN like Tailscale, ZeroTier, or Hamachi. SyncCrate works on any network where devices can see each other. See <a href="#remote-players">Remote Players</a>.
-</details>
-
-<details>
-<summary><strong>How fast is it compared to cloud syncing?</strong></summary>
-LAN transfers typically run at 100-900 MB/s vs 5-20 MB/s for cloud uploads. A 30 GB mod folder takes 3-5 minutes over LAN vs 2-4 hours via cloud.
-</details>
-
-<details>
-<summary><strong>Does it sync tray and screenshot files?</strong></summary>
-Yes. Each game defines its own content types and folders. For Sims games, SyncCrate syncs Mods, Saves, Tray, and Screenshots. For WoW, it syncs Addons and Settings. The host can control which folders peers can sync.
-</details>
-
-<details>
-<summary><strong>Will it break my mods?</strong></summary>
-SyncCrate never modifies existing files unless you explicitly choose "Use Theirs" on a conflict. It only adds new files or replaces files you approve. A safety backup is created automatically before every restore.
-</details>
-
-<details>
-<summary><strong>Does it work with non-Steam or pirated copies?</strong></summary>
-SyncCrate works with any game installation that has the expected folder structure. If auto-detection doesn't find your game, just set the path manually in Settings.
-</details>
-
-<details>
-<summary><strong>Do both players need the same version?</strong></summary>
-Yes. Both should run the same version of SyncCrate for compatibility. The app can check for updates from Settings.
-</details>
-
-<details>
-<summary><strong>Can the host restrict what gets synced?</strong></summary>
-Yes. The host can set folder permissions to control which folders peers are allowed to sync. Permissions are enforced server-side.
-</details>
-
-<details>
-<summary><strong>Is it safe to sync script mods?</strong></summary>
-SyncCrate flags potentially dangerous script files (like <code>.ts4script</code>, <code>.lua</code>, <code>.jar</code>, <code>.dll</code>) before syncing so you can review them. Always only sync with people you trust.
-</details>
-
----
-
-## Contributing
-
-Contributions are welcome. Open an [issue](../../issues) for bugs or feature requests, or submit a pull request.
-
-**Want to add support for a new game?** The game registry is a single [JSON file](synccrate/src-tauri/src/game_registry.json). Define the game's detection paths, content types, and file extensions — no Rust or TypeScript changes needed.
-
-Detection strategies (tried in order, first existing path wins):
-
-| Strategy | Example |
-|----------|---------|
-| `documents_relative` | `{"type": "documents_relative", "base": "My Games", "folders": ["Fallout4"]}` |
-| `absolute_paths` | `{"type": "absolute_paths", "paths": {"windows": ["%APPDATA%\\VintagestoryData"], "linux": ["~/.config/VintagestoryData"]}}` |
-| `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` — checked in every Steam library |
-| `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
-
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders that contain one of those files or folders (used for add-ons like ReShade/GShade). Every content type needs a real subfolder, and its `icon` must be one of the icons in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`.
-
----
-
-## Support
-
-If SyncCrate is useful to you, consider [buying me a coffee](https://www.buymeacoffee.com/stixe).
-
----
-
-## License
-
-[MIT](LICENSE)
+If SyncCrate saves your game night, consider [buying me a coffee](https://www.buymeacoffee.com/stixe). Released under the [MIT License](LICENSE).
