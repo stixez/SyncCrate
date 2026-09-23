@@ -40,6 +40,43 @@ pub fn file_type_to_content_id(
         .map(|ct| ct.id.clone())
 }
 
+/// Map a file to its content type ID using both its relative path and file_type.
+///
+/// Several content types of one game can share a file_type (e.g. "mods",
+/// "scenarios" and "blueprints" are all "CustomContent"), so the file_type
+/// alone is ambiguous. Prefer the content type whose folder contains the file
+/// (longest folder wins); fall back to the file_type-only mapping.
+pub fn content_id_for_file(
+    relative_path: &str,
+    file_type: &str,
+    content_types: &[crate::registry::ContentType],
+) -> Option<String> {
+    let rel = relative_path.replace('\\', "/");
+    let rel_lower = rel.to_lowercase();
+    let mut best: Option<(&crate::registry::ContentType, usize)> = None;
+    for ct in content_types {
+        let type_matches = ct.file_type == file_type
+            || ct.classify_by_extension.values().any(|v| v == file_type);
+        if !type_matches {
+            continue;
+        }
+        let folder = ct.folder.replace('\\', "/");
+        let folder = folder.trim_end_matches('/');
+        let depth = if folder.is_empty() || folder == "." {
+            0
+        } else if rel_lower.starts_with(&format!("{}/", folder.to_lowercase())) {
+            folder.len()
+        } else {
+            continue;
+        };
+        if best.map_or(true, |(_, d)| depth > d) {
+            best = Some((ct, depth));
+        }
+    }
+    best.map(|(ct, _)| ct.id.clone())
+        .or_else(|| file_type_to_content_id(file_type, content_types))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FileManifest {
     pub files: HashMap<String, FileInfo>,
@@ -57,6 +94,10 @@ pub struct PeerInfo {
     pub pin_required: bool,
     #[serde(default)]
     pub game_info: Option<GameInfo>,
+    /// Every address the peer was discovered on, best candidate first.
+    /// `ip` is always `addresses[0]` when non-empty; connecting tries each in turn.
+    #[serde(default)]
+    pub addresses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +125,9 @@ pub struct SessionStatus {
     pub pin: Option<String>,
     #[serde(default)]
     pub host_ips: Vec<String>,
+    /// Whether LAN discovery (mDNS / UDP broadcast) is running for this host session.
+    #[serde(default)]
+    pub discovery_active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +149,16 @@ pub struct SyncPlan {
     pub excluded: Vec<String>,
     #[serde(default)]
     pub resumed_files: u64,
+    /// "Keep both" conflict resolutions: maps the local path the remote copy
+    /// should be saved under (e.g. "Mods/x_remote.package") to the path the
+    /// file actually has on the remote peer ("Mods/x.package"). The peer only
+    /// serves files by their real path, so the rename happens locally.
+    #[serde(default)]
+    pub keep_both: HashMap<String, String>,
+    /// Plan hash computed when the plan was built (before conflict resolution
+    /// and resume filtering). Used as the stable identity for resume checkpoints.
+    #[serde(default)]
+    pub plan_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -231,6 +285,33 @@ impl AppState {
         self.connections.values().any(|c| c.is_syncing)
     }
 
+    /// Check whether a file is allowed by the current folder permissions.
+    ///
+    /// `folder_permissions` is keyed by content type ID (e.g. "saves", "mods"),
+    /// NOT by file_type ("Save", "CustomContent"), so the file must be mapped
+    /// through the active game's content types first (using its relative path
+    /// to disambiguate content types that share a file_type). Passing
+    /// `info.file_type` straight to `is_file_allowed` never matches a key and
+    /// silently allows everything.
+    pub fn is_file_info_allowed(&self, info: &FileInfo) -> bool {
+        if self.folder_permissions.is_empty() {
+            return true;
+        }
+        match content_id_for_file(&info.relative_path, &info.file_type, self.active_content_types()) {
+            Some(id) => is_file_allowed(&self.folder_permissions, &id),
+            None => true,
+        }
+    }
+
+    fn active_content_types(&self) -> &[crate::registry::ContentType] {
+        self.game_registry
+            .games
+            .iter()
+            .find(|g| g.id == self.active_game)
+            .map(|g| g.content_types.as_slice())
+            .unwrap_or(&[])
+    }
+
     /// Get the path for the active game, or error if not configured.
     pub fn active_game_path(&self) -> Result<String, String> {
         self.game_paths
@@ -293,5 +374,88 @@ impl Default for AppState {
             game_registry: GameRegistry { version: 0, games: Vec::new() },
             user_library: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::ContentType;
+
+    fn ct(id: &str, folder: &str, file_type: &str, classify: &[(&str, &str)]) -> ContentType {
+        ContentType {
+            id: id.to_string(),
+            label: id.to_string(),
+            folder: folder.to_string(),
+            extensions: Vec::new(),
+            file_type: file_type.to_string(),
+            classify_by_extension: classify
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            icon: String::new(),
+            color: String::new(),
+            syncable: true,
+        }
+    }
+
+    fn file(path: &str, file_type: &str) -> FileInfo {
+        FileInfo {
+            relative_path: path.to_string(),
+            size: 1,
+            hash: "h".to_string(),
+            modified: 0,
+            file_type: file_type.to_string(),
+        }
+    }
+
+    #[test]
+    fn content_id_uses_folder_to_disambiguate_shared_file_type() {
+        let cts = vec![
+            ct("mods", "mods", "CustomContent", &[]),
+            ct("scenarios", "scenarios", "CustomContent", &[]),
+            ct("blueprints", ".", "CustomContent", &[]),
+        ];
+        assert_eq!(content_id_for_file("mods/a.zip", "CustomContent", &cts).as_deref(), Some("mods"));
+        assert_eq!(content_id_for_file("scenarios/s.zip", "CustomContent", &cts).as_deref(), Some("scenarios"));
+        assert_eq!(content_id_for_file("bp.dat", "CustomContent", &cts).as_deref(), Some("blueprints"));
+    }
+
+    #[test]
+    fn content_id_handles_classified_extensions() {
+        let cts = vec![
+            ct("mods", "Mods", "CustomContent", &[("ts4script", "Mod")]),
+            ct("saves", "Saves", "Save", &[]),
+        ];
+        assert_eq!(content_id_for_file("Mods/x.ts4script", "Mod", &cts).as_deref(), Some("mods"));
+        assert_eq!(content_id_for_file("Saves/slot.save", "Save", &cts).as_deref(), Some("saves"));
+    }
+
+    #[test]
+    fn folder_permissions_are_matched_by_content_id_not_file_type() {
+        let mut state = AppState::default();
+        state.active_game = "g".to_string();
+        state.game_registry.games = Vec::new();
+        let def: crate::registry::GameDefinition = {
+            let mut def = crate::registry::load_registry()
+                .games
+                .into_iter()
+                .find(|g| g.id == "sims4")
+                .expect("sims4 in registry");
+            def.id = "g".to_string();
+            def.content_types = vec![
+                ct("mods", "Mods", "CustomContent", &[]),
+                ct("saves", "Saves", "Save", &[]),
+            ];
+            def
+        };
+        state.game_registry.games.push(def);
+        state.folder_permissions.insert("saves".to_string(), false);
+        state.folder_permissions.insert("mods".to_string(), true);
+
+        assert!(!state.is_file_info_allowed(&file("Saves/slot.save", "Save")));
+        assert!(state.is_file_info_allowed(&file("Mods/a.package", "CustomContent")));
+        // The old (buggy) lookup keyed by file_type allowed everything:
+        assert!(is_file_allowed(&state.folder_permissions, "Save"));
     }
 }

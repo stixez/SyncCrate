@@ -46,6 +46,11 @@ pub struct GameDefinition {
 pub struct DetectionConfig {
     #[serde(default)]
     pub strategies: Vec<DetectionStrategy>,
+    /// If non-empty, a candidate path only matches when at least one of these
+    /// relative paths exists inside it (e.g. `ReShade.ini` in the Sims 4 `Bin`
+    /// folder), so add-ons like ReShade/GShade are only detected when installed.
+    #[serde(default)]
+    pub require_any: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +67,23 @@ pub enum DetectionStrategy {
     AbsolutePaths {
         #[serde(default)]
         paths: PlatformPaths,
+    },
+    /// Check folders relative to every Steam library's `steamapps/common`
+    /// directory (parsed from `libraryfolders.vdf`, so games installed on
+    /// secondary drives are found too).
+    #[serde(rename = "steam_library")]
+    SteamLibrary {
+        folders: Vec<String>,
+    },
+    /// Read an install directory from the Windows registry (e.g. the EA App's
+    /// `HKLM\SOFTWARE\Maxis\The Sims 4` → `Install Dir`) and append `subpath`.
+    /// No-op on other platforms.
+    #[serde(rename = "windows_registry")]
+    WindowsRegistry {
+        keys: Vec<String>,
+        value: String,
+        #[serde(default)]
+        subpath: String,
     },
 }
 
@@ -187,6 +209,26 @@ mod tests {
     }
 
     #[test]
+    fn test_sims4_gshade_entry_and_install_markers() {
+        let registry = load_registry();
+        for (id, marker, cts) in [
+            ("sims4-reshade", "ReShade.ini", ["reshade_presets", "reshade_shaders"]),
+            ("sims4-gshade", "GShade.ini", ["gshade_presets", "gshade_shaders"]),
+        ] {
+            let g = registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{} missing", id));
+            let det = g.detection.as_ref().expect("detection missing");
+            // Only detected when the add-on is actually installed in Bin.
+            assert!(det.require_any.iter().any(|r| r == marker), "{} lacks {} marker", id, marker);
+            assert!(det.strategies.iter().any(|s| matches!(s, DetectionStrategy::SteamLibrary { .. })));
+            assert!(det.strategies.iter().any(|s| matches!(s, DetectionStrategy::WindowsRegistry { .. })));
+            let ids: Vec<&str> = g.content_types.iter().map(|c| c.id.as_str()).collect();
+            assert_eq!(ids, cts);
+            // The machine-specific config must never be synced.
+            assert!(g.content_types.iter().all(|c| !c.folder.is_empty() && c.folder != "."));
+        }
+    }
+
+    #[test]
     fn registry_includes_recent_game_additions() {
         let registry = load_registry();
         let ids: Vec<_> = registry.games.iter().map(|g| g.id.as_str()).collect();
@@ -194,6 +236,47 @@ mod tests {
         assert!(ids.contains(&"project_zomboid"));
         assert!(ids.contains(&"skyrim_se"));
         assert!(ids.contains(&"bannerlord"));
+    }
+
+    #[test]
+    fn registry_includes_expanded_game_catalog() {
+        let registry = load_registry();
+        assert!(
+            registry.games.len() >= 77,
+            "expected at least 77 games, found {}",
+            registry.games.len()
+        );
+
+        let ids: Vec<_> = registry.games.iter().map(|g| g.id.as_str()).collect();
+        for id in [
+            "baldurs_gate_3",
+            "fallout4",
+            "cyberpunk2077",
+            "witcher3",
+            "stellaris",
+            "civilization_6",
+            "lethal_company",
+            "vintage_story",
+        ] {
+            assert!(ids.contains(&id), "missing game id {id}");
+        }
+
+        for game in &registry.games {
+            assert!(!game.content_types.is_empty(), "{} has no content types", game.id);
+            for ct in &game.content_types {
+                assert!(!ct.folder.trim().is_empty(), "{}/{} has empty folder", game.id, ct.id);
+                assert!(!ct.file_type.trim().is_empty(), "{}/{} has empty file_type", game.id, ct.id);
+            }
+            // Manual-path-only entries (e.g. private WoW servers) have no detection.
+            if game.auto_detect {
+                let strategies = game
+                    .detection
+                    .as_ref()
+                    .map(|d| d.strategies.len())
+                    .unwrap_or(0);
+                assert!(strategies > 0, "{} auto-detects but has no detection strategy", game.id);
+            }
+        }
     }
 }
 

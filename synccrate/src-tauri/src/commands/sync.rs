@@ -1,5 +1,5 @@
 use crate::network::transfer;
-use crate::state::{is_file_allowed, file_type_to_content_id, AppState, FileInfo, Resolution, SyncAction, SyncPlan};
+use crate::state::{AppState, FileInfo, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use crate::utils;
 use std::sync::Arc;
@@ -49,6 +49,16 @@ pub async fn compute_sync_plan(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
+    // Diffing needs real hashes: a local manifest from a quick scan has empty
+    // hashes, which would turn every file both sides have into a "conflict".
+    let needs_rehash = {
+        let app_state = state.lock().await;
+        app_state.local_manifest.files.values().any(|f| f.hash.is_empty())
+    };
+    if needs_rehash {
+        crate::commands::files::scan_files_inner(state.inner(), None, true).await?;
+    }
+
     let mut app_state = state.lock().await;
 
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
@@ -69,30 +79,18 @@ pub async fn compute_sync_plan(
     // supported by the transfer protocol). Clients download; the host serves.
     diff::retain_pull_only(&mut plan);
 
-    // Filter out actions for content types disabled by host permissions
-    let perms = &app_state.folder_permissions;
-    let game_def = app_state.game_registry.games.iter()
-        .find(|g| g.id == app_state.active_game);
-    let content_types: Vec<crate::registry::ContentType> = game_def
-        .map(|def| def.content_types.clone())
-        .unwrap_or_default();
-
-    plan.actions.retain(|action| {
-        let file_type = match action {
-            SyncAction::SendToRemote(f) => Some(&f.file_type),
-            SyncAction::ReceiveFromRemote(f) => Some(&f.file_type),
-            SyncAction::Conflict { local, .. } => Some(&local.file_type),
-            SyncAction::Delete(_) => None,
-        };
-        file_type.map_or(true, |ft| {
-            // Map file_type to content type ID and check permissions
-            let content_id = file_type_to_content_id(ft, &content_types);
-            match content_id {
-                Some(id) => is_file_allowed(perms, &id),
-                None => true, // Unknown file types are allowed by default
-            }
-        })
-    });
+    // Filter out actions for content types disabled by folder permissions.
+    // Permissions are keyed by content type ID; map each file through its
+    // path + file_type (see AppState::is_file_info_allowed).
+    {
+        let app_state_ref = &*app_state;
+        plan.actions.retain(|action| match action {
+            SyncAction::SendToRemote(f) => app_state_ref.is_file_info_allowed(f),
+            SyncAction::ReceiveFromRemote(f) => app_state_ref.is_file_info_allowed(f),
+            SyncAction::Conflict { remote, .. } => app_state_ref.is_file_info_allowed(remote),
+            SyncAction::Delete(_) => true,
+        });
+    }
 
     // Recalculate total_bytes after filtering
     plan.total_bytes = plan.actions.iter().map(|action| match action {
@@ -139,10 +137,16 @@ pub async fn compute_sync_plan(
             .sum();
     }
 
+    // Hash of the full plan, before resume filtering or conflict resolution.
+    // It is stored on the plan and reused by run_sync for the checkpoint, so a
+    // resumed (filtered) or conflict-resolved plan still matches its checkpoint
+    // if the sync is interrupted again.
+    let plan_hash = diff::compute_plan_hash(&plan);
+    plan.plan_hash = Some(plan_hash.clone());
+
     // Check for resumable checkpoint
     let mut resumed_files: u64 = 0;
     if let Some(checkpoint) = read_checkpoint() {
-        let plan_hash = diff::compute_plan_hash(&plan);
         if checkpoint.game == app_state.active_game
             && checkpoint.peer_id == resolved_id
             && checkpoint.plan_hash == plan_hash
@@ -269,16 +273,25 @@ async fn run_sync(
     let mut sync_errors: Vec<String> = Vec::new();
     let state_arc = state.inner().clone();
 
-    let plan_hash = diff::compute_plan_hash(plan);
+    let plan_hash = plan
+        .plan_hash
+        .clone()
+        .unwrap_or_else(|| diff::compute_plan_hash(plan));
     let game_id = {
         let app_state = state.lock().await;
         app_state.active_game.clone()
     };
+    // When resuming, carry over the files already completed by the previous
+    // attempt so a second interruption doesn't forget them.
+    let previously_completed = read_checkpoint()
+        .filter(|cp| cp.game == game_id && cp.peer_id == peer_id && cp.plan_hash == plan_hash)
+        .map(|cp| cp.completed_files)
+        .unwrap_or_default();
     let mut checkpoint = SyncCheckpoint {
         game: game_id,
         peer_id: peer_id.to_string(),
         plan_hash,
-        completed_files: Vec::new(),
+        completed_files: previously_completed,
         total_files,
         total_bytes: plan.total_bytes,
         started_at: crate::utils::timestamp_now(),
@@ -300,14 +313,28 @@ async fn run_sync(
 
         match action {
             SyncAction::ReceiveFromRemote(file_info) => {
-                match transfer::request_file(
-                    &state_arc,
-                    peer_id,
-                    &file_info.relative_path,
-                    base_path,
-                )
-                .await
-                {
+                let result = match plan.keep_both.get(&file_info.relative_path) {
+                    Some(remote_path) => {
+                        receive_keep_both(
+                            &state_arc,
+                            peer_id,
+                            base_path,
+                            remote_path,
+                            &file_info.relative_path,
+                        )
+                        .await
+                    }
+                    None => {
+                        transfer::request_file(
+                            &state_arc,
+                            peer_id,
+                            &file_info.relative_path,
+                            base_path,
+                        )
+                        .await
+                    }
+                };
+                match result {
                     Ok(()) => {
                         files_done += 1;
                         bytes_done += file_info.size;
@@ -415,6 +442,69 @@ async fn run_sync(
     Ok(())
 }
 
+/// Download `remote_path` from the peer but save it locally as `local_dest`,
+/// leaving the existing local file at `remote_path` untouched ("keep both").
+///
+/// The peer only serves files under their real path and `request_file` always
+/// writes to that same relative path, so the local file is moved aside for
+/// the duration of the download and put back afterwards.
+async fn receive_keep_both(
+    state: &Arc<Mutex<AppState>>,
+    peer_id: &str,
+    base_path: &str,
+    remote_path: &str,
+    local_dest: &str,
+) -> Result<(), String> {
+    let original = utils::safe_join(base_path, remote_path)?;
+    let dest = utils::safe_join(base_path, local_dest)?;
+
+    let mut aside_name = original
+        .file_name()
+        .ok_or("Invalid file name")?
+        .to_os_string();
+    aside_name.push(format!(".synccrate-keep-{}.tmp", utils::timestamp_now()));
+    let aside = original.with_file_name(aside_name);
+
+    let had_local = tokio::fs::try_exists(&original).await.unwrap_or(false);
+    if had_local {
+        tokio::fs::rename(&original, &aside)
+            .await
+            .map_err(|e| format!("Cannot move local copy aside: {}", e))?;
+    }
+
+    let restore_local = |aside: std::path::PathBuf, original: std::path::PathBuf| async move {
+        if had_local {
+            if let Err(e) = tokio::fs::rename(&aside, &original).await {
+                log::error!(
+                    "Failed to restore local file {} from {}: {}",
+                    original.display(),
+                    aside.display(),
+                    e
+                );
+                return Err(format!(
+                    "Local copy could not be restored; it was left at {}",
+                    aside.display()
+                ));
+            }
+        }
+        Ok(())
+    };
+
+    if let Err(e) = transfer::request_file(state, peer_id, remote_path, base_path).await {
+        // request_file writes via temp file + rename, so on failure `original`
+        // was never replaced; just put the local copy back.
+        restore_local(aside, original).await?;
+        return Err(e);
+    }
+
+    // `original` now holds the remote copy: move it to its keep-both name,
+    // then put the local copy back in place.
+    let moved = tokio::fs::rename(&original, &dest).await;
+    let restored = restore_local(aside, original).await;
+    moved.map_err(|e| format!("Cannot save remote copy as {}: {}", local_dest, e))?;
+    restored
+}
+
 #[tauri::command]
 pub async fn resolve_conflict(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -425,6 +515,7 @@ pub async fn resolve_conflict(
     let mut app_state = state.lock().await;
 
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
+    let local_has_path = app_state.local_manifest.files.contains_key(&path);
 
     let conn = app_state
         .connections
@@ -442,12 +533,38 @@ pub async fn resolve_conflict(
         .cloned();
 
     if let Some(ref mut plan) = conn.sync_plan {
-        plan.actions.retain(|action| {
-            if let SyncAction::Conflict { local, .. } = action {
-                return local.relative_path != path;
-            }
-            true
+        let was_conflict = plan.actions.iter().any(|a| {
+            matches!(a, SyncAction::Conflict { local, .. } if local.relative_path == path)
         });
+        // A conflict that was already resolved earlier: drop the previous
+        // resolution first so re-resolving (e.g. KeepBoth -> UseTheirs) doesn't
+        // leave both downloads queued.
+        let previously_kept_both: Vec<String> = plan
+            .keep_both
+            .iter()
+            .filter(|(_, orig)| **orig == path)
+            .map(|(renamed, _)| renamed.clone())
+            .collect();
+        let previously_resolved = !previously_kept_both.is_empty()
+            || (local_has_path
+                && plan.actions.iter().any(|a| {
+                    matches!(a, SyncAction::ReceiveFromRemote(f) if f.relative_path == path)
+                }));
+        if !was_conflict && !previously_resolved {
+            // Nothing to resolve for this path; leave the plan untouched.
+            return Ok(plan.clone());
+        }
+
+        plan.actions.retain(|action| match action {
+            SyncAction::Conflict { local, .. } => local.relative_path != path,
+            SyncAction::ReceiveFromRemote(f) => {
+                f.relative_path != path && !previously_kept_both.contains(&f.relative_path)
+            }
+            _ => true,
+        });
+        for renamed in &previously_kept_both {
+            plan.keep_both.remove(renamed);
+        }
 
         match resolution {
             Resolution::KeepMine => {}
@@ -478,6 +595,9 @@ pub async fn resolve_conflict(
                         format!("{}/{}_remote.{}", parent, stem, ext)
                     };
 
+                    // The peer doesn't have a file under the renamed path —
+                    // remember which real path to request (see receive_keep_both).
+                    plan.keep_both.insert(renamed.relative_path.clone(), path.clone());
                     plan.actions.push(SyncAction::ReceiveFromRemote(renamed));
                 }
             }
@@ -560,8 +680,9 @@ fn glob_matches(pattern: &str, path: &str) -> bool {
     pattern == path
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SyncConfig {
+    #[serde(default)]
     pub exclude_patterns: Vec<String>,
     #[serde(default)]
     pub auto_backup_before_sync: bool,
@@ -578,6 +699,23 @@ pub struct SyncConfig {
 
 fn default_backup_interval() -> u32 { 4 }
 fn default_backup_max_count() -> u32 { 5 }
+
+// Manual Default so it agrees with the serde defaults. The derived Default gave
+// interval 0 / max_count 0, which was persisted by any setter that started from
+// a missing config file (e.g. set_exclude_patterns) — max_count 0 makes
+// prune_auto_backups delete every auto-backup, including the one just created.
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            exclude_patterns: Vec::new(),
+            auto_backup_before_sync: false,
+            auto_backup_scheduled: false,
+            auto_backup_interval_hours: default_backup_interval(),
+            auto_backup_max_count: default_backup_max_count(),
+            transfer_speed_limit: 0,
+        }
+    }
+}
 
 pub fn read_sync_config() -> SyncConfig {
     let path = utils::sync_config_path();
@@ -712,7 +850,17 @@ mod tests {
         assert_eq!(config.transfer_speed_limit, 0);
         assert!(!config.auto_backup_before_sync);
         assert!(!config.auto_backup_scheduled);
-        assert_eq!(config.auto_backup_interval_hours, 0); // default fn not called for Default trait
+        // Default must agree with the serde defaults (never 0 — see impl Default)
+        assert_eq!(config.auto_backup_interval_hours, 4);
+        assert_eq!(config.auto_backup_max_count, 5);
+    }
+
+    #[test]
+    fn test_sync_config_default_matches_serde_defaults() {
+        let from_empty: SyncConfig = serde_json::from_str(r#"{"exclude_patterns": []}"#).unwrap();
+        let def = SyncConfig::default();
+        assert_eq!(from_empty.auto_backup_interval_hours, def.auto_backup_interval_hours);
+        assert_eq!(from_empty.auto_backup_max_count, def.auto_backup_max_count);
     }
 
     #[test]

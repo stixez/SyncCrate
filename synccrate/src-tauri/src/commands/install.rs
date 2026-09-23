@@ -26,10 +26,21 @@ pub enum InstallStatus {
 }
 
 fn file_hash(path: &Path) -> Result<String, String> {
-    let data = std::fs::read(path).map_err(|e| format!("Cannot read file: {}", e))?;
+    // Stream instead of reading the whole file (up to 2 GB) into memory.
+    let mut file = std::fs::File::open(path).map_err(|e| format!("Cannot read file: {}", e))?;
     let mut hasher = Sha256::new();
-    hasher.update(&data);
+    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("Cannot read file: {}", e))?;
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// "name_N.ext", or "name_N" for extension-less files (no trailing dot, which
+/// Windows silently strips).
+fn numbered_name(stem: &str, counter: u32, ext: &str) -> String {
+    if ext.is_empty() {
+        format!("{}_{}", stem, counter)
+    } else {
+        format!("{}_{}.{}", stem, counter, ext)
+    }
 }
 
 #[tauri::command]
@@ -44,7 +55,11 @@ pub async fn install_mod_files(
             Some(ref g) => resolve_game(&app_state, g)?,
             None => app_state.active_game.clone(),
         };
-        let path = app_state.active_game_path()?;
+        // Install into the *target* game's folder. active_game_path() put files
+        // for a non-active `game` into the active game's directory.
+        let path = app_state.game_paths.get(&game_id).cloned().ok_or_else(|| {
+            format!("{} path not set. Please set it first.", app_state.game_label(&game_id))
+        })?;
         (path, game_id)
     };
 
@@ -212,7 +227,11 @@ pub async fn confirm_install_duplicate(
             Some(ref g) => resolve_game(&app_state, g)?,
             None => app_state.active_game.clone(),
         };
-        let path = app_state.active_game_path()?;
+        // Install into the *target* game's folder. active_game_path() put files
+        // for a non-active `game` into the active game's directory.
+        let path = app_state.game_paths.get(&game_id).cloned().ok_or_else(|| {
+            format!("{} path not set. Please set it first.", app_state.game_label(&game_id))
+        })?;
         (path, game_id)
     };
 
@@ -243,6 +262,18 @@ pub async fn confirm_install_duplicate(
     match strategy.as_str() {
         "overwrite" => {
             let dest = mods_dir.join(file_name);
+            // Copying a file onto itself (dropping a file that already lives in
+            // the mods folder) can truncate it; treat it as already installed.
+            if let (Ok(a), Ok(b)) = (std::fs::canonicalize(source_path), std::fs::canonicalize(&dest)) {
+                if a == b {
+                    return Ok(InstallResult {
+                        source,
+                        destination: dest.to_string_lossy().to_string(),
+                        status: InstallStatus::Success,
+                        message: Some("File is already in place".into()),
+                    });
+                }
+            }
             std::fs::copy(source_path, &dest).map_err(|e| e.to_string())?;
             Ok(InstallResult {
                 source,
@@ -262,13 +293,13 @@ pub async fn confirm_install_duplicate(
                 .unwrap_or("");
 
             let mut counter = 1u32;
-            let mut dest = mods_dir.join(format!("{}_{}.{}", stem, counter, ext));
+            let mut dest = mods_dir.join(numbered_name(stem, counter, ext));
             while dest.exists() {
                 counter += 1;
                 if counter > 999 {
                     return Err("Too many duplicates".into());
                 }
-                dest = mods_dir.join(format!("{}_{}.{}", stem, counter, ext));
+                dest = mods_dir.join(numbered_name(stem, counter, ext));
             }
 
             std::fs::copy(source_path, &dest).map_err(|e| e.to_string())?;
@@ -280,5 +311,27 @@ pub async fn confirm_install_duplicate(
             })
         }
         _ => Err(format!("Unknown strategy: {}", strategy)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbered_name_without_extension_has_no_trailing_dot() {
+        assert_eq!(numbered_name("mod", 2, "package"), "mod_2.package");
+        assert_eq!(numbered_name("README", 1, ""), "README_1");
+    }
+
+    #[test]
+    fn file_hash_streams_correctly() {
+        let p = std::env::temp_dir().join(format!("synccrate_hash_{}.bin", std::process::id()));
+        std::fs::write(&p, b"abc").unwrap();
+        assert_eq!(
+            file_hash(&p).unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        let _ = std::fs::remove_file(&p);
     }
 }

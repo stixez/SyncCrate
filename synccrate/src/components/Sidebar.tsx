@@ -30,6 +30,16 @@ import {
   Zap,
   Shield,
   Factory,
+  Sparkles,
+  Layers,
+  Truck,
+  Cog,
+  Building2,
+  PawPrint,
+  Biohazard,
+  Waves,
+  Skull,
+  Trees,
   X,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
@@ -57,6 +67,17 @@ const ICON_MAP: Record<string, typeof Gamepad2> = {
   shield: Shield,
   factory: Factory,
   package: Package,
+  sun: Sun,
+  sparkles: Sparkles,
+  layers: Layers,
+  truck: Truck,
+  cog: Cog,
+  "building-2": Building2,
+  "paw-print": PawPrint,
+  biohazard: Biohazard,
+  waves: Waves,
+  skull: Skull,
+  trees: Trees,
 };
 
 export function GameIcon({ iconName, size = 14, className = "" }: { iconName: string; size?: number; className?: string }) {

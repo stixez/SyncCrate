@@ -38,6 +38,8 @@ pub fn compute_diff(local: &FileManifest, remote: &FileManifest) -> SyncPlan {
         total_bytes,
         excluded: Vec::new(),
         resumed_files: 0,
+        keep_both: Default::default(),
+        plan_hash: None,
     }
 }
 

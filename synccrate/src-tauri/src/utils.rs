@@ -85,12 +85,17 @@ fn build_candidates_str(base: &str, folders: &[&str]) -> Vec<PathBuf> {
 /// Detect a game path using the detection strategies from a GameDefinition.
 pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
     let detection = game_def.detection.as_ref()?;
+    let accept = |p: &std::path::Path| -> bool {
+        p.exists()
+            && (detection.require_any.is_empty()
+                || detection.require_any.iter().any(|r| p.join(r).exists()))
+    };
 
     for strategy in &detection.strategies {
         match strategy {
             DetectionStrategy::DocumentsRelative { base, folders } => {
                 let candidates = build_candidates(base, folders);
-                if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+                if let Some(found) = candidates.into_iter().find(|p| accept(p)) {
                     return Some(found.to_string_lossy().to_string());
                 }
             }
@@ -99,14 +104,173 @@ pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
                 for path_str in platform_paths {
                     let expanded = expand_path_vars(path_str);
                     let path = PathBuf::from(&expanded);
-                    if path.exists() {
+                    if accept(&path) {
                         return Some(path.to_string_lossy().to_string());
+                    }
+                }
+            }
+            DetectionStrategy::SteamLibrary { folders } => {
+                for common in steam_common_dirs() {
+                    for folder in folders {
+                        let path = common.join(folder);
+                        if accept(&path) {
+                            return Some(path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+            DetectionStrategy::WindowsRegistry { keys, value, subpath } => {
+                for key in keys {
+                    if let Some(dir) = read_registry_string(key, value) {
+                        let path = if subpath.is_empty() {
+                            PathBuf::from(&dir)
+                        } else {
+                            PathBuf::from(&dir).join(subpath)
+                        };
+                        if accept(&path) {
+                            return Some(path.to_string_lossy().to_string());
+                        }
                     }
                 }
             }
         }
     }
 
+    None
+}
+
+/// Candidate Steam root directories for this platform.
+fn steam_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        for (key, value) in [
+            (r"HKCU\Software\Valve\Steam", "SteamPath"),
+            (r"HKLM\SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+            (r"HKLM\SOFTWARE\Valve\Steam", "InstallPath"),
+        ] {
+            if let Some(p) = read_registry_string(key, value) {
+                roots.push(PathBuf::from(p.replace('/', "\\")));
+            }
+        }
+        for var in ["ProgramFiles(x86)", "ProgramFiles"] {
+            if let Ok(pf) = std::env::var(var) {
+                roots.push(PathBuf::from(pf).join("Steam"));
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join("Library/Application Support/Steam"));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join(".steam/steam"));
+            roots.push(home.join(".local/share/Steam"));
+            roots.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+        }
+    }
+
+    let mut unique: Vec<PathBuf> = Vec::new();
+    for r in roots {
+        let key = r.to_string_lossy().to_lowercase();
+        if r.exists() && !unique.iter().any(|u| u.to_string_lossy().to_lowercase() == key) {
+            unique.push(r);
+        }
+    }
+    unique
+}
+
+/// Extract library paths from the contents of a Steam `libraryfolders.vdf`.
+/// Handles both the modern (`"path" "D:\\SteamLibrary"`) and legacy
+/// (`"1" "D:\\SteamLibrary"`) formats.
+pub(crate) fn parse_steam_library_vdf(contents: &str) -> Vec<PathBuf> {
+    let mut libs = Vec::new();
+    for line in contents.lines() {
+        let tokens: Vec<&str> = line.split('"').collect();
+        // A key/value line splits into: ["", key, "\t\t", value, ""]
+        if tokens.len() < 5 {
+            continue;
+        }
+        let key = tokens[1];
+        let value = tokens[3];
+        let is_path_key = key == "path" || (!key.is_empty() && key.chars().all(|c| c.is_ascii_digit()));
+        if is_path_key && (value.contains('\\') || value.contains('/')) {
+            libs.push(PathBuf::from(value.replace("\\\\", "\\")));
+        }
+    }
+    libs
+}
+
+/// All `steamapps/common` directories across every Steam library on this machine.
+pub fn steam_common_dirs() -> Vec<PathBuf> {
+    let mut libs: Vec<PathBuf> = Vec::new();
+    for root in steam_roots() {
+        libs.push(root.clone());
+        for vdf in [
+            root.join("steamapps").join("libraryfolders.vdf"),
+            root.join("config").join("libraryfolders.vdf"),
+        ] {
+            if let Ok(contents) = std::fs::read_to_string(&vdf) {
+                libs.extend(parse_steam_library_vdf(&contents));
+            }
+        }
+    }
+
+    let mut result: Vec<PathBuf> = Vec::new();
+    for lib in libs {
+        let common = lib.join("steamapps").join("common");
+        let key = common.to_string_lossy().to_lowercase();
+        if common.exists() && !result.iter().any(|r| r.to_string_lossy().to_lowercase() == key) {
+            result.push(common);
+        }
+    }
+    result
+}
+
+/// Read a REG_SZ value from the Windows registry via `reg query`
+/// (avoids pulling in a registry crate). Checks both the 64-bit and 32-bit views.
+#[cfg(target_os = "windows")]
+pub fn read_registry_string(key: &str, value: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    for view in ["/reg:64", "/reg:32"] {
+        let output = std::process::Command::new("reg")
+            .args(["query", key, "/v", value, view])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            continue;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let line = line.trim();
+            if let Some(pos) = line.find("REG_SZ").or_else(|| line.find("REG_EXPAND_SZ")) {
+                let (name, rest) = line.split_at(pos);
+                if !name.trim().eq_ignore_ascii_case(value) {
+                    continue;
+                }
+                let data = rest
+                    .trim_start_matches("REG_EXPAND_SZ")
+                    .trim_start_matches("REG_SZ")
+                    .trim();
+                if !data.is_empty() {
+                    return Some(expand_path_vars(data));
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_registry_string(_key: &str, _value: &str) -> Option<String> {
     None
 }
 
@@ -204,40 +368,68 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
         return Err(format!("Absolute path rejected: {}", relative));
     }
 
+    // Only plain path segments are allowed. On Windows `is_absolute()` is false
+    // for root-relative ("\\Windows\\x") and drive-relative ("C:x") paths, yet
+    // `PathBuf::join` with either replaces (part of) the base — so reject any
+    // Prefix/RootDir component explicitly, not just "..".
     for component in rel.components() {
-        if matches!(component, std::path::Component::ParentDir) {
-            return Err(format!("Path traversal rejected: {}", relative));
+        match component {
+            std::path::Component::Normal(_) | std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                return Err(format!("Path traversal rejected: {}", relative));
+            }
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                return Err(format!("Absolute path rejected: {}", relative));
+            }
         }
     }
 
-    let joined = PathBuf::from(base).join(relative);
+    // ':' is never valid in a Windows file name; "file.package:stream" would
+    // write an NTFS alternate data stream instead of a regular file.
+    #[cfg(target_os = "windows")]
+    if relative.contains(':') {
+        return Err(format!("Invalid character in path: {}", relative));
+    }
+
+    // Rebuild from the normal components only (drops "." segments so the
+    // ancestor walk below sees a clean path).
+    let mut joined = PathBuf::from(base);
+    for component in rel.components() {
+        if let std::path::Component::Normal(name) = component {
+            joined.push(name);
+        }
+    }
 
     let base_canonical = std::fs::canonicalize(base)
         .map_err(|e| format!("Cannot resolve base path: {}", e))?;
 
-    if joined.exists() {
-        let joined_canonical = std::fs::canonicalize(&joined)
-            .map_err(|e| format!("Cannot resolve path: {}", e))?;
-        if !joined_canonical.starts_with(&base_canonical) {
-            return Err(format!("Path escapes base directory: {}", relative));
-        }
-        Ok(joined_canonical)
-    } else if let Some(parent) = joined.parent() {
-        if parent.exists() {
-            let parent_canonical = std::fs::canonicalize(parent)
-                .map_err(|e| format!("Cannot resolve parent path: {}", e))?;
-            if !parent_canonical.starts_with(&base_canonical) {
-                return Err(format!("Path escapes base directory: {}", relative));
+    // Find the deepest ancestor (or the path itself) that exists and resolve it.
+    // Checking only the immediate parent let a not-yet-existing subpath below a
+    // symlink/junction that points outside the base slip through unchecked
+    // (e.g. "Mods/link_to_C_drive/newdir/file").
+    let mut existing = joined.as_path();
+    let mut remainder: Vec<&std::ffi::OsStr> = Vec::new();
+    while !existing.exists() {
+        match (existing.file_name(), existing.parent()) {
+            (Some(name), Some(parent)) => {
+                remainder.push(name);
+                existing = parent;
             }
-            let file_name = joined.file_name()
-                .ok_or_else(|| format!("Invalid file name in path: {}", relative))?;
-            Ok(parent_canonical.join(file_name))
-        } else {
-            Ok(base_canonical.join(relative))
+            _ => return Err(format!("Cannot resolve path: {}", relative)),
         }
-    } else {
-        Ok(base_canonical.join(relative))
     }
+
+    let existing_canonical = std::fs::canonicalize(existing)
+        .map_err(|e| format!("Cannot resolve path: {}", e))?;
+    if !existing_canonical.starts_with(&base_canonical) {
+        return Err(format!("Path escapes base directory: {}", relative));
+    }
+
+    let mut result = existing_canonical;
+    for name in remainder.into_iter().rev() {
+        result.push(name);
+    }
+    Ok(result)
 }
 
 pub fn metadata_path() -> PathBuf {
@@ -403,6 +595,37 @@ mod tests {
     }
 
     #[test]
+    fn test_safe_join_nested_nonexistent_dirs_stay_in_base() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        let path = safe_join(&base_str, "synccrate_no_such_dir/a/b/file.package").unwrap();
+        let base_canonical = std::fs::canonicalize(&base).unwrap();
+        assert!(path.starts_with(&base_canonical));
+        assert!(path.ends_with("synccrate_no_such_dir/a/b/file.package"));
+    }
+
+    #[test]
+    fn test_safe_join_ignores_curdir_segments() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        let path = safe_join(&base_str, "./Mods/./x.package").unwrap();
+        assert!(path.ends_with("Mods/x.package"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_safe_join_blocks_windows_root_and_drive_relative() {
+        let base = std::env::temp_dir();
+        let base_str = base.to_string_lossy();
+        // Not `is_absolute()` on Windows, but join() would escape the base.
+        assert!(safe_join(&base_str, "\\Windows\\System32\\evil.dll").is_err());
+        assert!(safe_join(&base_str, "/Windows/evil.dll").is_err());
+        assert!(safe_join(&base_str, "C:evil.package").is_err());
+        // NTFS alternate data stream
+        assert!(safe_join(&base_str, "Mods/a.package:stream").is_err());
+    }
+
+    #[test]
     fn test_sanitize_id_valid() {
         let result = sanitize_id("abc-123-def");
         assert!(result.is_ok());
@@ -434,5 +657,36 @@ mod tests {
         assert!(!is_dangerous_extension("cc.package"));
         assert!(!is_dangerous_extension("config.xml"));
         assert!(!is_dangerous_extension("texture.png"));
+    }
+
+    #[test]
+    fn test_parse_steam_library_vdf_modern_and_legacy() {
+        let modern = r#"
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"C:\Program Files (x86)\Steam"
+		"label"		""
+	}
+	"1"
+	{
+		"path"		"D:\SteamLibrary"
+	}
+}
+"#;
+        let libs = parse_steam_library_vdf(modern);
+        assert_eq!(libs.len(), 2);
+        assert_eq!(libs[1], std::path::PathBuf::from(r"D:\SteamLibrary"));
+
+        let legacy = r#"
+"LibraryFolders"
+{
+	"TimeNextStatsReport"		"1234"
+	"1"		"E:\Games\Steam"
+}
+"#;
+        let libs = parse_steam_library_vdf(legacy);
+        assert_eq!(libs, vec![std::path::PathBuf::from(r"E:\Games\Steam")]);
     }
 }

@@ -278,7 +278,14 @@ export default function BackupList({ gameId }: Props) {
               <div className="flex gap-4 mt-2 text-xs text-txt-dim">
                 <span>{backup.file_count} files</span>
                 <span>{formatBytes(backup.total_size)}</span>
-                {Object.entries(backup.category_counts).map(([cat, count]) =>
+                {Object.entries(
+                  backup.category_counts ?? {
+                    mods: backup.mods_count ?? 0,
+                    saves: backup.saves_count ?? 0,
+                    tray: backup.tray_count ?? 0,
+                    screenshots: backup.screenshots_count ?? 0,
+                  },
+                ).map(([cat, count]) =>
                   count > 0 ? <span key={cat}>{count} {cat}</span> : null
                 )}
               </div>

@@ -2,34 +2,9 @@ use crate::network::discovery;
 use crate::state::{AppState, PeerInfo, SessionInfo, SessionStatus, SessionType, SyncFolderPermissions};
 use crate::network::protocol::{self, Message};
 use rand::Rng;
-use std::net::UdpSocket;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
-
-/// Discover local IP addresses by probing common subnets.
-/// Returns IPs for all reachable interfaces (LAN, Tailscale, ZeroTier, etc.).
-fn get_local_ips() -> Vec<String> {
-    let targets = [
-        "8.8.8.8:80",        // default route (LAN IP)
-        "100.100.100.100:80", // Tailscale MagicDNS
-        "10.147.17.1:80",     // ZeroTier common
-    ];
-    let mut ips = Vec::new();
-    for target in &targets {
-        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
-            if socket.connect(target).is_ok() {
-                if let Ok(addr) = socket.local_addr() {
-                    let ip = addr.ip().to_string();
-                    if ip != "0.0.0.0" && !ips.contains(&ip) {
-                        ips.push(ip);
-                    }
-                }
-            }
-        }
-    }
-    ips
-}
 
 /// Sanitize a display name: strip control chars, limit length.
 fn sanitize_name(name: &str) -> Result<String, String> {
@@ -91,7 +66,7 @@ pub async fn start_host(
     };
 
     // Bind TCP listener first — surfaces port conflicts to user before committing state
-    let listener = crate::network::transfer::bind_listener(port).await?;
+    let (listener, port) = crate::network::transfer::bind_listener(port).await?;
 
     // Optionally generate a 4-digit session PIN
     let pin = if use_pin.unwrap_or(false) {
@@ -104,6 +79,7 @@ pub async fn start_host(
     {
         let mut app_state = state.lock().await;
         app_state.session_type = SessionType::Host;
+        app_state.session_port = port;
         app_state.session_name = name.clone();
         app_state.local_display_name = name.clone();
         app_state.session_pin = pin.clone();
@@ -129,8 +105,9 @@ pub async fn start_host(
     let host_name = name.clone();
     let pin_required = pin.is_some();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, app_handle).await {
-            log::error!("mDNS broadcast error: {}", e);
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version).await {
+            log::error!("Discovery broadcast error: {}", e);
+            let _ = app_handle.emit("discovery-unavailable", serde_json::json!({"message": e}));
         }
     });
 
@@ -164,7 +141,8 @@ pub async fn start_join(
 
     drop(app_state);
 
-    let peers = discovery::scan_for_hosts(app).await.map_err(|e| e.to_string())?;
+    let _ = app;
+    let peers = discovery::scan_for_hosts().await?;
 
     let mut app_state = state.lock().await;
     app_state.discovered_peers = peers.clone();
@@ -181,6 +159,10 @@ pub async fn connect_to_peer(
     pin: Option<String>,
 ) -> Result<SessionInfo, String> {
     let mut app_state = state.lock().await;
+
+    if app_state.session_type != SessionType::None {
+        return Err("Already in a session. Disconnect first.".to_string());
+    }
 
     let peer = app_state
         .discovered_peers
@@ -201,8 +183,13 @@ pub async fn connect_to_peer(
     let app_handle = app.clone();
     let connect_pin = pin;
     tokio::spawn(async move {
+        let addresses = if peer.addresses.is_empty() {
+            vec![peer.ip.clone()]
+        } else {
+            peer.addresses.clone()
+        };
         if let Err(e) = crate::network::transfer::connect_to_host(
-            &peer.ip,
+            &addresses,
             peer.port,
             &connection_peer_id,
             state_clone.clone(),
@@ -295,7 +282,7 @@ pub async fn get_session_status(
 ) -> Result<SessionStatus, String> {
     let app_state = state.lock().await;
     let host_ips = if app_state.session_type == SessionType::Host {
-        get_local_ips()
+        crate::network::netutil::host_display_ips()
     } else {
         vec![]
     };
@@ -307,6 +294,7 @@ pub async fn get_session_status(
         is_syncing: app_state.is_any_syncing(),
         pin: app_state.session_pin.clone(),
         host_ips,
+        discovery_active: app_state.session_type == SessionType::Host && discovery::discovery_active(),
     })
 }
 
@@ -344,7 +332,7 @@ pub async fn connect_by_ip(
     let connect_peer_id = peer_id.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::network::transfer::connect_to_host(
-            &connect_ip, port, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
+            &[connect_ip], port, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
         ).await {
             log::error!("Direct IP connection error: {}", e);
             let mut app_state = state_clone.lock().await;

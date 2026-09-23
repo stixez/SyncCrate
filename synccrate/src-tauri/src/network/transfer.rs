@@ -107,11 +107,31 @@ pub async fn reset_cancellation_token() {
 
 /// Bind the TCP listener and return it. Call `run_listener` to start accepting.
 /// Separated so the caller can detect port conflicts before spawning.
-pub async fn bind_listener(port: u16) -> Result<TcpListener, String> {
-    let addr = format!("0.0.0.0:{}", port);
-    TcpListener::bind(&addr)
-        .await
-        .map_err(|e| format!("Failed to bind port {}: {}", port, e))
+/// If the preferred port is taken (another app, or a previous SyncCrate that
+/// hasn't released it yet) the next few ports are tried; the port actually
+/// bound is returned so it can be advertised and shown to the user.
+pub async fn bind_listener(port: u16) -> Result<(TcpListener, u16), String> {
+    let mut first_err = None;
+    for candidate in port..=port.saturating_add(10) {
+        match TcpListener::bind(("0.0.0.0", candidate)).await {
+            Ok(l) => {
+                if candidate != port {
+                    log::warn!("Port {} unavailable, hosting on {} instead", port, candidate);
+                }
+                return Ok((l, candidate));
+            }
+            Err(e) => {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+        }
+    }
+    Err(format!(
+        "Failed to bind port {} (and the next 10): {}",
+        port,
+        first_err.map(|e| e.to_string()).unwrap_or_default()
+    ))
 }
 
 /// Accept loop for an already-bound listener.
@@ -178,7 +198,7 @@ async fn handle_client(
         protocol::recv_message(&mut *s).await?
     };
 
-    let mut use_compression = false;
+    let use_compression;
 
     let (peer_name, peer_version, peer_pin) = match msg {
         Message::Hello { name, version, pin, supports_compression } => {
@@ -248,6 +268,7 @@ async fn handle_client(
             version: peer_version.clone(),
             pin_required: false,
             game_info: None,
+            addresses: Vec::new(),
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -286,28 +307,49 @@ async fn handle_client(
         }
     }
 
-    // Handle messages in a loop (5-minute idle timeout; TCP keepalive detects dead connections)
+    // Handle messages in a loop (5-minute idle timeout; TCP keepalive detects dead connections).
+    // Poll in short slices and release the stream lock between them: holding it for
+    // the whole idle wait blocked `disconnect`/`disconnect_peer` (which need the lock
+    // to send `Disconnect`) until the client's next ping arrived.
+    const IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
     let mut clean_disconnect = false;
+    let mut removed_externally = false;
     let mut disconnect_reason = String::new();
     let mut peer_files_sent: u64 = 0;
     let speed_limit = crate::commands::sync::get_speed_limit();
     loop {
-        let msg = {
-            let mut s = stream.lock().await;
-            match protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(300)).await {
-                Ok(Some(m)) => m,
+        let idle_since = std::time::Instant::now();
+        let msg = loop {
+            {
+                let app_state = state.lock().await;
+                if !app_state.connections.contains_key(&peer_id) {
+                    removed_externally = true;
+                    break None;
+                }
+            }
+            let polled = {
+                let mut s = stream.lock().await;
+                protocol::try_recv_message(&mut *s, std::time::Duration::from_millis(250)).await
+            };
+            match polled {
+                Ok(Some(m)) => break Some(m),
                 Ok(None) => {
-                    log::warn!("Idle timeout for peer '{}' ({})", peer_name, peer_id);
-                    disconnect_reason = "Idle timeout (5 min)".to_string();
-                    break;
+                    if idle_since.elapsed() >= IDLE_TIMEOUT {
+                        log::warn!("Idle timeout for peer '{}' ({})", peer_name, peer_id);
+                        disconnect_reason = "Idle timeout (5 min)".to_string();
+                        break None;
+                    }
+                    // Give other lock holders (disconnect, etc.) a chance.
+                    tokio::task::yield_now().await;
                 }
                 Err(e) => {
                     log::warn!("Connection lost for peer '{}' ({}): {}", peer_name, peer_id, e);
                     disconnect_reason = e;
-                    break;
+                    break None;
                 }
             }
         };
+        let Some(msg) = msg else { break };
 
         match msg {
             Message::ManifestRequest => {
@@ -327,9 +369,8 @@ async fn handle_client(
 
                 let manifest = {
                     let app_state = state.lock().await;
-                    let perms = &app_state.folder_permissions;
                     let mut filtered = app_state.local_manifest.clone();
-                    filtered.files.retain(|_, info| crate::state::is_file_allowed(perms, &info.file_type));
+                    filtered.files.retain(|_, info| app_state.is_file_info_allowed(info));
                     filtered
                 };
                 let mut s = stream.lock().await;
@@ -355,7 +396,7 @@ async fn handle_client(
 
                     // Validate that the requested file is in an allowed folder
                     let allowed = app_state.local_manifest.files.get(&path)
-                        .map(|info| crate::state::is_file_allowed(&app_state.folder_permissions, &info.file_type))
+                        .map(|info| app_state.is_file_info_allowed(info))
                         .unwrap_or(false);
                     if !allowed {
                         let mut s = stream.lock().await;
@@ -593,7 +634,12 @@ async fn handle_client(
         }
     }
 
-    // Always emit disconnect event (whether clean or unexpected)
+    // disconnect / disconnect_peer already removed the peer and emitted the event.
+    if removed_externally {
+        return Ok(());
+    }
+
+    // Emit disconnect event (whether clean or unexpected)
     let _ = app.emit(
         "peer-disconnected",
         serde_json::json!({
@@ -613,22 +659,120 @@ async fn handle_client(
     Ok(())
 }
 
+/// Why a single TCP connect attempt failed — used to pick the most helpful message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ConnectFailure {
+    // Ordered from least to most informative; the "best" failure wins the report.
+    Timeout,
+    Unreachable,
+    Other,
+    Refused,
+}
+
+fn classify_connect_error(e: &std::io::Error) -> ConnectFailure {
+    use std::io::ErrorKind;
+    match e.kind() {
+        ErrorKind::ConnectionRefused => ConnectFailure::Refused,
+        ErrorKind::TimedOut => ConnectFailure::Timeout,
+        _ => {
+            // HostUnreachable / NetworkUnreachable are unstable ErrorKinds on
+            // older toolchains; match on the OS codes instead
+            // (Windows WSAENETUNREACH 10051, WSAEHOSTUNREACH 10065; Unix 101/113).
+            match e.raw_os_error() {
+                Some(10051) | Some(10065) | Some(101) | Some(113) => ConnectFailure::Unreachable,
+                Some(10060) | Some(110) => ConnectFailure::Timeout,
+                _ => ConnectFailure::Other,
+            }
+        }
+    }
+}
+
+fn connect_failure_message(kind: ConnectFailure, tried: &[String], port: u16, detail: &str) -> String {
+    let addrs = tried.join(", ");
+    match kind {
+        ConnectFailure::Refused => format!(
+            "The host at {} refused the connection on port {}. It's reachable, but SyncCrate isn't hosting on that port — check the host is still hosting and the port matches.",
+            addrs, port
+        ),
+        ConnectFailure::Timeout => format!(
+            "No response from {} on port {}. This is almost always Windows Firewall on the host blocking SyncCrate — on the host PC, open Settings → Network and click \"Fix Windows Firewall\", then try again.",
+            addrs, port
+        ),
+        ConnectFailure::Unreachable => format!(
+            "{} is unreachable from this PC. Make sure both PCs are on the same network (or the same VPN such as Tailscale/ZeroTier).",
+            addrs
+        ),
+        ConnectFailure::Other => format!("Could not connect to {}:{} — {}", addrs, port, detail),
+    }
+}
+
+/// Connect to the first reachable address. Attempts are staggered (a light
+/// "happy eyeballs"): the best-ranked address gets a head start, then the
+/// others are tried in parallel so one dead virtual-adapter address can't
+/// eat the whole timeout.
+async fn connect_any(addresses: &[String], port: u16) -> Result<TcpStream, String> {
+    let mut targets: Vec<std::net::SocketAddr> = Vec::new();
+    for a in addresses {
+        if let Ok(ip) = a.trim().trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>() {
+            let sa = std::net::SocketAddr::new(ip, port);
+            if !targets.contains(&sa) {
+                targets.push(sa);
+            }
+        }
+    }
+    if targets.is_empty() {
+        return Err("No valid address for this host".to_string());
+    }
+
+    let mut set = tokio::task::JoinSet::new();
+    for (i, target) in targets.iter().copied().enumerate() {
+        set.spawn(async move {
+            if i > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(400 * i as u64)).await;
+            }
+            match tokio::time::timeout(std::time::Duration::from_secs(8), TcpStream::connect(target)).await {
+                Ok(Ok(s)) => Ok(s),
+                Ok(Err(e)) => Err((classify_connect_error(&e), e.to_string())),
+                Err(_) => Err((ConnectFailure::Timeout, "timed out".to_string())),
+            }
+        });
+    }
+
+    let mut best: Option<(ConnectFailure, String)> = None;
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok(Ok(stream)) => {
+                set.abort_all();
+                return Ok(stream);
+            }
+            Ok(Err((kind, detail))) => {
+                if best.as_ref().map_or(true, |(k, _)| kind > *k) {
+                    best = Some((kind, detail));
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    let tried: Vec<String> = targets.iter().map(|t| t.ip().to_string()).collect();
+    let (kind, detail) = best.unwrap_or((ConnectFailure::Other, "unknown error".to_string()));
+    Err(connect_failure_message(kind, &tried, port, &detail))
+}
+
 pub async fn connect_to_host(
-    ip: &str,
+    addresses: &[String],
     port: u16,
     peer_id: &str,
     state: Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
     pin: Option<String>,
 ) -> Result<(), String> {
-    let addr = format!("{}:{}", ip, port);
-    let stream = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        TcpStream::connect(&addr),
-    )
-    .await
-    .map_err(|_| "Connection timed out (10s)".to_string())?
-    .map_err(|e| format!("Connection failed: {}", e))?;
+    let stream = connect_any(addresses, port).await?;
+    let ip = stream
+        .peer_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_else(|_| addresses.first().cloned().unwrap_or_default());
+    let ip = ip.as_str();
 
     protocol::configure_keepalive(&stream);
     let stream = Arc::new(Mutex::new(stream));
@@ -745,6 +889,7 @@ pub async fn connect_to_host(
             version: host_version,
             pin_required: false,
             game_info: host_game_info,
+            addresses: addresses.to_vec(),
         };
         app_state.connections.insert(
             peer_id.to_string(),
@@ -929,94 +1074,112 @@ pub async fn request_file(
     );
 
     // Hold stream lock for the entire file transfer to prevent message interleaving
-    let expected_hash = {
-        let mut s = connection.lock().await;
+    let mut s = connection.lock().await;
 
-        // Send file request
-        protocol::send_message(&mut *s, &Message::FileRequest { path: path.to_string() }).await?;
+    // Send file request
+    protocol::send_message(&mut *s, &Message::FileRequest { path: path.to_string() }).await?;
 
-        // Receive FileHeader
-        let (expected_size, expected_hash) = {
-            let msg = protocol::recv_message(&mut *s).await?;
-            match msg {
-                Message::FileHeader { size, hash, .. } => (size, hash),
-                Message::Error { message } => return Err(message),
-                _ => return Err("Expected FileHeader".to_string()),
-            }
-        };
-
-        // Validate file size before writing
-        if expected_size > MAX_FILE_SIZE {
-            return Err(format!(
-                "File too large: {} bytes (max {} bytes)",
-                expected_size, MAX_FILE_SIZE
-            ));
+    // Receive FileHeader
+    let (expected_size, expected_hash) = {
+        let msg = protocol::recv_message(&mut *s).await?;
+        match msg {
+            Message::FileHeader { size, hash, .. } => (size, hash),
+            Message::Error { message } => return Err(message),
+            _ => return Err("Expected FileHeader".to_string()),
         }
-
-        // Stream chunks directly to temp file on disk
-        let mut out_file = tokio::fs::File::create(&tmp_path)
-            .await
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
-        let mut hasher = Sha256::new();
-        let mut bytes_written = 0u64;
-
-        loop {
-            let msg = protocol::recv_message(&mut *s).await?;
-            match msg {
-                Message::FileChunk { data, compressed, .. } => {
-                    let raw_decoded = BASE64.decode(&data).map_err(|e| e.to_string())?;
-                    let decoded = if compressed {
-                        decompress_chunk(&raw_decoded)?
-                    } else {
-                        raw_decoded
-                    };
-                    if decoded.len() > MAX_CHUNK_SIZE {
-                        return Err(format!(
-                            "Chunk too large: {} bytes (max {})",
-                            decoded.len(),
-                            MAX_CHUNK_SIZE
-                        ));
-                    }
-                    bytes_written += decoded.len() as u64;
-                    if bytes_written > expected_size {
-                        return Err("Received more data than declared size".to_string());
-                    }
-                    hasher.update(&decoded);
-                    out_file.write_all(&decoded).await.map_err(|e| e.to_string())?;
-                }
-                Message::FileComplete { .. } => break,
-                Message::Error { message } => return Err(message),
-                _ => return Err("Unexpected message during file transfer".to_string()),
-            }
-        }
-
-        out_file.flush().await.map_err(|e| e.to_string())?;
-
-        // Verify hash
-        let actual_hash = hex::encode(hasher.finalize());
-        if actual_hash != expected_hash {
-            // Clean up temp file on hash mismatch
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Err(format!(
-                "Hash mismatch for {}: expected {}, got {}",
-                path, expected_hash, actual_hash
-            ));
-        }
-
-        expected_hash
     };
 
-    // Rename temp file to final destination
-    tokio::fs::rename(&tmp_path, &dest_path)
-        .await
-        .map_err(|e| {
-            let tmp = tmp_path.clone();
-            tokio::spawn(async move { let _ = tokio::fs::remove_file(tmp).await; });
-            e.to_string()
-        })?;
+    // From here on the host streams chunks until FileComplete. If we bail out
+    // early, drain the rest so the next request doesn't read stale chunks
+    // ("Expected FileHeader"), and always remove the temp file.
+    let result = receive_file_body(&mut s, &tmp_path, expected_size, &expected_hash, path).await;
+    if let Err((e, stream_in_sync)) = result {
+        if !stream_in_sync {
+            drain_until_file_end(&mut s).await;
+        }
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(e);
+    }
+    drop(s);
 
-    let _ = expected_hash; // suppress unused warning
+    // Rename temp file to final destination
+    if let Err(e) = tokio::fs::rename(&tmp_path, &dest_path).await {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(e.to_string());
+    }
     Ok(())
+}
+
+/// Receive chunks into `tmp_path` and verify size + hash.
+/// On error returns `(message, stream_in_sync)`; `stream_in_sync` is true when
+/// the host's transfer has already ended (FileComplete / Error was consumed).
+/// The temp file handle is always closed before returning so it can be deleted
+/// on Windows.
+async fn receive_file_body(
+    s: &mut TcpStream,
+    tmp_path: &std::path::Path,
+    expected_size: u64,
+    expected_hash: &str,
+    path: &str,
+) -> Result<(), (String, bool)> {
+    if expected_size > MAX_FILE_SIZE {
+        return Err((format!("File too large: {} bytes (max {} bytes)", expected_size, MAX_FILE_SIZE), false));
+    }
+
+    let mut out_file = tokio::fs::File::create(tmp_path)
+        .await
+        .map_err(|e| (format!("Failed to create temp file: {}", e), false))?;
+    let mut hasher = Sha256::new();
+    let mut bytes_written = 0u64;
+
+    loop {
+        let msg = protocol::recv_message(s).await.map_err(|e| (e, false))?;
+        match msg {
+            Message::FileChunk { data, compressed, .. } => {
+                let raw_decoded = BASE64.decode(&data).map_err(|e| (e.to_string(), false))?;
+                let decoded = if compressed {
+                    decompress_chunk(&raw_decoded).map_err(|e| (e, false))?
+                } else {
+                    raw_decoded
+                };
+                if decoded.len() > MAX_CHUNK_SIZE {
+                    return Err((format!("Chunk too large: {} bytes (max {})", decoded.len(), MAX_CHUNK_SIZE), false));
+                }
+                bytes_written += decoded.len() as u64;
+                if bytes_written > expected_size {
+                    return Err(("Received more data than declared size".to_string(), false));
+                }
+                hasher.update(&decoded);
+                out_file.write_all(&decoded).await.map_err(|e| (e.to_string(), false))?;
+            }
+            Message::FileComplete { .. } => break,
+            Message::Error { message } => return Err((message, true)),
+            _ => return Err(("Unexpected message during file transfer".to_string(), false)),
+        }
+    }
+
+    out_file.flush().await.map_err(|e| (e.to_string(), true))?;
+    drop(out_file);
+
+    let actual_hash = hex::encode(hasher.finalize());
+    if actual_hash != expected_hash {
+        return Err((format!("Hash mismatch for {}: expected {}, got {}", path, expected_hash, actual_hash), true));
+    }
+    Ok(())
+}
+
+/// Discard messages until the host finishes the current file. Gives up after
+/// a bounded number of messages / a read error (the connection is then
+/// unusable anyway and the loop will notice).
+async fn drain_until_file_end(s: &mut TcpStream) {
+    // A 2 GB file at 64 KB per chunk is ~32k chunks.
+    for _ in 0..40_000 {
+        match protocol::recv_message(s).await {
+            Ok(Message::FileComplete { .. }) | Ok(Message::Error { .. }) => return,
+            Ok(_) => continue,
+            Err(_) => return,
+        }
+    }
 }
 
 #[cfg(test)]

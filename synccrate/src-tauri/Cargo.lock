@@ -3806,6 +3806,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "hex",
+ "if-addrs",
  "log",
  "mdns-sd",
  "notify",

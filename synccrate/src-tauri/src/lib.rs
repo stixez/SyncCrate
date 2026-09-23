@@ -61,6 +61,14 @@ pub fn run() {
                 "satisfactory", "dst", "conan_exiles", "torchlight2", "riftbreaker",
                 "subnautica", "7daystodie", "kerbal_space_program",
                 "wow_classic",
+                "baldurs_gate_3", "cyberpunk2077", "fallout4", "witcher3",
+                "lethal_company", "civilization_6", "stellaris", "hearts_of_iron_4",
+                "starfield", "fallout_new_vegas", "crusader_kings_3", "tf2",
+                "europa_universalis_4", "farming_simulator_25", "farming_simulator_22",
+                "cities_skylines_2", "risk_of_rain_2", "beat_saber", "oblivion",
+                "skyrim_le", "xcom2", "american_truck_simulator", "slay_the_spire",
+                "hollow_knight", "oxygen_not_included", "victoria_3",
+                "mount_blade_warband", "dont_starve", "vintage_story", "morrowind",
                 "sims2", "warcraft3", "wow_classic_era",
                 "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom",
             ];
@@ -273,6 +281,13 @@ pub fn run() {
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,
+            commands::system::get_firewall_status,
+            commands::system::fix_firewall,
+            commands::system::is_elevated,
+            commands::system::restart_as_admin,
+            commands::system::check_game_path_writable,
+            commands::system::get_network_diagnostics,
+            commands::system::test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

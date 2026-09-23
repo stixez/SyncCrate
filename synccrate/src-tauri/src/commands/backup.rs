@@ -118,6 +118,15 @@ fn copy_dir_to_backup(
     Ok(entries)
 }
 
+/// True if `rel` consists only of normal path segments. `Path::is_absolute`
+/// alone isn't enough on Windows: "\foo" and "C:foo" are not absolute but
+/// `join` with them escapes the destination folder.
+fn is_plain_relative_path(rel: &str) -> bool {
+    let p = Path::new(rel);
+    !rel.is_empty()
+        && p.components().all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir))
+}
+
 fn count_files(dir: &Path) -> usize {
     if !dir.exists() {
         return 0;
@@ -176,7 +185,15 @@ pub async fn create_backup(
     let mut category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for (category, dir) in &category_dirs {
-        let entries = copy_dir_to_backup(dir, &backup_dir, category, &app, &mut files_done, files_total)?;
+        let entries = match copy_dir_to_backup(dir, &backup_dir, category, &app, &mut files_done, files_total) {
+            Ok(e) => e,
+            Err(e) => {
+                // Don't leave a partial, manifest-less backup folder behind
+                // (it never shows up in list_backups, so it can't be deleted).
+                let _ = std::fs::remove_dir_all(&backup_dir);
+                return Err(e);
+            }
+        };
         category_counts.insert(category.clone(), entries.len());
         all_entries.extend(entries);
     }
@@ -302,7 +319,13 @@ pub async fn create_auto_backup(
     let mut category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for (category, dir) in &category_dirs {
-        let entries = copy_dir_to_backup(dir, &backup_dir, category, app, &mut files_done, files_total)?;
+        let entries = match copy_dir_to_backup(dir, &backup_dir, category, app, &mut files_done, files_total) {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&backup_dir);
+                return Err(e);
+            }
+        };
         category_counts.insert(category.clone(), entries.len());
         all_entries.extend(entries);
     }
@@ -360,8 +383,10 @@ pub async fn restore_backup(
     // Resolve game from backup manifest
     let (base, game_id, content_types) = {
         let app_state = state.lock().await;
+        // Never fall back to another game: restoring e.g. a Minecraft backup
+        // into the Sims 4 folder would scatter files where they don't belong.
         let game_id = resolve_game(&app_state, &manifest.info.game)
-            .unwrap_or_else(|_| "sims4".to_string());
+            .map_err(|_| format!("Backup is for an unknown game '{}'", manifest.info.game))?;
         let path = app_state.game_paths.get(&game_id).cloned()
             .ok_or_else(|| format!("{} path not set. Configure it before restoring this backup.", app_state.game_label(&game_id)))?;
         let cts = get_game_def(&app_state.game_registry, &game_id)
@@ -394,8 +419,17 @@ pub async fn restore_backup(
     let mut safety_category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for (category, dir) in &category_dir_map {
-        let entries = copy_dir_to_backup(dir, &safety_dir, category, &app, &mut safety_done, safety_total)
-            .unwrap_or_default();
+        // The safety backup is the only way back if the restore goes wrong, so a
+        // failure here must abort the restore. (Previously the error was swallowed
+        // with unwrap_or_default(), recording an incomplete safety backup and then
+        // overwriting the user's files anyway.)
+        let entries = match copy_dir_to_backup(dir, &safety_dir, category, &app, &mut safety_done, safety_total) {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&safety_dir);
+                return Err(format!("Safety backup failed, restore aborted: {}", e));
+            }
+        };
         safety_category_counts.insert(category.clone(), entries.len());
         safety_entries.extend(entries);
     }
@@ -420,17 +454,15 @@ pub async fn restore_backup(
         files: safety_entries,
     };
     let sm_data = serde_json::to_string_pretty(&safety_manifest).map_err(|e| e.to_string())?;
-    std::fs::write(safety_dir.join("manifest.json"), sm_data).map_err(|e| e.to_string())?;
+    if let Err(e) = std::fs::write(safety_dir.join("manifest.json"), sm_data) {
+        let _ = std::fs::remove_dir_all(&safety_dir);
+        return Err(format!("Safety backup failed, restore aborted: {}", e));
+    }
 
     // Restore files
     let total = manifest.files.len();
     for (i, entry) in manifest.files.iter().enumerate() {
-        let rel = Path::new(&entry.relative_path);
-        if rel.is_absolute() {
-            continue;
-        }
-        let has_traversal = rel.components().any(|c| matches!(c, std::path::Component::ParentDir));
-        if has_traversal {
+        if !is_plain_relative_path(&entry.relative_path) {
             continue;
         }
 
@@ -507,4 +539,26 @@ pub async fn delete_backup(id: String) -> Result<(), String> {
     }
 
     std::fs::remove_dir_all(&backup_dir).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_relative_paths_only() {
+        assert!(is_plain_relative_path("sub/file.package"));
+        assert!(is_plain_relative_path("file.save"));
+        assert!(!is_plain_relative_path(""));
+        assert!(!is_plain_relative_path("../escape"));
+        assert!(!is_plain_relative_path("a/../../escape"));
+        #[cfg(target_os = "windows")]
+        {
+            assert!(!is_plain_relative_path(r"\Windows\evil.dll"));
+            assert!(!is_plain_relative_path("C:evil"));
+            assert!(!is_plain_relative_path(r"C:\evil"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        assert!(!is_plain_relative_path("/etc/passwd"));
+    }
 }

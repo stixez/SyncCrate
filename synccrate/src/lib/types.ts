@@ -159,7 +159,12 @@ export interface BackupInfo {
   label: string;
   file_count: number;
   total_size: number;
-  category_counts: Record<string, number>;
+  /** Not currently serialized by the backend; prefer the *_count fields. */
+  category_counts?: Record<string, number>;
+  mods_count?: number;
+  saves_count?: number;
+  tray_count?: number;
+  screenshots_count?: number;
   game: Game;
   auto?: boolean;
 }
@@ -210,11 +215,14 @@ export interface GameDefinition {
 
 export interface DetectionConfig {
   strategies: DetectionStrategy[];
+  require_any?: string[];
 }
 
 export type DetectionStrategy =
   | { type: "documents_relative"; base: string; folders: string[] }
-  | { type: "absolute_paths"; paths: PlatformPaths };
+  | { type: "absolute_paths"; paths: PlatformPaths }
+  | { type: "steam_library"; folders: string[] }
+  | { type: "windows_registry"; keys: string[]; value: string; subpath?: string };
 
 export interface PlatformPaths {
   windows: string[];

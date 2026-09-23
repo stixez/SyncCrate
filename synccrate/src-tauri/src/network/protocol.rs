@@ -97,12 +97,21 @@ pub async fn recv_message(stream: &mut TcpStream) -> Result<Message, String> {
         .map_err(|_| "Connection timed out reading message".to_string())?
 }
 
-/// Try to receive a message with a custom timeout.
-/// Returns Ok(Some(msg)) on success, Ok(None) on timeout, Err on connection error.
+/// Wait up to `timeout` for a message to *start* arriving, then read it fully.
+/// Returns Ok(Some(msg)) on success, Ok(None) if nothing arrived, Err on connection error.
+///
+/// Cancel-safe: the wait uses `peek`, which consumes nothing. Previously the
+/// whole read was wrapped in the timeout, so a timeout that fired after the
+/// length prefix was read (but before the body) silently dropped bytes and
+/// desynchronised the stream — surfacing later as random "connection lost" /
+/// JSON errors, most often on slow Wi-Fi.
 pub async fn try_recv_message(stream: &mut TcpStream, timeout: Duration) -> Result<Option<Message>, String> {
-    match tokio::time::timeout(timeout, recv_message_raw(stream)).await {
-        Ok(result) => result.map(Some),
+    let mut probe = [0u8; 1];
+    match tokio::time::timeout(timeout, stream.peek(&mut probe)).await {
         Err(_) => Ok(None),
+        Ok(Ok(0)) => Err("Connection closed by peer".to_string()),
+        Ok(Ok(_)) => recv_message(stream).await.map(Some),
+        Ok(Err(e)) => Err(e.to_string()),
     }
 }
 

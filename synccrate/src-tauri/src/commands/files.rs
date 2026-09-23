@@ -221,7 +221,7 @@ pub async fn scan_files_inner(
     game: Option<String>,
     compute_hashes: bool,
 ) -> Result<FileManifest, String> {
-    let (base_path, game_def, newly_detected) = {
+    let (game_id, base_path, game_def, newly_detected) = {
         let mut app_state = state.lock().await;
         let game_id = match game {
             Some(ref g) => resolve_game(&app_state, g)?,
@@ -244,8 +244,9 @@ pub async fn scan_files_inner(
         let def = get_game_def(&app_state.game_registry, &game_id)
             .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?
             .clone();
-        (path, def, newly_detected)
+        (game_id, path, def, newly_detected)
     };
+    let scanned_base = base_path.clone();
 
     // A just-auto-detected path bypasses set_game_path, which is where the game's
     // expected content folders normally get created. Mirror that here so, e.g.,
@@ -283,9 +284,18 @@ pub async fn scan_files_inner(
             all_files.extend(files);
         }
 
-        // Update hash cache with current scan results
+        // Update hash cache with current scan results. Keep entries that belong
+        // to other games/folders — replacing the whole cache with just this
+        // scan threw away every other game's cached hashes on each game switch.
         if compute_hashes {
-            let mut new_cache = HashCache::new();
+            let base_prefix = format!(
+                "{}/",
+                base_path.replace('\\', "/").trim_end_matches('/')
+            );
+            let mut new_cache: HashCache = hash_cache
+                .into_iter()
+                .filter(|(k, _)| !k.starts_with(&base_prefix))
+                .collect();
             for info in all_files.values() {
                 if !info.hash.is_empty() {
                     let abs_path = std::path::PathBuf::from(&base_path)
@@ -310,9 +320,40 @@ pub async fn scan_files_inner(
     .await
     .map_err(|e| e.to_string())?;
 
+    // `local_manifest` is what we sync against and serve to peers, and it is
+    // always interpreted relative to the *active* game's path. Only store the
+    // result if this scan was for the active game (and its path didn't change
+    // mid-scan); scanning another game (e.g. browsing it in the library) must
+    // not replace the active game's manifest.
+    let mut manifest = manifest;
     let mut app_state = state.lock().await;
-    app_state.local_manifest = manifest.clone();
+    if app_state.active_game == game_id
+        && app_state.game_paths.get(&game_id) == Some(&scanned_base)
+    {
+        if !compute_hashes {
+            // A quick scan (e.g. triggered by the file watcher) has no hashes.
+            // Carry over known hashes for unchanged files so a quick rescan
+            // doesn't wipe the hashes a sync plan / peer manifest relies on
+            // (empty local hashes make every shared file look like a conflict).
+            carry_over_hashes(&mut manifest, &app_state.local_manifest);
+        }
+        app_state.local_manifest = manifest.clone();
+    }
     Ok(manifest)
+}
+
+/// Fill empty hashes in `new` from `old` for files whose size and mtime are unchanged.
+fn carry_over_hashes(new: &mut FileManifest, old: &FileManifest) {
+    for (path, info) in new.files.iter_mut() {
+        if !info.hash.is_empty() {
+            continue;
+        }
+        if let Some(prev) = old.files.get(path) {
+            if !prev.hash.is_empty() && prev.size == info.size && prev.modified == info.modified {
+                info.hash = prev.hash.clone();
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -343,6 +384,7 @@ pub async fn get_game_path(
 #[tauri::command]
 pub async fn set_game_path(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
     game: String,
     path: String,
 ) -> Result<(), String> {
@@ -395,8 +437,19 @@ pub async fn set_game_path(
         }
     }
 
-    app_state.game_paths.insert(game_id, canonical.to_string_lossy().to_string());
+    let new_path = canonical.to_string_lossy().to_string();
+    if app_state.active_game == game_id
+        && app_state.game_paths.get(&game_id) != Some(&new_path)
+    {
+        // Manifest paths were relative to the old folder.
+        app_state.local_manifest = FileManifest::default();
+    }
+    let is_active = app_state.active_game == game_id;
+    app_state.game_paths.insert(game_id, new_path);
     save_game_config(&app_state);
+    if is_active {
+        crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
+    }
     Ok(())
 }
 
@@ -411,12 +464,26 @@ pub async fn get_active_game(
 #[tauri::command]
 pub async fn set_active_game(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
     game: String,
 ) -> Result<(), String> {
     let mut app_state = state.lock().await;
     let game_id = resolve_game(&app_state, &game)?;
+    let changed = app_state.active_game != game_id;
+    if changed && app_state.session_type != crate::state::SessionType::None {
+        // Peers are syncing against this game's manifest/folder.
+        return Err("Disconnect from the current session before switching games.".to_string());
+    }
+    if changed {
+        // The manifest belongs to the previous game; don't keep serving/syncing
+        // it against the new game's path until a rescan replaces it.
+        app_state.local_manifest = FileManifest::default();
+    }
     app_state.active_game = game_id;
     save_game_config(&app_state);
+    if changed {
+        crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
+    }
     Ok(())
 }
 
@@ -446,39 +513,70 @@ pub async fn toggle_mod(
     }
 
     let mods_dir = std::path::PathBuf::from(&base).join(&first_content_folder);
-    let disabled_dir = mods_dir.join("_Disabled");
-
-    let filename = full_path
-        .file_name()
-        .ok_or("Invalid filename")?
-        .to_os_string();
-
-    if enabled {
-        let dest = mods_dir.join(&filename);
-        if dest.exists() {
-            return Err(format!("A file with that name already exists in {}", first_content_folder));
+    let dest = match toggle_destination(&mods_dir, &full_path, enabled)? {
+        Some(d) => d,
+        None => {
+            // Already in the requested state; nothing to move.
+            return Ok(relative_path.replace('\\', "/"));
         }
-        std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
-        let new_rel = dest
-            .strip_prefix(&base)
-            .unwrap_or(&dest)
-            .to_string_lossy()
-            .replace('\\', "/");
-        Ok(new_rel)
-    } else {
-        std::fs::create_dir_all(&disabled_dir).map_err(|e| e.to_string())?;
-        let dest = disabled_dir.join(&filename);
-        if dest.exists() {
-            return Err("A file with that name already exists in _Disabled".into());
-        }
-        std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
-        let new_rel = dest
-            .strip_prefix(&base)
-            .unwrap_or(&dest)
-            .to_string_lossy()
-            .replace('\\', "/");
-        Ok(new_rel)
+    };
+
+    if dest.exists() {
+        return Err(if enabled {
+            format!("A file with that name already exists in {}", first_content_folder)
+        } else {
+            "A file with that name already exists in _Disabled".to_string()
+        });
     }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
+
+    let base_canonical = utils::clean_path(std::fs::canonicalize(&base).map_err(|e| e.to_string())?);
+    let dest_clean = utils::clean_path(dest.clone());
+    let new_rel = dest_clean
+        .strip_prefix(&base_canonical)
+        .unwrap_or(&dest_clean)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(new_rel)
+}
+
+/// Work out where `toggle_mod` should move a file.
+///
+/// Keeps the file's subfolder structure under the mods folder:
+/// `Mods/Creator/x.package` <-> `Mods/_Disabled/Creator/x.package`.
+/// (The old code flattened everything into `_Disabled/` and restored it to the
+/// mods root, losing the original folder and colliding same-named files.)
+///
+/// Returns `Some(dest)`, or `None` when the file is already
+/// in the requested state. Errors if the file isn't inside the mods folder.
+fn toggle_destination(
+    mods_dir: &std::path::Path,
+    full_path: &std::path::Path,
+    enabled: bool,
+) -> Result<Option<std::path::PathBuf>, String> {
+    let mods_canonical = utils::clean_path(
+        std::fs::canonicalize(mods_dir).map_err(|e| format!("Mods folder not found: {}", e))?,
+    );
+    let file_clean = utils::clean_path(full_path.to_path_buf());
+    let rel_in_mods = file_clean
+        .strip_prefix(&mods_canonical)
+        .map_err(|_| "Only files in the mods folder can be enabled or disabled".to_string())?;
+
+    let mut comps = rel_in_mods.components();
+    let in_disabled = matches!(
+        comps.next(),
+        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case("_Disabled")
+    );
+    let rest: std::path::PathBuf = comps.collect();
+
+    Ok(match (enabled, in_disabled) {
+        (true, true) => Some(mods_canonical.join(&rest)),
+        (false, false) => Some(mods_canonical.join("_Disabled").join(rel_in_mods)),
+        _ => None,
+    })
 }
 
 #[tauri::command]
@@ -593,4 +691,92 @@ pub async fn detect_installed_games(
     .map_err(|e| e.to_string())?;
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(path: &str, hash: &str, size: u64, modified: u64) -> FileInfo {
+        FileInfo {
+            relative_path: path.to_string(),
+            size,
+            hash: hash.to_string(),
+            modified,
+            file_type: "Mod".to_string(),
+        }
+    }
+
+    fn manifest(files: Vec<FileInfo>) -> FileManifest {
+        FileManifest {
+            files: files.into_iter().map(|f| (f.relative_path.clone(), f)).collect(),
+            generated_at: 0,
+        }
+    }
+
+    #[test]
+    fn quick_scan_keeps_hashes_of_unchanged_files_only() {
+        let old = manifest(vec![
+            info("Mods/same.package", "h1", 10, 100),
+            info("Mods/changed.package", "h2", 10, 100),
+        ]);
+        let mut new = manifest(vec![
+            info("Mods/same.package", "", 10, 100),
+            info("Mods/changed.package", "", 11, 200),
+            info("Mods/new.package", "", 5, 300),
+        ]);
+        carry_over_hashes(&mut new, &old);
+        assert_eq!(new.files["Mods/same.package"].hash, "h1");
+        assert_eq!(new.files["Mods/changed.package"].hash, "");
+        assert_eq!(new.files["Mods/new.package"].hash, "");
+    }
+
+    fn temp_mods_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "synccrate_toggle_{}_{}",
+            name,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Mods").join("Creator")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn toggle_preserves_subfolders() {
+        let base = temp_mods_dir("subfolders");
+        let mods = base.join("Mods");
+        let file = mods.join("Creator").join("hair.package");
+        std::fs::write(&file, b"x").unwrap();
+
+        let disabled = toggle_destination(&mods, &std::fs::canonicalize(&file).unwrap(), false)
+            .unwrap()
+            .expect("should move");
+        assert!(disabled.ends_with("Mods/_Disabled/Creator/hair.package"));
+
+        std::fs::create_dir_all(disabled.parent().unwrap()).unwrap();
+        std::fs::rename(&file, &disabled).unwrap();
+        let enabled = toggle_destination(&mods, &std::fs::canonicalize(&disabled).unwrap(), true)
+            .unwrap()
+            .expect("should move");
+        assert!(enabled.ends_with("Mods/Creator/hair.package"));
+
+        // Already disabled -> no move
+        assert!(toggle_destination(&mods, &std::fs::canonicalize(&disabled).unwrap(), false)
+            .unwrap()
+            .is_none());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn toggle_rejects_files_outside_mods_folder() {
+        let base = temp_mods_dir("outside");
+        std::fs::create_dir_all(base.join("Saves")).unwrap();
+        let save = base.join("Saves").join("slot.save");
+        std::fs::write(&save, b"x").unwrap();
+        let res = toggle_destination(&base.join("Mods"), &std::fs::canonicalize(&save).unwrap(), false);
+        assert!(res.is_err());
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
