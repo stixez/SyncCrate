@@ -93,15 +93,92 @@ pub(crate) fn get_game_def<'a>(registry: &'a crate::registry::GameRegistry, game
     registry.games.iter().find(|g| g.id == game_id)
 }
 
+/// Suffix `toggle_mod` appends when a game disables mods by renaming.
+pub(crate) const DISABLED_SUFFIX: &str = ".disabled";
+
+/// Lower-cased extension used for filtering/classification. A file disabled by
+/// renaming (`hair.package.disabled`) keeps being treated as its real type.
+pub(crate) fn effective_extension(path: &std::path::Path) -> String {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+    let name = name.strip_suffix(DISABLED_SUFFIX).unwrap_or(&name);
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// Per-content-type filters beyond the extension list.
+pub(crate) struct ScanFilter<'a> {
+    pub recursive: bool,
+    pub must_contain: Option<&'a str>,
+    pub exclude_files: &'a [String],
+}
+
+impl ScanFilter<'_> {
+    pub(crate) fn from_ct(ct: &crate::registry::ContentType) -> ScanFilter<'_> {
+        ScanFilter {
+            recursive: ct.recursive,
+            must_contain: ct.must_contain.as_deref(),
+            exclude_files: &ct.exclude_files,
+        }
+    }
+
+    fn accepts(&self, path: &std::path::Path) -> bool {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if self.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(name)) {
+            return false;
+        }
+        match self.must_contain {
+            Some(needle) => file_head_contains(path, needle),
+            None => true,
+        }
+    }
+}
+
+/// Whether a file under a content type's folder belongs to that content type
+/// (extension list incl. `.disabled` files, exclusions, content sniffing).
+/// Depth is enforced by the caller's walker (`ct.recursive`).
+pub(crate) fn content_type_accepts(ct: &crate::registry::ContentType, path: &std::path::Path) -> bool {
+    if !ct.extensions.is_empty() {
+        let ext = effective_extension(path);
+        if !ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {
+            return false;
+        }
+    }
+    ScanFilter::from_ct(ct).accepts(path)
+}
+
+/// True if the first 64 KB of the file contain `needle` (lossy UTF-8).
+fn file_head_contains(path: &std::path::Path, needle: &str) -> bool {
+    use std::io::Read;
+    let mut buf = Vec::with_capacity(65536);
+    match std::fs::File::open(path) {
+        Ok(f) => {
+            if f.take(65536).read_to_end(&mut buf).is_err() {
+                return false;
+            }
+        }
+        Err(_) => return false,
+    }
+    String::from_utf8_lossy(&buf).contains(needle)
+}
+
 fn scan_directory(
     base_path: &str,
     sub_dir: &str,
     file_type_fn: impl Fn(&str) -> String + Sync,
     valid_extensions: &[String],
+    filter: &ScanFilter,
     compute_hashes: bool,
     hash_cache: &HashCache,
 ) -> HashMap<String, FileInfo> {
-    let dir = std::path::PathBuf::from(base_path).join(sub_dir);
+    // "." (only allowed for non-recursive content types) means the game folder itself.
+    let dir = if sub_dir == "." || sub_dir.is_empty() {
+        std::path::PathBuf::from(base_path)
+    } else {
+        std::path::PathBuf::from(base_path).join(sub_dir)
+    };
     let mut files = HashMap::new();
 
     if !dir.exists() {
@@ -111,8 +188,11 @@ fn scan_directory(
     let ext_refs: Vec<&str> = valid_extensions.iter().map(|s| s.as_str()).collect();
 
     // Collect eligible file entries first, then hash in parallel
-    let entries: Vec<_> = WalkDir::new(&dir)
-        .follow_links(false)
+    let mut walker = WalkDir::new(&dir).follow_links(false);
+    if !filter.recursive {
+        walker = walker.max_depth(1);
+    }
+    let entries: Vec<_> = walker
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| {
@@ -121,16 +201,12 @@ fn scan_directory(
             }
             // If extensions list is non-empty, filter by them
             if !ext_refs.is_empty() {
-                let ext = entry
-                    .path()
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-                ext_refs.contains(&ext.as_str())
-            } else {
-                true
+                let ext = effective_extension(entry.path());
+                if !ext_refs.contains(&ext.as_str()) {
+                    return false;
+                }
             }
+            filter.accepts(entry.path())
         })
         .collect();
 
@@ -138,11 +214,7 @@ fn scan_directory(
         .par_iter()
         .filter_map(|entry| {
             let path = entry.path();
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_lowercase();
+            let ext = effective_extension(path);
 
             let relative = path
                 .strip_prefix(base_path)
@@ -278,6 +350,7 @@ pub async fn scan_files_inner(
                     classify.get(ext).cloned().unwrap_or_else(|| default_ft.clone())
                 },
                 &exts,
+                &ScanFilter::from_ct(ct),
                 compute_hashes,
                 &hash_cache,
             );
@@ -493,18 +566,20 @@ pub async fn toggle_mod(
     relative_path: String,
     enabled: bool,
 ) -> Result<String, String> {
-    let (base, first_content_folder) = {
+    let (base, first_content_folder, rename_method) = {
         let app_state = state.lock().await;
         let base = app_state
             .game_paths
             .get(&app_state.active_game)
             .cloned()
             .ok_or("Game path not set")?;
-        let folder = get_game_def(&app_state.game_registry, &app_state.active_game)
+        let def = get_game_def(&app_state.game_registry, &app_state.active_game);
+        let folder = def
             .and_then(|d| d.content_types.first())
             .map(|ct| ct.folder.clone())
             .unwrap_or_else(|| "Mods".to_string());
-        (base, folder)
+        let rename = def.and_then(|d| d.disable_method.as_deref()) == Some("rename");
+        (base, folder, rename)
     };
 
     let full_path = utils::safe_join(&base, &relative_path)?;
@@ -513,7 +588,15 @@ pub async fn toggle_mod(
     }
 
     let mods_dir = std::path::PathBuf::from(&base).join(&first_content_folder);
-    let dest = match toggle_destination(&mods_dir, &full_path, enabled)? {
+    // Also validates the file is inside the mods folder, and handles files left
+    // in a legacy `_Disabled/` folder.
+    let folder_dest = toggle_destination(&mods_dir, &full_path, enabled)?;
+    let dest = if rename_method {
+        rename_destination(&full_path, enabled, folder_dest)
+    } else {
+        folder_dest
+    };
+    let dest = match dest {
         Some(d) => d,
         None => {
             // Already in the requested state; nothing to move.
@@ -524,6 +607,8 @@ pub async fn toggle_mod(
     if dest.exists() {
         return Err(if enabled {
             format!("A file with that name already exists in {}", first_content_folder)
+        } else if rename_method {
+            "A disabled copy of this file already exists".to_string()
         } else {
             "A file with that name already exists in _Disabled".to_string()
         });
@@ -541,6 +626,35 @@ pub async fn toggle_mod(
         .to_string_lossy()
         .replace('\\', "/");
     Ok(new_rel)
+}
+
+/// Destination for games that disable by renaming (`x.package` <->
+/// `x.package.disabled`). The Sims 3/4 load .package files from nested
+/// subfolders, so moving a mod into `Mods/_Disabled/` didn't disable it.
+/// Enabling a file still sitting in a legacy `_Disabled/` folder moves it back
+/// out (`legacy_enable_dest`) and drops any `.disabled` suffix.
+fn rename_destination(
+    full_path: &std::path::Path,
+    enabled: bool,
+    legacy_enable_dest: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    let name = full_path.file_name()?.to_string_lossy().to_string();
+    if enabled {
+        let target = legacy_enable_dest.unwrap_or_else(|| full_path.to_path_buf());
+        let target_name = target.file_name()?.to_string_lossy().to_string();
+        if target_name.to_lowercase().ends_with(DISABLED_SUFFIX) {
+            let stripped = &target_name[..target_name.len() - DISABLED_SUFFIX.len()];
+            Some(target.with_file_name(stripped))
+        } else if target != full_path {
+            Some(target)
+        } else {
+            None
+        }
+    } else if name.to_lowercase().ends_with(DISABLED_SUFFIX) {
+        None
+    } else {
+        Some(full_path.with_file_name(format!("{}{}", name, DISABLED_SUFFIX)))
+    }
 }
 
 /// Work out where `toggle_mod` should move a file.
@@ -696,6 +810,67 @@ pub async fn detect_installed_games(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn effective_extension_sees_through_disabled_suffix() {
+        use std::path::Path;
+        assert_eq!(effective_extension(Path::new("Mods/hair.package")), "package");
+        assert_eq!(effective_extension(Path::new("Mods/Hair.PACKAGE.disabled")), "package");
+        assert_eq!(effective_extension(Path::new("Mods/readme")), "");
+    }
+
+    #[test]
+    fn rename_destination_toggles_suffix_and_migrates_legacy_folder() {
+        use std::path::PathBuf;
+        let f = PathBuf::from("Mods/CC/hair.package");
+        assert_eq!(rename_destination(&f, false, None), Some(PathBuf::from("Mods/CC/hair.package.disabled")));
+        assert_eq!(rename_destination(&f, true, None), None);
+
+        let d = PathBuf::from("Mods/CC/hair.package.disabled");
+        assert_eq!(rename_destination(&d, true, None), Some(PathBuf::from("Mods/CC/hair.package")));
+        assert_eq!(rename_destination(&d, false, None), None);
+
+        // Legacy `_Disabled/` file: enabling moves it back out of the folder.
+        let legacy = PathBuf::from("Mods/_Disabled/CC/hair.package");
+        let out = Some(PathBuf::from("Mods/CC/hair.package"));
+        assert_eq!(rename_destination(&legacy, true, out.clone()), out);
+    }
+
+    #[test]
+    fn content_type_accepts_applies_exclusions_and_sniffing() {
+        let dir = std::env::temp_dir().join(format!("synccrate-ct-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let preset = dir.join("Cozy.ini");
+        let config = dir.join("ReShade.ini");
+        let other = dir.join("Game.ini");
+        std::fs::write(&preset, "PreprocessorDefinitions=\nTechniques=Bloom@Bloom.fx\n").unwrap();
+        std::fs::write(&config, "[GENERAL]\nTechniques=ignored-because-excluded\n").unwrap();
+        std::fs::write(&other, "[Graphics]\nWidth=1920\n").unwrap();
+
+        let ct: crate::registry::ContentType = serde_json::from_value(serde_json::json!({
+            "id": "reshade_bin_presets", "label": "x", "folder": ".", "recursive": false,
+            "extensions": ["ini"], "must_contain": "Techniques=",
+            "exclude_files": ["ReShade.ini"], "file_type": "ReShadePreset"
+        }))
+        .unwrap();
+        assert!(content_type_accepts(&ct, &preset));
+        assert!(!content_type_accepts(&ct, &config));
+        assert!(!content_type_accepts(&ct, &other));
+
+        // The scanner only picks up the preset, keyed relative to the game folder.
+        let files = scan_directory(
+            &dir.to_string_lossy(),
+            ".",
+            |_| "ReShadePreset".to_string(),
+            &ct.extensions,
+            &ScanFilter::from_ct(&ct),
+            false,
+            &HashMap::new(),
+        );
+        let keys: Vec<&String> = files.keys().collect();
+        assert_eq!(keys, vec!["Cozy.ini"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn info(path: &str, hash: &str, size: u64, modified: u64) -> FileInfo {
         FileInfo {

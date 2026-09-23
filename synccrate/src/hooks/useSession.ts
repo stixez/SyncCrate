@@ -82,6 +82,21 @@ export function useSession() {
     }
   };
 
+  const connectByCode = async (code: string, name: string, pin?: string) => {
+    setIsLoading(true);
+    setIsConnecting(true);
+    addLog("Connecting with join code...", "info");
+    try {
+      await cmd.connectByCode(code, name, pin);
+    } catch (e: any) {
+      addLog(`Failed to connect: ${e}`, "error");
+      toastError(`Failed to connect: ${e}`);
+      setIsConnecting(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const leave = async () => {
     setIsLoading(true);
     try {
@@ -92,7 +107,7 @@ export function useSession() {
       setSyncPlan(null);
       setSyncProgress(null);
       useAppStore.getState().clearPeerDownloadProgress();
-      useAppStore.getState().clearLastHost();
+      // Keep the last host so the dashboard can offer "Reconnect to <host>" later
       addLog("Disconnected", "info");
     } catch (e: any) {
       addLog(`Failed to disconnect: ${e}`, "error");
@@ -101,5 +116,5 @@ export function useSession() {
     }
   };
 
-  return { host, join, connectTo, connectByIp, leave, isLoading };
+  return { host, join, connectTo, connectByIp, connectByCode, leave, isLoading };
 }

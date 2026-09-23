@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SyncCrate — The Easiest Way to Keep Modded Games in Sync</title>
-  <meta name="description" content="Free, open-source desktop app to sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. Works on LAN and virtual LAN (Tailscale, ZeroTier). 78 games supported. No cloud, no accounts.">
+  <meta name="description" content="Free, open-source desktop app to sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. Works on LAN and virtual LAN (Tailscale, ZeroTier). 100 games supported. No cloud, no accounts.">
   <meta property="og:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta property="og:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 78 games supported. No cloud, no accounts.">
+  <meta property="og:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 100 games supported. No cloud, no accounts.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
   <meta property="og:url" content="https://stixez.github.io/SyncCrate">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="SyncCrate — Never Break a Modded Multiplayer Session Again">
-  <meta name="twitter:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 78 games supported. No cloud, no accounts.">
+  <meta name="twitter:description" content="Sync game mods, addons, saves, and settings with friends. Peer-to-peer at LAN speed. 100 games supported. No cloud, no accounts.">
   <meta name="twitter:image" content="https://stixez.github.io/SyncCrate/screenshots/dashboard.png">
   <meta name="theme-color" content="#1ea84b">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -520,11 +520,13 @@
         <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Minecraft Java</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Baldur&#x27;s Gate 3</div>
         <div class="game-chip" style="--chip-color: #facc15"><span class="game-dot"></span>Cyberpunk 2077</div>
+        <div class="game-chip" style="--chip-color: #22c55e"><span class="game-dot"></span>Grand Theft Auto V</div>
         <div class="game-chip" style="--chip-color: #facc15"><span class="game-dot"></span>WoW Retail</div>
         <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Fallout 4</div>
         <div class="game-chip" style="--chip-color: #a3e635"><span class="game-dot"></span>Stardew Valley</div>
         <div class="game-chip" style="--chip-color: #22d3ee"><span class="game-dot"></span>Valheim</div>
         <div class="game-chip" style="--chip-color: #f87171"><span class="game-dot"></span>Lethal Company</div>
+        <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Among Us</div>
         <div class="game-chip" style="--chip-color: #a78bfa"><span class="game-dot"></span>Stellaris</div>
         <div class="game-chip" style="--chip-color: #34d399"><span class="game-dot"></span>Terraria</div>
         <div class="game-chip" style="--chip-color: #34d399"><span class="game-dot"></span>Project Zomboid</div>
@@ -535,21 +537,31 @@
         background: var(--bg-card); border: 1px dashed var(--border-light);
         color: var(--text-dim); font-size: 0.85rem; font-weight: 500;
         cursor: pointer; transition: all 0.2s;
-      ">Show all 78 games &darr;</button>
+      ">Show all 100 games &darr;</button>
       <div class="game-grid" id="more-games" style="display: none; margin-top: 12px;">
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>7 Days to Die</div>
         <div class="game-chip" style="--chip-color: #3b82f6"><span class="game-dot"></span>American Truck Simulator</div>
+        <div class="game-chip" style="--chip-color: #0891b2"><span class="game-dot"></span>ARK: Survival Evolved</div>
+        <div class="game-chip" style="--chip-color: #65a30d"><span class="game-dot"></span>Arma 3</div>
+        <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Assetto Corsa</div>
+        <div class="game-chip" style="--chip-color: #f43f5e"><span class="game-dot"></span>Balatro</div>
+        <div class="game-chip" style="--chip-color: #14b8a6"><span class="game-dot"></span>Barotrauma</div>
         <div class="game-chip" style="--chip-color: #f472b6"><span class="game-dot"></span>Beat Saber</div>
+        <div class="game-chip" style="--chip-color: #8b5cf6"><span class="game-dot"></span>Blade &amp; Sorcery</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Call of Duty</div>
         <div class="game-chip" style="--chip-color: #f87171"><span class="game-dot"></span>Call of Duty 2</div>
         <div class="game-chip" style="--chip-color: #f59e0b"><span class="game-dot"></span>Call of Duty 4: Modern Warfare</div>
+        <div class="game-chip" style="--chip-color: #ec4899"><span class="game-dot"></span>Celeste</div>
         <div class="game-chip" style="--chip-color: #22d3ee"><span class="game-dot"></span>Cities: Skylines</div>
         <div class="game-chip" style="--chip-color: #38bdf8"><span class="game-dot"></span>Cities: Skylines II</div>
         <div class="game-chip" style="--chip-color: #dc2626"><span class="game-dot"></span>Conan Exiles</div>
         <div class="game-chip" style="--chip-color: #f97316"><span class="game-dot"></span>Counter-Strike 2</div>
         <div class="game-chip" style="--chip-color: #ca8a04"><span class="game-dot"></span>Crusader Kings III</div>
+        <div class="game-chip" style="--chip-color: #991b1b"><span class="game-dot"></span>Darkest Dungeon</div>
         <div class="game-chip" style="--chip-color: #d97706"><span class="game-dot"></span>Don&#x27;t Starve</div>
         <div class="game-chip" style="--chip-color: #fbbf24"><span class="game-dot"></span>Don&#x27;t Starve Together</div>
+        <div class="game-chip" style="--chip-color: #b91c1c"><span class="game-dot"></span>Dragon Age: Origins</div>
+        <div class="game-chip" style="--chip-color: #0ea5e9"><span class="game-dot"></span>Dyson Sphere Program</div>
         <div class="game-chip" style="--chip-color: #f87171"><span class="game-dot"></span>Euro Truck Simulator 2</div>
         <div class="game-chip" style="--chip-color: #fbbf24"><span class="game-dot"></span>Europa Universalis IV</div>
         <div class="game-chip" style="--chip-color: #fb923c"><span class="game-dot"></span>Factorio</div>
@@ -559,26 +571,35 @@
         <div class="game-chip" style="--chip-color: #3b82f6"><span class="game-dot"></span>Garry&#x27;s Mod</div>
         <div class="game-chip" style="--chip-color: #a8a29e"><span class="game-dot"></span>Hearts of Iron IV</div>
         <div class="game-chip" style="--chip-color: #cbd5e1"><span class="game-dot"></span>Hollow Knight</div>
+        <div class="game-chip" style="--chip-color: #a8a29e"><span class="game-dot"></span>Kenshi</div>
         <div class="game-chip" style="--chip-color: #4ade80"><span class="game-dot"></span>Kerbal Space Program</div>
+        <div class="game-chip" style="--chip-color: #b45309"><span class="game-dot"></span>Kingdom Come: Deliverance II</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Left 4 Dead 2</div>
+        <div class="game-chip" style="--chip-color: #d97706"><span class="game-dot"></span>Monster Hunter: World</div>
         <div class="game-chip" style="--chip-color: #fbbf24"><span class="game-dot"></span>Mount &amp; Blade II: Bannerlord</div>
         <div class="game-chip" style="--chip-color: #ea580c"><span class="game-dot"></span>Mount &amp; Blade: Warband</div>
+        <div class="game-chip" style="--chip-color: #ea580c"><span class="game-dot"></span>Noita</div>
         <div class="game-chip" style="--chip-color: #34d399"><span class="game-dot"></span>Oxygen Not Included</div>
         <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>Palworld</div>
+        <div class="game-chip" style="--chip-color: #facc15"><span class="game-dot"></span>R.E.P.O.</div>
+        <div class="game-chip" style="--chip-color: #dc2626"><span class="game-dot"></span>Red Dead Redemption 2</div>
         <div class="game-chip" style="--chip-color: #eab308"><span class="game-dot"></span>RimWorld</div>
         <div class="game-chip" style="--chip-color: #eab308"><span class="game-dot"></span>Risk of Rain 2</div>
         <div class="game-chip" style="--chip-color: #f97316"><span class="game-dot"></span>Satisfactory</div>
         <div class="game-chip" style="--chip-color: #22d3ee"><span class="game-dot"></span>Sid Meier&#x27;s Civilization VI</div>
+        <div class="game-chip" style="--chip-color: #60a5fa"><span class="game-dot"></span>SimCity 4</div>
         <div class="game-chip" style="--chip-color: #a8a29e"><span class="game-dot"></span>Skyrim (Legendary Edition)</div>
         <div class="game-chip" style="--chip-color: #cbd5e1"><span class="game-dot"></span>Skyrim Special Edition</div>
         <div class="game-chip" style="--chip-color: #ef4444"><span class="game-dot"></span>Slay the Spire</div>
         <div class="game-chip" style="--chip-color: #818cf8"><span class="game-dot"></span>Space Engineers</div>
+        <div class="game-chip" style="--chip-color: #818cf8"><span class="game-dot"></span>Starbound</div>
         <div class="game-chip" style="--chip-color: #818cf8"><span class="game-dot"></span>Starfield</div>
         <div class="game-chip" style="--chip-color: #78716c"><span class="game-dot"></span>Stronghold 2</div>
         <div class="game-chip" style="--chip-color: #ea580c"><span class="game-dot"></span>Stronghold Crusader 2</div>
         <div class="game-chip" style="--chip-color: #ca8a04"><span class="game-dot"></span>Stronghold HD</div>
         <div class="game-chip" style="--chip-color: #d97706"><span class="game-dot"></span>Stronghold: Crusader HD</div>
         <div class="game-chip" style="--chip-color: #22d3ee"><span class="game-dot"></span>Subnautica</div>
+        <div class="game-chip" style="--chip-color: #f97316"><span class="game-dot"></span>Tabletop Simulator</div>
         <div class="game-chip" style="--chip-color: #ea580c"><span class="game-dot"></span>Team Fortress 2</div>
         <div class="game-chip" style="--chip-color: #78716c"><span class="game-dot"></span>The Elder Scrolls III: Morrowind</div>
         <div class="game-chip" style="--chip-color: #fcd34d"><span class="game-dot"></span>The Elder Scrolls IV: Oblivion</div>
@@ -590,6 +611,7 @@
         <div class="game-chip" style="--chip-color: #eab308"><span class="game-dot"></span>TrackMania 2: Stadium</div>
         <div class="game-chip" style="--chip-color: #22c55e"><span class="game-dot"></span>TrackMania Nations Forever</div>
         <div class="game-chip" style="--chip-color: #3b82f6"><span class="game-dot"></span>TrackMania United Forever</div>
+        <div class="game-chip" style="--chip-color: #b91c1c"><span class="game-dot"></span>V Rising</div>
         <div class="game-chip" style="--chip-color: #f97316"><span class="game-dot"></span>Victoria 3</div>
         <div class="game-chip" style="--chip-color: #f59e0b"><span class="game-dot"></span>Vintage Story</div>
         <div class="game-chip" style="--chip-color: #f87171"><span class="game-dot"></span>Warcraft III</div>
@@ -603,11 +625,11 @@
       </div>
       <div class="stats-row">
         <div class="stat">
-          <div class="stat-value">78</div>
+          <div class="stat-value">100</div>
           <div class="stat-label">Games supported</div>
         </div>
         <div class="stat">
-          <div class="stat-value">45</div>
+          <div class="stat-value">67</div>
           <div class="stat-label">Game families</div>
         </div>
         <div class="stat">
@@ -713,6 +735,21 @@
           <div class="feature-icon">&#x2611;&#xFE0F;</div>
           <h3>Selective Sync</h3>
           <p>Pick exactly what syncs. Exclude single files or glob patterns, and hosts can choose which folders to share, like mods but not saves.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F511;</div>
+          <h3>Join Codes</h3>
+          <p>The host shares one short code that includes their addresses, port and PIN. Friends paste it and they're in, even over Tailscale. Reconnecting takes one click.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F3AE;</div>
+          <h3>Game-Aware Syncing</h3>
+          <p>Warns when the game is still running and clears The Sims 4's thumbnail cache after new mods arrive. Sims mods are disabled the way the game actually respects.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F514;</div>
+          <h3>Notifications &amp; Estimates</h3>
+          <p>See the download size and estimated time before you sync, and get a desktop notification when it's done, even when SyncCrate is minimized.</p>
         </div>
       </div>
     </div>

@@ -34,7 +34,11 @@ export default function GameDashboard({ gameId }: Props) {
   const setGamePaths = useAppStore((s) => s.setGamePaths);
   const setPage = useAppStore((s) => s.setPage);
   const activeGame = useAppStore((s) => s.activeGame);
-  const { host, join, connectTo, connectByIp, leave, isLoading } = useSession();
+  const lastHostIp = useAppStore((s) => s.lastHostIp);
+  const lastHostPort = useAppStore((s) => s.lastHostPort);
+  const lastHostName = useAppStore((s) => s.lastHostName);
+  const clearLastHost = useAppStore((s) => s.clearLastHost);
+  const { host, join, connectTo, connectByIp, connectByCode, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, loadingPhase } = useSync();
 
   const gameDef = getGameDef(gameId);
@@ -96,6 +100,21 @@ export default function GameDashboard({ gameId }: Props) {
   const [pinInput, setPinInput] = useState("");
   const [pinPeerId, setPinPeerId] = useState<string | null>(null);
   const [showManualIp, setShowManualIp] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [hostJoinCode, setHostJoinCode] = useState<string | null>(null);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
+
+  // Fetch the join code whenever we start hosting (port/PIN are baked into it).
+  const hostingKey = session?.session_type === "Host" ? `${session.port}:${session.pin ?? ""}` : null;
+  useEffect(() => {
+    if (!hostingKey) {
+      setHostJoinCode(null);
+      return;
+    }
+    let cancelled = false;
+    cmd.getJoinCode().then((c) => { if (!cancelled) setHostJoinCode(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [hostingKey]);
   const [manualIp, setManualIp] = useState("");
   const [manualPort, setManualPort] = useState("9847");
   const [manualPin, setManualPin] = useState("");
@@ -315,6 +334,27 @@ export default function GameDashboard({ gameId }: Props) {
               <h3 className="font-semibold">Join a Session</h3>
             </div>
             <p className="text-txt-dim text-sm mb-4">Connect to a host on your network and sync files.</p>
+            {lastHostIp && lastHostPort && (
+              <div className="mb-3">
+                <button
+                  onClick={() => {
+                    // Prefill Connect by IP so a PIN can be added there if the host requires one
+                    setManualIp(lastHostIp);
+                    setManualPort(String(lastHostPort));
+                    connectByIp(lastHostIp, lastHostPort, hostName.trim() || "Guest", manualPin || undefined);
+                  }}
+                  disabled={isLoading || isConnecting}
+                  className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isConnecting ? "animate-spin" : ""} />
+                  {isConnecting ? "Connecting..." : `Reconnect to ${lastHostName || lastHostIp}`}
+                </button>
+                <p className="text-[11px] text-txt-dim mt-1 flex justify-between gap-2">
+                  <span>Host uses a PIN? Enter it under Connect by IP first.</span>
+                  <button onClick={clearLastHost} className="hover:text-txt shrink-0">Forget</button>
+                </p>
+              </div>
+            )}
             <button
               onClick={() => join(hostName.trim() || "Guest")}
               disabled={isLoading || isConnecting}
@@ -322,6 +362,25 @@ export default function GameDashboard({ gameId }: Props) {
             >
               {isLoading ? "Scanning..." : "Scan for Hosts"}
             </button>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && joinCode.trim()) connectByCode(joinCode, hostName.trim() || "Guest");
+                }}
+                placeholder="Join code (SC-...)"
+                className="flex-1 min-w-0 bg-bg border border-border rounded-lg px-3 py-1.5 text-sm font-mono tracking-wide focus:outline-none focus:border-accent"
+              />
+              <button
+                onClick={() => connectByCode(joinCode, hostName.trim() || "Guest")}
+                disabled={!joinCode.trim() || isLoading || isConnecting}
+                className="shrink-0 bg-accent/20 hover:bg-accent/30 text-accent-light rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Join
+              </button>
+            </div>
             {discoveredPeers.length > 0 && (
               <div className="space-y-2">
                 {discoveredPeers.map((peer) => (
@@ -565,6 +624,22 @@ export default function GameDashboard({ gameId }: Props) {
       )}
 
       {isHost && <FirewallCheck compact />}
+
+      {isHost && hostJoinCode && (
+        <div className="bg-bg-card rounded-xl border border-accent/30 p-3 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-txt-dim">Join code — friends paste this into "Join a Session"{session.pin ? " (includes your PIN)" : ""}:</p>
+            <p className="font-mono text-base font-semibold tracking-wider text-accent-light truncate select-all">{hostJoinCode}</p>
+          </div>
+          <button
+            onClick={() => { navigator.clipboard.writeText(hostJoinCode); setJoinCodeCopied(true); setTimeout(() => setJoinCodeCopied(false), 2000); }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated border border-border hover:border-accent/40 text-sm transition-colors"
+          >
+            {joinCodeCopied ? <Check size={14} className="text-status-green" /> : <Copy size={14} />}
+            {joinCodeCopied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      )}
 
       {isHost && session.host_ips && session.host_ips.length > 0 && (
         <div className="bg-bg-card rounded-xl border border-border p-3">

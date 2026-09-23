@@ -23,3 +23,12 @@ export function formatDateShort(ts: number): string {
     year: "numeric",
   });
 }
+
+/**
+ * Whether a mod is disabled: either moved into a `_Disabled/` folder, or
+ * renamed with a `.disabled` suffix (The Sims 3/4, which load subfolders).
+ */
+export function isDisabledPath(relativePath: string): boolean {
+  const p = relativePath.replace(/\\/g, "/");
+  return p.includes("_Disabled/") || p.toLowerCase().endsWith(".disabled");
+}

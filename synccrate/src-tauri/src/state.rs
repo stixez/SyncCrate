@@ -396,6 +396,9 @@ mod tests {
             icon: String::new(),
             color: String::new(),
             syncable: true,
+            recursive: true,
+            must_contain: None,
+            exclude_files: Vec::new(),
         }
     }
 

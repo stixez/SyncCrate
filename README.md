@@ -25,13 +25,15 @@
 
 - **Peer-to-peer at LAN speed** — Files transfer directly between computers at 100-900 MB/s. No cloud, no uploads, no waiting.
 - **Smart file diffing** — Compares SHA-256 hashes and only transfers what actually changed.
-- **78 games, 45 families** — Sims, WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, Stellaris, Lethal Company, Skyrim, Valheim, Terraria, and many more. Data-driven registry — adding a game is just JSON.
+- **100 games, 67 families** — Sims, WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, Stellaris, Lethal Company, Skyrim, Valheim, Terraria, and many more. Data-driven registry — adding a game is just JSON.
 - **ReShade & GShade for The Sims 4** — Share presets and shaders so everyone's game looks the same. Detected automatically when installed.
 - **Reliable connections** — Finds hosts via mDNS *and* UDP broadcast, tries every network address a host has, and fixes Windows Firewall with one click. No need to run as administrator.
 - **Transfer compression** — zstd compression reduces bandwidth by 50-80% for most mod types. Negotiated automatically between peers.
 - **Multi-peer sessions** — One host, multiple friends. Everyone syncs independently.
 - **Conflict resolution** — Keep yours, use theirs, or keep both — per file.
 - **Mod profiles & auto-backups** — Snapshot your setup, export profiles, share on Discord. Auto-backup before sync or on a schedule with smart pruning.
+- **Join codes** — The host gets a short code (`SC-…`) that contains their addresses, port and PIN. Friends paste it and connect. One click reconnects to your last host.
+- **Game-aware syncing** — Warns when the game is still running, clears The Sims 4's thumbnail cache after new mods arrive, and shows the size and estimated time before you sync. Desktop notifications fire when a sync finishes.
 - **Sync resume** — Interrupted syncs pick up where they left off instead of restarting from scratch.
 - **Privacy-first** — No servers, no accounts, no tracking, no data collection. Nothing leaves your network.
 - **Dangerous file warnings** — Flags potentially risky script files (`.ts4script`, `.lua`, `.jar`, `.dll`) per game before sync.
@@ -66,7 +68,7 @@ No cloud services. No accounts. No file uploads. Files move peer-to-peer at full
 
 ## Supported Games
 
-78 games across 45 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
+100 games across 67 families. Games are defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json) — adding a game requires no code changes. See [Contributing](#contributing).
 
 Auto-detection checks the usual install/save locations, **every Steam library on every drive**, and (for Sims 4 ReShade/GShade) the EA App install path from the registry. You can always set a path manually.
 
@@ -76,7 +78,7 @@ Auto-detection checks the usual install/save locations, **every Steam library on
 | Game | Content Types | Auto-Detect |
 |------|--------------|:-----------:|
 | **The Sims 4** | Script Mods, Save Files, Tray Items, Screenshots | Yes |
-| **The Sims 4 (ReShade)** | ReShade Presets, ReShade Shaders | Yes |
+| **The Sims 4 (ReShade)** | ReShade Presets, ReShade Shaders, ReShade Presets (Bin) | Yes |
 | **The Sims 4 (GShade)** | GShade Presets, GShade Shaders | Yes |
 | **The Sims 3** | Mods & CC, Save Files, Tray Items, Screenshots | Yes |
 | **The Sims 2** | Mods & CC, Neighborhoods, Tray Items, Screenshots | Yes |
@@ -162,49 +164,71 @@ Auto-detection checks the usual install/save locations, **every Steam library on
 </details>
 
 <details>
-<summary><strong>Other Games</strong> — 43 games</summary>
+<summary><strong>Other Games</strong> — 65 games</summary>
 
 | Game | Content Types | Auto-Detect |
 |------|--------------|:-----------:|
 | **7 Days to Die** | Mods, Save Files, Server Configs | Yes |
 | **American Truck Simulator** | Mods, Profiles | Yes |
+| **Among Us** | Plugins (BepInEx), Mod Configs | Yes |
+| **ARK: Survival Evolved** | Mods, Save Files | Yes |
+| **Arma 3** | Missions, MP Missions | Yes |
+| **Assetto Corsa** | Cars, Tracks | Yes |
+| **Balatro** | Mods (Steamodded/Lovely), Save Profile 1, Save Profile 2, Save Profile 3 | Yes |
 | **Baldur's Gate 3** | Mods, Mod Load Order, Save Files | Yes |
+| **Barotrauma** | Local Mods | Yes |
 | **Beat Saber** | Custom Songs, Plugins (BSIPA), Plugin Libraries, Custom Sabers, Mod Configs | Yes |
+| **Blade & Sorcery** | Mods | Yes |
+| **Celeste** | Mods (Everest), Save Files | Yes |
 | **Cities: Skylines** | Mods, Assets, Save Files, Maps | Yes |
 | **Cities: Skylines II** | Local Mods, Save Files, Maps | Yes |
 | **Conan Exiles** | Mods | Yes |
 | **Counter-Strike 2** | Maps, Configs | Yes |
 | **Cyberpunk 2077** | Archive Mods, Redscript Mods, TweakXL Tweaks, Cyber Engine Tweaks Mods, RED4ext Plugins | Yes |
+| **Darkest Dungeon** | Mods | Yes |
 | **Don't Starve** | Mods | Yes |
 | **Don't Starve Together** | Mods | Yes |
+| **Dragon Age: Origins** | Override Mods, AddIns (DAZip), Save Files | Yes |
+| **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs | Yes |
 | **Euro Truck Simulator 2** | Mods, Profiles | Yes |
 | **Factorio** | Mods, Save Files, Scenarios | Yes |
 | **Farming Simulator 22** | Mods | Yes |
 | **Farming Simulator 25** | Mods | Yes |
 | **Garry's Mod** | Addons, Maps, Saves | Yes |
+| **Grand Theft Auto V** | Scripts, OpenIV Mods Folder | Yes |
 | **Hollow Knight** | Mods | Yes |
+| **Kenshi** | Mods, Save Files | Yes |
 | **Kerbal Space Program** | Mods, Save Files, Ship Designs | Yes |
+| **Kingdom Come: Deliverance II** | Mods | Yes |
 | **Left 4 Dead 2** | Addons & Maps, Configs | Yes |
 | **Lethal Company** | Plugins (BepInEx), Mod Configs | Yes |
 | **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs | Yes |
+| **Monster Hunter: World** | nativePC Mods | Yes |
 | **Mount & Blade II: Bannerlord** | Modules | Yes |
 | **Mount & Blade: Warband** | Modules | Yes |
+| **Noita** | Mods | Yes |
 | **Oxygen Not Included** | Local Mods, Save Files | Yes |
 | **Palworld** | Mods | Yes |
 | **Project Zomboid** | Mods, Save Files | Yes |
+| **R.E.P.O.** | Plugins (BepInEx), Mod Configs | Yes |
+| **Red Dead Redemption 2** | Lenny's Mod Loader, Scripts | Yes |
 | **RimWorld** | Mods, Save Files | Yes |
 | **Risk of Rain 2** | Plugins (BepInEx), Mod Configs | Yes |
 | **Satisfactory** | Mods (SMM) | Yes |
 | **Sid Meier's Civilization VI** | Mods, Save Files | Yes |
+| **SimCity 4** | Plugins, Regions | Yes |
 | **Slay the Spire** | Mods, Save Files, Preferences & Profiles | Yes |
 | **Space Engineers** | Mods, Worlds, Blueprints | Yes |
+| **Starbound** | Mods, Characters, Universe | Yes |
 | **Stardew Valley** | SMAPI Mods | Yes |
 | **Subnautica** | Mods (QMods), Save Files | Yes |
+| **Tabletop Simulator** | Save Files, Workshop Mods | Yes |
 | **Team Fortress 2** | Custom (HUDs, Skins, Sounds), Maps, Configs | Yes |
 | **Terraria** | Worlds, Players, tModLoader Mods, Resource Packs | Yes |
 | **The Riftbreaker** | Mods | Yes |
 | **The Witcher 3: Wild Hunt** | Mods, Mod Menus | Yes |
 | **Torchlight II** | Mods | Yes |
+| **V Rising** | Plugins (BepInEx), Mod Configs | Yes |
 | **Valheim** | Plugins (BepInEx), Mod Configs | Yes |
 | **Vintage Story** | Mods, Save Files, Mod Configs | Yes |
 | **Warcraft III** | Custom Maps | Yes |
@@ -243,7 +267,7 @@ Auto-detection checks the usual install/save locations, **every Steam library on
 |-|---------|-------------|
 | **P2P** | Peer-to-peer transfer | Files move directly between computers. Nothing leaves your network. |
 | **Multi** | Multi-peer sessions | One host, multiple clients. Each client syncs independently. |
-| **Games** | Multi-game support | 78 games across 45 families. Data-driven registry — adding games is just JSON. |
+| **Games** | Multi-game support | 100 games across 67 families. Data-driven registry — adding games is just JSON. |
 | **Zstd** | Transfer compression | zstd compression reduces bandwidth 50-80%. Negotiated per-peer, skips already-compressed files. |
 | **Auto** | Auto-backups | Back up before every sync or on a schedule. Old auto-backups pruned automatically. |
 | **Resume** | Sync resume | Interrupted syncs resume from where they left off. Checkpoint verified by plan hash. |
@@ -307,7 +331,7 @@ Both players need to be on the **same network** — same Wi-Fi, same router, or 
 | **Host** | Enter a display name > **Start Hosting** |
 | **Client** | Enter a display name > **Scan for Hosts** > click the host to connect |
 
-If the host doesn't show up, use **Connect by IP** with one of the addresses shown on the host's screen.
+The easiest way to join is the **join code** on the host's screen. Paste it into *Join a Session* and click **Join**. It includes every address the host has, plus the port and the PIN, so it also works over Tailscale/ZeroTier. If you prefer, **Connect by IP** with one of the addresses shown on the host's screen still works. After you've connected once, **Reconnect to …** takes a single click.
 
 **Can't connect?** On the **host** PC, click **Fix Windows Firewall** (shown while hosting, and in *Network Check* on the Dashboard). It asks for administrator permission once, removes any rule blocking SyncCrate, and allows it on Private and Public networks. You don't need to run SyncCrate as administrator. Use **Test** in Network Check to see whether a host is reachable before joining.
 
@@ -335,13 +359,13 @@ Not on the same physical network? SyncCrate works over any virtual LAN network. 
 - **[ZeroTier](https://www.zerotier.com)** — Free for up to 25 devices
 - **Hamachi** or any VPN-based LAN solution
 
-Both players install the virtual LAN tool and join the same network. Auto-discovery usually doesn't cross a VPN, so the client uses **Connect by IP** with the host's VPN address, which the host's screen lists (Tailscale addresses start with `100.`).
+Both players install the virtual LAN tool and join the same network. Auto-discovery usually doesn't cross a VPN, so the client pastes the host's **join code**, which includes the host's VPN address. Connecting by IP with the host's VPN address also works (Tailscale addresses start with `100.`).
 
 ---
 
 ## Mod Enable / Disable
 
-Temporarily disable a mod without deleting it. Click any mod to open its details panel, then hit **Disable** — the file moves to `Mods/_Disabled/` so the game won't load it. Hit **Enable** to move it back. Disabled mods are visually dimmed in the list.
+Temporarily disable a mod without deleting it. Click any mod to open its details panel, then hit **Disable**. For most games the file moves to `Mods/_Disabled/`. The Sims 3 and 4 load mods from subfolders too, so for them the file is renamed to `name.package.disabled` instead, which the game ignores. Hit **Enable** to undo, including for Sims mods disabled by older versions into `_Disabled/`. Disabled mods are dimmed in the list.
 
 ---
 
@@ -450,7 +474,7 @@ Yes. One person hosts, multiple friends join. Each client syncs independently wi
 
 <details>
 <summary><strong>Which games are supported?</strong></summary>
-SyncCrate ships with 78 games across 45 families, including The Sims (plus ReShade/GShade presets for Sims 4), WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, the Paradox grand-strategy games, Skyrim, Valheim, Terraria, and more. Games are defined in a JSON registry — adding new games requires no code changes.
+SyncCrate ships with 100 games across 67 families, including The Sims (plus ReShade/GShade presets for Sims 4), WoW, Minecraft, Baldur's Gate 3, Cyberpunk 2077, Fallout, the Paradox grand-strategy games, Skyrim, Valheim, Terraria, and more. Games are defined in a JSON registry — adding new games requires no code changes.
 </details>
 
 <details>

@@ -309,6 +309,64 @@ pub async fn connect_by_ip(
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
     ip.parse::<std::net::IpAddr>().map_err(|_| "Invalid IP address".to_string())?;
+    start_direct_connection(state.inner(), app, vec![ip.clone()], port, name, pin, ip).await
+}
+
+/// Join using a host's join code (addresses + port + optional PIN in one string).
+#[tauri::command]
+pub async fn connect_by_code(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    code: String,
+    name: String,
+    pin: Option<String>,
+) -> Result<SessionInfo, String> {
+    let name = sanitize_name(&name)?;
+    let info = crate::network::joincode::decode(&code)?;
+    let ranked: Vec<String> = crate::network::netutil::rank_addresses(
+        &info.addresses.iter().map(|a| std::net::IpAddr::V4(*a)).collect::<Vec<_>>(),
+    )
+    .iter()
+    .map(|a| a.to_string())
+    .collect();
+    let label = ranked.first().cloned().unwrap_or_default();
+    // A PIN typed by the user wins over the one embedded in the code (e.g. the
+    // host restarted hosting and got a new PIN but the code was shared earlier).
+    let pin = pin.filter(|p| !p.trim().is_empty()).or(info.pin);
+    start_direct_connection(state.inner(), app, ranked, info.port, name, pin, label).await
+}
+
+/// The host's join code for the current session.
+#[tauri::command]
+pub async fn get_join_code(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+    let (port, pin) = {
+        let app_state = state.lock().await;
+        if app_state.session_type != SessionType::Host {
+            return Err("Join codes are only available while hosting".to_string());
+        }
+        (app_state.session_port, app_state.session_pin.clone())
+    };
+    let addresses: Vec<std::net::Ipv4Addr> = tokio::task::spawn_blocking(crate::network::netutil::host_display_ips)
+        .await
+        .map_err(|e| e.to_string())?
+        .iter()
+        .filter_map(|ip| ip.parse().ok())
+        .collect();
+    crate::network::joincode::encode(&crate::network::joincode::JoinInfo { addresses, port, pin })
+}
+
+/// Shared by Connect-by-IP and join codes: mark the pending client session and
+/// connect in the background (the frontend waits for `peer-connected` /
+/// `connection-failed`).
+async fn start_direct_connection(
+    state: &Arc<Mutex<AppState>>,
+    app: tauri::AppHandle,
+    addresses: Vec<String>,
+    port: u16,
+    name: String,
+    pin: Option<String>,
+    label: String,
+) -> Result<SessionInfo, String> {
     if port < 1024 {
         return Err("Port must be 1024 or higher".to_string());
     }
@@ -319,22 +377,21 @@ pub async fn connect_by_ip(
     }
 
     app_state.session_type = SessionType::Client;
-    app_state.session_name = format!("{}:{}", ip, port);
+    app_state.session_name = format!("{}:{}", label, port);
     app_state.local_display_name = name;
 
     let peer_id = uuid::Uuid::new_v4().to_string();
     app_state.pending_client_peer_id = Some(peer_id.clone());
-    let state_clone = state.inner().clone();
+    let state_clone = state.clone();
     drop(app_state);
 
     let app_handle = app.clone();
-    let connect_ip = ip.clone();
     let connect_peer_id = peer_id.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::network::transfer::connect_to_host(
-            &[connect_ip], port, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
+            &addresses, port, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
         ).await {
-            log::error!("Direct IP connection error: {}", e);
+            log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;
             if clear_failed_client_attempt_if_active(&mut app_state, &connect_peer_id) {
                 let _ = app_handle.emit(
@@ -347,7 +404,7 @@ pub async fn connect_by_ip(
 
     Ok(SessionInfo {
         session_type: SessionType::Client,
-        name: ip,
+        name: label,
         port,
         peer_count: 1,
     })

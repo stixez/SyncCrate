@@ -109,12 +109,33 @@ interface AppState {
   setLastHost: (ip: string, port: number, name: string) => void;
   clearLastHost: () => void;
 
+  // Desktop notifications when the window is in the background (per-user, localStorage)
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (enabled: boolean) => void;
+
   theme: "dark" | "light";
   setTheme: (theme: "dark" | "light") => void;
 
   // Compound navigation helpers
   navigateToGame: (gameId: string, page?: Page) => void;
   navigateToGlobal: (page: Page) => void;
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable — keep the in-memory value only
+  }
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -207,20 +228,27 @@ export const useAppStore = create<AppState>((set) => ({
   modTagFilter: null,
   setModTagFilter: (tag) => set({ modTagFilter: tag }),
 
-  lastHostIp: sessionStorage.getItem("synccrate-last-host-ip"),
-  lastHostPort: Number(sessionStorage.getItem("synccrate-last-host-port")) || null,
-  lastHostName: sessionStorage.getItem("synccrate-last-host-name"),
+  // Persisted in localStorage so "Reconnect to <host>" survives app restarts
+  lastHostIp: readStorage("synccrate-last-host-ip"),
+  lastHostPort: Number(readStorage("synccrate-last-host-port")) || null,
+  lastHostName: readStorage("synccrate-last-host-name"),
   setLastHost: (ip, port, name) => {
-    sessionStorage.setItem("synccrate-last-host-ip", ip);
-    sessionStorage.setItem("synccrate-last-host-port", String(port));
-    sessionStorage.setItem("synccrate-last-host-name", name);
+    writeStorage("synccrate-last-host-ip", ip);
+    writeStorage("synccrate-last-host-port", String(port));
+    writeStorage("synccrate-last-host-name", name);
     set({ lastHostIp: ip, lastHostPort: port, lastHostName: name });
   },
   clearLastHost: () => {
-    sessionStorage.removeItem("synccrate-last-host-ip");
-    sessionStorage.removeItem("synccrate-last-host-port");
-    sessionStorage.removeItem("synccrate-last-host-name");
+    writeStorage("synccrate-last-host-ip", null);
+    writeStorage("synccrate-last-host-port", null);
+    writeStorage("synccrate-last-host-name", null);
     set({ lastHostIp: null, lastHostPort: null, lastHostName: null });
+  },
+
+  notificationsEnabled: readStorage("synccrate-notifications") !== "off",
+  setNotificationsEnabled: (enabled) => {
+    writeStorage("synccrate-notifications", enabled ? "on" : "off");
+    set({ notificationsEnabled: enabled });
   },
 
   theme:

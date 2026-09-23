@@ -3,6 +3,7 @@ import { ArrowUpDown, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react
 import type { SyncPlan } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
+import { gameLabel } from "../lib/games";
 import SyncActionItem from "./SyncActionItem";
 import * as cmd from "../lib/commands";
 
@@ -20,6 +21,14 @@ function formatEta(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
+/** Rough pre-sync duration: "about 30 s" / "about 4 min". */
+function formatEstimate(seconds: number): string {
+  if (seconds < 60) return `about ${Math.max(5, Math.round(seconds / 5) * 5)} s`;
+  if (seconds < 3600) return `about ${Math.round(seconds / 60)} min`;
+  const h = seconds / 3600;
+  return `about ${h < 10 ? h.toFixed(1).replace(/\.0$/, "") : Math.round(h)} h`;
+}
+
 export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerProps) {
   const syncProgress = useAppStore((s) => s.syncProgress);
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
@@ -29,6 +38,25 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
   const [expanded, setExpanded] = useState(false);
   const [quickFilter, setQuickFilter] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(50);
+  const activeGame = useAppStore((s) => s.activeGame);
+  const [gameRunning, setGameRunning] = useState(false);
+  const [typicalSpeed, setTypicalSpeed] = useState<number | null>(null);
+
+  // Warn (don't block) while the game is running: files may be locked or half-loaded.
+  useEffect(() => {
+    let cancelled = false;
+    const check = () =>
+      cmd.checkGameRunning(activeGame)
+        .then((running) => { if (!cancelled) setGameRunning(running); })
+        .catch(() => {});
+    check();
+    const timer = setInterval(check, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [activeGame]);
+
+  useEffect(() => {
+    cmd.getTypicalTransferSpeed().then(setTypicalSpeed).catch(() => {});
+  }, [plan]);
 
   // Reset visible count when plan changes or details expand
   useEffect(() => {
@@ -201,12 +229,25 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
           </span>
         </div>
       )}
+      {gameRunning && (
+        <div className="flex items-center gap-2 mb-2 text-status-yellow text-xs">
+          <AlertTriangle size={14} className="shrink-0" />
+          <span>
+            {gameLabel(activeGame)} is running — close it before syncing so files aren't locked or half-loaded.
+          </span>
+        </div>
+      )}
       <div className="flex items-center gap-4 text-xs text-txt-dim">
         <div className="flex gap-4 flex-1">
           {sendCount > 0 && <span>Upload: {sendCount} files</span>}
           {receiveCount > 0 && <span>Download: {receiveCount} files</span>}
           {conflictCount > 0 && <span className="text-status-red">Conflicts: {conflictCount}</span>}
-          <span>Total: {formatBytes(plan.total_bytes)}</span>
+          <span>
+            Total: {formatBytes(plan.total_bytes)}
+            {typicalSpeed && plan.total_bytes > 0 && !syncProgress
+              ? ` · ${formatEstimate(plan.total_bytes / typicalSpeed)}`
+              : ""}
+          </span>
         </div>
         <button
           onClick={() => setExpanded(!expanded)}

@@ -102,6 +102,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(app_state)
         .setup(|app| {
             // Set up tray icon
@@ -229,6 +230,8 @@ pub fn run() {
             commands::session::start_join,
             commands::session::connect_to_peer,
             commands::session::connect_by_ip,
+            commands::session::connect_by_code,
+            commands::session::get_join_code,
             commands::session::disconnect,
             commands::session::disconnect_peer,
             commands::session::get_session_status,
@@ -278,6 +281,10 @@ pub fn run() {
             commands::sync::set_transfer_speed_limit,
             commands::sync::get_sync_history,
             commands::sync::clear_sync_history,
+            commands::sync::get_typical_transfer_speed,
+            commands::sync::get_clear_cache_after_sync,
+            commands::sync::set_clear_cache_after_sync,
+            commands::game_state::check_game_running,
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,

@@ -40,6 +40,21 @@ pub struct GameDefinition {
     pub version_detection: Option<VersionDetection>,
     #[serde(default)]
     pub path_correction: Option<PathCorrection>,
+    /// Executable names of the running game (e.g. `TS4_x64.exe`), used to warn
+    /// before syncing while the game has files open. Case-insensitive.
+    #[serde(default)]
+    pub process_names: Vec<String>,
+    /// How `toggle_mod` disables a file: `"folder"` (default) moves it into
+    /// `<mods>/_Disabled/`; `"rename"` appends `.disabled` in place. Games that
+    /// load content from nested subfolders (The Sims 3/4) need `"rename"`, or
+    /// "disabled" mods keep loading.
+    #[serde(default)]
+    pub disable_method: Option<String>,
+    /// Files (relative to the game path) deleted after a sync that received
+    /// files, e.g. Sims 4's `localthumbcache.package`, which must be cleared
+    /// after mods change.
+    #[serde(default)]
+    pub post_sync_delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +140,17 @@ pub struct ContentType {
     pub color: String,
     #[serde(default = "default_true")]
     pub syncable: bool,
+    /// Scan subfolders (default). `false` only looks at files directly in
+    /// `folder`, which is the only case where `folder` may be `"."`.
+    #[serde(default = "default_true")]
+    pub recursive: bool,
+    /// Only include files whose first 64 KB contain this text (e.g. ReShade
+    /// presets contain `Techniques=`), so loose files are matched safely.
+    #[serde(default)]
+    pub must_contain: Option<String>,
+    /// File names (case-insensitive) never included, e.g. `ReShade.ini`.
+    #[serde(default)]
+    pub exclude_files: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -222,9 +248,14 @@ mod tests {
             assert!(det.strategies.iter().any(|s| matches!(s, DetectionStrategy::SteamLibrary { .. })));
             assert!(det.strategies.iter().any(|s| matches!(s, DetectionStrategy::WindowsRegistry { .. })));
             let ids: Vec<&str> = g.content_types.iter().map(|c| c.id.as_str()).collect();
-            assert_eq!(ids, cts);
+            assert_eq!(&ids[..2], &cts[..]);
+            // A "." folder is only allowed for non-recursive (loose-file) types.
+            assert!(g.content_types.iter().all(|c| !c.folder.is_empty() && (c.folder != "." || !c.recursive)));
             // The machine-specific config must never be synced.
-            assert!(g.content_types.iter().all(|c| !c.folder.is_empty() && c.folder != "."));
+            for c in g.content_types.iter().filter(|c| c.folder == ".") {
+                assert!(c.exclude_files.iter().any(|f| f.eq_ignore_ascii_case(marker)));
+                assert!(c.must_contain.is_some());
+            }
         }
     }
 
@@ -242,8 +273,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 77,
-            "expected at least 77 games, found {}",
+            registry.games.len() >= 100,
+            "expected at least 100 games, found {}",
             registry.games.len()
         );
 
@@ -257,9 +288,32 @@ mod tests {
             "civilization_6",
             "lethal_company",
             "vintage_story",
+            "gta5",
+            "among_us",
+            "balatro",
+            "tabletop_simulator",
+            "dragon_age_origins",
         ] {
             assert!(ids.contains(&id), "missing game id {id}");
         }
+
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len(), "duplicate game ids in registry");
+
+        let sims4 = registry.games.iter().find(|g| g.id == "sims4").expect("sims4");
+        assert_eq!(sims4.disable_method.as_deref(), Some("rename"));
+        assert!(sims4.post_sync_delete.iter().any(|f| f == "localthumbcache.package"));
+        let sims3 = registry.games.iter().find(|g| g.id == "sims3").expect("sims3");
+        assert_eq!(sims3.disable_method.as_deref(), Some("rename"));
+
+        let with_procs = registry
+            .games
+            .iter()
+            .filter(|g| g.process_names.iter().any(|p| !p.trim().is_empty()))
+            .count();
+        assert!(with_procs >= 60, "only {with_procs} games have process_names");
 
         for game in &registry.games {
             assert!(!game.content_types.is_empty(), "{} has no content types", game.id);

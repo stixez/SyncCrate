@@ -50,6 +50,16 @@ export async function disconnect(): Promise<void> {
   return invoke("disconnect");
 }
 
+/** Join a host using the join code shown on their screen (addresses + port + PIN). */
+export async function connectByCode(code: string, name: string, pin?: string): Promise<SessionInfo> {
+  return invoke("connect_by_code", { code, name, pin });
+}
+
+/** The host's join code for the current session. */
+export async function getJoinCode(): Promise<string> {
+  return invoke("get_join_code");
+}
+
 export async function getSessionStatus(): Promise<SessionStatus> {
   return invoke("get_session_status");
 }
@@ -326,6 +336,25 @@ export async function getSyncHistory(): Promise<SyncHistoryEntry[]> {
 
 export async function clearSyncHistory(): Promise<void> {
   return invoke("clear_sync_history");
+}
+
+/** Median bytes/sec of recent syncs, or null when there is no usable history. */
+export async function getTypicalTransferSpeed(): Promise<number | null> {
+  return invoke("get_typical_transfer_speed");
+}
+
+export async function getClearCacheAfterSync(): Promise<boolean> {
+  return invoke("get_clear_cache_after_sync");
+}
+
+export async function setClearCacheAfterSync(enabled: boolean): Promise<void> {
+  return invoke("set_clear_cache_after_sync", { enabled });
+}
+
+// --- Game state ---
+
+export async function checkGameRunning(game?: string): Promise<boolean> {
+  return invoke("check_game_running", { game: game ?? null });
 }
 
 // --- Packs ---

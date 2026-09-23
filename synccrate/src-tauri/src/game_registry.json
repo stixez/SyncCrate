@@ -101,7 +101,16 @@
           "Screenshots",
           "Downloads"
         ]
-      }
+      },
+      "process_names": [
+        "TS4_x64.exe",
+        "TS4.exe",
+        "The Sims 4"
+      ],
+      "disable_method": "rename",
+      "post_sync_delete": [
+        "localthumbcache.package"
+      ]
     },
     {
       "id": "sims4-reshade",
@@ -190,6 +199,27 @@
           ],
           "file_type": "ReShadeShader",
           "syncable": true
+        },
+        {
+          "id": "reshade_bin_presets",
+          "label": "ReShade Presets (Bin)",
+          "icon": "sun",
+          "color": "text-pink-400",
+          "folder": ".",
+          "recursive": false,
+          "extensions": [
+            "ini"
+          ],
+          "must_contain": "Techniques=",
+          "exclude_files": [
+            "ReShade.ini",
+            "GShade.ini",
+            "dxgi.ini",
+            "d3d11.ini",
+            "opengl32.ini"
+          ],
+          "file_type": "ReShadePreset",
+          "syncable": true
         }
       ],
       "path_correction": {
@@ -197,7 +227,12 @@
           "reshade-presets",
           "reshade-shaders"
         ]
-      }
+      },
+      "process_names": [
+        "TS4_x64.exe",
+        "TS4.exe",
+        "The Sims 4"
+      ]
     },
     {
       "id": "sims4-gshade",
@@ -294,7 +329,12 @@
           "gshade-presets",
           "gshade-shaders"
         ]
-      }
+      },
+      "process_names": [
+        "TS4_x64.exe",
+        "TS4.exe",
+        "The Sims 4"
+      ]
     },
     {
       "id": "sims3",
@@ -390,7 +430,13 @@
           "Screenshots",
           "Downloads"
         ]
-      }
+      },
+      "process_names": [
+        "TS3W.exe",
+        "TS3.exe",
+        "The Sims 3"
+      ],
+      "disable_method": "rename"
     },
     {
       "id": "sims2",
@@ -485,7 +531,12 @@
           "Screenshots",
           "Downloads"
         ]
-      }
+      },
+      "process_names": [
+        "Sims2EP9.exe",
+        "Sims2RPC.exe",
+        "Sims2.exe"
+      ]
     },
     {
       "id": "wow_retail",
@@ -571,7 +622,11 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "Wow.exe",
+        "World of Warcraft"
+      ]
     },
     {
       "id": "wow_classic",
@@ -655,7 +710,11 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "WowClassic.exe",
+        "World of Warcraft Classic"
+      ]
     },
     {
       "id": "wow_classic_era",
@@ -737,7 +796,11 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "WowClassic.exe",
+        "World of Warcraft Classic"
+      ]
     },
     {
       "id": "wow_wotlk",
@@ -800,7 +863,10 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "Wow.exe"
+      ]
     },
     {
       "id": "wow_tbc",
@@ -863,7 +929,10 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "Wow.exe"
+      ]
     },
     {
       "id": "wow_vanilla",
@@ -926,7 +995,10 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "Wow.exe"
+      ]
     },
     {
       "id": "wow_custom",
@@ -989,7 +1061,10 @@
         "nested_corrections": {
           "AddOns": 2
         }
-      }
+      },
+      "process_names": [
+        "Wow.exe"
+      ]
     },
     {
       "id": "warcraft3",
@@ -1053,7 +1128,12 @@
         "known_subfolders": [
           "Maps"
         ]
-      }
+      },
+      "process_names": [
+        "Warcraft III.exe",
+        "war3.exe",
+        "Frozen Throne.exe"
+      ]
     },
     {
       "id": "minecraft_java",
@@ -1198,7 +1278,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "cs2.exe",
+        "cs2"
+      ]
     },
     {
       "id": "gmod",
@@ -1266,6 +1350,9 @@
       ],
       "dangerous_script_extensions": [
         "lua"
+      ],
+      "process_names": [
+        "gmod.exe"
       ]
     },
     {
@@ -1314,6 +1401,12 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "Stardew Valley.exe",
+        "StardewModdingAPI.exe",
+        "StardewValley",
+        "Stardew Valley"
       ]
     },
     {
@@ -1379,6 +1472,10 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "valheim.exe",
+        "valheim.x86_64"
       ]
     },
     {
@@ -1472,6 +1569,11 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "Terraria.exe",
+        "tModLoader.exe",
+        "Terraria"
       ]
     },
     {
@@ -1520,7 +1622,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "CoDSP.exe",
+        "CoDMP.exe"
+      ]
     },
     {
       "id": "cod2",
@@ -1569,7 +1675,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "CoD2SP_s.exe",
+        "CoD2MP_s.exe"
+      ]
     },
     {
       "id": "cod4",
@@ -1628,7 +1738,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "iw3sp.exe",
+        "iw3mp.exe"
+      ]
     },
     {
       "id": "stronghold_hd",
@@ -1677,7 +1791,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Stronghold.exe"
+      ]
     },
     {
       "id": "stronghold_crusader_hd",
@@ -1726,7 +1843,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Stronghold Crusader.exe"
+      ]
     },
     {
       "id": "stronghold_2",
@@ -1772,7 +1892,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Stronghold2.exe"
+      ]
     },
     {
       "id": "stronghold_crusader_2",
@@ -1888,6 +2011,9 @@
       ],
       "dangerous_script_extensions": [
         "cs"
+      ],
+      "process_names": [
+        "SpaceEngineers.exe"
       ]
     },
     {
@@ -1953,7 +2079,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "TmForever.exe"
+      ]
     },
     {
       "id": "tmuf",
@@ -2018,7 +2147,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "TmForever.exe"
+      ]
     },
     {
       "id": "tm2_stadium",
@@ -2083,7 +2215,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "ManiaPlanet.exe"
+      ]
     },
     {
       "id": "trackmania2020",
@@ -2148,7 +2283,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Trackmania.exe"
+      ]
     },
     {
       "id": "torchlight2",
@@ -2198,7 +2336,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Torchlight2.exe"
+      ]
     },
     {
       "id": "riftbreaker",
@@ -2292,7 +2433,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "ConanSandbox.exe"
+      ]
     },
     {
       "id": "dst",
@@ -2343,6 +2487,12 @@
       ],
       "dangerous_script_extensions": [
         "lua"
+      ],
+      "process_names": [
+        "dontstarve_steam_x64.exe",
+        "dontstarve_steam.exe",
+        "dontstarve_rail.exe",
+        "dontstarve_steam_x64"
       ]
     },
     {
@@ -2393,6 +2543,11 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "FactoryGameSteam-Win64-Shipping.exe",
+        "FactoryGameEGS-Win64-Shipping.exe",
+        "FactoryGame-Win64-Shipping.exe"
       ]
     },
     {
@@ -2459,6 +2614,11 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "RimWorldWin64.exe",
+        "RimWorldWin.exe",
+        "RimWorldLinux"
       ]
     },
     {
@@ -2547,6 +2707,10 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "Cities.exe",
+        "Cities.x64"
       ]
     },
     {
@@ -2615,7 +2779,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "eurotrucks2.exe",
+        "eurotrucks2"
+      ]
     },
     {
       "id": "factorio",
@@ -2687,6 +2855,10 @@
       ],
       "dangerous_script_extensions": [
         "lua"
+      ],
+      "process_names": [
+        "factorio.exe",
+        "factorio"
       ]
     },
     {
@@ -2736,7 +2908,11 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Palworld.exe",
+        "Palworld-Win64-Shipping.exe"
+      ]
     },
     {
       "id": "l4d2",
@@ -2797,7 +2973,10 @@
           "syncable": true
         }
       ],
-      "dangerous_script_extensions": []
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "left4dead2.exe"
+      ]
     },
     {
       "id": "subnautica",
@@ -2861,6 +3040,9 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "Subnautica.exe"
       ]
     },
     {
@@ -2939,6 +3121,11 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "7DaysToDie.exe",
+        "7DaysToDie_EAC.exe",
+        "7DaysToDie.x86_64"
       ]
     },
     {
@@ -3021,6 +3208,11 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "KSP_x64.exe",
+        "KSP.exe",
+        "KSP.x86_64"
       ]
     },
     {
@@ -3084,6 +3276,10 @@
       "dangerous_script_extensions": [
         "lua",
         "dll"
+      ],
+      "process_names": [
+        "ProjectZomboid64.exe",
+        "ProjectZomboid32.exe"
       ]
     },
     {
@@ -3142,6 +3338,10 @@
       "dangerous_script_extensions": [
         "dll",
         "pex"
+      ],
+      "process_names": [
+        "SkyrimSE.exe",
+        "skse64_loader.exe"
       ]
     },
     {
@@ -3196,6 +3396,10 @@
       ],
       "dangerous_script_extensions": [
         "dll"
+      ],
+      "process_names": [
+        "Bannerlord.exe",
+        "TaleWorlds.MountAndBlade.Launcher.exe"
       ]
     },
     {
@@ -3278,7 +3482,12 @@
           "Mods",
           "PlayerProfiles"
         ]
-      }
+      },
+      "process_names": [
+        "bg3.exe",
+        "bg3_dx11.exe",
+        "Baldur's Gate 3"
+      ]
     },
     {
       "id": "fallout4",
@@ -3351,7 +3560,11 @@
         "known_subfolders": [
           "Data"
         ]
-      }
+      },
+      "process_names": [
+        "Fallout4.exe",
+        "f4se_loader.exe"
+      ]
     },
     {
       "id": "fallout_new_vegas",
@@ -3424,7 +3637,11 @@
         "known_subfolders": [
           "Data"
         ]
-      }
+      },
+      "process_names": [
+        "FalloutNV.exe",
+        "nvse_loader.exe"
+      ]
     },
     {
       "id": "skyrim_le",
@@ -3483,7 +3700,11 @@
         "known_subfolders": [
           "Data"
         ]
-      }
+      },
+      "process_names": [
+        "TESV.exe",
+        "skse_loader.exe"
+      ]
     },
     {
       "id": "oblivion",
@@ -3553,7 +3774,11 @@
         "known_subfolders": [
           "Data"
         ]
-      }
+      },
+      "process_names": [
+        "Oblivion.exe",
+        "obse_loader.exe"
+      ]
     },
     {
       "id": "morrowind",
@@ -3621,7 +3846,12 @@
         "known_subfolders": [
           "Data Files"
         ]
-      }
+      },
+      "process_names": [
+        "Morrowind.exe",
+        "openmw.exe",
+        "openmw"
+      ]
     },
     {
       "id": "witcher3",
@@ -3695,7 +3925,10 @@
           "bin",
           "mods"
         ]
-      }
+      },
+      "process_names": [
+        "witcher3.exe"
+      ]
     },
     {
       "id": "cyberpunk2077",
@@ -3816,7 +4049,10 @@
           "r6",
           "red4ext"
         ]
-      }
+      },
+      "process_names": [
+        "Cyberpunk2077.exe"
+      ]
     },
     {
       "id": "starfield",
@@ -3873,7 +4109,11 @@
         "known_subfolders": [
           "Data"
         ]
-      }
+      },
+      "process_names": [
+        "Starfield.exe",
+        "sfse_loader.exe"
+      ]
     },
     {
       "id": "hollow_knight",
@@ -3938,7 +4178,11 @@
         "known_subfolders": [
           "hollow_knight_Data"
         ]
-      }
+      },
+      "process_names": [
+        "hollow_knight.exe",
+        "hollow_knight.x86_64"
+      ]
     },
     {
       "id": "dont_starve",
@@ -3992,7 +4236,11 @@
         "known_subfolders": [
           "mods"
         ]
-      }
+      },
+      "process_names": [
+        "dontstarve_steam.exe",
+        "dontstarve_steam"
+      ]
     },
     {
       "id": "mount_blade_warband",
@@ -4046,7 +4294,10 @@
         "known_subfolders": [
           "Modules"
         ]
-      }
+      },
+      "process_names": [
+        "mb_warband.exe"
+      ]
     },
     {
       "id": "american_truck_simulator",
@@ -4120,7 +4371,11 @@
           "mod",
           "profiles"
         ]
-      }
+      },
+      "process_names": [
+        "amtrucks.exe",
+        "amtrucks"
+      ]
     },
     {
       "id": "farming_simulator_22",
@@ -4178,7 +4433,11 @@
         "known_subfolders": [
           "mods"
         ]
-      }
+      },
+      "process_names": [
+        "FarmingSimulator2022.exe",
+        "FarmingSimulator2022Game.exe"
+      ]
     },
     {
       "id": "farming_simulator_25",
@@ -4236,7 +4495,11 @@
         "known_subfolders": [
           "mods"
         ]
-      }
+      },
+      "process_names": [
+        "FarmingSimulator2025.exe",
+        "FarmingSimulator2025Game.exe"
+      ]
     },
     {
       "id": "cities_skylines_2",
@@ -4314,7 +4577,10 @@
           "Mods",
           "Saves"
         ]
-      }
+      },
+      "process_names": [
+        "Cities2.exe"
+      ]
     },
     {
       "id": "crusader_kings_3",
@@ -4386,7 +4652,11 @@
           "mod",
           "save games"
         ]
-      }
+      },
+      "process_names": [
+        "ck3.exe",
+        "ck3"
+      ]
     },
     {
       "id": "europa_universalis_4",
@@ -4458,7 +4728,11 @@
           "mod",
           "save games"
         ]
-      }
+      },
+      "process_names": [
+        "eu4.exe",
+        "eu4"
+      ]
     },
     {
       "id": "hearts_of_iron_4",
@@ -4530,7 +4804,11 @@
           "mod",
           "save games"
         ]
-      }
+      },
+      "process_names": [
+        "hoi4.exe",
+        "hoi4"
+      ]
     },
     {
       "id": "stellaris",
@@ -4602,7 +4880,11 @@
           "mod",
           "save games"
         ]
-      }
+      },
+      "process_names": [
+        "stellaris.exe",
+        "stellaris"
+      ]
     },
     {
       "id": "victoria_3",
@@ -4674,7 +4956,11 @@
           "mod",
           "save games"
         ]
-      }
+      },
+      "process_names": [
+        "victoria3.exe",
+        "victoria3"
+      ]
     },
     {
       "id": "xcom2",
@@ -4728,7 +5014,10 @@
           "XCom2-WarOfTheChosen",
           "XComGame"
         ]
-      }
+      },
+      "process_names": [
+        "XCom2.exe"
+      ]
     },
     {
       "id": "civilization_6",
@@ -4800,7 +5089,11 @@
           "Mods",
           "Saves"
         ]
-      }
+      },
+      "process_names": [
+        "CivilizationVI.exe",
+        "CivilizationVI_DX12.exe"
+      ]
     },
     {
       "id": "beat_saber",
@@ -4914,7 +5207,10 @@
           "Plugins",
           "UserData"
         ]
-      }
+      },
+      "process_names": [
+        "Beat Saber.exe"
+      ]
     },
     {
       "id": "tf2",
@@ -4985,7 +5281,11 @@
           "custom",
           "maps"
         ]
-      }
+      },
+      "process_names": [
+        "tf_win64.exe",
+        "tf.exe"
+      ]
     },
     {
       "id": "risk_of_rain_2",
@@ -5051,7 +5351,10 @@
         "known_subfolders": [
           "BepInEx"
         ]
-      }
+      },
+      "process_names": [
+        "Risk of Rain 2.exe"
+      ]
     },
     {
       "id": "lethal_company",
@@ -5118,7 +5421,10 @@
         "known_subfolders": [
           "BepInEx"
         ]
-      }
+      },
+      "process_names": [
+        "Lethal Company.exe"
+      ]
     },
     {
       "id": "oxygen_not_included",
@@ -5192,7 +5498,10 @@
           "mods",
           "save_files"
         ]
-      }
+      },
+      "process_names": [
+        "OxygenNotIncluded.exe"
+      ]
     },
     {
       "id": "slay_the_spire",
@@ -5267,7 +5576,10 @@
           "preferences",
           "saves"
         ]
-      }
+      },
+      "process_names": [
+        "SlayTheSpire.exe"
+      ]
     },
     {
       "id": "vintage_story",
@@ -5354,7 +5666,1539 @@
           "Mods",
           "Saves"
         ]
-      }
+      },
+      "process_names": [
+        "Vintagestory.exe",
+        "Vintagestory"
+      ]
+    },
+    {
+      "id": "gta5",
+      "label": "Grand Theft Auto V",
+      "family": "gta",
+      "icon": "target",
+      "color": "text-green-500",
+      "primary_color": "#22c55e",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Grand Theft Auto V",
+              "Grand Theft Auto V Enhanced"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
+                "C:\\Program Files\\Epic Games\\GTAV"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "x64"
+        ],
+        "auto_create_dirs": [
+          "scripts"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "scripts",
+          "label": "Scripts",
+          "icon": "package",
+          "color": "text-green-500",
+          "folder": "scripts",
+          "extensions": [
+            "dll",
+            "cs",
+            "vb",
+            "lua",
+            "ini",
+            "xml",
+            "json"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "mods",
+          "label": "OpenIV Mods Folder",
+          "icon": "layers",
+          "color": "text-green-500",
+          "folder": "mods",
+          "extensions": [
+            "rpf"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "asi",
+        "cs",
+        "vb",
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "mods",
+          "scripts"
+        ]
+      },
+      "process_names": [
+        "GTA5.exe",
+        "GTA5_Enhanced.exe",
+        "PlayGTAV.exe"
+      ]
+    },
+    {
+      "id": "among_us",
+      "label": "Among Us",
+      "family": "amongus",
+      "icon": "rocket",
+      "color": "text-red-500",
+      "primary_color": "#ef4444",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Among Us"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-red-500",
+          "folder": "BepInEx/plugins",
+          "extensions": [
+            "dll",
+            "json",
+            "txt",
+            "md",
+            "png"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      },
+      "process_names": [
+        "Among Us.exe"
+      ]
+    },
+    {
+      "id": "rdr2",
+      "label": "Red Dead Redemption 2",
+      "family": "rdr",
+      "icon": "crosshair",
+      "color": "text-red-600",
+      "primary_color": "#dc2626",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Red Dead Redemption 2"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files\\Rockstar Games\\Red Dead Redemption 2",
+                "C:\\Program Files\\Epic Games\\RedDeadRedemption2"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "x64"
+        ],
+        "auto_create_dirs": [
+          "lml"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "lml",
+          "label": "Lenny's Mod Loader",
+          "icon": "package",
+          "color": "text-red-600",
+          "folder": "lml",
+          "extensions": [
+            "xml",
+            "ymt",
+            "ytd",
+            "ydr",
+            "meta",
+            "dat",
+            "ini"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "scripts",
+          "label": "Scripts",
+          "icon": "layers",
+          "color": "text-red-600",
+          "folder": "scripts",
+          "extensions": [
+            "dll",
+            "asi",
+            "ini",
+            "lua"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "asi",
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "lml",
+          "scripts"
+        ]
+      },
+      "process_names": [
+        "RDR2.exe",
+        "PlayRDR2.exe"
+      ]
+    },
+    {
+      "id": "balatro",
+      "label": "Balatro",
+      "family": "balatro",
+      "icon": "sparkles",
+      "color": "text-rose-500",
+      "primary_color": "#f43f5e",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "%APPDATA%\\Balatro"
+              ],
+              "macos": [
+                "~/Library/Application Support/Balatro"
+              ],
+              "linux": [
+                "~/.local/share/Steam/steamapps/compatdata/2379780/pfx/drive_c/users/steamuser/AppData/Roaming/Balatro"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods",
+          "1"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (Steamodded/Lovely)",
+          "icon": "package",
+          "color": "text-rose-500",
+          "folder": "Mods",
+          "extensions": [
+            "lua",
+            "json",
+            "toml",
+            "png",
+            "txt",
+            "md"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "profile1",
+          "label": "Save Profile 1",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "1",
+          "extensions": [
+            "jkr"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "profile2",
+          "label": "Save Profile 2",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "2",
+          "extensions": [
+            "jkr"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "profile3",
+          "label": "Save Profile 3",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "3",
+          "extensions": [
+            "jkr"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "1",
+          "2",
+          "3",
+          "Mods"
+        ]
+      },
+      "process_names": [
+        "Balatro.exe",
+        "Balatro"
+      ]
+    },
+    {
+      "id": "arma3",
+      "label": "Arma 3",
+      "family": "arma",
+      "icon": "crosshair",
+      "color": "text-lime-600",
+      "primary_color": "#65a30d",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "",
+            "folders": [
+              "Arma 3"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "missions",
+          "mpmissions"
+        ],
+        "auto_create_dirs": [
+          "missions",
+          "mpmissions"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "missions",
+          "label": "Missions",
+          "icon": "map",
+          "color": "text-sky-400",
+          "folder": "missions",
+          "extensions": [
+            "pbo",
+            "sqm",
+            "sqf",
+            "hpp",
+            "ext"
+          ],
+          "file_type": "Map",
+          "syncable": true
+        },
+        {
+          "id": "mpmissions",
+          "label": "MP Missions",
+          "icon": "map",
+          "color": "text-sky-400",
+          "folder": "mpmissions",
+          "extensions": [
+            "pbo",
+            "sqm",
+            "sqf",
+            "hpp",
+            "ext"
+          ],
+          "file_type": "Map",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "sqf"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "missions",
+          "mpmissions"
+        ]
+      },
+      "process_names": [
+        "arma3_x64.exe",
+        "arma3.exe"
+      ]
+    },
+    {
+      "id": "tabletop_simulator",
+      "label": "Tabletop Simulator",
+      "family": "tts",
+      "icon": "box",
+      "color": "text-orange-500",
+      "primary_color": "#f97316",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "My Games",
+            "folders": [
+              "Tabletop Simulator"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "macos": [
+                "~/Library/Tabletop Simulator"
+              ],
+              "linux": [
+                "~/.local/share/Tabletop Simulator"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Saves",
+          "Mods"
+        ],
+        "auto_create_dirs": [
+          "Saves"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Saves",
+          "extensions": [
+            "json",
+            "png",
+            "bson"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "workshop",
+          "label": "Workshop Mods",
+          "icon": "package",
+          "color": "text-orange-500",
+          "folder": "Mods/Workshop",
+          "extensions": [
+            "json",
+            "png",
+            "bson"
+          ],
+          "file_type": "CustomContent",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "Mods",
+          "Saves"
+        ]
+      },
+      "process_names": [
+        "Tabletop Simulator.exe",
+        "Tabletop Simulator"
+      ]
+    },
+    {
+      "id": "monster_hunter_world",
+      "label": "Monster Hunter: World",
+      "family": "monsterhunter",
+      "icon": "swords",
+      "color": "text-amber-600",
+      "primary_color": "#d97706",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Monster Hunter World"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "nativePC"
+        ],
+        "auto_create_dirs": [
+          "nativePC"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "nativepc",
+          "label": "nativePC Mods",
+          "icon": "package",
+          "color": "text-amber-600",
+          "folder": "nativePC",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "nativePC"
+        ]
+      },
+      "process_names": [
+        "MonsterHunterWorld.exe"
+      ]
+    },
+    {
+      "id": "ark_survival_evolved",
+      "label": "ARK: Survival Evolved",
+      "family": "ark",
+      "icon": "paw-print",
+      "color": "text-cyan-600",
+      "primary_color": "#0891b2",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "ARK"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "ShooterGame"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-cyan-600",
+          "folder": "ShooterGame/Content/Mods",
+          "extensions": [
+            "mod",
+            "uasset",
+            "ubulk",
+            "umap",
+            "info"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "ShooterGame/Saved/SavedArksLocal",
+          "extensions": [
+            "ark",
+            "arkprofile",
+            "arktribe"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "path_correction": {
+        "known_subfolders": [
+          "ShooterGame"
+        ]
+      },
+      "process_names": [
+        "ShooterGame.exe"
+      ]
+    },
+    {
+      "id": "assetto_corsa",
+      "label": "Assetto Corsa",
+      "family": "assettocorsa",
+      "icon": "flag",
+      "color": "text-red-500",
+      "primary_color": "#ef4444",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "assettocorsa"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "content"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "cars",
+          "label": "Cars",
+          "icon": "package",
+          "color": "text-red-500",
+          "folder": "content/cars",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "tracks",
+          "label": "Tracks",
+          "icon": "map",
+          "color": "text-sky-400",
+          "folder": "content/tracks",
+          "extensions": [],
+          "file_type": "Map",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "py"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "content"
+        ]
+      },
+      "process_names": [
+        "acs.exe",
+        "AssettoCorsa.exe",
+        "Content Manager.exe"
+      ]
+    },
+    {
+      "id": "kingdom_come_deliverance_2",
+      "label": "Kingdom Come: Deliverance II",
+      "family": "kcd",
+      "icon": "shield",
+      "color": "text-amber-700",
+      "primary_color": "#b45309",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "KingdomComeDeliverance2",
+              "Kingdom Come Deliverance II"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-amber-700",
+          "folder": "Mods",
+          "extensions": [
+            "pak",
+            "xml",
+            "manifest",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "path_correction": {
+        "known_subfolders": [
+          "Mods"
+        ]
+      },
+      "process_names": [
+        "KingdomCome.exe"
+      ]
+    },
+    {
+      "id": "repo",
+      "label": "R.E.P.O.",
+      "family": "repo",
+      "icon": "box",
+      "color": "text-yellow-400",
+      "primary_color": "#facc15",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "REPO"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-yellow-400",
+          "folder": "BepInEx/plugins",
+          "extensions": [
+            "dll",
+            "json",
+            "txt",
+            "md",
+            "png"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      },
+      "process_names": [
+        "REPO.exe"
+      ]
+    },
+    {
+      "id": "v_rising",
+      "label": "V Rising",
+      "family": "vrising",
+      "icon": "castle",
+      "color": "text-red-700",
+      "primary_color": "#b91c1c",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "VRising"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-red-700",
+          "folder": "BepInEx/plugins",
+          "extensions": [
+            "dll",
+            "json",
+            "txt",
+            "md",
+            "png"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      },
+      "process_names": [
+        "VRising.exe"
+      ]
+    },
+    {
+      "id": "dyson_sphere_program",
+      "label": "Dyson Sphere Program",
+      "family": "dsp",
+      "icon": "factory",
+      "color": "text-sky-500",
+      "primary_color": "#0ea5e9",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Dyson Sphere Program"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-sky-500",
+          "folder": "BepInEx/plugins",
+          "extensions": [
+            "dll",
+            "json",
+            "txt",
+            "md",
+            "png"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      },
+      "process_names": [
+        "DSPGAME.exe"
+      ]
+    },
+    {
+      "id": "celeste",
+      "label": "Celeste",
+      "family": "celeste",
+      "icon": "flag",
+      "color": "text-pink-500",
+      "primary_color": "#ec4899",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Celeste"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods",
+          "Saves"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (Everest)",
+          "icon": "package",
+          "color": "text-pink-500",
+          "folder": "Mods",
+          "extensions": [
+            "zip",
+            "yaml",
+            "bin"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Saves",
+          "extensions": [
+            "celeste"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "Mods",
+          "Saves"
+        ]
+      },
+      "process_names": [
+        "Celeste.exe",
+        "Celeste"
+      ]
+    },
+    {
+      "id": "darkest_dungeon",
+      "label": "Darkest Dungeon",
+      "family": "darkestdungeon",
+      "icon": "skull",
+      "color": "text-red-800",
+      "primary_color": "#991b1b",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "DarkestDungeon"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mods"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-red-800",
+          "folder": "mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "path_correction": {
+        "known_subfolders": [
+          "mods"
+        ]
+      },
+      "process_names": [
+        "Darkest.exe",
+        "darkest.bin.x86_64"
+      ]
+    },
+    {
+      "id": "barotrauma",
+      "label": "Barotrauma",
+      "family": "barotrauma",
+      "icon": "waves",
+      "color": "text-teal-500",
+      "primary_color": "#14b8a6",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Barotrauma"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "LocalMods"
+        ],
+        "auto_create_dirs": [
+          "LocalMods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "localmods",
+          "label": "Local Mods",
+          "icon": "package",
+          "color": "text-teal-500",
+          "folder": "LocalMods",
+          "extensions": [
+            "xml",
+            "sub",
+            "png",
+            "ogg",
+            "lua",
+            "cs"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "cs",
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "LocalMods"
+        ]
+      },
+      "process_names": [
+        "Barotrauma.exe",
+        "Barotrauma"
+      ]
+    },
+    {
+      "id": "kenshi",
+      "label": "Kenshi",
+      "family": "kenshi",
+      "icon": "swords",
+      "color": "text-stone-400",
+      "primary_color": "#a8a29e",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Kenshi"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mods",
+          "save"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-stone-400",
+          "folder": "mods",
+          "extensions": [
+            "mod",
+            "info",
+            "img"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "save",
+          "extensions": [],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "path_correction": {
+        "known_subfolders": [
+          "mods",
+          "save"
+        ]
+      },
+      "process_names": [
+        "kenshi_x64.exe",
+        "kenshi_GOG_x64.exe"
+      ]
+    },
+    {
+      "id": "starbound",
+      "label": "Starbound",
+      "family": "starbound",
+      "icon": "rocket",
+      "color": "text-indigo-400",
+      "primary_color": "#818cf8",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Starbound"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mods",
+          "storage"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-indigo-400",
+          "folder": "mods",
+          "extensions": [
+            "pak",
+            "modpak"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "characters",
+          "label": "Characters",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "storage/player",
+          "extensions": [
+            "player",
+            "metadata",
+            "shipworld"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "universe",
+          "label": "Universe",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "storage/universe",
+          "extensions": [
+            "world",
+            "system",
+            "dat"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "mods",
+          "storage"
+        ]
+      },
+      "process_names": [
+        "starbound.exe",
+        "starbound"
+      ]
+    },
+    {
+      "id": "noita",
+      "label": "Noita",
+      "family": "noita",
+      "icon": "flame",
+      "color": "text-orange-600",
+      "primary_color": "#ea580c",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Noita"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mods"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-orange-600",
+          "folder": "mods",
+          "extensions": [
+            "lua",
+            "xml",
+            "png",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "lua"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "mods"
+        ]
+      },
+      "process_names": [
+        "noita.exe"
+      ]
+    },
+    {
+      "id": "blade_and_sorcery",
+      "label": "Blade & Sorcery",
+      "family": "bladesorcery",
+      "icon": "swords",
+      "color": "text-violet-500",
+      "primary_color": "#8b5cf6",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Blade & Sorcery"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BladeAndSorcery_Data"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-violet-500",
+          "folder": "BladeAndSorcery_Data/StreamingAssets/Mods",
+          "extensions": [
+            "json",
+            "dll",
+            "bundle",
+            "catalog",
+            "hash"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "BladeAndSorcery_Data"
+        ]
+      },
+      "process_names": [
+        "BladeAndSorcery.exe"
+      ]
+    },
+    {
+      "id": "simcity4",
+      "label": "SimCity 4",
+      "family": "simcity",
+      "icon": "building-2",
+      "color": "text-blue-400",
+      "primary_color": "#60a5fa",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "",
+            "folders": [
+              "SimCity 4"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Plugins",
+          "Regions"
+        ],
+        "auto_create_dirs": [
+          "Plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins",
+          "icon": "package",
+          "color": "text-blue-400",
+          "folder": "Plugins",
+          "extensions": [
+            "dat",
+            "sc4lot",
+            "sc4desc",
+            "sc4model",
+            "dll"
+          ],
+          "file_type": "CustomContent",
+          "syncable": true
+        },
+        {
+          "id": "regions",
+          "label": "Regions",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Regions",
+          "extensions": [
+            "sc4",
+            "bmp",
+            "ini",
+            "png"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "Plugins",
+          "Regions"
+        ]
+      },
+      "process_names": [
+        "SimCity 4.exe"
+      ]
+    },
+    {
+      "id": "dragon_age_origins",
+      "label": "Dragon Age: Origins",
+      "family": "dragonage",
+      "icon": "shield",
+      "color": "text-red-700",
+      "primary_color": "#b91c1c",
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "BioWare",
+            "folders": [
+              "Dragon Age"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "packages",
+          "Characters"
+        ],
+        "auto_create_dirs": [
+          "packages/core/override"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "override",
+          "label": "Override Mods",
+          "icon": "package",
+          "color": "text-red-700",
+          "folder": "packages/core/override",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "addins",
+          "label": "AddIns (DAZip)",
+          "icon": "layers",
+          "color": "text-red-700",
+          "folder": "AddIns",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Characters",
+          "extensions": [
+            "das",
+            "dds"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "path_correction": {
+        "known_subfolders": [
+          "AddIns",
+          "Characters",
+          "packages"
+        ]
+      },
+      "process_names": [
+        "daorigins.exe",
+        "DAOriginsLauncher.exe"
+      ]
     }
   ]
 }

@@ -6,20 +6,35 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification as sendOsNotification,
+} from "@tauri-apps/plugin-notification";
 
-function sendNotification(title: string, body: string) {
+/** Desktop notification, only when enabled and the window is in the background. */
+async function sendNotification(title: string, body: string) {
   try {
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body });
-    } else if ("Notification" in window && Notification.permission !== "denied") {
-      Notification.requestPermission().then((perm) => {
-        if (perm === "granted") new Notification(title, { body });
-      });
-    }
+    if (!useAppStore.getState().notificationsEnabled) return;
+    const win = getCurrentWebviewWindow();
+    const [focused, visible] = await Promise.all([win.isFocused(), win.isVisible()]);
+    if (focused && visible) return;
+    let granted = await isPermissionGranted();
+    if (!granted) granted = (await requestPermission()) === "granted";
+    if (granted) sendOsNotification({ title, body });
   } catch {
     // Notifications not supported in this environment
   }
 }
+
+function peerName(peerId?: string): string | null {
+  if (!peerId) return null;
+  return useAppStore.getState().session?.peers.find((p) => p.id === peerId)?.name ?? null;
+}
+
+// Host side: the client doesn't announce the end of its sync, so treat a peer
+// as done downloading once its progress has been idle for a few seconds.
+const PEER_IDLE_MS = 4000;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 4000, 8000];
@@ -34,18 +49,11 @@ export function useTauriEvents() {
   const setPeerDownloadProgress = useAppStore((s) => s.setPeerDownloadProgress);
   const addLog = useLogStore((s) => s.addLog);
 
-  const notifRequested = useRef(false);
+  const peerIdleTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const retryRef = useRef<{ active: boolean; timer: ReturnType<typeof setTimeout> | null }>({
     active: false,
     timer: null,
   });
-
-  useEffect(() => {
-    if (!notifRequested.current && "Notification" in window && Notification.permission === "default") {
-      notifRequested.current = true;
-      Notification.requestPermission().catch(() => {});
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,7 +173,11 @@ export function useTauriEvents() {
         listen<{ name: string; clean?: boolean; reason?: string; peer_id?: string }>("peer-disconnected", async (event) => {
           const { name, clean, reason, peer_id } = event.payload;
           setIsScanning(false);
-          if (peer_id) setPeerDownloadProgress(peer_id, null);
+          if (peer_id) {
+            setPeerDownloadProgress(peer_id, null);
+            clearTimeout(peerIdleTimers.current[peer_id]);
+            delete peerIdleTimers.current[peer_id];
+          }
           if (clean) {
             cancelRetry(); // Stop any in-progress reconnect attempts
             addLog(`Peer disconnected: ${name}`, "info");
@@ -221,6 +233,7 @@ export function useTauriEvents() {
           setSyncProgress(null);
           setSyncPlan(null);
           const { files_synced, errors } = event.payload;
+          const from = peerName((event.payload as { peer_id?: string }).peer_id);
           if (errors && errors.length > 0) {
             addLog(
               `Sync completed with ${errors.length} error(s): ${files_synced} files synced`,
@@ -229,10 +242,13 @@ export function useTauriEvents() {
             for (const err of errors) {
               addLog(`  Sync error: ${err}`, "error");
             }
-            sendNotification("SyncCrate", `Sync completed with ${errors.length} error(s)`);
+            sendNotification("SyncCrate", `Sync finished with ${errors.length} error(s) — see the activity log`);
           } else {
             addLog(`Sync complete: ${files_synced} files synced`, "success");
-            sendNotification("SyncCrate", `Sync complete: ${files_synced} files synced`);
+            sendNotification(
+              "SyncCrate",
+              `Sync complete — ${files_synced} file${files_synced !== 1 ? "s" : ""}${from ? ` from ${from}` : ""}`,
+            );
           }
         }),
         listen<{ message: string }>("sync-error", (event) => {
@@ -240,7 +256,19 @@ export function useTauriEvents() {
         }),
         // Host sees peer download progress
         listen<PeerDownloadProgress>("peer-download-progress", (event) => {
-          setPeerDownloadProgress(event.payload.peer_id, event.payload);
+          const p = event.payload;
+          setPeerDownloadProgress(p.peer_id, p);
+          const timers = peerIdleTimers.current;
+          if (timers[p.peer_id]) clearTimeout(timers[p.peer_id]);
+          timers[p.peer_id] = setTimeout(() => {
+            delete timers[p.peer_id];
+            if (p.files_sent > 0) {
+              sendNotification("SyncCrate", `${p.peer_name} finished downloading`);
+            }
+          }, PEER_IDLE_MS);
+        }),
+        listen<{ files: string[] }>("caches-cleared", (event) => {
+          addLog(`Cleared game caches after sync: ${event.payload.files.join(", ")}`, "info");
         }),
         // Peer game info exchange
         listen<{ peer_id: string }>("peer-game-info", async () => {
@@ -292,6 +320,8 @@ export function useTauriEvents() {
     return () => {
       cancelled = true;
       cancelRetry();
+      Object.values(peerIdleTimers.current).forEach(clearTimeout);
+      peerIdleTimers.current = {};
       unlisteners.forEach((fn) => fn());
     };
   }, [setSyncProgress, setSyncPlan, setSession, setManifest, setIsDragging, setIsScanning, setPeerDownloadProgress, addLog]);

@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use crate::registry::ContentType;
 use walkdir::WalkDir;
 
 const MAX_BACKUP_FILES: usize = 100_000;
@@ -50,6 +51,7 @@ struct BackupFileEntry {
 
 fn copy_dir_to_backup(
     source_dir: &Path,
+    ct: Option<&ContentType>,
     backup_dir: &Path,
     category: &str,
     app: &tauri::AppHandle,
@@ -62,13 +64,20 @@ fn copy_dir_to_backup(
         return Ok(entries);
     }
 
-    for entry in WalkDir::new(source_dir)
-        .follow_links(false)
+    for entry in content_walker(source_dir, ct)
         .into_iter()
         .filter_map(|e| e.ok())
     {
         if !entry.file_type().is_file() {
             continue;
+        }
+        // Only back up what the content type actually covers — e.g. a
+        // non-recursive "." type for loose presets must not copy the whole
+        // game folder.
+        if let Some(ct) = ct {
+            if !crate::commands::files::content_type_accepts(ct, entry.path()) {
+                continue;
+            }
         }
 
         if entry.path_is_symlink() {
@@ -127,15 +136,23 @@ fn is_plain_relative_path(rel: &str) -> bool {
         && p.components().all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir))
 }
 
-fn count_files(dir: &Path) -> usize {
+fn content_walker(dir: &Path, ct: Option<&ContentType>) -> WalkDir {
+    let walker = WalkDir::new(dir).follow_links(false);
+    match ct {
+        Some(ct) if !ct.recursive => walker.max_depth(1),
+        _ => walker,
+    }
+}
+
+fn count_files(dir: &Path, ct: Option<&ContentType>) -> usize {
     if !dir.exists() {
         return 0;
     }
-    WalkDir::new(dir)
-        .follow_links(false)
+    content_walker(dir, ct)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file() && !e.path_is_symlink())
+        .filter(|e| ct.map_or(true, |ct| crate::commands::files::content_type_accepts(ct, e.path())))
         .count()
 }
 
@@ -169,12 +186,12 @@ pub async fn create_backup(
     };
 
     // Build directory list from content types
-    let mut category_dirs: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut category_dirs: Vec<(String, std::path::PathBuf, ContentType)> = Vec::new();
     for ct in &content_types {
-        category_dirs.push((ct.id.clone(), std::path::PathBuf::from(&base).join(&ct.folder)));
+        category_dirs.push((ct.id.clone(), std::path::PathBuf::from(&base).join(&ct.folder), ct.clone()));
     }
 
-    let files_total: usize = category_dirs.iter().map(|(_, dir)| count_files(dir)).sum();
+    let files_total: usize = category_dirs.iter().map(|(_, dir, ct)| count_files(dir, Some(ct))).sum();
 
     let id = Uuid::new_v4().to_string();
     let backup_dir = utils::backups_dir().join(&id);
@@ -184,8 +201,8 @@ pub async fn create_backup(
     let mut all_entries = Vec::new();
     let mut category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
-    for (category, dir) in &category_dirs {
-        let entries = match copy_dir_to_backup(dir, &backup_dir, category, &app, &mut files_done, files_total) {
+    for (category, dir, ct) in &category_dirs {
+        let entries = match copy_dir_to_backup(dir, Some(ct), &backup_dir, category, &app, &mut files_done, files_total) {
             Ok(e) => e,
             Err(e) => {
                 // Don't leave a partial, manifest-less backup folder behind
@@ -303,12 +320,12 @@ pub async fn create_auto_backup(
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
     let label = format!("Auto: {} {}", label_prefix, now);
 
-    let mut category_dirs: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut category_dirs: Vec<(String, std::path::PathBuf, ContentType)> = Vec::new();
     for ct in &content_types {
-        category_dirs.push((ct.id.clone(), std::path::PathBuf::from(&base).join(&ct.folder)));
+        category_dirs.push((ct.id.clone(), std::path::PathBuf::from(&base).join(&ct.folder), ct.clone()));
     }
 
-    let files_total: usize = category_dirs.iter().map(|(_, dir)| count_files(dir)).sum();
+    let files_total: usize = category_dirs.iter().map(|(_, dir, ct)| count_files(dir, Some(ct))).sum();
 
     let id = Uuid::new_v4().to_string();
     let backup_dir = utils::backups_dir().join(&id);
@@ -318,8 +335,8 @@ pub async fn create_auto_backup(
     let mut all_entries = Vec::new();
     let mut category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
-    for (category, dir) in &category_dirs {
-        let entries = match copy_dir_to_backup(dir, &backup_dir, category, app, &mut files_done, files_total) {
+    for (category, dir, ct) in &category_dirs {
+        let entries = match copy_dir_to_backup(dir, Some(ct), &backup_dir, category, app, &mut files_done, files_total) {
             Ok(e) => e,
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&backup_dir);
@@ -413,7 +430,13 @@ pub async fn restore_backup(
     let safety_dir = utils::backups_dir().join(&safety_id);
     std::fs::create_dir_all(&safety_dir).map_err(|e| e.to_string())?;
 
-    let safety_total: usize = category_dir_map.values().map(|dir| count_files(dir)).sum();
+    let ct_for = |category: &str| -> Option<&ContentType> {
+        content_types
+            .iter()
+            .find(|c| c.id == category)
+            .or_else(|| if category == "mods" { content_types.first() } else { None })
+    };
+    let safety_total: usize = category_dir_map.iter().map(|(cat, dir)| count_files(dir, ct_for(cat))).sum();
     let mut safety_done = 0usize;
     let mut safety_entries = Vec::new();
     let mut safety_category_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -423,7 +446,7 @@ pub async fn restore_backup(
         // failure here must abort the restore. (Previously the error was swallowed
         // with unwrap_or_default(), recording an incomplete safety backup and then
         // overwriting the user's files anyway.)
-        let entries = match copy_dir_to_backup(dir, &safety_dir, category, &app, &mut safety_done, safety_total) {
+        let entries = match copy_dir_to_backup(dir, ct_for(category), &safety_dir, category, &app, &mut safety_done, safety_total) {
             Ok(e) => e,
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&safety_dir);

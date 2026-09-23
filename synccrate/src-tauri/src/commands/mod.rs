@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod files;
+pub mod game_state;
 pub mod install;
 pub mod packs;
 pub mod profiles;

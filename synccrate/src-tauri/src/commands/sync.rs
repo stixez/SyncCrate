@@ -271,6 +271,8 @@ async fn run_sync(
     let mut files_done = 0u64;
     let mut bytes_done = 0u64;
     let mut sync_errors: Vec<String> = Vec::new();
+    let mut files_received = 0u64;
+    let started = std::time::Instant::now();
     let state_arc = state.inner().clone();
 
     let plan_hash = plan
@@ -337,6 +339,7 @@ async fn run_sync(
                 match result {
                     Ok(()) => {
                         files_done += 1;
+                        files_received += 1;
                         bytes_done += file_info.size;
                         checkpoint.completed_files.push(file_info.relative_path.clone());
                         write_checkpoint(&checkpoint);
@@ -397,6 +400,12 @@ async fn run_sync(
         }
     }
 
+    let duration_ms = started.elapsed().as_millis() as u64;
+
+    if files_received > 0 && read_sync_config().clear_cache_after_sync {
+        clear_post_sync_caches(state, app, base_path).await;
+    }
+
     let _ = app.emit(
         "sync-complete",
         serde_json::json!({
@@ -432,6 +441,7 @@ async fn run_sync(
             total_bytes: plan.total_bytes,
             errors: sync_errors.clone(),
             direction,
+            duration_ms,
         });
     }
 
@@ -440,6 +450,41 @@ async fn run_sync(
     }
 
     Ok(())
+}
+
+/// Delete the active game's registry `post_sync_delete` files (stale caches the
+/// game would otherwise keep using, e.g. Sims 4 localthumbcache.package).
+async fn clear_post_sync_caches(
+    state: &tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: &tauri::AppHandle,
+    base_path: &str,
+) {
+    let targets = {
+        let app_state = state.lock().await;
+        app_state
+            .game_registry
+            .games
+            .iter()
+            .find(|g| g.id == app_state.active_game)
+            .map(|g| g.post_sync_delete.clone())
+            .unwrap_or_default()
+    };
+    let mut deleted = Vec::new();
+    for rel in targets {
+        let Ok(full) = utils::safe_join(base_path, &rel) else {
+            log::warn!("Rejected post-sync delete path: {}", rel);
+            continue;
+        };
+        match tokio::fs::remove_file(&full).await {
+            Ok(()) => deleted.push(rel),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => log::warn!("Failed to clear cache {}: {}", rel, e),
+        }
+    }
+    if !deleted.is_empty() {
+        log::info!("Cleared game caches after sync: {:?}", deleted);
+        let _ = app.emit("caches-cleared", serde_json::json!({ "files": deleted }));
+    }
 }
 
 /// Download `remote_path` from the peer but save it locally as `local_dest`,
@@ -695,8 +740,13 @@ pub struct SyncConfig {
     /// Transfer speed limit in bytes/sec. 0 = unlimited.
     #[serde(default)]
     pub transfer_speed_limit: u64,
+    /// Delete the game's registry `post_sync_delete` files (e.g. Sims 4
+    /// localthumbcache.package) after a sync that received files.
+    #[serde(default = "default_true")]
+    pub clear_cache_after_sync: bool,
 }
 
+fn default_true() -> bool { true }
 fn default_backup_interval() -> u32 { 4 }
 fn default_backup_max_count() -> u32 { 5 }
 
@@ -713,6 +763,7 @@ impl Default for SyncConfig {
             auto_backup_interval_hours: default_backup_interval(),
             auto_backup_max_count: default_backup_max_count(),
             transfer_speed_limit: 0,
+            clear_cache_after_sync: true,
         }
     }
 }
@@ -872,6 +923,7 @@ mod tests {
             auto_backup_interval_hours: 4,
             auto_backup_max_count: 5,
             transfer_speed_limit: 10_485_760, // 10 MB/s
+            clear_cache_after_sync: false,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let parsed: SyncConfig = serde_json::from_str(&json).expect("deserialize");
@@ -900,6 +952,7 @@ mod tests {
             total_bytes: 1073741824,
             errors: vec![],
             direction: "received".to_string(),
+            duration_ms: 0,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         let parsed: SyncHistoryEntry = serde_json::from_str(&json).expect("deserialize");
@@ -921,11 +974,65 @@ mod tests {
             total_bytes: 5000,
             errors: vec!["Mods/broken.tmod: hash mismatch".to_string()],
             direction: "bidirectional".to_string(),
+            duration_ms: 0,
         };
         let json = serde_json::to_string(&entry).expect("serialize");
         let parsed: SyncHistoryEntry = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.errors.len(), 1);
         assert!(parsed.errors[0].contains("hash mismatch"));
+    }
+
+    #[test]
+    fn test_sync_config_clear_cache_defaults_true() {
+        let config: SyncConfig = serde_json::from_str(r#"{"exclude_patterns": []}"#).unwrap();
+        assert!(config.clear_cache_after_sync);
+        assert!(SyncConfig::default().clear_cache_after_sync);
+    }
+
+    #[test]
+    fn test_sync_history_entry_missing_duration_defaults_zero() {
+        let json = r#"{"timestamp":1,"game":"sims4","peer_name":"A","files_synced":1,"total_bytes":10,"errors":[],"direction":"received"}"#;
+        let parsed: SyncHistoryEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.duration_ms, 0);
+    }
+
+    fn hist(bytes: u64, ms: u64) -> SyncHistoryEntry {
+        SyncHistoryEntry {
+            timestamp: 0,
+            game: "sims4".to_string(),
+            peer_name: "A".to_string(),
+            files_synced: 1,
+            total_bytes: bytes,
+            errors: vec![],
+            direction: "received".to_string(),
+            duration_ms: ms,
+        }
+    }
+
+    #[test]
+    fn test_typical_speed_none_without_usable_history() {
+        assert_eq!(typical_speed(&[], 5), None);
+        assert_eq!(typical_speed(&[hist(100, 0), hist(0, 1000)], 5), None);
+    }
+
+    #[test]
+    fn test_typical_speed_median_of_recent() {
+        // 1000 B/s, 3000 B/s, 2000 B/s -> median 2000
+        let h = vec![hist(1000, 1000), hist(3000, 1000), hist(2000, 1000)];
+        assert_eq!(typical_speed(&h, 5), Some(2000));
+        // Even count averages the middle two
+        let h = vec![hist(1000, 1000), hist(3000, 1000)];
+        assert_eq!(typical_speed(&h, 5), Some(2000));
+    }
+
+    #[test]
+    fn test_typical_speed_uses_only_last_n() {
+        // Oldest entries are slow; only the last 2 (fast) should count.
+        let h = vec![hist(1, 1000), hist(1, 1000), hist(1, 1000), hist(8000, 1000), hist(8000, 1000)];
+        assert_eq!(typical_speed(&h, 2), Some(8000));
+        // Unusable entries are skipped, not counted toward the sample.
+        let h = vec![hist(4000, 1000), hist(100, 0)];
+        assert_eq!(typical_speed(&h, 1), Some(4000));
     }
 
     // --- SyncCheckpoint tests ---
@@ -1001,6 +1108,20 @@ pub async fn set_transfer_speed_limit(limit: u64) -> Result<(), String> {
     std::fs::write(&path, data).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn get_clear_cache_after_sync() -> Result<bool, String> {
+    Ok(read_sync_config().clear_cache_after_sync)
+}
+
+#[tauri::command]
+pub async fn set_clear_cache_after_sync(enabled: bool) -> Result<(), String> {
+    let mut config = read_sync_config();
+    config.clear_cache_after_sync = enabled;
+    let path = crate::utils::sync_config_path();
+    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())
+}
+
 /// Read the current transfer speed limit (called from transfer layer).
 pub fn get_speed_limit() -> u64 {
     read_sync_config().transfer_speed_limit
@@ -1017,6 +1138,9 @@ pub struct SyncHistoryEntry {
     pub total_bytes: u64,
     pub errors: Vec<String>,
     pub direction: String,
+    /// Wall-clock transfer time; 0 for entries recorded before this existed.
+    #[serde(default)]
+    pub duration_ms: u64,
 }
 
 fn sync_history_path() -> std::path::PathBuf {
@@ -1054,6 +1178,35 @@ pub async fn get_sync_history() -> Result<Vec<SyncHistoryEntry>, String> {
     } else {
         Ok(Vec::new())
     }
+}
+
+/// Median bytes/sec over the most recent `sample` history entries that have a
+/// measured duration and moved data. `None` when there is no usable history.
+pub(crate) fn typical_speed(history: &[SyncHistoryEntry], sample: usize) -> Option<u64> {
+    let mut speeds: Vec<u64> = history
+        .iter()
+        .rev()
+        .filter(|e| e.duration_ms > 0 && e.total_bytes > 0)
+        .take(sample)
+        .map(|e| (e.total_bytes as u128 * 1000 / e.duration_ms as u128) as u64)
+        .collect();
+    if speeds.is_empty() {
+        return None;
+    }
+    speeds.sort_unstable();
+    let mid = speeds.len() / 2;
+    Some(if speeds.len() % 2 == 0 {
+        (speeds[mid - 1] + speeds[mid]) / 2
+    } else {
+        speeds[mid]
+    })
+}
+
+/// Typical transfer speed (bytes/sec) from recent syncs, for the pre-sync estimate.
+#[tauri::command]
+pub async fn get_typical_transfer_speed() -> Result<Option<u64>, String> {
+    let history = get_sync_history().await.unwrap_or_default();
+    Ok(typical_speed(&history, 5))
 }
 
 #[tauri::command]

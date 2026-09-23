@@ -36,6 +36,9 @@ export default function Settings() {
     auto_backup_max_count: 5,
   });
   const [speedLimit, setSpeedLimit] = useState(0);
+  const [clearCache, setClearCache] = useState(true);
+  const notificationsEnabled = useAppStore((s) => s.notificationsEnabled);
+  const setNotificationsEnabled = useAppStore((s) => s.setNotificationsEnabled);
 
   // Only show games in the user's library
   const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id));
@@ -52,6 +55,7 @@ export default function Settings() {
     }).catch(() => {});
     cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
     cmd.getTransferSpeedLimit().then(setSpeedLimit).catch(() => {});
+    cmd.getClearCacheAfterSync().then(setClearCache).catch(() => {});
   }, [setGamePaths, setExcludePatterns]);
 
   useEffect(() => {
@@ -427,6 +431,28 @@ export default function Settings() {
         </div>
       </div>
 
+      <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-sm">After Sync</h3>
+        <div className="flex items-center justify-between gap-4">
+          <label className="text-sm">Clear game caches after sync (e.g. Sims 4 localthumbcache)</label>
+          <Toggle
+            checked={clearCache}
+            label="Clear game caches after sync"
+            onChange={(v) => {
+              setClearCache(v);
+              cmd.setClearCacheAfterSync(v).catch(console.error);
+            }}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <label className="text-sm">Desktop notifications</label>
+            <p className="text-xs text-txt-dim">When SyncCrate is in the background: sync finished, friend connected.</p>
+          </div>
+          <Toggle checked={notificationsEnabled} label="Desktop notifications" onChange={setNotificationsEnabled} />
+        </div>
+      </div>
+
       <p className="text-xs font-semibold text-txt-dim uppercase tracking-wider mb-2">Application</p>
 
       <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
@@ -505,5 +531,25 @@ export default function Settings() {
         </button>
       </div>
     </div>
+  );
+}
+
+function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${
+        checked ? "bg-accent" : "bg-bg border border-border"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </button>
   );
 }

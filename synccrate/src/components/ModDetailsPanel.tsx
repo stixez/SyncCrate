@@ -1,6 +1,6 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility } from "../lib/types";
-import { formatBytes, formatDate } from "../lib/utils";
+import { formatBytes, formatDate, isDisabledPath } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
@@ -25,7 +25,7 @@ export default function ModDetailsPanel({
   const setManifest = useAppStore((s) => s.setManifest);
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
-  const isDisabled = file.relative_path.includes("_Disabled/") || file.relative_path.includes("_Disabled\\");
+  const isDisabled = isDisabledPath(file.relative_path);
   const basePath = gamePaths[activeGame];
 
   const handleToggle = async () => {

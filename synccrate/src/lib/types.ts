@@ -220,6 +220,7 @@ export interface SyncHistoryEntry {
   total_bytes: number;
   errors: string[];
   direction: string;
+  duration_ms: number;
 }
 
 export interface InstallResult {
@@ -247,6 +248,9 @@ export interface GameDefinition {
   legacy_id?: string;
   version_detection?: VersionDetection;
   path_correction?: PathCorrection;
+  process_names?: string[];
+  disable_method?: "folder" | "rename" | null;
+  post_sync_delete?: string[];
 }
 
 export interface DetectionConfig {
@@ -281,6 +285,9 @@ export interface ContentTypeDefinition {
   file_type: string;
   classify_by_extension?: Record<string, string>;
   syncable?: boolean;
+  recursive?: boolean;
+  must_contain?: string | null;
+  exclude_files?: string[];
 }
 
 export interface VersionDetection {

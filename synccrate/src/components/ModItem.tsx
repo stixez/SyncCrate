@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility } from "../lib/types";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
 
@@ -31,7 +31,7 @@ export default function ModItem({
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
   const [showTagEditor, setShowTagEditor] = useState(false);
-  const isDisabled = file.relative_path.includes("_Disabled/") || file.relative_path.includes("_Disabled\\");
+  const isDisabled = isDisabledPath(file.relative_path);
 
   return (
     <div
