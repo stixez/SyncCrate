@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import type { PeerDownloadProgress } from "../lib/types";
+import type { BackupProgress, PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
 import {
   isPermissionGranted,
@@ -346,14 +346,17 @@ export function useTauriEvents() {
             // Ignore
           }
         }),
-        // Backup events
-        listen<{ file: string; files_done: number; files_total: number }>("backup-progress", (event) => {
-          const { files_done, files_total } = event.payload;
-          addLog(`Backup progress: ${files_done}/${files_total}`, "info");
+        // Backup events (throttled by the backend). Progress goes to the store for
+        // BackupList; logging every event flooded the activity log.
+        listen<BackupProgress>("backup-progress", (event) => {
+          useAppStore.getState().setBackupProgress(event.payload);
         }),
-        listen<{ file: string; files_done: number; files_total: number }>("restore-progress", (event) => {
-          const { files_done, files_total } = event.payload;
-          addLog(`Restore progress: ${files_done}/${files_total}`, "info");
+        listen<BackupProgress>("restore-progress", (event) => {
+          useAppStore.getState().setBackupProgress(event.payload);
+        }),
+        // A scheduled backup finished in the background.
+        listen("backups-changed", () => {
+          cmd.listBackups().then(useAppStore.getState().setBackups).catch(() => {});
         }),
         // Drag & Drop events
         appWindow.onDragDropEvent((event) => {

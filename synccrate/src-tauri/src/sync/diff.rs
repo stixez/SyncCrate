@@ -60,34 +60,42 @@ pub fn is_disabled_path(path: &str) -> bool {
 /// older than 0.5.6 don't say which game they share, so a Sims 4 host could
 /// otherwise still push its Mods folder into an ETS2 client's folder.
 pub fn path_accepted_by(content_types: &[ContentType], rel: &str) -> bool {
+    content_type_for(content_types, rel).is_some()
+}
+
+/// The first content type accepting a game-folder-relative path (same rules
+/// as `path_accepted_by`), with the path relative to that type's folder
+/// ('/'-separated, original case). Backups store files per content type.
+pub fn content_type_for<'a>(content_types: &'a [ContentType], rel: &str) -> Option<(&'a ContentType, String)> {
     let rel = rel.replace('\\', "/");
     let rel = rel.trim_start_matches("./");
-    let rel_lower = rel.to_lowercase();
     let file_name = rel.rsplit('/').next().unwrap_or(rel);
-    content_types.iter().any(|ct| {
+    content_types.iter().find_map(|ct| {
         let folder = ct.folder.replace('\\', "/");
         let folder = folder.trim_end_matches('/').trim_start_matches("./");
         let rest = if folder.is_empty() || folder == "." {
-            rel_lower.as_str()
+            rel
         } else {
-            match rel_lower.strip_prefix(&format!("{}/", folder.to_lowercase())) {
-                Some(r) => r,
-                None => return false,
+            let head = rel.get(..folder.len())?;
+            let tail = rel.get(folder.len()..)?;
+            if head.to_lowercase() != folder.to_lowercase() {
+                return None;
             }
+            tail.strip_prefix('/')?
         };
         if rest.is_empty() || (!ct.recursive && rest.contains('/')) {
-            return false;
+            return None;
         }
         if ct.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(file_name)) {
-            return false;
+            return None;
         }
         if !ct.extensions.is_empty() {
             let ext = crate::commands::files::effective_extension(std::path::Path::new(rest));
             if !ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {
-                return false;
+                return None;
             }
         }
-        true
+        Some((ct, rest.to_string()))
     })
 }
 

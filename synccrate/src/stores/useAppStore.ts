@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  BackupProgress,
   BackupInfo,
   FileManifest,
   GameDefinition,
@@ -103,6 +104,9 @@ interface AppState {
 
   backups: BackupInfo[];
   setBackups: (backups: BackupInfo[]) => void;
+  /** Latest backup-progress / restore-progress event (phase: manual, auto, presync, safety, restore). */
+  backupProgress: BackupProgress | null;
+  setBackupProgress: (p: BackupProgress | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -236,6 +240,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   backups: [],
   setBackups: (backups) => set({ backups }),
+  backupProgress: null,
+  setBackupProgress: (backupProgress) => set({ backupProgress }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

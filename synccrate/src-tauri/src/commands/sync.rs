@@ -248,6 +248,9 @@ pub async fn execute_sync(
         if app_state.is_any_syncing() {
             return Err("Sync is already in progress".to_string());
         }
+        if crate::commands::backup::restore_in_progress() {
+            return Err("A backup is being restored. Sync again when it's done.".to_string());
+        }
 
         let conn = app_state
             .connections
@@ -276,6 +279,7 @@ pub async fn execute_sync(
 
     {
         let base = base_path.clone();
+        let content_types = content_types.clone();
         let recovered = tokio::task::spawn_blocking(move || recover_keep_temps(&base, &content_types))
             .await
             .unwrap_or(0);
@@ -284,17 +288,35 @@ pub async fn execute_sync(
         }
     }
 
-    // Auto-backup before sync if enabled
-    let config = read_sync_config();
-    if config.auto_backup_before_sync {
-        log::info!("Creating pre-sync auto-backup");
-        if let Err(e) = crate::commands::backup::create_auto_backup(
-            state.inner(),
-            &app,
-            "Pre-sync",
-        ).await {
-            log::warn!("Pre-sync auto-backup failed: {}", e);
-            // Don't block sync on backup failure
+    // Back up only the local files this sync will overwrite or delete (a full
+    // copy took minutes and gigabytes before every sync). If that fails, stop:
+    // the user asked for a way back, so don't replace files without one.
+    if read_sync_config().auto_backup_before_sync {
+        let targets = crate::commands::backup::presync_targets(&plan);
+        if !targets.is_empty() {
+            let backup = crate::commands::backup::create_presync_backup(
+                &app,
+                plan.game_id.clone(),
+                base_path.clone(),
+                content_types,
+                targets,
+            )
+            .await;
+            if let Err(e) = backup {
+                log::warn!("Pre-sync backup failed: {}", e);
+                let mut app_state = state.lock().await;
+                if let Some(conn) = app_state.connections.get_mut(&resolved_id) {
+                    conn.is_syncing = false;
+                    // Keep the plan so the user can retry without comparing again.
+                    if conn.sync_plan.is_none() {
+                        conn.sync_plan = Some(plan);
+                    }
+                }
+                return Err(format!(
+                    "Backup before sync failed: {}. Nothing was changed. Free up space or fix the problem, or turn off \"Back up before sync\" in Settings.",
+                    e
+                ));
+            }
         }
     }
 

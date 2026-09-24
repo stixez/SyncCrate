@@ -78,7 +78,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
 **Safety**
-- **Backups.** Manual or automatic (before every sync or every 1–24 h) with pruning, plus a safety backup before every restore.
+- **Backups.** Manual or automatic, stored incrementally: unchanged files are kept once and shared between backups, so extra backups cost almost nothing. Scheduled backups cover each game in your library on its own 1–24 h timer (even across restarts). "Back up before sync" saves just the files a sync is about to replace or delete, and the sync stops if that backup fails. Restores keep file dates, skip mods you have disabled since, can optionally be exact (also removing files added since the backup), and always take a safety backup first.
 - **Script warnings.** Flags risky files (`.dll`, `.ts4script`, `.lua`, `.jar`) before syncing.
 - **Private.** Files never leave your PCs. Warns you if the game is still running.
 

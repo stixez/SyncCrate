@@ -206,14 +206,29 @@ export interface BackupInfo {
   label: string;
   file_count: number;
   total_size: number;
-  /** Not currently serialized by the backend; prefer the *_count fields. */
+  /** Files per content type id. Empty for backups made before 0.6; use the *_count fields then. */
   category_counts?: Record<string, number>;
+  /** "manual" | "auto" (scheduled) | "presync" (before sync, only replaced files) | "safety" (before a restore). */
+  kind?: BackupKind;
+  /** Bytes this backup added to the deduplicated store (absent for old full-copy backups). */
+  new_bytes?: number;
   mods_count?: number;
   saves_count?: number;
   tray_count?: number;
   screenshots_count?: number;
   game: Game;
   auto?: boolean;
+}
+
+export type BackupKind = "manual" | "auto" | "presync" | "safety";
+
+/** Payload of backup-progress / restore-progress. */
+export interface BackupProgress {
+  phase: BackupKind | "restore";
+  game: string;
+  file: string;
+  files_done: number;
+  files_total: number;
 }
 
 export interface AutoBackupConfig {
@@ -344,8 +359,18 @@ export interface DeleteResult {
 
 export interface RestoreResult {
   restored: number;
+  /** Already identical (same size and modification time). */
+  unchanged: number;
   /** Files left alone because a disabled/enabled copy exists now. */
   skipped: string[];
+  /** Entries whose stored data is missing or whose content type no longer exists. */
+  missing: number;
+  /** Files removed by an exact restore. */
+  removed: number;
+  /** Set when the restore stopped part-way; `restored` files were already written. */
+  error: string | null;
+  /** Label of the safety backup holding the previous files (null if there was nothing to save). */
+  safety_backup: string | null;
 }
 
 export interface OutdatedScripts {

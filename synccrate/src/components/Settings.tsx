@@ -403,7 +403,7 @@ export default function Settings() {
                 checked={autoBackupConfig.auto_backup_before_sync}
                 onChange={(v) => updateAutoBackupConfig({ auto_backup_before_sync: v })}
                 label="Back up before sync"
-                description="Snapshot your content folders right before files are received."
+                description="Before a sync replaces or deletes any of your files, back up just those files. If that backup fails, the sync stops."
               />
             </SettingRow>
             <SettingRow>
@@ -411,7 +411,7 @@ export default function Settings() {
                 checked={autoBackupConfig.auto_backup_scheduled}
                 onChange={(v) => updateAutoBackupConfig({ auto_backup_scheduled: v })}
                 label="Scheduled backups"
-                description="Take a backup every few hours while SyncCrate is running."
+                description={`Back up each game in your library every ${autoBackupConfig.auto_backup_interval_hours} hour${autoBackupConfig.auto_backup_interval_hours === 1 ? "" : "s"} while SyncCrate is running. Only changed files take new space.`}
               />
             </SettingRow>
             {autoBackupConfig.auto_backup_scheduled && (
@@ -432,7 +432,7 @@ export default function Settings() {
               </SettingRow>
             )}
             {(autoBackupConfig.auto_backup_before_sync || autoBackupConfig.auto_backup_scheduled) && (
-              <SettingRow label="Max auto-backups" hint="Oldest auto-backups are removed past this count.">
+              <SettingRow label="Max auto-backups" hint="Per game and type (scheduled / before sync). Oldest are removed past this count.">
                 <input
                   type="number"
                   value={autoBackupConfig.auto_backup_max_count}

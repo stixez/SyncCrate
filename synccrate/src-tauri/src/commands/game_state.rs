@@ -20,14 +20,18 @@ pub async fn check_game_running(
             .map(|g| g.process_names.clone())
             .unwrap_or_default()
     };
+    is_game_running(&process_names).await
+}
+
+/// Whether any of the given executables is running (false when none are known).
+pub(crate) async fn is_game_running(process_names: &[String]) -> Result<bool, String> {
     if process_names.is_empty() {
         return Ok(false);
     }
-
     let running = tokio::task::spawn_blocking(list_process_names)
         .await
         .map_err(|e| e.to_string())??;
-    Ok(any_process_matches(&process_names, &running))
+    Ok(any_process_matches(process_names, &running))
 }
 
 /// Case-insensitive match of wanted executable names against running process

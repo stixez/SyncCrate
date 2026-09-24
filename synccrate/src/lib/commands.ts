@@ -338,8 +338,8 @@ export async function listBackups(): Promise<BackupInfo[]> {
   return invoke("list_backups");
 }
 
-export async function restoreBackup(id: string): Promise<import("./types").RestoreResult> {
-  return invoke("restore_backup", { id });
+export async function restoreBackup(id: string, exact = false): Promise<import("./types").RestoreResult> {
+  return invoke("restore_backup", { id, exact });
 }
 
 export async function deleteBackup(id: string): Promise<void> {

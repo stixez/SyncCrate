@@ -203,38 +203,8 @@ pub fn run() {
 
             app.manage(commands::tray::TrayHandles { tray, status, leave });
             commands::tray::start_tray_status_updates(&handle, state_clone.clone());
-            let state_for_timer = state_clone.clone();
-
-            // Start scheduled auto-backup timer
-            {
-                let app_handle = handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    loop {
-                        let config = crate::commands::sync::read_sync_config();
-                        if !config.auto_backup_scheduled {
-                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                            continue;
-                        }
-
-                        let interval = std::time::Duration::from_secs(
-                            config.auto_backup_interval_hours as u64 * 3600
-                        );
-                        tokio::time::sleep(interval).await;
-
-                        let config = crate::commands::sync::read_sync_config();
-                        if config.auto_backup_scheduled {
-                            log::info!("Creating scheduled auto-backup");
-                            if let Err(e) = crate::commands::backup::create_auto_backup(
-                                &state_for_timer,
-                                &app_handle,
-                                "Scheduled",
-                            ).await {
-                                log::warn!("Scheduled auto-backup failed: {}", e);
-                            }
-                        }
-                    }
-                });
-            }
+            // Scheduled auto-backups (per game, checked every minute)
+            commands::backup::spawn_scheduler(handle.clone(), state_clone.clone());
 
             // Async tasks: file watcher + pack detection
             tauri::async_runtime::spawn(async move {
