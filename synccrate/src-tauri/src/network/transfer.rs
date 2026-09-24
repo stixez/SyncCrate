@@ -1,9 +1,9 @@
+use crate::event_sink::Events;
 use crate::network::protocol::{self, Message};
 use crate::state::{AppState, GameInfo};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use crate::network::stream::PeerStream;
@@ -150,7 +150,7 @@ pub async fn bind_listener(port: u16) -> Result<(TcpListener, u16), String> {
 pub async fn run_listener(
     listener: TcpListener,
     state: Arc<Mutex<AppState>>,
-    app: tauri::AppHandle,
+    app: Events,
 ) {
     let token = get_or_create_token().await;
 
@@ -183,7 +183,7 @@ pub async fn run_listener(
 pub async fn serve_incoming(
     stream: PeerStream,
     state: Arc<Mutex<AppState>>,
-    app: tauri::AppHandle,
+    app: Events,
     label: String,
 ) {
     // Enforce connection limit
@@ -203,7 +203,7 @@ pub async fn serve_incoming(
 async fn handle_client(
     stream: PeerStream,
     state: Arc<Mutex<AppState>>,
-    app: tauri::AppHandle,
+    app: Events,
     peer_label: String,
 ) -> Result<(), String> {
     let peer_ip = stream
@@ -813,7 +813,7 @@ async fn connect_best(
     port: u16,
     internet_id: Option<iroh::EndpointId>,
     state: &Arc<Mutex<AppState>>,
-    app: &tauri::AppHandle,
+    app: &Events,
 ) -> Result<PeerStream, String> {
     let Some(remote) = internet_id else {
         return connect_any(addresses, port).await.map(PeerStream::tcp);
@@ -848,10 +848,29 @@ pub async fn connect_to_host(
     internet_id: Option<iroh::EndpointId>,
     peer_id: &str,
     state: Arc<Mutex<AppState>>,
-    app: tauri::AppHandle,
+    app: Events,
     pin: Option<String>,
 ) -> Result<(), String> {
     let stream = connect_best(addresses, port, internet_id, &state, &app).await?;
+    run_client_session(stream, addresses, port, peer_id, state, app, pin).await
+}
+
+/// Everything after the transport connects: the handshake, manifest exchange
+/// and message loop. Transport-neutral (`PeerStream` covers TCP and iroh), so
+/// tests can drive it directly with a hand-built `PeerStream` — e.g. a raw
+/// iroh connection with relays disabled — without going through
+/// `connect_best`/`iroh_net`'s app-wide singleton endpoint. `addresses`/`port`
+/// are only recorded on the stored `PeerInfo` (for reconnects); pass `&[]`/`0`
+/// for a stream that didn't come from an address (e.g. a test iroh dial).
+pub(crate) async fn run_client_session(
+    stream: PeerStream,
+    addresses: &[String],
+    port: u16,
+    peer_id: &str,
+    state: Arc<Mutex<AppState>>,
+    app: Events,
+    pin: Option<String>,
+) -> Result<(), String> {
     let ip = stream
         .peer_ip()
         .map(|a| a.to_string())
@@ -1017,7 +1036,7 @@ pub async fn connect_to_host(
 /// Runs until the connection drops or the user disconnects. Handles its own cleanup.
 async fn client_message_loop(
     state: Arc<Mutex<AppState>>,
-    app: tauri::AppHandle,
+    app: Events,
     stream: Arc<Mutex<PeerStream>>,
     peer_id: &str,
     host_name: String,

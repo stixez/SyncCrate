@@ -1,4 +1,5 @@
 mod commands;
+mod event_sink;
 mod game_install;
 mod network;
 mod packs;

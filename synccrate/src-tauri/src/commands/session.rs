@@ -143,8 +143,9 @@ pub async fn start_host(
     {
         let net_state = state.inner().clone();
         let net_app = app.clone();
+        let net_events = crate::event_sink::from_app(&net_app);
         tokio::spawn(async move {
-            match crate::network::iroh_net::endpoint(&net_state, &net_app).await {
+            match crate::network::iroh_net::endpoint(&net_state, &net_events).await {
                 Ok(ep) => {
                     ep.online().await;
                     log::info!("Internet joining ready ({})", ep.id().fmt_short());
@@ -161,7 +162,7 @@ pub async fn start_host(
     let app_handle = app.clone();
     let state_clone = state.inner().clone();
     tokio::spawn(async move {
-        crate::network::transfer::run_listener(listener, state_clone, app_handle).await;
+        crate::network::transfer::run_listener(listener, state_clone, crate::event_sink::from_app(&app_handle)).await;
     });
 
     Ok(SessionInfo {
@@ -240,7 +241,7 @@ pub async fn connect_to_peer(
             None,
             &connection_peer_id,
             state_clone.clone(),
-            app_handle.clone(),
+            crate::event_sink::from_app(&app_handle),
             connect_pin,
         ).await {
             log::error!("Connection error: {}", e);
@@ -453,7 +454,7 @@ async fn start_direct_connection(
     let connect_peer_id = peer_id.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::network::transfer::connect_to_host(
-            &addresses, port, internet_id, &connect_peer_id, state_clone.clone(), app_handle.clone(), pin,
+            &addresses, port, internet_id, &connect_peer_id, state_clone.clone(), crate::event_sink::from_app(&app_handle), pin,
         ).await {
             log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;
