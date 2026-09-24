@@ -1,6 +1,16 @@
 use crate::registry::{DetectionStrategy, GameDefinition, GameRegistry};
 use std::path::PathBuf;
 
+/// Root config directory: the real OS config dir, unless overridden (E2E
+/// tests point this at a temp dir so a test run never reads or writes the
+/// developer's real SyncCrate data — hash cache, sync config, backups, ...).
+pub fn config_root() -> PathBuf {
+    if let Ok(dir) = std::env::var("SYNCCRATE_CONFIG_DIR") {
+        return PathBuf::from(dir);
+    }
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
 /// Strip the Windows extended-length path prefix (\\?\) that canonicalize() adds.
 #[allow(dead_code)]
 pub fn clean_path(path: PathBuf) -> PathBuf {
@@ -406,7 +416,7 @@ pub fn content_type_path(base: &str, folder: &str) -> PathBuf {
 }
 
 pub fn profiles_dir() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate").join("profiles");
     std::fs::create_dir_all(&dir).ok();
     dir
@@ -493,35 +503,35 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
 }
 
 pub fn metadata_path() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate");
     std::fs::create_dir_all(&dir).ok();
     dir.join("mod_metadata.json")
 }
 
 pub fn backups_dir() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate").join("backups");
     std::fs::create_dir_all(&dir).ok();
     dir
 }
 
 pub fn sync_config_path() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate");
     std::fs::create_dir_all(&dir).ok();
     dir.join("sync_config.json")
 }
 
 pub fn game_config_path() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate");
     std::fs::create_dir_all(&dir).ok();
     dir.join("game_config.json")
 }
 
 pub fn hash_cache_path() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let config = config_root();
     let dir = config.join("synccrate");
     std::fs::create_dir_all(&dir).ok();
     dir.join("hash_cache.json")

@@ -1,9 +1,9 @@
+use crate::event_sink::{self, Events};
 use crate::network::transfer;
 use crate::state::{AppState, ConflictPair, FileInfo, ReplaceTarget, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use crate::utils;
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::sync::Mutex;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -26,6 +26,10 @@ static CANCEL_SYNC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBoo
 /// checkpoint is kept so the next sync continues where this one stopped.
 #[tauri::command]
 pub async fn cancel_sync(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    cancel_sync_inner(state.inner()).await
+}
+
+pub(crate) async fn cancel_sync_inner(state: &Arc<Mutex<AppState>>) -> Result<bool, String> {
     let syncing = state.lock().await.is_any_syncing();
     if syncing {
         CANCEL_SYNC.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -34,8 +38,7 @@ pub async fn cancel_sync(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Resul
 }
 
 fn checkpoint_path() -> std::path::PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    config.join("synccrate").join("sync_progress.json")
+    utils::config_root().join("synccrate").join("sync_progress.json")
 }
 
 fn read_checkpoint() -> Option<SyncCheckpoint> {
@@ -67,6 +70,13 @@ pub async fn compute_sync_plan(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
+    compute_sync_plan_inner(state.inner(), peer_id).await
+}
+
+pub(crate) async fn compute_sync_plan_inner(
+    state: &Arc<Mutex<AppState>>,
+    peer_id: Option<String>,
+) -> Result<SyncPlan, String> {
     // Diffing needs real hashes: a local manifest from a quick scan has empty
     // hashes, which would turn every file both sides have into a "conflict".
     // An empty manifest may simply never have been scanned (or was dropped on
@@ -80,7 +90,7 @@ pub async fn compute_sync_plan(
         files.is_empty() || files.values().any(|f| f.hash.is_empty())
     };
     if needs_rehash {
-        crate::commands::files::scan_files_inner(state.inner(), None, true).await?;
+        crate::commands::files::scan_files_inner(state, None, true).await?;
     }
 
     let mut app_state = state.lock().await;
@@ -237,6 +247,14 @@ pub async fn execute_sync(
     app: tauri::AppHandle,
     peer_id: Option<String>,
 ) -> Result<(), String> {
+    execute_sync_inner(state.inner(), event_sink::from_app(&app), peer_id).await
+}
+
+pub(crate) async fn execute_sync_inner(
+    state: &Arc<Mutex<AppState>>,
+    events: Events,
+    peer_id: Option<String>,
+) -> Result<(), String> {
     let (plan, base_path, resolved_id, content_types) = {
         let mut app_state = state.lock().await;
         let resolved_id = app_state.resolve_peer_id(peer_id)?;
@@ -295,7 +313,7 @@ pub async fn execute_sync(
         let targets = crate::commands::backup::presync_targets(&plan);
         if !targets.is_empty() {
             let backup = crate::commands::backup::create_presync_backup(
-                &app,
+                &events,
                 plan.game_id.clone(),
                 base_path.clone(),
                 content_types,
@@ -320,7 +338,7 @@ pub async fn execute_sync(
         }
     }
 
-    let result = run_sync(&state, &app, &plan, &base_path, &resolved_id).await;
+    let result = run_sync(state, &events, &plan, &base_path, &resolved_id).await;
 
     {
         let mut app_state = state.lock().await;
@@ -403,8 +421,8 @@ pub(crate) fn receive_target(plan: &SyncPlan, file: &FileInfo) -> (String, Strin
 pub const SYNC_CANCELLED: &str = "Sync cancelled";
 
 async fn run_sync(
-    state: &tauri::State<'_, Arc<Mutex<AppState>>>,
-    app: &tauri::AppHandle,
+    state: &Arc<Mutex<AppState>>,
+    app: &Events,
     plan: &SyncPlan,
     base_path: &str,
     peer_id: &str,
@@ -425,7 +443,7 @@ async fn run_sync(
     let mut sync_errors: Vec<String> = Vec::new();
     let mut files_received = 0u64;
     let started = std::time::Instant::now();
-    let state_arc = state.inner().clone();
+    let state_arc = state.clone();
 
     let plan_hash = plan
         .plan_hash
@@ -612,8 +630,8 @@ async fn run_sync(
 /// Delete the active game's registry `post_sync_delete` files (stale caches the
 /// game would otherwise keep using, e.g. Sims 4 localthumbcache.package).
 async fn clear_post_sync_caches(
-    state: &tauri::State<'_, Arc<Mutex<AppState>>>,
-    app: &tauri::AppHandle,
+    state: &Arc<Mutex<AppState>>,
+    app: &Events,
     base_path: &str,
 ) {
     let targets = {
@@ -735,6 +753,15 @@ pub async fn resolve_conflict(
     resolution: Resolution,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
+    resolve_conflict_inner(state.inner(), path, resolution, peer_id).await
+}
+
+pub(crate) async fn resolve_conflict_inner(
+    state: &Arc<Mutex<AppState>>,
+    path: String,
+    resolution: Resolution,
+    peer_id: Option<String>,
+) -> Result<SyncPlan, String> {
     let mut app_state = state.lock().await;
 
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
@@ -774,6 +801,14 @@ pub async fn resolve_conflict(
 #[tauri::command]
 pub async fn resolve_all_conflicts(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    strategy: String,
+    peer_id: Option<String>,
+) -> Result<SyncPlan, String> {
+    resolve_all_conflicts_inner(state.inner(), strategy, peer_id).await
+}
+
+pub(crate) async fn resolve_all_conflicts_inner(
+    state: &Arc<Mutex<AppState>>,
     strategy: String,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
@@ -1391,8 +1426,7 @@ pub struct SyncHistoryEntry {
 }
 
 fn sync_history_path() -> std::path::PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    config.join("synccrate").join("sync_history.json")
+    utils::config_root().join("synccrate").join("sync_history.json")
 }
 
 pub fn append_sync_history(entry: SyncHistoryEntry) {

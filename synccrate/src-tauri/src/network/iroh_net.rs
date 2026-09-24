@@ -6,6 +6,7 @@
 //! host's endpoint id (and therefore their join code) stays the same across
 //! restarts.
 
+use crate::event_sink::Events;
 use crate::network::stream::PeerStream;
 use crate::state::{AppState, SessionType};
 use iroh::endpoint::{presets, QuicTransportConfig};
@@ -47,7 +48,7 @@ pub fn local_id() -> EndpointId {
 
 /// The shared endpoint, bound on first use. Incoming connections are only
 /// served while hosting; others are refused.
-pub async fn endpoint(state: &Arc<Mutex<AppState>>, app: &tauri::AppHandle) -> Result<Endpoint, String> {
+pub async fn endpoint(state: &Arc<Mutex<AppState>>, app: &Events) -> Result<Endpoint, String> {
     let state = state.clone();
     let app = app.clone();
     ENDPOINT
@@ -74,7 +75,7 @@ pub async fn endpoint(state: &Arc<Mutex<AppState>>, app: &tauri::AppHandle) -> R
         .cloned()
 }
 
-async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: tauri::AppHandle) {
+async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: Events) {
     while let Some(incoming) = ep.accept().await {
         let state = state.clone();
         let app = app.clone();
@@ -112,7 +113,7 @@ async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: tauri::AppH
 /// the connection starts on a relay and upgrades to direct when possible).
 pub async fn connect(
     state: &Arc<Mutex<AppState>>,
-    app: &tauri::AppHandle,
+    app: &Events,
     remote: EndpointId,
 ) -> Result<PeerStream, String> {
     let ep = endpoint(state, app).await?;

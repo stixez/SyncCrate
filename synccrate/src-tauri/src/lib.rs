@@ -1,4 +1,5 @@
 mod commands;
+mod event_sink;
 mod game_install;
 mod network;
 mod packs;
@@ -7,6 +8,11 @@ mod state;
 mod sync;
 mod utils;
 mod watcher;
+
+#[cfg(test)]
+mod testutil;
+#[cfg(test)]
+mod e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;

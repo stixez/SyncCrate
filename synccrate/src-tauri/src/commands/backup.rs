@@ -1,4 +1,5 @@
 use crate::commands::files::{get_game_def, resolve_game};
+use crate::event_sink::{self, EventSink, Events};
 use crate::registry::ContentType;
 use crate::state::{AppState, SyncAction, SyncPlan};
 use crate::utils;
@@ -9,7 +10,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -812,14 +812,14 @@ pub(crate) fn presync_targets(plan: &SyncPlan) -> Vec<String> {
 /// Back up the files a sync is about to replace. Ok(None) if none of them
 /// exist locally.
 pub async fn create_presync_backup(
-    app: &tauri::AppHandle,
+    events: &Events,
     game: String,
     base: String,
     cts: Vec<ContentType>,
     targets: Vec<String>,
 ) -> Result<Option<BackupInfo>, String> {
     let max_count = crate::commands::sync::read_sync_config().auto_backup_max_count as usize;
-    let mut progress = progress_emitter(app.clone(), "backup-progress", KIND_PRESYNC, game.clone());
+    let mut progress = progress_emitter(events.clone(), "backup-progress", KIND_PRESYNC, game.clone());
     tokio::task::spawn_blocking(move || {
         let _lock = store_lock();
         let root = utils::backups_dir();
@@ -844,7 +844,7 @@ pub async fn create_presync_backup(
 /// Emits progress at most every 100 ms (plus the last file): per-file events
 /// for a 50k-file backup flooded the webview.
 fn progress_emitter(
-    app: tauri::AppHandle,
+    app: Events,
     event: &'static str,
     phase: &'static str,
     game: String,
@@ -854,7 +854,7 @@ fn progress_emitter(
         let now = std::time::Instant::now();
         if done == total || last.map_or(true, |t| now.duration_since(t).as_millis() >= 100) {
             last = Some(now);
-            let _ = app.emit(
+            app.emit(
                 event,
                 serde_json::json!({
                     "phase": phase,
@@ -920,7 +920,7 @@ pub async fn create_backup(
         (path, game_id, cts, game_label)
     };
 
-    let mut progress = progress_emitter(app.clone(), "backup-progress", KIND_MANUAL, game_id.clone());
+    let mut progress = progress_emitter(event_sink::from_app(&app), "backup-progress", KIND_MANUAL, game_id.clone());
     let info = tokio::task::spawn_blocking(move || {
         let _lock = store_lock();
         create_backup_inner(
@@ -1011,8 +1011,9 @@ pub async fn restore_backup(
     }
     let _guard = RestoringGuard;
 
-    let mut safety_progress = progress_emitter(app.clone(), "restore-progress", KIND_SAFETY, game_id.clone());
-    let mut restore_progress = progress_emitter(app.clone(), "restore-progress", "restore", game_id.clone());
+    let events = event_sink::from_app(&app);
+    let mut safety_progress = progress_emitter(events.clone(), "restore-progress", KIND_SAFETY, game_id.clone());
+    let mut restore_progress = progress_emitter(events, "restore-progress", "restore", game_id.clone());
     tokio::task::spawn_blocking(move || -> Result<RestoreResult, String> {
         let _lock = store_lock();
         let manifest = read_manifest(&backup_dir)?;
@@ -1178,7 +1179,7 @@ pub fn spawn_scheduler(app: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
             .await
             .unwrap_or(false);
             if ran {
-                let _ = app.emit("backups-changed", ());
+                app.emit("backups-changed", serde_json::Value::Null);
             }
         }
     });
@@ -1209,7 +1210,7 @@ fn run_due_backup(
         return false;
     }
     let label = format!("Scheduled {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let mut progress = progress_emitter(app.clone(), "backup-progress", KIND_AUTO, c.game.clone());
+    let mut progress = progress_emitter(event_sink::from_app(app), "backup-progress", KIND_AUTO, c.game.clone());
     let result = create_backup_inner(
         &root,
         BackupRequest { game: &c.game, base: Path::new(&c.base), cts: &c.cts, label, kind: KIND_AUTO, only: None },
