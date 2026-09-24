@@ -232,6 +232,70 @@ pub fn compute_diff(local: &FileManifest, remote: &FileManifest) -> SyncPlan {
     }
 }
 
+/// Diff a modpack's file list against the local manifest and a connected
+/// host's remote manifest. Unlike `compute_diff`, only paths the pack lists
+/// are ever considered: nothing outside it is uploaded, deleted, or even
+/// looked at, so a pack sync can never touch a file it doesn't mention.
+///
+/// For each pack file: already matching locally (by hash, any local twin) →
+/// skipped. Otherwise, only a host file at the same path with the pack's
+/// *exact* hash counts — a host file at that path with different content
+/// isn't "the pack's file" and is reported unavailable rather than treated
+/// as a substitute. A brand new local path is a plain receive; an existing,
+/// differently-hashed one is a conflict (same resolution UI as a normal sync).
+pub fn compute_pack_plan(
+    local: &FileManifest,
+    remote: &FileManifest,
+    pack_files: &[crate::state::PackFile],
+) -> (SyncPlan, Vec<String>) {
+    let mut actions = Vec::new();
+    let mut total_bytes = 0u64;
+    let mut unavailable = Vec::new();
+
+    let mut local_by_key: HashMap<String, Vec<&FileInfo>> = HashMap::new();
+    for info in local.files.values() {
+        local_by_key.entry(match_key(&info.relative_path)).or_default().push(info);
+    }
+    let mut remote_by_key: HashMap<String, Vec<&FileInfo>> = HashMap::new();
+    for info in remote.files.values() {
+        remote_by_key.entry(match_key(&info.relative_path)).or_default().push(info);
+    }
+
+    for pf in pack_files {
+        let key = match_key(&pf.relative_path);
+        let local_candidates = local_by_key.get(&key);
+        let already_have = local_candidates.is_some_and(|cands| {
+            cands.iter().any(|l| !pf.hash.is_empty() && l.hash == pf.hash)
+        });
+        if already_have {
+            continue;
+        }
+
+        let matching_remote: Vec<&FileInfo> = remote_by_key
+            .get(&key)
+            .map(|cands| cands.iter().filter(|r| !pf.hash.is_empty() && r.hash == pf.hash).copied().collect())
+            .unwrap_or_default();
+        let Some(remote_info) = (!matching_remote.is_empty()).then(|| pick_remote(&matching_remote)) else {
+            unavailable.push(pf.relative_path.clone());
+            continue;
+        };
+
+        match local_candidates {
+            None => {
+                total_bytes += remote_info.size;
+                actions.push(SyncAction::ReceiveFromRemote(remote_info.clone()));
+            }
+            Some(cands) => {
+                let local_info = pick_local(cands, remote_info);
+                total_bytes += remote_info.size.max(local_info.size);
+                actions.push(SyncAction::Conflict { local: local_info.clone(), remote: remote_info.clone() });
+            }
+        }
+    }
+
+    (SyncPlan { actions, total_bytes, ..Default::default() }, unavailable)
+}
+
 /// Why a plan may not run against the current game/folder, if any. Plans are
 /// computed against one folder; running one after the game or its path
 /// changed would download (and replace) files in the wrong place.
@@ -550,6 +614,77 @@ mod tests {
         assert!(plan_target_mismatch(&plan, "sims4", "C:/B").is_some());
         assert!(plan_target_mismatch(&plan, "ets2", "C:/A").is_some());
         assert!(plan_target_mismatch(&SyncPlan::default(), "", "").is_some());
+    }
+
+    fn pf(path: &str, hash: &str) -> crate::state::PackFile {
+        crate::state::PackFile { relative_path: path.to_string(), size: 1000, hash: hash.to_string() }
+    }
+
+    #[test]
+    fn pack_plan_downloads_a_missing_file_the_host_has() {
+        let local = make_manifest(vec![]);
+        let remote = make_manifest(vec![make_file("Mods/a.package", "abc123", 1000)]);
+        let (plan, unavailable) = compute_pack_plan(&local, &remote, &[pf("Mods/a.package", "abc123")]);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/a.package"));
+        assert!(unavailable.is_empty());
+    }
+
+    #[test]
+    fn pack_plan_skips_a_file_already_present_with_the_pack_hash() {
+        let local = make_manifest(vec![make_file("Mods/a.package", "abc123", 1000)]);
+        let remote = make_manifest(vec![make_file("Mods/a.package", "abc123", 1000)]);
+        let (plan, unavailable) = compute_pack_plan(&local, &remote, &[pf("Mods/a.package", "abc123")]);
+        assert!(plan.actions.is_empty());
+        assert!(unavailable.is_empty());
+    }
+
+    #[test]
+    fn pack_plan_conflicts_a_locally_different_file() {
+        let local = make_manifest(vec![make_file("Mods/a.package", "local_hash", 1000)]);
+        let remote = make_manifest(vec![make_file("Mods/a.package", "pack_hash", 1000)]);
+        let (plan, unavailable) = compute_pack_plan(&local, &remote, &[pf("Mods/a.package", "pack_hash")]);
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::Conflict { .. }));
+        assert!(unavailable.is_empty());
+    }
+
+    #[test]
+    fn pack_plan_reports_unavailable_when_host_lacks_the_exact_hash() {
+        // Host doesn't have the path at all.
+        let local = make_manifest(vec![]);
+        let remote = make_manifest(vec![]);
+        let (plan, unavailable) = compute_pack_plan(&local, &remote, &[pf("Mods/a.package", "abc123")]);
+        assert!(plan.actions.is_empty());
+        assert_eq!(unavailable, vec!["Mods/a.package".to_string()]);
+
+        // Host has the path, but different content than the pack specifies.
+        let remote2 = make_manifest(vec![make_file("Mods/a.package", "different_hash", 1000)]);
+        let (plan2, unavailable2) = compute_pack_plan(&local, &remote2, &[pf("Mods/a.package", "abc123")]);
+        assert!(plan2.actions.is_empty());
+        assert_eq!(unavailable2, vec!["Mods/a.package".to_string()]);
+    }
+
+    #[test]
+    fn pack_plan_never_touches_files_outside_the_pack() {
+        let local = make_manifest(vec![make_file("Mods/extra_local.package", "x", 5)]);
+        let remote = make_manifest(vec![
+            make_file("Mods/a.package", "abc123", 1000),
+            make_file("Mods/extra_remote.package", "y", 5),
+        ]);
+        let (plan, _) = compute_pack_plan(&local, &remote, &[pf("Mods/a.package", "abc123")]);
+        assert_eq!(plan.actions.len(), 1, "only the pack's own file should appear");
+        assert!(plan.actions.iter().all(|a| !matches!(a, SyncAction::Delete(_) | SyncAction::SendToRemote(_))));
+    }
+
+    #[test]
+    fn pack_plan_matches_case_only_and_disabled_names() {
+        // Client already has it, disabled, different case: counts as "have", no action.
+        let local = make_manifest(vec![make_file("Mods/cc/hair.package.disabled", "abc123", 1000)]);
+        let remote = make_manifest(vec![make_file("Mods/CC/Hair.package", "abc123", 1000)]);
+        let (plan, unavailable) = compute_pack_plan(&local, &remote, &[pf("Mods/CC/Hair.package", "abc123")]);
+        assert!(plan.actions.is_empty());
+        assert!(unavailable.is_empty());
     }
 
     #[test]

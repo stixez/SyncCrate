@@ -195,6 +195,51 @@ pub struct SyncPlan {
     /// Plan-level warning for the UI (e.g. "host may be sharing a different game").
     #[serde(default)]
     pub warning: Option<String>,
+    /// Pack files (by relative path) the connected host doesn't have with the
+    /// pack's exact hash. Only set on a plan from `compute_pack_plan`.
+    #[serde(default)]
+    pub pack_unavailable: Vec<String>,
+}
+
+/// One file in a modpack's manifest. No content — packs are shareable
+/// because they stay tiny regardless of how much they describe.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackFile {
+    pub relative_path: String,
+    pub size: u64,
+    pub hash: String,
+}
+
+/// A host's join info embedded in a pack, so "get missing files" doesn't
+/// need a separate discovery/join-code step. Best-effort: only present when
+/// the pack was exported while its author was hosting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackJoin {
+    pub code: String,
+}
+
+/// A shareable snapshot of "my exact setup" for one game: which files, not
+/// their bytes. `format_version` is bumped only on a breaking change to this
+/// shape; unknown extra fields from a newer app already round-trip fine
+/// through serde without it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModPack {
+    pub format_version: u32,
+    pub app_version: String,
+    pub game_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub author: String,
+    pub created_at: u64,
+    /// Content type ids actually represented in `files` (informational; the
+    /// importer's own registry entry, not the exporter's, decides folders).
+    #[serde(default)]
+    pub content_types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join: Option<PackJoin>,
+    pub files: Vec<PackFile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

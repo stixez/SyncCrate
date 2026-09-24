@@ -398,6 +398,12 @@ pub async fn connect_by_code(
 /// The host's join code for the current session.
 #[tauri::command]
 pub async fn get_join_code(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+    join_code_for(state.inner()).await
+}
+
+/// Shared with `commands::modpack::create_pack_inner`, which embeds the
+/// current join code in an exported pack while hosting.
+pub(crate) async fn join_code_for(state: &Arc<Mutex<AppState>>) -> Result<String, String> {
     let (port, pin) = {
         let app_state = state.lock().await;
         if app_state.session_type != SessionType::Host {
