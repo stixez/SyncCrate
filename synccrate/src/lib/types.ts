@@ -133,6 +133,49 @@ export interface SyncPlan {
   /** Host files the host has disabled while yours are enabled (left alone). */
   disabled_on_host?: number;
   warning?: string | null;
+  /** Pack files (by path) the host doesn't have with the pack's exact hash. Only set on a pack sync plan. */
+  pack_unavailable?: string[];
+}
+
+// --- Modpacks ---
+
+export interface PackFile {
+  relative_path: string;
+  size: number;
+  hash: string;
+}
+
+export interface PackJoin {
+  code: string;
+}
+
+export interface ModPack {
+  format_version: number;
+  app_version: string;
+  game_id: string;
+  name: string;
+  description: string;
+  author: string;
+  created_at: number;
+  content_types: string[];
+  join?: PackJoin | null;
+  files: PackFile[];
+}
+
+export interface PackFileStatus {
+  relative_path: string;
+  size: number;
+  content_type?: string | null;
+}
+
+export interface PackComparison {
+  pack_name: string;
+  pack_game: string;
+  wrong_game: boolean;
+  have: number;
+  have_bytes: number;
+  missing: PackFileStatus[];
+  different: PackFileStatus[];
 }
 
 export type Resolution = "KeepMine" | "UseTheirs" | "KeepBoth";
@@ -196,6 +239,7 @@ export type Page =
   | "content"
   | "profiles"
   | "backups"
+  | "modpacks"
   | "activity"
   | "settings"
   | "game-browser";

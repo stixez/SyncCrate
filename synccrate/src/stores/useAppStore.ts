@@ -113,6 +113,11 @@ interface AppState {
   undoStatus: UndoStatus | null;
   setUndoStatus: (s: UndoStatus | null) => void;
 
+  /** A `.scpack` file dropped anywhere in the app (see App.tsx's global drop
+   * handler); ModpackList picks it up and clears it once loaded. */
+  pendingImportPackPath: string | null;
+  setPendingImportPackPath: (path: string | null) => void;
+
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
 
@@ -249,6 +254,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBackupProgress: (backupProgress) => set({ backupProgress }),
   undoStatus: null,
   setUndoStatus: (undoStatus) => set({ undoStatus }),
+  pendingImportPackPath: null,
+  setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

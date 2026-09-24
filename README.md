@@ -77,6 +77,9 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Game browser.** 100 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
+**Share your setup**
+- **Modpacks.** Export "my exact setup" as a tiny `.scpack` manifest — game, content types, and a file list (path, size, hash), no file contents, so it stays shareable-sized even for a big CC folder. A friend imports it (file, drag & drop, or a pasted link for small packs) and sees what they have, what's missing, and what differs, grouped like the Content page. Connect to whoever's sharing it and "Get missing files" pulls exactly the pack's files — differences become the normal conflict prompt, files the host doesn't have are reported rather than silently skipped, and nothing outside the pack is ever touched.
+
 **Safety**
 - **Backups.** Manual or automatic, stored incrementally: unchanged files are kept once and shared between backups, so extra backups cost almost nothing. Scheduled backups cover each game in your library on its own 1–24 h timer (even across restarts). "Back up before sync" saves just the files a sync is about to replace or delete, and the sync stops if that backup fails. Restores keep file dates, skip mods you have disabled since, can optionally be exact (also removing files added since the backup), and always take a safety backup first.
 - **Undo last sync.** Right after a sync, one click puts your files back exactly as they were — replaced files return byte- and date-identical, added files (including "keep both" copies) are removed, and anything you've touched since is left alone and reported instead of overwritten. Only the most recent sync per game can be undone, and only from the client side.

@@ -5,6 +5,7 @@ import GameDashboard from "./components/GameDashboard";
 import ContentBrowser from "./components/ContentBrowser";
 import ProfileList from "./components/ProfileList";
 import BackupList from "./components/BackupList";
+import ModpackList from "./components/ModpackList";
 import ActivityLog from "./components/ActivityLog";
 import Settings from "./components/Settings";
 import GameBrowser from "./components/GameBrowser";
@@ -280,6 +281,17 @@ function App() {
     async (e: Event) => {
       const paths = (e as CustomEvent<string[]>).detail;
       if (!paths || paths.length === 0) return;
+
+      if (paths.length === 1 && paths[0].toLowerCase().endsWith(".scpack")) {
+        if (!useAppStore.getState().selectedGame) {
+          toastInfo("Open a game first, then drop a pack file");
+          return;
+        }
+        useAppStore.getState().setPendingImportPackPath(paths[0]);
+        useAppStore.getState().setPage("modpacks");
+        return;
+      }
+
       const { selectedGame: gameId, activeGame, session } = useAppStore.getState();
       if (!gameId) {
         // Without a game the backend fell back to the active game's folder.
@@ -371,6 +383,8 @@ function App() {
         return <ProfileList gameId={selectedGame} />;
       case "backups":
         return <BackupList gameId={selectedGame} />;
+      case "modpacks":
+        return <ModpackList gameId={selectedGame} />;
       default:
         return <GameDashboard gameId={selectedGame} />;
     }
