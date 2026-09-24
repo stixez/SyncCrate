@@ -479,17 +479,29 @@ pub struct HostUpdates {
 
 /// Files the host has that we don't — exactly the `ReceiveFromRemote` actions
 /// `compute_sync_plan` would produce (a missing path; changed files become
-/// conflicts), minus disallowed content types and exclude patterns. Only paths
+/// conflicts), minus disallowed content types, paths outside this game's
+/// content folders and exclude patterns. Paths are matched like the diff does
+/// (`sync::diff::match_key`: case, `.disabled`, `_Disabled/`). Only paths
 /// matter, so a quick-scan local manifest (empty hashes) needs no re-hash.
 pub(crate) fn count_new_host_files(
     local: &crate::state::FileManifest,
     remote: &crate::state::FileManifest,
+    content_types: &[crate::registry::ContentType],
     allowed: impl Fn(&crate::state::FileInfo) -> bool,
     exclude_patterns: &[String],
 ) -> HostUpdates {
+    use crate::sync::diff::{match_key, path_accepted_by};
+    let local_keys: std::collections::HashSet<String> =
+        local.files.keys().map(|k| match_key(k)).collect();
+    let mut seen = std::collections::HashSet::new();
     let mut out = HostUpdates::default();
     for (path, info) in &remote.files {
-        if local.files.contains_key(path) || !allowed(info) {
+        let key = match_key(path);
+        if local_keys.contains(&key)
+            || !path_accepted_by(content_types, path)
+            || !allowed(info)
+            || !seen.insert(key)
+        {
             continue;
         }
         if exclude_patterns.iter().any(|p| crate::commands::sync::glob_matches(p, path)) {
@@ -521,9 +533,13 @@ pub async fn check_host_updates(
     let remote = crate::network::transfer::refresh_remote_manifest(state.inner(), &peer_id).await?;
     let patterns = crate::commands::sync::read_exclude_patterns();
     let app_state = state.lock().await;
+    let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
+        .map(|g| g.content_types.clone())
+        .unwrap_or_default();
     Ok(count_new_host_files(
         &app_state.local_manifest,
         &remote,
+        &content_types,
         |f| app_state.is_file_info_allowed(f),
         &patterns,
     ))
@@ -591,10 +607,37 @@ mod tests {
         let out = count_new_host_files(
             &local,
             &remote,
+            &content_types(),
             |f| !f.relative_path.starts_with("Saves/"),
             &["*.tmp".to_string()],
         );
         assert_eq!(out, HostUpdates { files: 1, bytes: 20 });
+    }
+
+    fn content_types() -> Vec<crate::registry::ContentType> {
+        let def = crate::registry::load_registry()
+            .games
+            .into_iter()
+            .find(|g| g.id == "sims4")
+            .expect("sims4 in registry");
+        let mut cts = def.content_types;
+        // Let the test's `.tmp` file through so the exclude pattern is what drops it.
+        for ct in &mut cts {
+            ct.extensions.push("tmp".to_string());
+        }
+        cts
+    }
+
+    #[test]
+    fn count_new_host_files_matches_like_the_diff_and_skips_foreign() {
+        let local = manifest(&[("Mods/cc/hair.package.disabled", 10)]);
+        let remote = manifest(&[
+            ("Mods/CC/Hair.package", 10), // disabled/case twin of a local file
+            ("mod/truck.scs", 30),        // another game's folder
+            ("Mods/new.package", 5),
+        ]);
+        let out = count_new_host_files(&local, &remote, &content_types(), |_| true, &[]);
+        assert_eq!(out, HostUpdates { files: 1, bytes: 5 });
     }
 
     #[test]

@@ -124,6 +124,15 @@ export interface SyncPlan {
   total_bytes: number;
   excluded: string[];
   resumed_files?: number;
+  /** Host files skipped because they're outside this game's content folders. */
+  skipped_foreign?: number;
+  /** Game the host shares; null for hosts older than 0.5.6. */
+  host_game?: string | null;
+  /** Host files you have only as a disabled copy with the same content. */
+  disabled_locally?: number;
+  /** Host files the host has disabled while yours are enabled (left alone). */
+  disabled_on_host?: number;
+  warning?: string | null;
 }
 
 export type Resolution = "KeepMine" | "UseTheirs" | "KeepBoth";
@@ -259,7 +268,10 @@ export interface GameDefinition {
   version_detection?: VersionDetection;
   path_correction?: PathCorrection;
   process_names?: string[];
-  disable_method?: "folder" | "rename" | null;
+  /** "none": the game loads every subfolder and mods are folders, so no per-file toggle. */
+  disable_method?: "folder" | "rename" | "none" | null;
+  /** Duplicate finder offered (mods folder only). */
+  duplicate_finder?: boolean;
   post_sync_delete?: string[];
   install_names?: string[];
   install_markers?: string[];
@@ -328,6 +340,12 @@ export interface DuplicateGroup {
 export interface DeleteResult {
   deleted: number;
   errors: string[];
+}
+
+export interface RestoreResult {
+  restored: number;
+  /** Files left alone because a disabled/enabled copy exists now. */
+  skipped: string[];
 }
 
 export interface OutdatedScripts {

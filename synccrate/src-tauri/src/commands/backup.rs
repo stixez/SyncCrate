@@ -384,7 +384,7 @@ pub async fn restore_backup(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     id: String,
-) -> Result<(), String> {
+) -> Result<RestoreResult, String> {
     utils::sanitize_id(&id)?;
 
     let backup_dir = utils::backups_dir().join(&id);
@@ -400,12 +400,23 @@ pub async fn restore_backup(
     // Resolve game from backup manifest
     let (base, game_id, content_types) = {
         let app_state = state.lock().await;
+        // Restoring rewrites files a sync may be reading/writing, and a host's
+        // peers would pull a half-restored folder.
+        if app_state.is_any_syncing() {
+            return Err("Can't restore while a sync is in progress.".into());
+        }
+        if app_state.session_type != crate::state::SessionType::None {
+            return Err("Disconnect from the current session before restoring a backup.".into());
+        }
         // Never fall back to another game: restoring e.g. a Minecraft backup
         // into the Sims 4 folder would scatter files where they don't belong.
         let game_id = resolve_game(&app_state, &manifest.info.game)
             .map_err(|_| format!("Backup is for an unknown game '{}'", manifest.info.game))?;
         let path = app_state.game_paths.get(&game_id).cloned()
             .ok_or_else(|| format!("{} path not set. Configure it before restoring this backup.", app_state.game_label(&game_id)))?;
+        if !Path::new(&path).is_dir() {
+            return Err(crate::commands::files::missing_folder_error(&app_state.game_label(&game_id), &path));
+        }
         let cts = get_game_def(&app_state.game_registry, &game_id)
             .map(|def| def.content_types.clone())
             .unwrap_or_default();
@@ -483,6 +494,8 @@ pub async fn restore_backup(
     }
 
     // Restore files
+    let mods_dir = content_types.first().map(|ct| std::path::PathBuf::from(&base).join(&ct.folder));
+    let mut result = RestoreResult::default();
     let total = manifest.files.len();
     for (i, entry) in manifest.files.iter().enumerate() {
         if !is_plain_relative_path(&entry.relative_path) {
@@ -496,12 +509,14 @@ pub async fn restore_backup(
         };
         let dest = dest_base.join(&entry.relative_path);
 
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
-
-        if source.exists() {
+        if let Some(twin) = disabled_twin(&dest, dest_base, mods_dir.as_deref(), &entry.relative_path) {
+            result.skipped.push(format!("{} ({} exists)", entry.relative_path, twin));
+        } else if source.exists() {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
             std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+            result.restored += 1;
         }
 
         let _ = app.emit(
@@ -514,7 +529,43 @@ pub async fn restore_backup(
         );
     }
 
-    Ok(())
+    Ok(result)
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct RestoreResult {
+    pub restored: usize,
+    /// Files left alone because the user has since disabled/enabled them.
+    pub skipped: Vec<String>,
+}
+
+/// The other state of a backed-up file, if it exists now: restoring
+/// `x.package` next to a disabled `x.package.disabled` (or `_Disabled/x`)
+/// silently re-enabled a mod the user had turned off, as a duplicate; the
+/// reverse for a backed-up `x.disabled` next to an enabled `x`.
+fn disabled_twin(
+    dest: &Path,
+    dest_base: &Path,
+    mods_dir: Option<&Path>,
+    rel: &str,
+) -> Option<String> {
+    let suffix = crate::commands::files::DISABLED_SUFFIX;
+    let name = dest.file_name()?.to_string_lossy().to_string();
+    let twin = if name.to_lowercase().ends_with(suffix) {
+        dest.with_file_name(&name[..name.len() - suffix.len()])
+    } else {
+        dest.with_file_name(format!("{}{}", name, suffix))
+    };
+    if twin.exists() {
+        return twin.file_name().map(|n| n.to_string_lossy().to_string());
+    }
+    if mods_dir == Some(dest_base) {
+        let legacy = dest_base.join("_Disabled").join(rel);
+        if legacy.exists() {
+            return Some(format!("_Disabled/{}", rel));
+        }
+    }
+    None
 }
 
 #[tauri::command]
@@ -567,6 +618,26 @@ pub async fn delete_backup(id: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restore_skips_files_the_user_disabled_or_enabled() {
+        let base = std::env::temp_dir().join(format!("synccrate-restore-{}", uuid::Uuid::new_v4()));
+        let mods = base.join("Mods");
+        std::fs::create_dir_all(mods.join("_Disabled").join("CC")).unwrap();
+        std::fs::write(mods.join("a.package.disabled"), b"x").unwrap();
+        std::fs::write(mods.join("b.package"), b"x").unwrap();
+        std::fs::write(mods.join("_Disabled").join("CC").join("c.package"), b"x").unwrap();
+
+        let twin = |rel: &str| disabled_twin(&mods.join(rel), &mods, Some(&mods), rel);
+        assert_eq!(twin("a.package").as_deref(), Some("a.package.disabled"));
+        assert_eq!(twin("b.package.disabled").as_deref(), Some("b.package"));
+        assert_eq!(twin("CC/c.package").as_deref(), Some("_Disabled/CC/c.package"));
+        assert_eq!(twin("d.package"), None);
+        // `_Disabled` only means something in the mods folder.
+        let saves = base.join("Saves");
+        assert_eq!(disabled_twin(&saves.join("CC/c.package"), &saves, Some(&mods), "CC/c.package"), None);
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn plain_relative_paths_only() {

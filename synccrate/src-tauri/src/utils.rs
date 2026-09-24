@@ -330,14 +330,73 @@ pub fn detect_game_path_from_registry(game_id: &str, registry: &GameRegistry) ->
     detect_game_path_from_def(game_def)
 }
 
-/// Get the list of valid mod/content extensions for a game from its registry definition.
-/// Returns extensions from the first content type (primary content).
+/// Every extension listed by any of the game's content types (for messages).
 pub fn valid_extensions_for_game(game_def: &GameDefinition) -> Vec<String> {
-    game_def
-        .content_types
-        .iter()
-        .flat_map(|ct| ct.extensions.clone())
+    let mut exts: Vec<String> = Vec::new();
+    for e in game_def.content_types.iter().flat_map(|ct| ct.extensions.iter()) {
+        let e = e.to_lowercase();
+        if !exts.contains(&e) {
+            exts.push(e);
+        }
+    }
+    exts
+}
+
+/// Path components compared case-insensitively on Windows (NTFS is), exactly elsewhere.
+fn path_key(p: &std::path::Path) -> Vec<String> {
+    p.components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
+        .map(|c| {
+            let s = c.as_os_str().to_string_lossy().to_string();
+            if cfg!(target_os = "windows") {
+                s.trim_end_matches(['\\', '/']).to_lowercase()
+            } else {
+                s
+            }
+        })
         .collect()
+}
+
+/// True if `a` and `b` are the same folder or one is inside the other.
+/// Both should already be canonical/cleaned.
+pub fn paths_overlap(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let (a, b) = (path_key(a), path_key(b));
+    let n = a.len().min(b.len());
+    n > 0 && a[..n] == b[..n]
+}
+
+pub fn same_path(a: &std::path::Path, b: &std::path::Path) -> bool {
+    path_key(a) == path_key(b)
+}
+
+/// Folders a game path must never be: picking one made SyncCrate scan (and
+/// create `Mods/`, `Saves/` in) a whole drive or the user's Documents.
+pub fn protected_folders() -> Vec<(PathBuf, &'static str)> {
+    let mut out = Vec::new();
+    for (dir, what) in [
+        (dirs::home_dir(), "your user folder"),
+        (dirs::document_dir(), "your Documents folder"),
+        (dirs::desktop_dir(), "your Desktop"),
+        (dirs::download_dir(), "your Downloads folder"),
+    ] {
+        if let Some(d) = dir {
+            let d = std::fs::canonicalize(&d).map(clean_path).unwrap_or(d);
+            out.push((d, what));
+        }
+    }
+    out
+}
+
+/// Why `path` (canonical) can't be a game folder, if it's a drive root or one
+/// of `protected`.
+pub fn protected_folder_reason(path: &std::path::Path, protected: &[(PathBuf, &'static str)]) -> Option<String> {
+    if path.parent().is_none() || path_key(path).len() <= 1 {
+        return Some("a drive root".to_string());
+    }
+    protected
+        .iter()
+        .find(|(p, _)| same_path(p, path))
+        .map(|(_, what)| what.to_string())
 }
 
 /// Get the path for a specific content type folder.
@@ -479,12 +538,11 @@ const DANGEROUS_EXTENSIONS: &[&str] = &[
 ];
 
 /// Returns true if the file extension is on the blocklist of dangerous executables.
+/// Sees through a `.disabled` suffix: `evil.exe.disabled` is one rename away
+/// from running, so it's blocked like `evil.exe`.
 pub fn is_dangerous_extension(path: &str) -> bool {
-    if let Some(ext) = std::path::Path::new(path).extension().and_then(|e| e.to_str()) {
-        DANGEROUS_EXTENSIONS.contains(&ext.to_lowercase().as_str())
-    } else {
-        false
-    }
+    let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
+    DANGEROUS_EXTENSIONS.contains(&ext.as_str())
 }
 
 /// Migrate config from the old `simshare` directory to `synccrate`.
@@ -624,6 +682,53 @@ mod tests {
         assert!(safe_join(&base_str, "C:evil.package").is_err());
         // NTFS alternate data stream
         assert!(safe_join(&base_str, "Mods/a.package:stream").is_err());
+    }
+
+    #[test]
+    fn paths_overlap_detects_nesting_both_ways() {
+        let base = std::env::temp_dir();
+        let a = base.join("Games").join("Sims");
+        assert!(paths_overlap(&a, &a));
+        assert!(paths_overlap(&a, &a.join("Mods")));
+        assert!(paths_overlap(&a.join("Mods"), &a));
+        assert!(!paths_overlap(&a, &base.join("Games").join("Sims 4")));
+        assert!(!paths_overlap(&a, &base.join("Games").join("Other")));
+        #[cfg(target_os = "windows")]
+        {
+            use std::path::Path;
+            assert!(paths_overlap(Path::new(r"C:\Games\Sims"), Path::new(r"c:\games\SIMS\Mods")));
+            assert!(same_path(Path::new(r"C:\Games\Sims\"), Path::new(r"c:\games\sims")));
+            assert!(paths_overlap(Path::new(r"C:\"), Path::new(r"C:\Games")));
+        }
+    }
+
+    #[test]
+    fn protected_folder_reason_rejects_roots_and_user_folders() {
+        let docs = std::env::temp_dir().join("synccrate_fake_docs");
+        let protected = vec![(docs.clone(), "your Documents folder")];
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(protected_folder_reason(std::path::Path::new(r"C:\"), &protected).as_deref(), Some("a drive root"));
+            assert_eq!(protected_folder_reason(std::path::Path::new(r"D:\"), &protected).as_deref(), Some("a drive root"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(protected_folder_reason(std::path::Path::new("/"), &protected).as_deref(), Some("a drive root"));
+        assert_eq!(protected_folder_reason(&docs, &protected).as_deref(), Some("your Documents folder"));
+        // A game folder *inside* Documents is fine.
+        assert_eq!(protected_folder_reason(&docs.join("Electronic Arts").join("The Sims 4"), &protected), None);
+    }
+
+    #[test]
+    fn valid_extensions_are_deduplicated() {
+        let g: GameDefinition = serde_json::from_value(serde_json::json!({
+            "id": "g", "label": "G", "family": "g",
+            "content_types": [
+                {"id": "a", "label": "A", "folder": "A", "extensions": ["zip", "PAK"], "file_type": "Mod"},
+                {"id": "b", "label": "B", "folder": "B", "extensions": ["zip"], "file_type": "Save"}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(valid_extensions_for_game(&g), vec!["zip".to_string(), "pak".to_string()]);
     }
 
     #[test]

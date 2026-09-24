@@ -12,6 +12,7 @@ import { formatBytes } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
+import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ConnectionGuide from "./ConnectionGuide";
@@ -35,7 +36,6 @@ export default function GameDashboard({ gameId }: Props) {
   const discoveredPeers = useAppStore((s) => s.discoveredPeers);
   const addLog = useLogStore((s) => s.addLog);
   const gamePaths = useAppStore((s) => s.gamePaths);
-  const setGamePaths = useAppStore((s) => s.setGamePaths);
   const setPage = useAppStore((s) => s.setPage);
   const activeGame = useAppStore((s) => s.activeGame);
   const lastHostIp = useAppStore((s) => s.lastHostIp);
@@ -346,13 +346,13 @@ export default function GameDashboard({ gameId }: Props) {
                       const selected = await open({ directory: true });
                       if (selected) {
                         const path = typeof selected === "string" ? selected : selected;
-                        await cmd.setGamePath(gameId, path);
-                        setGamePaths({ ...gamePaths, [gameId]: path });
+                        // Asks before using a folder that doesn't look like the game's.
+                        if ((await saveGamePath(gameId, path)) === null) return;
                         toastSuccess(`${gameLabel} path saved`);
                         handleScan();
                       }
-                    } catch {
-                      toastError("Failed to set path");
+                    } catch (e) {
+                      toastError(`Couldn't use that folder: ${e}`);
                     }
                   }}
                 >

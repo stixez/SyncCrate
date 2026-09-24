@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Plus, Tag } from "lucide-react";
 import * as cmd from "../lib/commands";
+import { useAppStore } from "../stores/useAppStore";
 import { Button, cx } from "./ui";
 
 interface TagEditorProps {
@@ -34,7 +35,7 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
     const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
     setTags(next);
     try {
-      await cmd.setModTags(filePath, next);
+      await cmd.setModTags(useAppStore.getState().selectedGame ?? "", filePath, next);
       onTagsChanged(filePath, next);
     } catch (e) {
       console.error("Failed to set tags:", e);
@@ -51,7 +52,7 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
     setTags(next);
     setCustomInput("");
     try {
-      await cmd.setModTags(filePath, next);
+      await cmd.setModTags(useAppStore.getState().selectedGame ?? "", filePath, next);
       onTagsChanged(filePath, next);
     } catch (e) {
       console.error("Failed to set tags:", e);

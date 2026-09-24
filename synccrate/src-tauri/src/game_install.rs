@@ -280,7 +280,8 @@ pub fn install_evidence(game: &GameDefinition, ctx: &InstallContext, folders: &[
 }
 
 /// Final "installed on this PC" verdict used for the UI's Detected state.
-/// `detected` is the auto-detected folder, `configured` the user-set one.
+/// `detected` is the auto-detected folder, `configured` one the user picked
+/// in Settings (never an auto-detected path, which can be a leftover).
 pub fn detect_installed(
     game: &GameDefinition,
     ctx: &InstallContext,
@@ -296,6 +297,11 @@ pub fn detect_installed(
     }
     if let Some(e) = install_evidence(game, ctx, &folders) {
         log::debug!("{} installed: {:?}", game.id, e);
+        return true;
+    }
+    // Portable / cracked-free / custom-launcher installs leave no uninstall
+    // entry. A folder the user explicitly chose is good enough: they know.
+    if configured.is_some_and(|c| Path::new(c).is_dir()) {
         return true;
     }
     // Linux/macOS have no uninstall registry. Where no evidence source applies
@@ -423,6 +429,17 @@ mod tests {
         let folder = dir.to_string_lossy().to_string();
         assert!(!detect_installed(&g, &InstallContext::default(), Some(&folder), None));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn user_configured_folder_counts_as_installed() {
+        let dir = temp_dir("configured");
+        let g = game(r#"{"id":"sims4","label":"The Sims 4","family":"sims","steam_app_id":1222670,"content_types":[]}"#);
+        let folder = dir.to_string_lossy().to_string();
+        assert!(detect_installed(&g, &InstallContext::default(), None, Some(&folder)));
+        // A configured path whose drive is gone doesn't.
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(!detect_installed(&g, &InstallContext::default(), None, Some(&folder)));
     }
 
     /// Manual check on a dev machine:

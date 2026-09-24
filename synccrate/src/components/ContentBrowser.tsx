@@ -111,6 +111,10 @@ export default function ContentBrowser({ gameId }: Props) {
   const [legacyDismissed, setLegacyDismissed] = useState<string | null>(null);
   const [fixingLegacy, setFixingLegacy] = useState(false);
   const [outdated, setOutdated] = useState<{ patchTime: number | null; paths: Set<string> }>({ patchTime: null, paths: new Set() });
+  /** Game whose activation the backend refused (mid-session): its files are read-only here. */
+  const [refusedFor, setRefusedFor] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const activeGame = useAppStore((s) => s.activeGame);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const modCompatibility = useAppStore((s) => s.modCompatibility);
@@ -130,17 +134,26 @@ export default function ContentBrowser({ gameId }: Props) {
   useEffect(() => {
     // Refused mid-session; only mirror into the store once the backend accepts it.
     cmd.setActiveGame(gameId)
-      .then(() => useAppStore.getState().setActiveGame(gameId))
+      .then(() => { useAppStore.getState().setActiveGame(gameId); setRefusedFor(null); })
       .catch(() => {
+        setRefusedFor(gameId);
         cmd.getActiveGame().then((g) => useAppStore.getState().setActiveGame(g)).catch(() => {});
       });
   }, [gameId]);
+
+  // Toggle/delete/install act on the backend's active game; while it's another
+  // game (session running), this page must not offer them for this one.
+  const readOnly = !isDemoMode() && refusedFor === gameId && activeGame !== gameId;
+  const activeLabel = getGameDef(activeGame)?.label ?? activeGame;
 
   // Re-scan when switching games or when manifest is missing
   useEffect(() => {
     // Ignore results that land after switching to another game (stale manifest).
     let cancelled = false;
-    cmd.scanFiles(gameId).then((m) => { if (!cancelled) setManifest(m); }).catch(console.error);
+    setScanError(null);
+    cmd.scanFiles(gameId)
+      .then((m) => { if (!cancelled) setManifest(m); })
+      .catch((e) => { if (!cancelled) setScanError(String(e)); });
     return () => { cancelled = true; };
   }, [gameId, setManifest]);
 
@@ -183,16 +196,18 @@ export default function ContentBrowser({ gameId }: Props) {
       return;
     }
     if (!hasVersionDetection) { setOutdated({ patchTime: null, paths: new Set() }); return; }
-    cmd.getOutdatedScripts()
+    // Only the active game has a current manifest to compare.
+    if (readOnly) { setOutdated({ patchTime: null, paths: new Set() }); return; }
+    cmd.getOutdatedScripts(gameId)
       .then((r) => { if (!cancelled) setOutdated({ patchTime: r.patch_time, paths: new Set(r.paths) }); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [manifest, gameId, hasVersionDetection]);
+  }, [manifest, gameId, hasVersionDetection, readOnly]);
 
   useEffect(() => {
-    cmd.getModTags().then(setModTags).catch(console.error);
+    cmd.getModTags(gameId).then(setModTags).catch(console.error);
     cmd.getPredefinedTags().then(setPredefinedTags).catch(() => {});
-  }, [setModTags]);
+  }, [gameId, setModTags]);
 
   // "/" or Ctrl+F jumps to search, like the game browser.
   useEffect(() => {
@@ -223,7 +238,10 @@ export default function ContentBrowser({ gameId }: Props) {
   // Determine if this content type looks like "mods" (has tagging, details panel)
   const isModLike = !!activeCt && (activeCt.file_type === "Mod" || activeCt.file_type === "CustomContent" || activeCt.file_type === "Addon");
   // toggle_mod only moves files inside the first content type's folder.
-  const canToggle = isModLike && activeCt?.id === contentTypes[0]?.id;
+  const isFirstCt = isModLike && activeCt?.id === contentTypes[0]?.id;
+  // SMAPI / KSP load every subfolder and mods are folders: no safe per-file toggle.
+  const toggleUnsupported = isFirstCt && gameDef?.disable_method === "none";
+  const canToggle = isFirstCt && !toggleUnsupported && !readOnly;
 
   const handleTagsChanged = useCallback((path: string, tags: string[]) => {
     const current = useAppStore.getState().modTags;
@@ -243,8 +261,8 @@ export default function ContentBrowser({ gameId }: Props) {
     const paths = Array.from(selected);
     if (paths.length === 0) return;
     try {
-      await cmd.bulkSetTags(paths, [tag]);
-      const updated = await cmd.getModTags();
+      await cmd.bulkSetTags(gameId, paths, [tag]);
+      const updated = await cmd.getModTags(gameId);
       setModTags(updated);
       setBulkTagInput(false);
       setSelected(new Set());
@@ -495,7 +513,7 @@ export default function ContentBrowser({ gameId }: Props) {
     try {
       for (const p of targets) {
         try {
-          await cmd.toggleMod(p, enable);
+          await cmd.toggleMod(gameId, p, enable);
           ok++;
         } catch (e) {
           errors.push(`${fileName(p)}: ${e}`);
@@ -504,7 +522,7 @@ export default function ContentBrowser({ gameId }: Props) {
       // Paths change on toggle (.disabled rename / _Disabled move): rescan once
       // at the end and drop the now-stale selection.
       setManifest(await cmd.scanFiles(gameId));
-      cmd.getModTags().then(setModTags).catch(() => {});
+      cmd.getModTags(gameId).then(setModTags).catch(() => {});
     } catch (e) {
       errors.push(`Rescan failed: ${e}`);
     } finally {
@@ -612,7 +630,9 @@ export default function ContentBrowser({ gameId }: Props) {
         title={<>{gameDef?.label ?? gameId} <span className="text-neon">Content</span></>}
         actions={
           <>
-            {isModLike && (
+            {/* Opt-in per game: identical files in different folders are normal
+                for many games (shared addon libs, BepInEx DLLs, world files). */}
+            {isModLike && gameDef?.duplicate_finder && !readOnly && (
               <Button
                 size="sm"
                 variant={showDuplicates ? "primary" : "secondary"}
@@ -636,7 +656,19 @@ export default function ContentBrowser({ gameId }: Props) {
         }
       />
 
-      {legacyCount > 0 && legacyDismissed !== gameId && (
+      {readOnly && (
+        <Banner tone="warn" icon={<AlertTriangle size={14} />} title={`You're in a session for ${activeLabel}`}>
+          Disconnect to manage {gameDef?.label ?? gameId}'s files. Until then this page is read-only.
+        </Banner>
+      )}
+
+      {scanError && (
+        <Banner tone="warn" icon={<AlertTriangle size={14} />} title="Couldn't scan this game's folder">
+          {scanError}
+        </Banner>
+      )}
+
+      {legacyCount > 0 && legacyDismissed !== gameId && !readOnly && (
         <Banner
           tone="warn"
           icon={<AlertTriangle size={14} />}
@@ -662,7 +694,9 @@ export default function ContentBrowser({ gameId }: Props) {
         </Banner>
       )}
 
-      {showDuplicates && <DuplicateFinder gameId={gameId} onClose={() => setShowDuplicates(false)} />}
+      {showDuplicates && gameDef?.duplicate_finder && !readOnly && (
+        <DuplicateFinder gameId={gameId} onClose={() => setShowDuplicates(false)} />
+      )}
 
       {/* Content type tabs + sort */}
       <div className="flex items-end justify-between gap-4 border-b border-border">
@@ -951,7 +985,15 @@ export default function ContentBrowser({ gameId }: Props) {
             {visible.length.toLocaleString()} file{visible.length !== 1 ? "s" : ""}
             {view === "folders" && <> in {groups.length} folder{groups.length !== 1 ? "s" : ""}</>}
           </span>
-          {isModLike && !bulkMode && (
+          {toggleUnsupported && (
+            <span
+              className="hud-label"
+              title={`${gameDef?.label ?? "This game"} loads every subfolder and its mods are folders, so single files can't be switched off safely. Move a mod's folder out of the game to disable it.`}
+            >
+              Enable/disable not available for this game
+            </span>
+          )}
+          {isModLike && !bulkMode && !readOnly && (
             <span className="hud-label flex items-center gap-1.5">
               <Upload size={12} />
               Drop files anywhere to install
@@ -962,6 +1004,8 @@ export default function ContentBrowser({ gameId }: Props) {
 
       {detailFile && (
         <ModDetailsPanel
+          gameId={gameId}
+          canToggle={canToggle}
           file={detailFile}
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}

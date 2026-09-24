@@ -5,6 +5,22 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+/// file_type values of the game's first (mods) content type.
+fn mod_file_types(app_state: &AppState, game: &str) -> Vec<String> {
+    crate::commands::files::get_game_def(&app_state.game_registry, game)
+        .map(|def| {
+            def.content_types
+                .first()
+                .map(|ct| {
+                    let mut types = vec![ct.file_type.clone()];
+                    types.extend(ct.classify_by_extension.values().cloned());
+                    types
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_else(|| vec!["Mod".to_string(), "CustomContent".to_string()])
+}
+
 #[tauri::command]
 pub async fn list_profiles(game: Option<String>) -> Result<Vec<ModProfile>, String> {
     let dir = utils::profiles_dir();
@@ -47,30 +63,21 @@ pub async fn save_profile(
         return Err("Description must be under 1024 characters".to_string());
     }
 
-    let app_state = state.lock().await;
-
-    let target_game = match game {
-        Some(ref g) => resolve_game(&app_state, g)?,
-        None => app_state.active_game.clone(),
+    // Snapshot the active game only, from a fresh hashed scan: local_manifest
+    // may belong to another game or carry empty hashes from a quick scan
+    // (every later comparison then reported all mods as "modified").
+    let target_game = {
+        let app_state = state.lock().await;
+        match game {
+            Some(ref g) => crate::commands::files::require_active(&app_state, g)?,
+            None => app_state.active_game.clone(),
+        }
     };
+    let manifest = crate::commands::files::scan_files_inner(&state, Some(target_game.clone()), true).await?;
+    let app_state = state.lock().await;
+    let mod_file_types = mod_file_types(&app_state, &target_game);
 
-    // Get the primary content types for this game to filter mods
-    let game_def = crate::commands::files::get_game_def(&app_state.game_registry, &target_game);
-    let mod_file_types: Vec<String> = game_def
-        .map(|def| {
-            def.content_types
-                .first()
-                .map(|ct| {
-                    let mut types = vec![ct.file_type.clone()];
-                    types.extend(ct.classify_by_extension.values().cloned());
-                    types
-                })
-                .unwrap_or_default()
-        })
-        .unwrap_or_else(|| vec!["Mod".to_string(), "CustomContent".to_string()]);
-
-    let mods: Vec<ProfileMod> = app_state
-        .local_manifest
+    let mods: Vec<ProfileMod> = manifest
         .files
         .values()
         .filter(|f| mod_file_types.contains(&f.file_type))
@@ -115,31 +122,21 @@ pub async fn load_profile(
     id: String,
 ) -> Result<ProfileComparison, String> {
     sanitize_id(&id)?;
-    let app_state = state.lock().await;
-    let _base = app_state.active_game_path()?;
-
     let dir = utils::profiles_dir();
     let path = dir.join(format!("{}.json", id));
     let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let profile: ModProfile = serde_json::from_str(&data).map_err(|e| e.to_string())?;
 
-    // Get mod file types for the profile's game
-    let game_def = crate::commands::files::get_game_def(&app_state.game_registry, &profile.game);
-    let mod_file_types: Vec<String> = game_def
-        .map(|def| {
-            def.content_types
-                .first()
-                .map(|ct| {
-                    let mut types = vec![ct.file_type.clone()];
-                    types.extend(ct.classify_by_extension.values().cloned());
-                    types
-                })
-                .unwrap_or_default()
-        })
-        .unwrap_or_else(|| vec!["Mod".to_string(), "CustomContent".to_string()]);
+    {
+        let app_state = state.lock().await;
+        crate::commands::files::require_active(&app_state, &profile.game)?;
+        app_state.active_game_path()?;
+    }
+    // Hashed: a quick scan's empty hashes made every mod look "modified".
+    let manifest = crate::commands::files::scan_files_inner(&state, Some(profile.game.clone()), true).await?;
+    let mod_file_types = mod_file_types(&*state.lock().await, &profile.game);
 
-    let current_mods: std::collections::HashMap<String, String> = app_state
-        .local_manifest
+    let current_mods: std::collections::HashMap<String, String> = manifest
         .files
         .values()
         .filter(|f| mod_file_types.contains(&f.file_type))
@@ -192,28 +189,46 @@ pub async fn export_profile(id: String, dest: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub async fn import_profile(path: String) -> Result<ModProfile, String> {
-    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let profile: ModProfile = serde_json::from_str(&data).map_err(|e| e.to_string())?;
-
-    sanitize_id(&profile.id)?;
-
+/// Reject anything but plain relative segments: `..`, `\x` / `C:x`
+/// (not "absolute" on Windows, yet they escape a join) and `:` (NTFS streams).
+fn validate_profile_paths(profile: &ModProfile) -> Result<(), String> {
     for m in &profile.mods {
         let p = std::path::Path::new(&m.relative_path);
-        if p.is_absolute() {
-            return Err(format!("Invalid mod path (absolute): {}", m.relative_path));
-        }
-        for component in p.components() {
-            if matches!(component, std::path::Component::ParentDir) {
-                return Err(format!("Invalid mod path (traversal): {}", m.relative_path));
-            }
+        let plain = !m.relative_path.is_empty()
+            && !m.relative_path.contains(':')
+            && !m.relative_path.starts_with(['/', '\\'])
+            && p.components().all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
+        if !plain {
+            return Err(format!("Invalid mod path in profile: {}", m.relative_path));
         }
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn import_profile(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    path: String,
+) -> Result<ModProfile, String> {
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut profile: ModProfile = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+
+    sanitize_id(&profile.id)?;
+    profile.game = {
+        let app_state = state.lock().await;
+        resolve_game(&app_state, &profile.game).map_err(|_| format!("Profile is for an unknown game '{}'", profile.game))?
+    };
+    validate_profile_paths(&profile)?;
 
     let dir = utils::profiles_dir();
+    // Importing a friend's copy of a profile you already have used to
+    // overwrite yours silently.
+    if dir.join(format!("{}.json", profile.id)).exists() {
+        profile.id = Uuid::new_v4().to_string();
+    }
     let dest = dir.join(format!("{}.json", profile.id));
-    std::fs::write(&dest, &data).map_err(|e| e.to_string())?;
+    let out = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    std::fs::write(&dest, out).map_err(|e| e.to_string())?;
 
     Ok(profile)
 }
@@ -225,4 +240,26 @@ pub async fn delete_profile(id: String) -> Result<(), String> {
     let path = dir.join(format!("{}.json", id));
     std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile(paths: &[&str]) -> ModProfile {
+        serde_json::from_value(serde_json::json!({
+            "id": "p", "name": "n", "description": "", "icon": "", "author": "a", "created_at": 0,
+            "game": "sims4",
+            "mods": paths.iter().map(|p| serde_json::json!({"relative_path": p, "hash": "", "size": 0, "name": "x"})).collect::<Vec<_>>()
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn imported_profile_paths_must_be_plain() {
+        assert!(validate_profile_paths(&profile(&["Mods/a.package", "Mods/CC/b.package"])).is_ok());
+        for bad in ["../x", "Mods/../../x", r"\Windows\x", "/etc/x", "C:x", r"C:\x", "Mods/a.package:ads", ""] {
+            assert!(validate_profile_paths(&profile(&[bad])).is_err(), "{bad}");
+        }
+    }
 }

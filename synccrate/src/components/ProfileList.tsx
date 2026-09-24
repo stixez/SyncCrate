@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Upload, X } from "lucide-react";
+import { AlertTriangle, Plus, Upload, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import ProfileCard from "./ProfileCard";
-import { Button, Input, Panel, SectionHeader, StatTile } from "./ui";
+import { Banner, Button, Input, Panel, SectionHeader, StatTile } from "./ui";
+import { getGameDef } from "../lib/games";
+import { isDemoMode } from "../lib/demoData";
+import { toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import type { ProfileComparison } from "../lib/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -21,10 +24,21 @@ export default function ProfileList({ gameId }: Props) {
   const [desc, setDesc] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [comparison, setComparison] = useState<ProfileComparison | null>(null);
+  const activeGame = useAppStore((s) => s.activeGame);
+  // Save/compare scan the backend's active game; for any other game they'd
+  // snapshot or compare the wrong folder (the backend refuses too).
+  const readOnly = !isDemoMode() && activeGame !== gameId;
 
   useEffect(() => {
     cmd.listProfiles().then(setProfiles).catch(console.error);
   }, [setProfiles]);
+
+  // Like the dashboard/content pages: make this the active game when allowed
+  // (refused mid-session, which leaves the page read-only).
+  useEffect(() => {
+    if (isDemoMode()) return;
+    cmd.setActiveGame(gameId).then(() => useAppStore.getState().setActiveGame(gameId)).catch(() => {});
+  }, [gameId]);
 
   // Filter profiles to current game
   const filteredProfiles = useMemo(() => {
@@ -32,7 +46,7 @@ export default function ProfileList({ gameId }: Props) {
   }, [profiles, gameId]);
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || readOnly) return;
     try {
       await cmd.saveProfile(name, desc, "\uD83D\uDCE6", gameId);
       const updated = await cmd.listProfiles();
@@ -43,6 +57,7 @@ export default function ProfileList({ gameId }: Props) {
       addLog(`Profile "${name}" created`, "success");
     } catch (e) {
       addLog(`Failed to create profile: ${e}`, "error");
+      toastError(`Couldn't save profile: ${e}`);
     }
   };
 
@@ -63,12 +78,14 @@ export default function ProfileList({ gameId }: Props) {
   };
 
   const handleLoad = async (id: string) => {
+    if (readOnly) return;
     try {
       const result = await cmd.loadProfile(id);
       setComparison(result);
       addLog(`Profile "${result.profile_name}" compared: ${result.matched} matched, ${result.missing.length} missing, ${result.modified.length} modified`, "success");
     } catch (e) {
       addLog(`Failed to load profile: ${e}`, "error");
+      toastError(`Couldn't compare profile: ${e}`);
     }
   };
 
@@ -118,6 +135,12 @@ export default function ProfileList({ gameId }: Props) {
           </Button>
         }
       />
+
+      {readOnly && (
+        <Banner tone="warn" icon={<AlertTriangle size={14} />} title={`You're in a session for ${getGameDef(activeGame)?.label ?? activeGame}`}>
+          Disconnect to save or compare {getGameDef(gameId)?.label ?? gameId} profiles.
+        </Banner>
+      )}
 
       {comparison && (
         <Panel
@@ -177,7 +200,7 @@ export default function ProfileList({ gameId }: Props) {
           />
         ))}
 
-        {showCreate ? (
+        {readOnly ? null : showCreate ? (
           <Panel tone="accent" label={<b>// New loadout</b>} title="Snapshot current mods">
             <div className="space-y-3">
               <Input

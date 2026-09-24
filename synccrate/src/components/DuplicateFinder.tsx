@@ -23,7 +23,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [keep, setKeep] = useState<Record<string, string>>({});
-  const [confirmDelete, setConfirmDelete] = useState<{ paths: string[]; bytes: number } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ paths: string[]; keep: Record<string, string>; bytes: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,7 +64,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
     const errors: string[] = [];
     for (const p of paths) {
       try {
-        await cmd.toggleMod(p, false);
+        await cmd.toggleMod(gameId, p, false);
         ok++;
       } catch (e) {
         errors.push(`${p}: ${e}`);
@@ -79,14 +79,21 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
   const askDelete = (targets: DuplicateGroup[]) => {
     const files = targets.flatMap(extras);
     if (files.length === 0) return;
-    setConfirmDelete({ paths: files.map((f) => f.relative_path), bytes: files.reduce((n, f) => n + f.size, 0) });
+    // The backend re-hashes each extra against its kept copy right before
+    // deleting, so a stale list can't remove the only remaining copy.
+    const keepFor: Record<string, string> = {};
+    for (const g of targets) {
+      const kept = keep[g.hash] ?? defaultKeep(g);
+      for (const f of extras(g)) keepFor[f.relative_path] = kept;
+    }
+    setConfirmDelete({ paths: files.map((f) => f.relative_path), keep: keepFor, bytes: files.reduce((n, f) => n + f.size, 0) });
   };
 
   const doDelete = async () => {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      const r = await cmd.deleteModFiles(confirmDelete.paths);
+      const r = await cmd.deleteModFiles(gameId, confirmDelete.paths, confirmDelete.keep);
       if (r.deleted) toastSuccess(`Deleted ${r.deleted} duplicate${r.deleted !== 1 ? "s" : ""}`);
       if (r.errors.length) toastError(`${r.errors.length} file(s) couldn't be deleted: ${r.errors[0]}`);
     } catch (e) {

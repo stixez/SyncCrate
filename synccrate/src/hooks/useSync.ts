@@ -22,7 +22,11 @@ export function useSync() {
       const plan = await cmd.computeSyncPlan();
       setSyncPlan(plan);
       const count = plan.actions.length;
-      if (count > 0) {
+      if (plan.warning) {
+        // e.g. an older host that seems to share a different game
+        addLog(plan.warning, "warning");
+        toastError(plan.warning);
+      } else if (count > 0) {
         toastSuccess(`Found ${count} difference(s) to sync`);
       } else {
         toastSuccess("Everything is in sync!");
@@ -52,7 +56,11 @@ export function useSync() {
       // Early backend errors return before `sync-complete` fires; don't leave
       // the progress bar stuck.
       useAppStore.getState().setSyncProgress(null);
-      if (String(e).includes("Sync cancelled")) {
+      if (String(e).includes("Game folder changed")) {
+        // The backend dropped the stale plan; don't offer to run it again.
+        setSyncPlan(null);
+        toastError(`${e}`);
+      } else if (String(e).includes("Sync cancelled")) {
         toastInfo("Sync cancelled. Compute the plan again to resume.");
       } else {
         addLog(`Sync failed: ${e}`, "error");

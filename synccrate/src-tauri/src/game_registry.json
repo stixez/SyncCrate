@@ -3,6 +3,7 @@
   "games": [
     {
       "id": "sims4",
+      "duplicate_finder": true,
       "label": "The Sims 4",
       "install_markers": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"],
       "family": "sims",
@@ -347,6 +348,7 @@
     },
     {
       "id": "sims3",
+      "duplicate_finder": true,
       "label": "The Sims 3",
       "install_markers": ["HKLM\\SOFTWARE\\Sims\\The Sims 3::Install Dir"],
       "family": "sims",
@@ -452,6 +454,7 @@
     },
     {
       "id": "sims2",
+      "duplicate_finder": true,
       "label": "The Sims 2",
       "install_names": ["The Sims 2 Legacy Collection", "The Sims 2 Ultimate Collection"],
       "family": "sims",
@@ -1425,6 +1428,7 @@
     },
     {
       "id": "stardew_valley",
+      "disable_method": "none",
       "label": "Stardew Valley",
       "family": "stardew",
       "icon": "sprout",
@@ -1481,6 +1485,7 @@
     },
     {
       "id": "valheim",
+      "disable_method": "rename",
       "label": "Valheim",
       "family": "valheim",
       "icon": "axe",
@@ -2828,6 +2833,7 @@
     },
     {
       "id": "ets2",
+      "duplicate_finder": true,
       "label": "Euro Truck Simulator 2",
       "family": "ets2",
       "icon": "truck",
@@ -3255,6 +3261,7 @@
     },
     {
       "id": "kerbal_space_program",
+      "disable_method": "none",
       "label": "Kerbal Space Program",
       "family": "ksp",
       "icon": "rocket",
@@ -3316,18 +3323,6 @@
             "sfs",
             "craft",
             "loadmeta"
-          ],
-          "file_type": "Save",
-          "syncable": true
-        },
-        {
-          "id": "ships",
-          "label": "Ship Designs",
-          "icon": "rocket",
-          "color": "text-blue-400",
-          "folder": "saves/ships",
-          "extensions": [
-            "craft"
           ],
           "file_type": "Save",
           "syncable": true
@@ -3592,6 +3587,7 @@
           "icon": "settings",
           "color": "text-txt-dim",
           "folder": "PlayerProfiles/Public",
+          "recursive": false,
           "extensions": [
             "lsx"
           ],
@@ -4461,6 +4457,7 @@
     },
     {
       "id": "american_truck_simulator",
+      "duplicate_finder": true,
       "label": "American Truck Simulator",
       "family": "ets2",
       "icon": "flag",
@@ -4541,6 +4538,7 @@
     },
     {
       "id": "farming_simulator_22",
+      "duplicate_finder": true,
       "label": "Farming Simulator 22",
       "family": "farmingsim",
       "icon": "sprout",
@@ -4605,6 +4603,7 @@
     },
     {
       "id": "farming_simulator_25",
+      "duplicate_finder": true,
       "label": "Farming Simulator 25",
       "family": "farmingsim",
       "icon": "sprout",
@@ -5475,6 +5474,7 @@
     },
     {
       "id": "risk_of_rain_2",
+      "disable_method": "rename",
       "label": "Risk of Rain 2",
       "family": "ror",
       "icon": "target",
@@ -5546,6 +5546,7 @@
     },
     {
       "id": "lethal_company",
+      "disable_method": "rename",
       "label": "Lethal Company",
       "family": "lethalcompany",
       "icon": "box",
@@ -5963,6 +5964,7 @@
     },
     {
       "id": "among_us",
+      "disable_method": "rename",
       "label": "Among Us",
       "family": "amongus",
       "icon": "rocket",
@@ -6630,6 +6632,7 @@
     },
     {
       "id": "repo",
+      "disable_method": "rename",
       "label": "R.E.P.O.",
       "family": "repo",
       "icon": "box",
@@ -6701,6 +6704,7 @@
     },
     {
       "id": "v_rising",
+      "disable_method": "rename",
       "label": "V Rising",
       "family": "vrising",
       "icon": "castle",
@@ -6772,6 +6776,7 @@
     },
     {
       "id": "dyson_sphere_program",
+      "disable_method": "rename",
       "label": "Dyson Sphere Program",
       "family": "dsp",
       "icon": "factory",

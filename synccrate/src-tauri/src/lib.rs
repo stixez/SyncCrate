@@ -28,34 +28,56 @@ pub fn run() {
 
     // Load saved config synchronously so paths are available immediately
     let saved_config = commands::files::load_game_config();
-    let mut game_paths = std::collections::HashMap::new();
-    for (key, path) in &saved_config.game_paths {
-        // Accept both new IDs and legacy enum-style names
+    // Saved paths are kept even when the folder is missing right now (e.g. a
+    // game on an unplugged drive): dropping them let auto-detect put a leftover
+    // Documents folder in their place, and that got saved over the custom path.
+    // The UI flags missing folders instead (`get_unavailable_game_paths`).
+    let mut saved = commands::files::SavedPaths::default();
+    let mut keys: Vec<&String> = saved_config.game_paths.keys().collect();
+    // Current ids before legacy enum names, so a stale legacy entry can't win.
+    keys.sort_by_key(|k| !registry_map.contains_key(*k));
+    for key in keys {
         if let Some(game_id) = registry::resolve_game_id(key, &registry_map, &legacy_map) {
-            if std::path::Path::new(path).exists() {
-                game_paths.insert(game_id, path.clone());
+            if !saved.paths.contains_key(&game_id) {
+                if saved_config.user_set_paths.iter().any(|u| u == key || *u == game_id) {
+                    saved.user_set.insert(game_id.clone());
+                }
+                saved.paths.insert(game_id, saved_config.game_paths[key].clone());
             }
         }
     }
+    let mut game_paths = saved.paths.clone();
+    let user_set: std::collections::HashMap<String, String> = saved
+        .paths
+        .iter()
+        .filter(|(id, _)| saved.user_set.contains(*id))
+        .map(|(id, p)| (id.clone(), p.clone()))
+        .collect();
+    commands::files::set_saved_paths(saved);
 
-    // Auto-detect any games not already loaded from config
+    // Auto-detect games without a saved path, but only adopt a folder with
+    // install evidence: leftover folders of uninstalled games were adopted
+    // (and later got Mods/ Saves/ created in them).
+    let install_ctx = game_install::InstallContext::build();
     for game_def in &game_registry.games {
         if game_def.auto_detect && !game_paths.contains_key(&game_def.id) {
             if let Some(path) = utils::detect_game_path_from_def(game_def) {
-                game_paths.insert(game_def.id.clone(), path);
+                if game_install::detect_installed(game_def, &install_ctx, Some(&path), None) {
+                    game_paths.insert(game_def.id.clone(), path);
+                }
             }
         }
     }
 
-    // A found folder can be a leftover from an uninstalled game, so first-run
-    // picks (active game, default library) prefer games with install evidence.
-    let install_ctx = game_install::InstallContext::build();
+    // A saved folder can still be a leftover (older versions saved detected
+    // paths), so first-run picks (active game, default library) prefer games
+    // with install evidence.
     let installed: std::collections::HashSet<String> = game_registry
         .games
         .iter()
         .filter(|g| {
             game_paths.get(&g.id).is_some_and(|p| {
-                game_install::detect_installed(g, &install_ctx, Some(p.as_str()), None)
+                game_install::detect_installed(g, &install_ctx, Some(p.as_str()), user_set.get(&g.id).map(|s| s.as_str()))
             })
         })
         .map(|g| g.id.clone())
@@ -296,6 +318,7 @@ pub fn run() {
             commands::files::get_active_game,
             commands::files::set_active_game,
             commands::files::get_all_game_paths,
+            commands::files::get_unavailable_game_paths,
             commands::files::toggle_mod,
             commands::files::count_legacy_disabled,
             commands::files::migrate_legacy_disabled,

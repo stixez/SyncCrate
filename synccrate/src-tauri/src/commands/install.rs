@@ -1,4 +1,5 @@
 use crate::commands::files::{get_game_def, resolve_game};
+use crate::registry::{ContentType, GameDefinition};
 use crate::state::AppState;
 use crate::utils;
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,34 @@ fn numbered_name(stem: &str, counter: u32, ext: &str) -> String {
     }
 }
 
+/// Content type a dropped file belongs to: the first type (registry order)
+/// listing its extension; otherwise the first type if it takes any extension
+/// (`extensions: []`). Everything used to land in the first folder, so a
+/// dropped `.wld` world ended up in Terraria's mods folder.
+fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a ContentType, String> {
+    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    // Folders outside the game dir (`%APPDATA%/...`) can't be joined onto it.
+    let usable = |ct: &ContentType| !ct.folder.contains('%') && !ct.folder.contains(':');
+    if !ext.is_empty() {
+        if let Some(ct) = def
+            .content_types
+            .iter()
+            .find(|ct| usable(ct) && ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
+        {
+            return Ok(ct);
+        }
+    }
+    if let Some(first) = def.content_types.first().filter(|ct| ct.extensions.is_empty() && usable(ct)) {
+        return Ok(first);
+    }
+    let supported: Vec<String> = utils::valid_extensions_for_game(def).iter().map(|e| format!(".{}", e)).collect();
+    Err(format!(
+        "Can't install '{}' files here. Supported: {}",
+        if ext.is_empty() { "(no extension)".to_string() } else { format!(".{}", ext) },
+        supported.join(", ")
+    ))
+}
+
 #[tauri::command]
 pub async fn install_mod_files(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -63,25 +92,13 @@ pub async fn install_mod_files(
         (path, game_id)
     };
 
-    // Get valid extensions and install folder from game definition
-    let (valid_extensions, install_folder, game_label) = {
+    let (game_def, game_label) = {
         let app_state = state.lock().await;
-        let game_def = get_game_def(&app_state.game_registry, &game_id);
-        let exts: Vec<String> = game_def
-            .map(|def| utils::valid_extensions_for_game(def))
-            .unwrap_or_default();
-        let folder = game_def
-            .and_then(|def| def.content_types.first())
-            .map(|ct| ct.folder.clone())
-            .unwrap_or_else(|| "Mods".to_string());
-        let label = app_state.game_label(&game_id);
-        (exts, folder, label)
+        let def = get_game_def(&app_state.game_registry, &game_id)
+            .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?
+            .clone();
+        (def, app_state.game_label(&game_id))
     };
-
-    let mods_dir = std::path::PathBuf::from(&base).join(&install_folder);
-    if !mods_dir.exists() {
-        std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
-    }
 
     let mut results = Vec::new();
 
@@ -98,26 +115,18 @@ pub async fn install_mod_files(
             continue;
         }
 
-        let ext = source
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        if !valid_extensions.iter().any(|e| e == &ext) {
-            let supported: Vec<String> = valid_extensions.iter().map(|e| format!(".{}", e)).collect();
-            results.push(InstallResult {
-                source: source_str.clone(),
-                destination: String::new(),
-                status: InstallStatus::InvalidExtension,
-                message: Some(format!(
-                    "Invalid extension '.{}'. Supported for {}: {}",
-                    ext,
-                    game_label,
-                    supported.join(", ")
-                )),
-            });
-            continue;
-        }
+        let mods_dir = match install_folder_for(&game_def, source) {
+            Ok(ct) => std::path::PathBuf::from(&base).join(&ct.folder),
+            Err(msg) => {
+                results.push(InstallResult {
+                    source: source_str.clone(),
+                    destination: String::new(),
+                    status: InstallStatus::InvalidExtension,
+                    message: Some(format!("{} ({})", msg, game_label)),
+                });
+                continue;
+            }
+        };
 
         let metadata = std::fs::metadata(source).map_err(|e| e.to_string())?;
         if metadata.len() > MAX_INSTALL_FILE_SIZE {
@@ -145,6 +154,15 @@ pub async fn install_mod_files(
             continue;
         }
 
+        if let Err(e) = std::fs::create_dir_all(&mods_dir) {
+            results.push(InstallResult {
+                source: source_str.clone(),
+                destination: String::new(),
+                status: InstallStatus::Failed,
+                message: Some(format!("Cannot create {}: {}", mods_dir.display(), e)),
+            });
+            continue;
+        }
         let dest = mods_dir.join(file_name);
 
         if dest.exists() {
@@ -235,16 +253,15 @@ pub async fn confirm_install_duplicate(
         (path, game_id)
     };
 
-    let install_folder = {
+    let game_def = {
         let app_state = state.lock().await;
         get_game_def(&app_state.game_registry, &game_id)
-            .and_then(|def| def.content_types.first())
-            .map(|ct| ct.folder.clone())
-            .unwrap_or_else(|| "Mods".to_string())
+            .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?
+            .clone()
     };
-
-    let mods_dir = std::path::PathBuf::from(&base).join(&install_folder);
     let source_path = Path::new(&source);
+    // Same routing as install_mod_files, so "overwrite" hits the file it reported.
+    let mods_dir = std::path::PathBuf::from(&base).join(&install_folder_for(&game_def, source_path)?.folder);
 
     if !source_path.is_file() {
         return Err("Source file no longer exists".into());
@@ -317,6 +334,42 @@ pub async fn confirm_install_duplicate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn game(cts: serde_json::Value) -> GameDefinition {
+        serde_json::from_value(serde_json::json!({"id": "g", "label": "G", "family": "g", "content_types": cts})).unwrap()
+    }
+
+    #[test]
+    fn drop_routing_picks_the_matching_content_type() {
+        let terraria = game(serde_json::json!([
+            {"id": "worlds", "label": "W", "folder": "Worlds", "extensions": ["wld"], "file_type": "Save"},
+            {"id": "mods", "label": "M", "folder": "tModLoader/Mods", "extensions": ["tmod"], "file_type": "Mod"},
+            {"id": "rp", "label": "R", "folder": "ResourcePacks", "extensions": ["zip"], "file_type": "ResourcePack"}
+        ]));
+        let f = |name: &str| install_folder_for(&terraria, Path::new(name)).map(|c| c.id.clone());
+        assert_eq!(f("C:/dl/World.WLD").unwrap(), "worlds");
+        assert_eq!(f("x.tmod").unwrap(), "mods");
+        assert_eq!(f("pack.zip").unwrap(), "rp");
+        assert!(f("readme.txt").unwrap_err().contains(".txt"));
+        assert!(f("noext").is_err());
+
+        // `[]` means "anything" only for the first type; explicit matches still win.
+        let gmod = game(serde_json::json!([
+            {"id": "addons", "label": "A", "folder": "addons", "extensions": [], "file_type": "Mod"},
+            {"id": "maps", "label": "M", "folder": "maps", "extensions": ["bsp"], "file_type": "Map"},
+            {"id": "saves", "label": "S", "folder": "saves", "extensions": [], "file_type": "Save"}
+        ]));
+        let g = |name: &str| install_folder_for(&gmod, Path::new(name)).map(|c| c.id.clone());
+        assert_eq!(g("de_dust.bsp").unwrap(), "maps");
+        assert_eq!(g("addon.gma").unwrap(), "addons");
+
+        // Folders outside the game dir are never install targets.
+        let sdtd = game(serde_json::json!([
+            {"id": "mods", "label": "M", "folder": "Mods", "extensions": ["xml"], "file_type": "Mod"},
+            {"id": "saves", "label": "S", "folder": "%APPDATA%/7DaysToDie/Saves", "extensions": ["ttp"], "file_type": "Save"}
+        ]));
+        assert!(install_folder_for(&sdtd, Path::new("a.ttp")).is_err());
+    }
 
     #[test]
     fn numbered_name_without_extension_has_no_trailing_dot() {

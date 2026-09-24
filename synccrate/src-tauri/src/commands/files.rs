@@ -50,10 +50,18 @@ fn save_hash_cache(cache: &HashCache) {
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct GameConfig {
+    /// Saved paths only. Auto-detected paths live in `AppState::game_paths`
+    /// but are never written here: persisting them let a leftover folder
+    /// found at startup permanently replace a user's custom path (e.g. on a
+    /// drive that was unplugged for one launch).
     pub game_paths: HashMap<String, String>,
     pub active_game: Option<String>,
     #[serde(default)]
     pub user_library: Vec<String>,
+    /// Games whose path the user picked themselves. Older configs also contain
+    /// auto-detected paths; those are kept but don't count as install evidence.
+    #[serde(default)]
+    pub user_set_paths: Vec<String>,
 }
 
 pub fn load_game_config() -> GameConfig {
@@ -68,16 +76,80 @@ pub fn load_game_config() -> GameConfig {
     GameConfig::default()
 }
 
+/// The persisted paths, kept in memory so saving the active game or library
+/// never has to reconstruct them from `AppState::game_paths` (which mixes in
+/// auto-detected ones).
+#[derive(Default)]
+pub(crate) struct SavedPaths {
+    pub paths: HashMap<String, String>,
+    pub user_set: std::collections::HashSet<String>,
+}
+
+static SAVED_PATHS: std::sync::LazyLock<std::sync::Mutex<SavedPaths>> = std::sync::LazyLock::new(|| {
+    let c = load_game_config();
+    std::sync::Mutex::new(SavedPaths { paths: c.game_paths, user_set: c.user_set_paths.into_iter().collect() })
+});
+
+fn saved_paths_lock() -> std::sync::MutexGuard<'static, SavedPaths> {
+    SAVED_PATHS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Replace the saved paths (startup, after resolving legacy ids).
+pub(crate) fn set_saved_paths(saved: SavedPaths) {
+    *saved_paths_lock() = saved;
+}
+
+/// Path the user picked for `game_id`, if any (not auto-detected).
+pub(crate) fn user_set_path(game_id: &str) -> Option<String> {
+    let s = saved_paths_lock();
+    if s.user_set.contains(game_id) { s.paths.get(game_id).cloned() } else { None }
+}
+
 pub(crate) fn save_game_config(app_state: &AppState) {
-    let config = GameConfig {
-        game_paths: app_state.game_paths.clone(),
-        active_game: Some(app_state.active_game.clone()),
-        user_library: app_state.user_library.clone(),
+    let config = {
+        let saved = saved_paths_lock();
+        let mut user_set: Vec<String> = saved.user_set.iter().cloned().collect();
+        user_set.sort();
+        GameConfig {
+            game_paths: saved.paths.clone(),
+            active_game: Some(app_state.active_game.clone()),
+            user_library: app_state.user_library.clone(),
+            user_set_paths: user_set,
+        }
     };
     let path = utils::game_config_path();
     if let Ok(data) = serde_json::to_string_pretty(&config) {
         let _ = std::fs::write(&path, data);
     }
+}
+
+/// Error for a saved folder that's gone. Scanning it would produce an empty
+/// manifest, which looks like "the host has no mods" to everyone else.
+pub(crate) fn missing_folder_error(label: &str, path: &str) -> String {
+    format!(
+        "{} folder not found: {}. Is the drive disconnected? Reconnect it or pick the folder again in Settings.",
+        label, path
+    )
+}
+
+/// Prefix of the `set_game_path` error that asks the UI to confirm an
+/// unfamiliar folder and retry with `force`.
+pub(crate) const NEEDS_CONFIRMATION: &str = "NEEDS_CONFIRMATION:";
+
+/// Resolve `game` and require it to be the active game. Toggle/delete/profile
+/// commands act on the active game's folder; the UI could show another game
+/// (e.g. `set_active_game` refused mid-session) and then act on the wrong one.
+pub(crate) fn require_active(app_state: &AppState, game: &str) -> Result<String, String> {
+    let game_id = resolve_game(app_state, game)?;
+    if game_id != app_state.active_game {
+        return Err(format!(
+            "{} isn't the active game ({} is). Disconnect from the session to manage {}'s files.",
+            app_state.game_label(&game_id),
+            app_state.game_label(&app_state.active_game),
+            app_state.game_label(&game_id)
+        ));
+    }
+    Ok(game_id)
 }
 
 /// Resolve a game ID string, accepting both new registry IDs and legacy enum variant names.
@@ -293,37 +365,49 @@ pub async fn scan_files_inner(
     game: Option<String>,
     compute_hashes: bool,
 ) -> Result<FileManifest, String> {
-    let (game_id, base_path, game_def, newly_detected) = {
-        let mut app_state = state.lock().await;
+    let (game_id, existing, game_def, label) = {
+        let app_state = state.lock().await;
         let game_id = match game {
             Some(ref g) => resolve_game(&app_state, g)?,
             None => app_state.active_game.clone(),
         };
-        let (path, newly_detected) = match app_state.game_paths.get(&game_id).cloned() {
-            Some(p) => (p, false),
-            None => {
-                let detected = utils::detect_game_path_from_registry(&game_id, &app_state.game_registry)
-                    .ok_or_else(|| {
-                        format!(
-                            "{} path not found. Please set it manually.",
-                            app_state.game_label(&game_id)
-                        )
-                    })?;
-                app_state.game_paths.insert(game_id.clone(), detected.clone());
-                (detected, true)
-            }
-        };
         let def = get_game_def(&app_state.game_registry, &game_id)
             .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?
             .clone();
-        (game_id, path, def, newly_detected)
+        let label = app_state.game_label(&game_id);
+        (game_id.clone(), app_state.game_paths.get(&game_id).cloned(), def, label)
+    };
+    let (base_path, newly_detected) = match existing {
+        Some(p) => {
+            if !std::path::Path::new(&p).is_dir() {
+                return Err(missing_folder_error(&label, &p));
+            }
+            (p, false)
+        }
+        None => {
+            // Only adopt a detected folder with real install evidence: a
+            // leftover `Documents/.../<Game>` from an uninstalled game used to
+            // be adopted (and populated with Mods/ Saves/) just by viewing it.
+            let def = game_def.clone();
+            let detected = tokio::task::spawn_blocking(move || {
+                let p = utils::detect_game_path_from_def(&def)?;
+                let ctx = crate::game_install::InstallContext::build();
+                crate::game_install::detect_installed(&def, &ctx, Some(&p), None).then_some(p)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("{} path not found. Please set it manually.", label))?;
+            let mut app_state = state.lock().await;
+            let p = app_state.game_paths.entry(game_id.clone()).or_insert(detected).clone();
+            (p, true)
+        }
     };
     let scanned_base = base_path.clone();
 
     // A just-auto-detected path bypasses set_game_path, which is where the game's
     // expected content folders normally get created. Mirror that here so, e.g.,
     // ReShade's reshade-presets/ folder exists on first detection rather than only
-    // when the user manually re-picks the path.
+    // when the user manually re-picks the path. Only for installed games (above).
     if newly_detected {
         if let Some(val) = &game_def.validation {
             for dir in &val.auto_create_dirs {
@@ -454,55 +538,129 @@ pub async fn get_game_path(
         .ok_or_else(|| format!("{} path not found", app_state.game_label(&game_id)))
 }
 
+/// Climb out of a known subfolder the user picked (`Mods` -> the game folder,
+/// `Interface/AddOns` -> 2 levels up).
+fn apply_path_correction(pc: &crate::registry::PathCorrection, picked: &std::path::Path) -> std::path::PathBuf {
+    let mut out = picked.to_path_buf();
+    let Some(folder) = picked.file_name().and_then(|n| n.to_str()) else { return out };
+    let levels = match pc.nested_corrections.get(folder) {
+        Some(&n) => n,
+        None if pc.known_subfolders.iter().any(|s| s.eq_ignore_ascii_case(folder)) => 1,
+        None => 0,
+    };
+    for _ in 0..levels {
+        if let Some(parent) = out.parent() {
+            out = parent.to_path_buf();
+        }
+    }
+    out
+}
+
+/// Games that may legitimately share a folder: add-on variants of one game
+/// (Sims 4 ReShade and GShade both live in `The Sims 4/Game/Bin`).
+fn games_may_share(a: &GameDefinition, b: &GameDefinition) -> bool {
+    let addon = |g: &GameDefinition| g.detection.as_ref().is_some_and(|d| !d.require_any.is_empty());
+    a.family == b.family && addon(a) && addon(b)
+}
+
+/// Refuse drive roots, the user's home/Documents/Desktop/Downloads, and a
+/// folder that is, contains, or sits inside another game's folder (`others`:
+/// label + path). Picking `Documents` for The Sims made every other game's
+/// files part of its manifest.
+fn check_game_folder(
+    candidate: &std::path::Path,
+    others: &[(String, std::path::PathBuf)],
+    protected: &[(std::path::PathBuf, &'static str)],
+) -> Result<(), String> {
+    if let Some(reason) = utils::protected_folder_reason(candidate, protected) {
+        return Err(format!(
+            "{} is {}. Pick the game's own folder instead.",
+            candidate.display(),
+            reason
+        ));
+    }
+    if let Some((label, p)) = others.iter().find(|(_, p)| utils::paths_overlap(candidate, p)) {
+        return Err(format!(
+            "This folder overlaps {}'s folder ({}). Each game needs its own folder.",
+            label,
+            p.display()
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_game_path(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     game: String,
     path: String,
+    force: Option<bool>,
 ) -> Result<(), String> {
     let mut app_state = state.lock().await;
     let game_id = resolve_game(&app_state, &game)?;
+    let label = app_state.game_label(&game_id);
+    if app_state.active_game == game_id && app_state.session_type != crate::state::SessionType::None {
+        // Peers sync against this folder's manifest, like set_active_game.
+        return Err(format!("Disconnect from the current session before changing {}'s folder.", label));
+    }
     let game_def = get_game_def(&app_state.game_registry, &game_id)
         .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?
         .clone();
 
     let game_dir = std::path::Path::new(&path);
-    if !game_dir.exists() {
+    if !game_dir.is_dir() {
         return Err("Path does not exist".to_string());
     }
 
-    let mut canonical = utils::clean_path(
+    let picked = utils::clean_path(
         std::fs::canonicalize(game_dir)
             .map_err(|e| format!("Cannot resolve path: {}", e))?,
     );
 
-    // Auto-correct if user selected a known subfolder
-    if let Some(pc) = &game_def.path_correction {
-        if let Some(folder_name) = canonical.file_name().and_then(|n| n.to_str()) {
-            let folder_str = folder_name.to_string();
+    let others: Vec<(String, std::path::PathBuf)> = app_state
+        .game_paths
+        .iter()
+        .filter(|(id, _)| **id != game_id)
+        .filter(|(id, _)| {
+            get_game_def(&app_state.game_registry, id).is_none_or(|d| !games_may_share(&game_def, d))
+        })
+        .map(|(id, p)| {
+            let p = std::fs::canonicalize(p).map(utils::clean_path).unwrap_or_else(|_| p.into());
+            (app_state.game_label(id), p)
+        })
+        .collect();
+    let protected = utils::protected_folders();
 
-            // Check nested corrections first (e.g., AddOns -> go up 2 levels)
-            if let Some(&levels) = pc.nested_corrections.get(&folder_str) {
-                for _ in 0..levels {
-                    if let Some(parent) = canonical.parent() {
-                        canonical = parent.to_path_buf();
-                    }
-                }
-            } else if pc.known_subfolders.iter().any(|s| s.eq_ignore_ascii_case(&folder_str)) {
-                if let Some(parent) = canonical.parent() {
-                    canonical = parent.to_path_buf();
-                }
+    // Auto-correct if the user selected a known subfolder, unless climbing
+    // would land in a drive root / user folder / another game's folder
+    // (e.g. a "Mods" folder directly inside Documents).
+    let canonical = match &game_def.path_correction {
+        Some(pc) => {
+            let corrected = apply_path_correction(pc, &picked);
+            if corrected != picked && check_game_folder(&corrected, &others, &protected).is_err() {
+                picked
+            } else {
+                corrected
             }
         }
-    }
+        None => picked,
+    };
+    check_game_folder(&canonical, &others, &protected)?;
 
-    // Validate or create expected directories
+    // A folder with none of the game's expected subfolders is probably the
+    // wrong one: ask before creating Mods/ Saves/ in it.
     if let Some(val) = &game_def.validation {
-        let any_exists = val.check_dirs.is_empty()
-            || val.check_dirs.iter().any(|d| canonical.join(d).exists());
-
-        if !any_exists && !val.auto_create_dirs.is_empty() {
+        let looks_right = val.check_dirs.is_empty() || val.check_dirs.iter().any(|d| canonical.join(d).exists());
+        if !looks_right {
+            if !force.unwrap_or(false) {
+                return Err(format!(
+                    "{}This doesn't look like a {} folder (no {} inside). Use it anyway?",
+                    NEEDS_CONFIRMATION,
+                    label,
+                    val.check_dirs.join(" / ")
+                ));
+            }
             for dir in &val.auto_create_dirs {
                 std::fs::create_dir_all(canonical.join(dir))
                     .map_err(|e| format!("Cannot create {} folder: {}", dir, e))?;
@@ -518,12 +676,33 @@ pub async fn set_game_path(
         app_state.local_manifest = FileManifest::default();
     }
     let is_active = app_state.active_game == game_id;
+    {
+        let mut saved = saved_paths_lock();
+        saved.paths.insert(game_id.clone(), new_path.clone());
+        saved.user_set.insert(game_id.clone());
+    }
     app_state.game_paths.insert(game_id, new_path);
     save_game_config(&app_state);
     if is_active {
         crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
     }
     Ok(())
+}
+
+/// Games whose configured folder doesn't exist right now (unplugged drive,
+/// moved library). Their saved path is kept; the UI flags them.
+#[tauri::command]
+pub async fn get_unavailable_game_paths(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<Vec<String>, String> {
+    let paths = state.lock().await.game_paths.clone();
+    let mut ids: Vec<String> = paths
+        .into_iter()
+        .filter(|(_, p)| !std::path::Path::new(p).is_dir())
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    Ok(ids)
 }
 
 #[tauri::command]
@@ -563,23 +742,31 @@ pub async fn set_active_game(
 #[tauri::command]
 pub async fn toggle_mod(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
     relative_path: String,
     enabled: bool,
 ) -> Result<String, String> {
-    let (base, first_content_folder, rename_method) = {
+    let (game_id, base, first_content_folder, rename_method) = {
         let app_state = state.lock().await;
+        let game_id = require_active(&app_state, &game_id)?;
         let base = app_state
             .game_paths
-            .get(&app_state.active_game)
+            .get(&game_id)
             .cloned()
             .ok_or("Game path not set")?;
-        let def = get_game_def(&app_state.game_registry, &app_state.active_game);
+        let def = get_game_def(&app_state.game_registry, &game_id);
+        let method = def.and_then(|d| d.disable_method.as_deref());
+        if method == Some("none") {
+            return Err(format!(
+                "{} loads every subfolder and its mods are folders, so single files can't be disabled safely. Move the mod's folder out of the game to disable it.",
+                app_state.game_label(&game_id)
+            ));
+        }
         let folder = def
             .and_then(|d| d.content_types.first())
             .map(|ct| ct.folder.clone())
             .unwrap_or_else(|| "Mods".to_string());
-        let rename = def.and_then(|d| d.disable_method.as_deref()) == Some("rename");
-        (base, folder, rename)
+        (game_id, base, folder, method == Some("rename"))
     };
 
     let full_path = utils::safe_join(&base, &relative_path)?;
@@ -625,6 +812,8 @@ pub async fn toggle_mod(
         .unwrap_or(&dest_clean)
         .to_string_lossy()
         .replace('\\', "/");
+    // Tags are keyed by path; without this a toggle silently dropped them.
+    crate::commands::tags::move_tags(&game_id, &relative_path.replace('\\', "/"), &new_rel);
     Ok(new_rel)
 }
 
@@ -826,8 +1015,11 @@ pub async fn get_installed_games(
             .iter()
             .filter(|game| {
                 let detected = if game.auto_detect { utils::detect_game_path_from_def(game) } else { None };
-                let configured = game_paths.get(&game.id).map(|s| s.as_str());
-                crate::game_install::detect_installed(game, &ctx, detected.as_deref(), configured)
+                // Only a path the user picked counts on its own (see
+                // detect_installed). Older configs saved auto-detected paths
+                // too, and those may be leftovers.
+                let user_set = user_set_path(&game.id).filter(|p| game_paths.get(&game.id) == Some(p));
+                crate::game_install::detect_installed(game, &ctx, detected.as_deref(), user_set.as_deref())
             })
             .map(|game| game.id.clone())
             .collect()
@@ -1027,14 +1219,55 @@ pub(crate) fn group_duplicates(manifest: &FileManifest) -> Vec<DuplicateGroup> {
     groups
 }
 
-/// Hashed scan of the game followed by duplicate grouping.
+/// Only files of the first (mods) content type take part in duplicate
+/// grouping: identical saves, settings or world region files at different
+/// paths are expected and must never be offered for deletion.
+pub(crate) fn duplicate_candidates(manifest: &FileManifest, mods: &crate::registry::ContentType) -> FileManifest {
+    let folder = mods.folder.replace('\\', "/").trim_matches('/').to_lowercase();
+    let files = manifest
+        .files
+        .iter()
+        .filter(|(rel, _)| {
+            let rel = rel.to_lowercase();
+            let dir = rel.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+            if folder == "." || folder.is_empty() {
+                dir.is_empty()
+            } else if mods.recursive {
+                rel.starts_with(&format!("{}/", folder))
+            } else {
+                dir == folder
+            }
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    FileManifest { files, generated_at: manifest.generated_at }
+}
+
+/// Hashed scan of the game followed by duplicate grouping (mods folder only,
+/// games with `duplicate_finder` only).
 #[tauri::command]
 pub async fn find_duplicates(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     game: Option<String>,
 ) -> Result<Vec<DuplicateGroup>, String> {
+    let mods = {
+        let app_state = state.lock().await;
+        let game_id = match game {
+            Some(ref g) => resolve_game(&app_state, g)?,
+            None => app_state.active_game.clone(),
+        };
+        let def = get_game_def(&app_state.game_registry, &game_id)
+            .ok_or_else(|| format!("Game '{}' not found in registry", game_id))?;
+        if !def.duplicate_finder {
+            return Err(format!(
+                "The duplicate finder isn't available for {}: identical files in different folders are normal there.",
+                def.label
+            ));
+        }
+        def.content_types.first().cloned().ok_or("Game has no content types")?
+    };
     let manifest = scan_files_inner(&*state, game, true).await?;
-    Ok(group_duplicates(&manifest))
+    Ok(group_duplicates(&duplicate_candidates(&manifest, &mods)))
 }
 
 #[derive(serde::Serialize, Debug, Default)]
@@ -1045,27 +1278,37 @@ pub struct DeleteResult {
 
 /// Delete files of the active game. Every path must resolve (via `safe_join`,
 /// no symlinks) to a regular file inside one of the game's content folders
-/// that the content type accepts.
+/// that the content type accepts. `keep` maps a duplicate being deleted to
+/// the copy that stays: that copy is re-checked right before the delete.
 #[tauri::command]
 pub async fn delete_mod_files(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
     paths: Vec<String>,
+    keep: Option<HashMap<String, String>>,
 ) -> Result<DeleteResult, String> {
     let (base, cts) = {
         let app_state = state.lock().await;
         if app_state.is_any_syncing() {
             return Err("Cannot delete files while a sync is in progress".into());
         }
-        let base = app_state.active_game_path()?;
-        let cts = get_game_def(&app_state.game_registry, &app_state.active_game)
+        let game_id = require_active(&app_state, &game_id)?;
+        let base = app_state.game_paths.get(&game_id).cloned().ok_or("Game path not set")?;
+        let cts = get_game_def(&app_state.game_registry, &game_id)
             .map(|d| d.content_types.clone())
             .unwrap_or_default();
         (base, cts)
     };
+    let keep = keep.unwrap_or_default();
     tokio::task::spawn_blocking(move || {
         let mut result = DeleteResult::default();
         for rel in paths {
-            match delete_content_file(&base, &cts, &rel) {
+            let res = match keep.get(&rel) {
+                Some(kept) => verify_kept_duplicate(&base, &cts, &rel, kept)
+                    .and_then(|()| delete_content_file(&base, &cts, &rel)),
+                None => delete_content_file(&base, &cts, &rel),
+            };
+            match res {
                 Ok(()) => result.deleted += 1,
                 Err(e) => result.errors.push(format!("{}: {}", rel, e)),
             }
@@ -1076,11 +1319,45 @@ pub async fn delete_mod_files(
     .map_err(|e| e.to_string())
 }
 
+/// Before deleting duplicate `rel`, make sure `kept` still exists as a
+/// different file with identical content. The duplicate list can be minutes
+/// old: the kept copy may have been moved, deleted or updated since, and
+/// deleting the "extra" would then remove the only copy.
+fn verify_kept_duplicate(
+    base: &str,
+    cts: &[crate::registry::ContentType],
+    rel: &str,
+    kept: &str,
+) -> Result<(), String> {
+    let doomed = content_file_path(base, cts, rel)?;
+    let kept_path = content_file_path(base, cts, kept)
+        .map_err(|e| format!("the copy to keep ({}) is gone: {}", kept, e))?;
+    if utils::same_path(&doomed, &kept_path) {
+        return Err("it is the copy you chose to keep".into());
+    }
+    let (a, b) = (compute_file_hash(&doomed)?, compute_file_hash(&kept_path)?);
+    if a != b {
+        return Err(format!("the copy to keep ({}) changed; scan for duplicates again", kept));
+    }
+    Ok(())
+}
+
 fn delete_content_file(
     base: &str,
     cts: &[crate::registry::ContentType],
     rel: &str,
 ) -> Result<(), String> {
+    let full = content_file_path(base, cts, rel)?;
+    std::fs::remove_file(&full).map_err(|e| e.to_string())
+}
+
+/// Canonical path of `rel` if it's a regular file (not a symlink) inside one
+/// of the content folders and accepted by that content type.
+fn content_file_path(
+    base: &str,
+    cts: &[crate::registry::ContentType],
+    rel: &str,
+) -> Result<std::path::PathBuf, String> {
     let full = utils::safe_join(base, rel)?;
     let meta = std::fs::symlink_metadata(&full).map_err(|e| e.to_string())?;
     if !meta.is_file() || meta.file_type().is_symlink() {
@@ -1102,7 +1379,7 @@ fn delete_content_file(
     if !inside {
         return Err("Only files in the game's content folders can be deleted".into());
     }
-    std::fs::remove_file(&full).map_err(|e| e.to_string())
+    Ok(full)
 }
 
 // --- "May be outdated after a game patch" ---
@@ -1165,11 +1442,14 @@ pub struct OutdatedScripts {
 #[tauri::command]
 pub async fn get_outdated_scripts(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
 ) -> Result<OutdatedScripts, String> {
     let app_state = state.lock().await;
+    // local_manifest belongs to the active game only.
+    let game_id = require_active(&app_state, &game_id)?;
     let (Some(def), Some(base)) = (
-        get_game_def(&app_state.game_registry, &app_state.active_game),
-        app_state.game_paths.get(&app_state.active_game),
+        get_game_def(&app_state.game_registry, &game_id),
+        app_state.game_paths.get(&game_id),
     ) else {
         return Ok(OutdatedScripts::default());
     };
@@ -1407,5 +1687,103 @@ mod tests {
         let res = toggle_destination(&base.join("Mods"), &std::fs::canonicalize(&save).unwrap(), false);
         assert!(res.is_err());
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn duplicates_only_come_from_the_mods_folder() {
+        let m = manifest(vec![
+            info("Mods/a.package", "h1", 10, 1),
+            info("Mods/CC/a copy.package", "h1", 10, 1),
+            info("Saves/slot1.save", "h2", 10, 1),
+            info("Saves/Backup/slot1.save", "h2", 10, 1),
+            info("ModsExtra/x.package", "h1", 10, 1),
+        ]);
+        let cand = duplicate_candidates(&m, &mods_ct());
+        let mut keys: Vec<&String> = cand.files.keys().collect();
+        keys.sort();
+        assert_eq!(keys, vec!["Mods/CC/a copy.package", "Mods/a.package"]);
+        let g = group_duplicates(&cand);
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].files.len(), 2);
+
+        // Non-recursive first content type: only its direct files.
+        let flat: crate::registry::ContentType = serde_json::from_value(serde_json::json!({
+            "id": "mods", "label": "Mods", "folder": "Mods", "recursive": false, "file_type": "Mod"
+        }))
+        .unwrap();
+        assert_eq!(duplicate_candidates(&m, &flat).files.len(), 1);
+    }
+
+    #[test]
+    fn deleting_a_duplicate_rechecks_the_kept_copy() {
+        let base = std::env::temp_dir().join(format!("synccrate-dupdel-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(base.join("Mods").join("CC")).unwrap();
+        std::fs::write(base.join("Mods").join("a.package"), b"same").unwrap();
+        std::fs::write(base.join("Mods").join("CC").join("b.package"), b"same").unwrap();
+        let b = base.to_string_lossy().to_string();
+        let cts = vec![mods_ct()];
+
+        assert!(verify_kept_duplicate(&b, &cts, "Mods/CC/b.package", "Mods/a.package").is_ok());
+        // Keeping the file itself would delete the only copy.
+        assert!(verify_kept_duplicate(&b, &cts, "Mods/a.package", "Mods/a.package").is_err());
+        // Kept copy changed since the scan.
+        std::fs::write(base.join("Mods").join("a.package"), b"different").unwrap();
+        assert!(verify_kept_duplicate(&b, &cts, "Mods/CC/b.package", "Mods/a.package").is_err());
+        // Kept copy gone.
+        std::fs::remove_file(base.join("Mods").join("a.package")).unwrap();
+        assert!(verify_kept_duplicate(&b, &cts, "Mods/CC/b.package", "Mods/a.package").is_err());
+        assert!(base.join("Mods").join("CC").join("b.package").is_file());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn game_folder_checks_refuse_roots_user_folders_and_other_games() {
+        let tmp = utils::clean_path(std::fs::canonicalize(std::env::temp_dir()).unwrap());
+        let docs = tmp.join("synccrate_docs");
+        let sims = docs.join("Electronic Arts").join("The Sims 4");
+        let protected = vec![(docs.clone(), "your Documents folder")];
+        let others = vec![("Minecraft".to_string(), tmp.join(".minecraft"))];
+
+        assert!(check_game_folder(&sims, &others, &protected).is_ok());
+        assert!(check_game_folder(&docs, &others, &protected).unwrap_err().contains("Documents"));
+        // Same as, inside, or containing another game's folder.
+        assert!(check_game_folder(&tmp.join(".minecraft"), &others, &protected).is_err());
+        assert!(check_game_folder(&tmp.join(".minecraft").join("mods"), &others, &protected).is_err());
+        assert!(check_game_folder(&tmp, &others, &protected).is_err());
+        #[cfg(target_os = "windows")]
+        assert!(check_game_folder(std::path::Path::new(r"E:\"), &[], &[]).unwrap_err().contains("drive root"));
+    }
+
+    #[test]
+    fn path_correction_climbs_out_of_known_subfolders() {
+        let pc: crate::registry::PathCorrection = serde_json::from_value(serde_json::json!({
+            "known_subfolders": ["Mods", "Saves"], "nested_corrections": {"AddOns": 2}
+        }))
+        .unwrap();
+        let root = std::env::temp_dir().join("Game");
+        assert_eq!(apply_path_correction(&pc, &root.join("mods")), root);
+        assert_eq!(apply_path_correction(&pc, &root.join("Interface").join("AddOns")), root);
+        assert_eq!(apply_path_correction(&pc, &root), root);
+    }
+
+    #[test]
+    fn only_addon_variants_may_share_a_folder() {
+        let reg = crate::registry::load_registry();
+        let get = |id: &str| reg.games.iter().find(|g| g.id == id).unwrap();
+        assert!(games_may_share(get("sims4-reshade"), get("sims4-gshade")));
+        assert!(!games_may_share(get("sims4"), get("sims4-reshade")));
+        assert!(!games_may_share(get("sims4"), get("sims3")));
+    }
+
+    #[test]
+    fn saved_paths_are_not_replaced_by_state() {
+        // save_game_config writes SAVED_PATHS, never AppState::game_paths, so an
+        // auto-detected path can't overwrite a saved (possibly unplugged) one.
+        let mut s = SavedPaths::default();
+        s.paths.insert("sims4".into(), "X:/Custom/The Sims 4".into());
+        s.user_set.insert("sims4".into());
+        set_saved_paths(s);
+        assert_eq!(user_set_path("sims4").as_deref(), Some("X:/Custom/The Sims 4"));
+        assert_eq!(user_set_path("sims3"), None);
     }
 }

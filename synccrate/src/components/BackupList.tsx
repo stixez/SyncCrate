@@ -6,6 +6,7 @@ import { formatBytes, formatDate } from "../lib/utils";
 import { gameLabel } from "../lib/games";
 import { Badge, Banner, Button, EmptyState, Input, Panel, SectionHeader, cx } from "./ui";
 import * as cmd from "../lib/commands";
+import { toastError, toastInfo } from "../lib/toast";
 
 function sendNotification(title: string, body: string) {
   try {
@@ -70,17 +71,24 @@ export default function BackupList({ gameId }: Props) {
     setRestoreConfirm(null);
     setRestoring(true);
     try {
-      await cmd.restoreBackup(id);
+      const r = await cmd.restoreBackup(id);
       const updated = await cmd.listBackups();
       setBackups(updated);
       try {
         const m = await cmd.scanFiles(gameId);
         useAppStore.getState().setManifest(m);
       } catch {}
-      addLog("Backup restored (safety backup created)", "success");
+      addLog(`Backup restored: ${r.restored} file(s) (safety backup created)`, "success");
+      if (r.skipped.length > 0) {
+        // Mods the user has since disabled/enabled are left as they are.
+        const msg = `${r.skipped.length} file(s) skipped because you've disabled or enabled them since: ${r.skipped[0]}${r.skipped.length > 1 ? " …" : ""}`;
+        addLog(msg, "warning");
+        toastInfo(msg);
+      }
       sendNotification("SyncCrate", "Backup restored successfully");
     } catch (e) {
       addLog(`Restore failed: ${e}`, "error");
+      toastError(`Restore failed: ${e}`);
     } finally {
       setRestoring(false);
     }

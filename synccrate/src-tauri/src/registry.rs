@@ -58,9 +58,18 @@ pub struct GameDefinition {
     /// How `toggle_mod` disables a file: `"folder"` (default) moves it into
     /// `<mods>/_Disabled/`; `"rename"` appends `.disabled` in place. Games that
     /// load content from nested subfolders (The Sims 3/4) need `"rename"`, or
-    /// "disabled" mods keep loading.
+    /// "disabled" mods keep loading. BepInEx games also use `"rename"` (it
+    /// loads `*.dll` from every plugins subfolder). `"none"` hides the toggle
+    /// where neither works (SMAPI / KSP load every subfolder and mods are
+    /// folders, so renaming single files would half-break a mod).
     #[serde(default)]
     pub disable_method: Option<String>,
+    /// Offer the duplicate finder (first content type only). Opt-in because
+    /// identical files at different paths are normal for many games (WoW
+    /// addons' shared `Libs/LibStub.lua`, BepInEx shared DLLs, Minecraft
+    /// region files): "delete all extras" there broke working setups.
+    #[serde(default)]
+    pub duplicate_finder: bool,
     /// Files (relative to the game path) deleted after a sync that received
     /// files, e.g. Sims 4's `localthumbcache.package`, which must be cleared
     /// after mods change.
@@ -296,6 +305,80 @@ mod tests {
                 assert!(c.exclude_files.iter().any(|f| f.eq_ignore_ascii_case(marker)));
                 assert!(c.must_contain.is_some());
             }
+        }
+    }
+
+    /// Normalized content folder ("./" and case stripped, "/" separators).
+    fn norm_folder(f: &str) -> String {
+        f.replace('\\', "/").trim_matches('/').to_lowercase()
+    }
+
+    /// True if `inner`'s files would also be picked up by scanning `outer`.
+    fn folder_covers(outer: &ContentType, inner: &ContentType) -> bool {
+        let (o, i) = (norm_folder(&outer.folder), norm_folder(&inner.folder));
+        if o == i {
+            return true;
+        }
+        // "." non-recursive only sees loose files in the game folder itself.
+        let o_prefix = if o == "." { String::new() } else { format!("{}/", o) };
+        outer.recursive && (o == "." || i.starts_with(&o_prefix))
+    }
+
+    #[test]
+    fn content_type_folders_do_not_overlap() {
+        // One file must belong to one content type: overlapping folders made KSP
+        // list saves/ships twice and gave it two sets of permissions.
+        for g in load_registry().games {
+            for (a_i, a) in g.content_types.iter().enumerate() {
+                for (b_i, b) in g.content_types.iter().enumerate() {
+                    if a_i != b_i {
+                        assert!(!folder_covers(a, b), "{}: {} covers {}", g.id, a.id, b.id);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn folder_cover_rules() {
+        let ct = |folder: &str, recursive: bool| -> ContentType {
+            serde_json::from_value(serde_json::json!({
+                "id": folder, "label": "x", "folder": folder, "recursive": recursive, "file_type": "Mod"
+            }))
+            .unwrap()
+        };
+        assert!(folder_covers(&ct("saves", true), &ct("saves/ships", true)));
+        assert!(folder_covers(&ct("Saves", true), &ct("saves", true)));
+        assert!(!folder_covers(&ct("saves", false), &ct("saves/ships", true)));
+        assert!(!folder_covers(&ct("save", true), &ct("saves", true)));
+        assert!(!folder_covers(&ct(".", false), &ct("presets", true)));
+    }
+
+    #[test]
+    fn toggle_and_duplicate_flags() {
+        let registry = load_registry();
+        let get = |id: &str| registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+        for id in ["valheim", "lethal_company", "risk_of_rain_2", "among_us", "repo", "v_rising", "dyson_sphere_program"] {
+            assert_eq!(get(id).disable_method.as_deref(), Some("rename"), "{id}");
+        }
+        // Every BepInEx game, including ones added later.
+        for g in registry.games.iter().filter(|g| g.content_types.iter().any(|c| c.folder.starts_with("BepInEx/plugins"))) {
+            assert_eq!(g.disable_method.as_deref(), Some("rename"), "{} uses BepInEx", g.id);
+        }
+        for id in ["stardew_valley", "kerbal_space_program"] {
+            assert_eq!(get(id).disable_method.as_deref(), Some("none"), "{id}");
+        }
+        for g in &registry.games {
+            assert!(
+                matches!(g.disable_method.as_deref(), None | Some("folder") | Some("rename") | Some("none")),
+                "{}: unknown disable_method", g.id
+            );
+        }
+        for id in ["sims4", "sims3", "sims2"] {
+            assert!(get(id).duplicate_finder, "{id}");
+        }
+        for id in ["wow_retail", "minecraft_java", "valheim", "skyrim_se"] {
+            assert!(!get(id).duplicate_finder, "{id}");
         }
     }
 
