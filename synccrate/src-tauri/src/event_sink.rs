@@ -28,25 +28,10 @@ pub fn from_app(app: &tauri::AppHandle) -> Events {
 }
 
 /// Discards every event. Used by tests that don't assert on progress/state events.
+#[cfg(test)]
 pub struct NullSink;
 
+#[cfg(test)]
 impl EventSink for NullSink {
     fn emit(&self, _event: &str, _payload: serde_json::Value) {}
-}
-
-#[cfg(test)]
-pub struct RecordingSink(pub std::sync::Mutex<Vec<(String, serde_json::Value)>>);
-
-#[cfg(test)]
-impl Default for RecordingSink {
-    fn default() -> Self {
-        RecordingSink(std::sync::Mutex::new(Vec::new()))
-    }
-}
-
-#[cfg(test)]
-impl EventSink for RecordingSink {
-    fn emit(&self, event: &str, payload: serde_json::Value) {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).push((event.to_string(), payload));
-    }
 }

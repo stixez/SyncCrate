@@ -1,0 +1,90 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    name: Test (Windows, MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: synccrate/src-tauri
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        working-directory: synccrate
+        run: npm ci
+
+      # tauri::generate_context!() embeds the frontend dist, so cargo test
+      # needs a real build first, not just node_modules.
+      - name: Build frontend
+        working-directory: synccrate
+        run: npm run build
+
+      - name: Typecheck frontend
+        working-directory: synccrate
+        run: npx tsc --noEmit
+
+      - name: cargo test
+        working-directory: synccrate/src-tauri
+        run: cargo test
+
+  linux:
+    name: Test (Linux)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: synccrate/src-tauri
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Linux dependencies required by Tauri (see release.yml)
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install frontend dependencies
+        working-directory: synccrate
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: synccrate
+        run: npm run build
+
+      - name: cargo test
+        working-directory: synccrate/src-tauri
+        run: cargo test

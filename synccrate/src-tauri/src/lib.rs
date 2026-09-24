@@ -9,6 +9,11 @@ mod sync;
 mod utils;
 mod watcher;
 
+#[cfg(test)]
+mod testutil;
+#[cfg(test)]
+mod e2e_tests;
+
 use state::AppState;
 use std::sync::Arc;
 use tauri::Manager;
