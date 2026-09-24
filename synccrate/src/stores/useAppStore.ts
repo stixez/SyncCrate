@@ -13,6 +13,7 @@ import type {
   SessionStatus,
   SyncPlan,
   SyncProgress,
+  UndoStatus,
 } from "../lib/types";
 import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, type Appearance, type ThemeMode } from "../lib/prefs";
 import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
@@ -107,6 +108,10 @@ interface AppState {
   /** Latest backup-progress / restore-progress event (phase: manual, auto, presync, safety, restore). */
   backupProgress: BackupProgress | null;
   setBackupProgress: (p: BackupProgress | null) => void;
+
+  /** The active game's last sync, if it can still be undone. Client only. */
+  undoStatus: UndoStatus | null;
+  setUndoStatus: (s: UndoStatus | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -242,6 +247,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBackups: (backups) => set({ backups }),
   backupProgress: null,
   setBackupProgress: (backupProgress) => set({ backupProgress }),
+  undoStatus: null,
+  setUndoStatus: (undoStatus) => set({ undoStatus }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

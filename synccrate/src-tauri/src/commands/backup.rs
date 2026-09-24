@@ -47,7 +47,7 @@ pub fn restore_in_progress() -> bool {
     RESTORING.load(Ordering::SeqCst)
 }
 
-struct RestoringGuard;
+pub(crate) struct RestoringGuard;
 impl Drop for RestoringGuard {
     fn drop(&mut self) {
         RESTORING.store(false, Ordering::SeqCst);
@@ -498,15 +498,28 @@ fn create_backup_inner(
 // ---------------------------------------------------------------------------
 // Pruning and garbage collection
 
+/// `created_at` is second-granularity, so several backups made within the
+/// same second (e.g. "undo" doing three quick presync backups in a row, or
+/// just a fast manual backup spree) tie on it — sorting by it alone would
+/// then keep or prune an arbitrary one of them (filesystem enumeration
+/// order), not necessarily the one actually created last. The manifest
+/// file's own mtime breaks the tie with far finer resolution.
+fn backup_order_key(root: &Path, info: &BackupInfo) -> (u64, std::time::SystemTime) {
+    let mtime = std::fs::metadata(root.join(&info.id).join("manifest.json"))
+        .and_then(|m| m.modified())
+        .unwrap_or(std::time::UNIX_EPOCH);
+    (info.created_at, mtime)
+}
+
 /// Ids to delete so at most `keep` non-empty backups of `kind` remain for
 /// `game`. Empty backups (from old versions) are always dropped and never
 /// count toward `keep`, so they can't push out real ones.
-fn prune_candidates(infos: &[BackupInfo], game: &str, kind: &str, keep: usize, protect: Option<&str>) -> Vec<String> {
+fn prune_candidates(root: &Path, infos: &[BackupInfo], game: &str, kind: &str, keep: usize, protect: Option<&str>) -> Vec<String> {
     let mut matching: Vec<&BackupInfo> = infos
         .iter()
         .filter(|b| b.game == game && effective_kind(b) == kind && Some(b.id.as_str()) != protect)
         .collect();
-    matching.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    matching.sort_by(|a, b| backup_order_key(root, b).cmp(&backup_order_key(root, a)));
     let keep = keep.max(1);
     let mut kept = 0;
     let mut out = Vec::new();
@@ -547,7 +560,7 @@ fn remove_backup_dir(root: &Path, id: &str) -> Result<(), String> {
 fn prune_kind(root: &Path, game: &str, kind: &str, keep: usize, protect: Option<&str>) -> usize {
     let infos = read_infos(root);
     let mut removed = 0;
-    for id in prune_candidates(&infos, game, kind, keep, protect) {
+    for id in prune_candidates(root, &infos, game, kind, keep, protect) {
         match remove_backup_dir(root, &id) {
             Ok(()) => removed += 1,
             Err(e) => log::warn!("Failed to prune backup {}: {}", id, e),
@@ -781,6 +794,171 @@ fn restore_inner(
 }
 
 // ---------------------------------------------------------------------------
+// Undo last sync
+
+/// Whether a restore may start; also blocks a second undo (and a restore
+/// blocks undo) since both use this one flag. `None` if one is already running.
+pub(crate) fn try_begin_restoring() -> Option<RestoringGuard> {
+    if RESTORING.swap(true, Ordering::SeqCst) {
+        None
+    } else {
+        Some(RestoringGuard)
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UndoResult {
+    /// Replaced or deleted files put back from the presync backup (includes
+    /// ones already matching, so restoring twice is harmless).
+    pub restored: usize,
+    /// Added files (including "keep both" `_remote` copies) deleted.
+    pub removed: usize,
+    /// Left alone, with why: changed or recreated since the sync, or no
+    /// backup available for that file.
+    pub skipped: Vec<String>,
+}
+
+fn hash_file(path: &Path) -> Option<String> {
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Some(hex::encode(hasher.finalize()))
+}
+
+/// Whether the file at `base`/`rel` is exactly what a sync wrote: same size,
+/// mtime and content. Used to refuse touching a file the user has since
+/// changed (or the sync never actually wrote, e.g. it failed mid-sync).
+fn file_matches(base: &str, rel: &crate::commands::undo::RecordedFile) -> bool {
+    let Ok(abs) = utils::safe_join(base, &rel.relative_path) else { return false };
+    let Ok(meta) = std::fs::symlink_metadata(&abs) else { return false };
+    meta.is_file()
+        && meta.len() == rel.size
+        && mtime_ms(&meta) == Some(rel.mtime_ms)
+        && hash_file(&abs).as_deref() == Some(rel.hash.as_str())
+}
+
+/// The game-folder-relative path a presync backup entry was collected from
+/// (the reverse of `content_type_for`/`collect_targeted`): `ct.folder` + `/` +
+/// `entry.relative_path`, or just the latter for a `.`-folder content type.
+fn entry_game_root_path(cts: &[ContentType], entry: &BackupFileEntry) -> Option<String> {
+    let ct = resolve_ct(cts, &entry.category)?;
+    let folder = ct.folder.replace('\\', "/");
+    let folder = folder.trim_end_matches('/').trim_start_matches("./");
+    Some(if folder.is_empty() || folder == "." {
+        entry.relative_path.clone()
+    } else {
+        format!("{}/{}", folder, entry.relative_path)
+    })
+}
+
+/// Undo one sync: delete the files it added (only the ones still exactly as
+/// it left them), and restore the files it replaced or deleted from the
+/// presync backup it points to (only the ones the user hasn't touched
+/// since). Never overwrites a file that doesn't match. The caller holds the
+/// restoring guard.
+pub(crate) fn undo_apply(
+    record: &crate::commands::undo::SyncRecord,
+    base: &Path,
+    cts: &[ContentType],
+) -> UndoResult {
+    let mut result = UndoResult::default();
+    let base_str = base.to_string_lossy().to_string();
+    let _lock = store_lock();
+
+    for f in &record.added {
+        let Ok(abs) = utils::safe_join(&base_str, &f.relative_path) else {
+            result.skipped.push(format!("{} (invalid path)", f.relative_path));
+            continue;
+        };
+        if std::fs::symlink_metadata(&abs).is_err() {
+            continue; // already gone
+        }
+        if !file_matches(&base_str, f) {
+            result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
+            continue;
+        }
+        match std::fs::remove_file(&abs) {
+            Ok(()) => result.removed += 1,
+            Err(e) => result.skipped.push(format!("{}: {}", f.relative_path, e)),
+        }
+    }
+
+    let Some(backup_id) = &record.presync_backup_id else {
+        for f in &record.replaced {
+            result.skipped.push(format!("{} (no backup was made for this sync)", f.relative_path));
+        }
+        for p in &record.deleted {
+            result.skipped.push(format!("{} (no backup was made for this sync)", p));
+        }
+        return result;
+    };
+
+    let root = utils::backups_dir();
+    let manifest = match read_manifest(&root.join(backup_id)) {
+        Ok(m) => m,
+        Err(_) => {
+            for f in &record.replaced {
+                result.skipped.push(format!("{} (the presync backup is gone)", f.relative_path));
+            }
+            for p in &record.deleted {
+                result.skipped.push(format!("{} (the presync backup is gone)", p));
+            }
+            return result;
+        }
+    };
+
+    let mut wanted: HashSet<String> = HashSet::new();
+    for f in &record.replaced {
+        if file_matches(&base_str, f) {
+            wanted.insert(crate::sync::diff::match_key(&f.relative_path));
+        } else {
+            result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
+        }
+    }
+    for p in &record.deleted {
+        let still_absent = utils::safe_join(&base_str, p).map_or(true, |abs| !abs.exists());
+        if still_absent {
+            wanted.insert(crate::sync::diff::match_key(p));
+        } else {
+            result.skipped.push(format!("{} (recreated since the sync)", p));
+        }
+    }
+
+    if !wanted.is_empty() {
+        let restricted = BackupManifest {
+            version: manifest.version,
+            info: manifest.info.clone(),
+            files: manifest
+                .files
+                .iter()
+                .filter(|e| {
+                    entry_game_root_path(cts, e)
+                        .is_some_and(|p| wanted.contains(&crate::sync::diff::match_key(&p)))
+                })
+                .cloned()
+                .collect(),
+        };
+        let r = restore_inner(&root, backup_id, &restricted, base, cts, false, &mut |_, _, _| {});
+        result.restored += r.restored + r.unchanged;
+        result.skipped.extend(r.skipped);
+        if r.missing > 0 {
+            result.skipped.push(format!("{} file(s) missing from the backup", r.missing));
+        }
+        if let Some(e) = r.error {
+            result.skipped.push(format!("restore stopped: {}", e));
+        }
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
 // Pre-sync backup
 
 /// Game-folder-relative local files the plan will overwrite ("use theirs"
@@ -829,8 +1007,13 @@ pub async fn create_presync_backup(
             BackupRequest { game: &game, base: Path::new(&base), cts: &cts, label, kind: KIND_PRESYNC, only: Some(targets.as_slice()) },
             &mut progress,
         )?;
-        if info.is_some() && prune_kind(&root, &game, KIND_PRESYNC, max_count, None) > 0 {
-            gc_logged(&root);
+        if info.is_some() {
+            // Never prune the presync backup a live undo record still points
+            // to, even if it's fallen out of the newest-`max_count` window.
+            let protect = crate::commands::undo::protected_presync_id(&game);
+            if prune_kind(&root, &game, KIND_PRESYNC, max_count, protect.as_deref()) > 0 {
+                gc_logged(&root);
+            }
         }
         Ok(info)
     })
@@ -1418,6 +1601,10 @@ mod tests {
 
     #[test]
     fn prune_never_counts_empty_backups() {
+        // No real backup dirs exist for these ids, so the mtime tiebreak
+        // always falls back to UNIX_EPOCH for all of them — moot here since
+        // every created_at below is already distinct.
+        let root = std::path::Path::new("/nonexistent-prune-test-root");
         let infos = vec![
             info("old-full", KIND_AUTO, 1, 10),
             info("empty1", KIND_AUTO, 2, 0),
@@ -1425,14 +1612,38 @@ mod tests {
             info("manual", KIND_MANUAL, 4, 0),
             info("new-full", KIND_AUTO, 5, 10),
         ];
-        let mut out = prune_candidates(&infos, "g", KIND_AUTO, 2, None);
+        let mut out = prune_candidates(root, &infos, "g", KIND_AUTO, 2, None);
         out.sort();
         assert_eq!(out, vec!["empty1", "empty2"], "both real backups survive; manual untouched");
-        let out = prune_candidates(&infos, "g", KIND_AUTO, 1, None);
+        let out = prune_candidates(root, &infos, "g", KIND_AUTO, 1, None);
         assert!(out.contains(&"old-full".to_string()) && !out.contains(&"new-full".to_string()));
         // keep is at least 1, and the protected id is never pruned.
-        assert!(!prune_candidates(&infos, "g", KIND_AUTO, 0, None).contains(&"new-full".to_string()));
-        assert!(!prune_candidates(&infos, "g", KIND_AUTO, 1, Some("old-full")).contains(&"old-full".to_string()));
+        assert!(!prune_candidates(root, &infos, "g", KIND_AUTO, 0, None).contains(&"new-full".to_string()));
+        assert!(!prune_candidates(root, &infos, "g", KIND_AUTO, 1, Some("old-full")).contains(&"old-full".to_string()));
+    }
+
+    #[test]
+    fn prune_breaks_same_second_ties_by_manifest_mtime() {
+        // Three backups created within the same `created_at` second (very
+        // real for a quick succession of presync backups): without a finer
+        // tiebreak, sorting by created_at alone leaves "newest" to whatever
+        // order the filesystem happens to enumerate them in.
+        let root = tmp("prune-tie");
+        for id in ["a", "b", "c"] {
+            std::fs::create_dir_all(root.join(id)).unwrap();
+            std::fs::write(root.join(id).join("manifest.json"), "{}").unwrap();
+        }
+        // Give each manifest a distinct, increasing mtime — "c" is the real
+        // most-recent one — while created_at (seconds) ties all three.
+        set_mtime(&root.join("a").join("manifest.json"), 1_000_000).unwrap();
+        set_mtime(&root.join("b").join("manifest.json"), 1_000_001).unwrap();
+        set_mtime(&root.join("c").join("manifest.json"), 1_000_002).unwrap();
+        let infos = vec![info("a", KIND_AUTO, 5, 10), info("b", KIND_AUTO, 5, 10), info("c", KIND_AUTO, 5, 10)];
+
+        let mut out = prune_candidates(&root, &infos, "g", KIND_AUTO, 1, None);
+        out.sort();
+        assert_eq!(out, vec!["a".to_string(), "b".to_string()], "only \"c\" (truly newest) should survive");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

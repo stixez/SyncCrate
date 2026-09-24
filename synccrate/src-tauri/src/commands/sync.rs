@@ -1,4 +1,5 @@
 use crate::event_sink::{self, Events};
+use crate::commands::undo::{RecordedFile, SyncRecord};
 use crate::network::transfer;
 use crate::state::{AppState, ConflictPair, FileInfo, ReplaceTarget, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
@@ -309,6 +310,9 @@ pub(crate) async fn execute_sync_inner(
     // Back up only the local files this sync will overwrite or delete (a full
     // copy took minutes and gigabytes before every sync). If that fails, stop:
     // the user asked for a way back, so don't replace files without one.
+    // Its id (if a backup was made) is recorded so "undo last sync" can put
+    // replaced/deleted files back from it.
+    let mut presync_backup_id: Option<String> = None;
     if read_sync_config().auto_backup_before_sync {
         let targets = crate::commands::backup::presync_targets(&plan);
         if !targets.is_empty() {
@@ -320,25 +324,28 @@ pub(crate) async fn execute_sync_inner(
                 targets,
             )
             .await;
-            if let Err(e) = backup {
-                log::warn!("Pre-sync backup failed: {}", e);
-                let mut app_state = state.lock().await;
-                if let Some(conn) = app_state.connections.get_mut(&resolved_id) {
-                    conn.is_syncing = false;
-                    // Keep the plan so the user can retry without comparing again.
-                    if conn.sync_plan.is_none() {
-                        conn.sync_plan = Some(plan);
+            match backup {
+                Ok(info) => presync_backup_id = info.map(|i| i.id),
+                Err(e) => {
+                    log::warn!("Pre-sync backup failed: {}", e);
+                    let mut app_state = state.lock().await;
+                    if let Some(conn) = app_state.connections.get_mut(&resolved_id) {
+                        conn.is_syncing = false;
+                        // Keep the plan so the user can retry without comparing again.
+                        if conn.sync_plan.is_none() {
+                            conn.sync_plan = Some(plan);
+                        }
                     }
+                    return Err(format!(
+                        "Backup before sync failed: {}. Nothing was changed. Free up space or fix the problem, or turn off \"Back up before sync\" in Settings.",
+                        e
+                    ));
                 }
-                return Err(format!(
-                    "Backup before sync failed: {}. Nothing was changed. Free up space or fix the problem, or turn off \"Back up before sync\" in Settings.",
-                    e
-                ));
             }
         }
     }
 
-    let result = run_sync(state, &events, &plan, &base_path, &resolved_id).await;
+    let result = run_sync(state, &events, &plan, &base_path, &resolved_id, presync_backup_id).await;
 
     {
         let mut app_state = state.lock().await;
@@ -420,12 +427,25 @@ pub(crate) fn receive_target(plan: &SyncPlan, file: &FileInfo) -> (String, Strin
 /// Error returned by `execute_sync` when the user cancelled (the UI matches on it).
 pub const SYNC_CANCELLED: &str = "Sync cancelled";
 
+/// Modified time (ms since the epoch) of a file just written, or 0 if it
+/// can't be read (never fails the sync over it — undo would just skip that
+/// file's match check later).
+fn mtime_ms_of(path: &std::path::Path) -> i64 {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|d| i64::try_from(d.as_millis()).ok())
+        .unwrap_or(0)
+}
+
 async fn run_sync(
     state: &Arc<Mutex<AppState>>,
     app: &Events,
     plan: &SyncPlan,
     base_path: &str,
     peer_id: &str,
+    presync_backup_id: Option<String>,
 ) -> Result<(), String> {
     let total_files = plan.actions.iter()
         .filter(|action| {
@@ -460,7 +480,7 @@ async fn run_sync(
         .map(|cp| cp.completed_files)
         .unwrap_or_default();
     let mut checkpoint = SyncCheckpoint {
-        game: game_id,
+        game: game_id.clone(),
         peer_id: peer_id.to_string(),
         plan_hash,
         completed_files: previously_completed,
@@ -470,6 +490,15 @@ async fn run_sync(
     };
     write_checkpoint(&checkpoint);
     let mut cancelled = false;
+
+    // What this sync actually wrote, for "undo last sync" — only files an
+    // action *completed on*, never ones only planned. Added: new downloads
+    // and "keep both" `_remote` copies (undone by deleting). Replaced: "use
+    // theirs" overwrites (undone by restoring the presync backup). Deleted:
+    // successful `Delete` actions (same, restored from the presync backup).
+    let mut undo_added: Vec<RecordedFile> = Vec::new();
+    let mut undo_replaced: Vec<RecordedFile> = Vec::new();
+    let mut undo_deleted: Vec<String> = Vec::new();
 
     for action in &plan.actions {
         if CANCEL_SYNC.swap(false, std::sync::atomic::Ordering::SeqCst) {
@@ -491,6 +520,10 @@ async fn run_sync(
         match action {
             SyncAction::ReceiveFromRemote(file_info) => {
                 let (remote_path, local_path, policy) = receive_target(plan, file_info);
+                // `policy` is moved into the request below; this is the same
+                // condition `receive_target` used to choose it (replace vs.
+                // new), kept here for the undo record.
+                let is_replace = plan.use_theirs.contains_key(&file_info.relative_path);
                 let result = transfer::receive_file(
                     &state_arc,
                     peer_id,
@@ -510,6 +543,20 @@ async fn run_sync(
                         bytes_done += file_info.size;
                         checkpoint.completed_files.push(file_info.relative_path.clone());
                         write_checkpoint(&checkpoint);
+                        let mtime_ms = crate::utils::safe_join(base_path, &local_path)
+                            .map(|p| mtime_ms_of(&p))
+                            .unwrap_or(0);
+                        let recorded = RecordedFile {
+                            relative_path: local_path.clone(),
+                            size: file_info.size,
+                            mtime_ms,
+                            hash: file_info.hash.clone(),
+                        };
+                        if is_replace {
+                            undo_replaced.push(recorded);
+                        } else {
+                            undo_added.push(recorded);
+                        }
                     }
                     Err(e) => {
                         files_done += 1;
@@ -555,6 +602,7 @@ async fn run_sync(
                         } else {
                             checkpoint.completed_files.push(path.clone());
                             write_checkpoint(&checkpoint);
+                            undo_deleted.push(path.clone());
                         }
                     }
                     Err(e) => {
@@ -565,6 +613,23 @@ async fn run_sync(
             }
             SyncAction::Conflict { .. } => {}
         }
+    }
+
+    // Only overwrite the last-sync record if this sync actually changed a
+    // file — a no-op sync (e.g. everything failed, or there was nothing to
+    // do) leaves whatever's undoable from before alone.
+    let undo_record = SyncRecord {
+        sync_id: uuid::Uuid::new_v4().to_string(),
+        created_at: crate::utils::timestamp_now(),
+        game: game_id,
+        base_path: base_path.to_string(),
+        presync_backup_id,
+        added: undo_added,
+        replaced: undo_replaced,
+        deleted: undo_deleted,
+    };
+    if !undo_record.is_empty() {
+        crate::commands::undo::write_record(&undo_record);
     }
 
     let duration_ms = started.elapsed().as_millis() as u64;

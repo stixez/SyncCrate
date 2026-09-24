@@ -21,6 +21,8 @@ import type {
   SyncFolderPermissions,
   SyncHistoryEntry,
   SyncPlan,
+  UndoResult,
+  UndoStatus,
 } from "./types";
 
 // --- Session ---
@@ -351,6 +353,16 @@ export async function renameBackup(
   label: string,
 ): Promise<void> {
   return invoke("rename_backup", { id, label });
+}
+
+// --- Undo last sync ---
+
+export async function getUndoStatus(game?: string): Promise<UndoStatus | null> {
+  return invoke("get_undo_status", { game: game ?? null });
+}
+
+export async function undoLastSync(game?: string): Promise<UndoResult> {
+  return invoke("undo_last_sync", { game: game ?? null });
 }
 
 // --- Auto-Backup Config ---

@@ -79,6 +79,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 **Safety**
 - **Backups.** Manual or automatic, stored incrementally: unchanged files are kept once and shared between backups, so extra backups cost almost nothing. Scheduled backups cover each game in your library on its own 1–24 h timer (even across restarts). "Back up before sync" saves just the files a sync is about to replace or delete, and the sync stops if that backup fails. Restores keep file dates, skip mods you have disabled since, can optionally be exact (also removing files added since the backup), and always take a safety backup first.
+- **Undo last sync.** Right after a sync, one click puts your files back exactly as they were — replaced files return byte- and date-identical, added files (including "keep both" copies) are removed, and anything you've touched since is left alone and reported instead of overwritten. Only the most recent sync per game can be undone, and only from the client side.
 - **Script warnings.** Flags risky files (`.dll`, `.ts4script`, `.lua`, `.jar`) before syncing.
 - **Private.** Files never leave your PCs. Warns you if the game is still running.
 

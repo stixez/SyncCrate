@@ -334,6 +334,8 @@ pub fn run() {
             commands::backup::restore_backup,
             commands::backup::delete_backup,
             commands::backup::rename_backup,
+            commands::undo::undo_last_sync,
+            commands::undo::get_undo_status,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X, Loader2 } from "lucide-react";
+import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X, Loader2, Undo2 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { formatBytes, formatDate } from "../lib/utils";
@@ -7,7 +7,7 @@ import { gameLabel, getGameDef } from "../lib/games";
 import { Badge, Banner, Button, EmptyState, Input, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
 import * as cmd from "../lib/commands";
 import { toastError, toastInfo, toastSuccess } from "../lib/toast";
-import type { BackupInfo, BackupProgress, RestoreResult } from "../lib/types";
+import type { BackupInfo, BackupProgress, RestoreResult, UndoResult, UndoStatus } from "../lib/types";
 
 function sendNotification(title: string, body: string) {
   try {
@@ -63,6 +63,12 @@ function restoreSummary(r: RestoreResult): string {
   return parts.join(", ");
 }
 
+function undoSummary(r: UndoResult): string {
+  const parts = [`${r.restored} restored`, `${r.removed} removed`];
+  if (r.skipped.length) parts.push(`${r.skipped.length} skipped`);
+  return parts.join(", ");
+}
+
 export default function BackupList({ gameId }: Props) {
   const backups = useAppStore((s) => s.backups);
   const setBackups = useAppStore((s) => s.setBackups);
@@ -79,17 +85,47 @@ export default function BackupList({ gameId }: Props) {
   const [exactRestore, setExactRestore] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [undoStatus, setUndoStatus] = useState<UndoStatus | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [undoConfirm, setUndoConfirm] = useState(false);
+  const isHost = useAppStore((s) => s.session?.session_type === "Host");
 
   useEffect(() => {
     cmd.listBackups().then(setBackups).catch(console.error);
   }, [setBackups]);
+
+  useEffect(() => {
+    setUndoConfirm(false);
+    cmd.getUndoStatus(gameId).then(setUndoStatus).catch(() => setUndoStatus(null));
+  }, [gameId]);
+
+  const handleUndo = async () => {
+    setUndoConfirm(false);
+    setUndoing(true);
+    try {
+      const r = await cmd.undoLastSync(gameId);
+      setUndoStatus(null);
+      useAppStore.getState().setUndoStatus(null);
+      addLog(`Sync undone: ${undoSummary(r)}`, "success");
+      toastSuccess(`Sync undone: ${undoSummary(r)}`);
+      try {
+        const m = await cmd.scanFiles(gameId);
+        useAppStore.getState().setManifest(m);
+      } catch {}
+    } catch (e) {
+      addLog(`Undo failed: ${e}`, "error");
+      toastError(`Undo failed: ${e}`);
+    } finally {
+      setUndoing(false);
+    }
+  };
 
   // Filter backups to current game
   const filteredBackups = useMemo(() => {
     return backups.filter((b) => b.game === gameId);
   }, [backups, gameId]);
 
-  const busy = creating || restoring;
+  const busy = creating || restoring || undoing;
 
   const handleCreate = async () => {
     if (!label.trim()) return;
@@ -204,6 +240,37 @@ export default function BackupList({ gameId }: Props) {
           )
         }
       />
+
+      {undoStatus && !isHost && (
+        <Banner
+          tone="info"
+          icon={<Undo2 size={14} />}
+          title={`Undo last sync (${formatDate(undoStatus.created_at)})`}
+          actions={
+            undoConfirm ? (
+              <>
+                <Button size="sm" variant="primary" onClick={handleUndo} disabled={undoing} icon={undoing ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}>
+                  {undoing ? "Undoing..." : "Confirm"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setUndoConfirm(false)} disabled={undoing}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={() => setUndoConfirm(true)} icon={<Undo2 size={12} />}>
+                Undo
+              </Button>
+            )
+          }
+        >
+          {[
+            undoStatus.replaced > 0 && `${undoStatus.replaced} file${undoStatus.replaced !== 1 ? "s" : ""} replaced`,
+            undoStatus.added > 0 && `${undoStatus.added} added`,
+            undoStatus.deleted > 0 && `${undoStatus.deleted} deleted`,
+          ].filter(Boolean).join(", ") || "Nothing changed"}
+          {undoConfirm && " — puts your files back exactly as they were before that sync."}
+        </Banner>
+      )}
 
       {showCreate && (
         <Panel tone="accent" label={<b>// New snapshot</b>} title="New Backup">
