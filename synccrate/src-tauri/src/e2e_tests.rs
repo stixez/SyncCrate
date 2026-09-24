@@ -495,6 +495,69 @@ async fn resume_after_cancel_tcp() {
     let _ = std::fs::remove_dir_all(&client_dir);
 }
 
+/// Resets `auto_backup_before_sync` to off when dropped, even on panic, so a
+/// failing assertion in this test can't leave the flag on for every later
+/// test in the process (they share the redirected `SYNCCRATE_CONFIG_DIR`).
+struct ResetAutoBackup;
+impl Drop for ResetAutoBackup {
+    fn drop(&mut self) {
+        let mut config = crate::commands::sync::read_sync_config();
+        config.auto_backup_before_sync = false;
+        let path = crate::utils::sync_config_path();
+        let _ = std::fs::write(&path, serde_json::to_string_pretty(&config).unwrap());
+    }
+}
+
+/// The backup byte/mtime/dedup/GC/restore behavior is already fully unit
+/// tested directly against `presync_targets`/`create_backup_inner` in
+/// `commands/backup.rs`. What those tests don't cover is the wiring: that a
+/// real `execute_sync` run actually calls `create_presync_backup` with the
+/// plan's real targets. This test closes that one gap.
+#[tokio::test]
+async fn presync_backup_created_before_real_sync_tcp() {
+    let _g = e2e_guard().await;
+    let _reset = ResetAutoBackup;
+    let host_dir = temp_dir("presync-host");
+    let client_dir = temp_dir("presync-client");
+    write_file(&host_dir, "Mods/conflict.package", b"HOST_V");
+    write_file(&host_dir, "Mods/new.package", b"NEW");
+    write_file(&client_dir, "Mods/conflict.package", b"CLIENT_V");
+
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 5)
+        .await
+        .expect("enable auto backup");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/conflict.package".to_string(), Resolution::UseTheirs, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+
+    let backups = crate::commands::backup::list_backups().await.expect("list backups");
+    let presync = backups
+        .iter()
+        .find(|b| b.kind == "presync")
+        .expect("execute_sync should have created a presync backup");
+    // Exactly the replaced file (the client's pre-sync 8-byte content), never
+    // the freshly-received `new.package` (nothing local for it to replace).
+    assert_eq!(presync.file_count, 1, "backup should contain exactly the one replaced file");
+    assert_eq!(presync.total_size, "CLIENT_V".len() as u64, "backup should hold the local file's original bytes");
+
+    assert_eq!(read_file(&client_dir, "Mods/conflict.package"), b"HOST_V");
+    assert_eq!(read_file(&client_dir, "Mods/new.package"), b"NEW");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
 #[tokio::test]
 async fn multi_client_tcp() {
     let _g = e2e_guard().await;
