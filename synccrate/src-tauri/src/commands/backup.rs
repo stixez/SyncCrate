@@ -498,15 +498,28 @@ fn create_backup_inner(
 // ---------------------------------------------------------------------------
 // Pruning and garbage collection
 
+/// `created_at` is second-granularity, so several backups made within the
+/// same second (e.g. "undo" doing three quick presync backups in a row, or
+/// just a fast manual backup spree) tie on it — sorting by it alone would
+/// then keep or prune an arbitrary one of them (filesystem enumeration
+/// order), not necessarily the one actually created last. The manifest
+/// file's own mtime breaks the tie with far finer resolution.
+fn backup_order_key(root: &Path, info: &BackupInfo) -> (u64, std::time::SystemTime) {
+    let mtime = std::fs::metadata(root.join(&info.id).join("manifest.json"))
+        .and_then(|m| m.modified())
+        .unwrap_or(std::time::UNIX_EPOCH);
+    (info.created_at, mtime)
+}
+
 /// Ids to delete so at most `keep` non-empty backups of `kind` remain for
 /// `game`. Empty backups (from old versions) are always dropped and never
 /// count toward `keep`, so they can't push out real ones.
-fn prune_candidates(infos: &[BackupInfo], game: &str, kind: &str, keep: usize, protect: Option<&str>) -> Vec<String> {
+fn prune_candidates(root: &Path, infos: &[BackupInfo], game: &str, kind: &str, keep: usize, protect: Option<&str>) -> Vec<String> {
     let mut matching: Vec<&BackupInfo> = infos
         .iter()
         .filter(|b| b.game == game && effective_kind(b) == kind && Some(b.id.as_str()) != protect)
         .collect();
-    matching.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    matching.sort_by(|a, b| backup_order_key(root, b).cmp(&backup_order_key(root, a)));
     let keep = keep.max(1);
     let mut kept = 0;
     let mut out = Vec::new();
@@ -547,7 +560,7 @@ fn remove_backup_dir(root: &Path, id: &str) -> Result<(), String> {
 fn prune_kind(root: &Path, game: &str, kind: &str, keep: usize, protect: Option<&str>) -> usize {
     let infos = read_infos(root);
     let mut removed = 0;
-    for id in prune_candidates(&infos, game, kind, keep, protect) {
+    for id in prune_candidates(root, &infos, game, kind, keep, protect) {
         match remove_backup_dir(root, &id) {
             Ok(()) => removed += 1,
             Err(e) => log::warn!("Failed to prune backup {}: {}", id, e),
@@ -1418,6 +1431,10 @@ mod tests {
 
     #[test]
     fn prune_never_counts_empty_backups() {
+        // No real backup dirs exist for these ids, so the mtime tiebreak
+        // always falls back to UNIX_EPOCH for all of them — moot here since
+        // every created_at below is already distinct.
+        let root = std::path::Path::new("/nonexistent-prune-test-root");
         let infos = vec![
             info("old-full", KIND_AUTO, 1, 10),
             info("empty1", KIND_AUTO, 2, 0),
@@ -1425,14 +1442,38 @@ mod tests {
             info("manual", KIND_MANUAL, 4, 0),
             info("new-full", KIND_AUTO, 5, 10),
         ];
-        let mut out = prune_candidates(&infos, "g", KIND_AUTO, 2, None);
+        let mut out = prune_candidates(root, &infos, "g", KIND_AUTO, 2, None);
         out.sort();
         assert_eq!(out, vec!["empty1", "empty2"], "both real backups survive; manual untouched");
-        let out = prune_candidates(&infos, "g", KIND_AUTO, 1, None);
+        let out = prune_candidates(root, &infos, "g", KIND_AUTO, 1, None);
         assert!(out.contains(&"old-full".to_string()) && !out.contains(&"new-full".to_string()));
         // keep is at least 1, and the protected id is never pruned.
-        assert!(!prune_candidates(&infos, "g", KIND_AUTO, 0, None).contains(&"new-full".to_string()));
-        assert!(!prune_candidates(&infos, "g", KIND_AUTO, 1, Some("old-full")).contains(&"old-full".to_string()));
+        assert!(!prune_candidates(root, &infos, "g", KIND_AUTO, 0, None).contains(&"new-full".to_string()));
+        assert!(!prune_candidates(root, &infos, "g", KIND_AUTO, 1, Some("old-full")).contains(&"old-full".to_string()));
+    }
+
+    #[test]
+    fn prune_breaks_same_second_ties_by_manifest_mtime() {
+        // Three backups created within the same `created_at` second (very
+        // real for a quick succession of presync backups): without a finer
+        // tiebreak, sorting by created_at alone leaves "newest" to whatever
+        // order the filesystem happens to enumerate them in.
+        let root = tmp("prune-tie");
+        for id in ["a", "b", "c"] {
+            std::fs::create_dir_all(root.join(id)).unwrap();
+            std::fs::write(root.join(id).join("manifest.json"), "{}").unwrap();
+        }
+        // Give each manifest a distinct, increasing mtime — "c" is the real
+        // most-recent one — while created_at (seconds) ties all three.
+        set_mtime(&root.join("a").join("manifest.json"), 1_000_000).unwrap();
+        set_mtime(&root.join("b").join("manifest.json"), 1_000_001).unwrap();
+        set_mtime(&root.join("c").join("manifest.json"), 1_000_002).unwrap();
+        let infos = vec![info("a", KIND_AUTO, 5, 10), info("b", KIND_AUTO, 5, 10), info("c", KIND_AUTO, 5, 10)];
+
+        let mut out = prune_candidates(&root, &infos, "g", KIND_AUTO, 1, None);
+        out.sort();
+        assert_eq!(out, vec!["a".to_string(), "b".to_string()], "only \"c\" (truly newest) should survive");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
