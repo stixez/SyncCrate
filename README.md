@@ -233,7 +233,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Euro Truck Simulator 2** | Mods, Profiles |
 | **Farming Simulator 22** | Mods |
 | **Farming Simulator 25** | Mods |
-| **Kerbal Space Program** | Mods, Save Files, Ship Designs |
+| **Kerbal Space Program** | Mods, Save Files |
 | **Oxygen Not Included** | Local Mods, Save Files |
 | **Stardew Valley** | SMAPI Mods |
 
