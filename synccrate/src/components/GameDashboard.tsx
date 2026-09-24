@@ -12,6 +12,7 @@ import { formatBytes } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
+import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ConnectionGuide from "./ConnectionGuide";
@@ -35,7 +36,6 @@ export default function GameDashboard({ gameId }: Props) {
   const discoveredPeers = useAppStore((s) => s.discoveredPeers);
   const addLog = useLogStore((s) => s.addLog);
   const gamePaths = useAppStore((s) => s.gamePaths);
-  const setGamePaths = useAppStore((s) => s.setGamePaths);
   const setPage = useAppStore((s) => s.setPage);
   const activeGame = useAppStore((s) => s.activeGame);
   const lastHostIp = useAppStore((s) => s.lastHostIp);
@@ -45,8 +45,10 @@ export default function GameDashboard({ gameId }: Props) {
   const clearLastHost = useAppStore((s) => s.clearLastHost);
   const pinPrompt = useAppStore((s) => s.pinPrompt);
   const setPinPrompt = useAppStore((s) => s.setPinPrompt);
+  const gameSwitchPrompt = useAppStore((s) => s.gameSwitchPrompt);
+  const setGameSwitchPrompt = useAppStore((s) => s.setGameSwitchPrompt);
   const syncProgress = useAppStore((s) => s.syncProgress);
-  const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, leave, isLoading } = useSession();
+  const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, loadingPhase } = useSync();
 
   // "Host has new files" check: clients only, never while syncing/computing a
@@ -131,6 +133,27 @@ export default function GameDashboard({ gameId }: Props) {
   const [pinCopied, setPinCopied] = useState(false);
   const [pinInput, setPinInput] = useState("");
   useEffect(() => setPinInput(""), [pinPrompt]);
+
+  // Host refused us for having another game selected: switch to the host's game
+  // (adding it to the library if needed), then repeat the same connect attempt.
+  const switchGameAndJoin = async () => {
+    const prompt = useAppStore.getState().gameSwitchPrompt;
+    if (!prompt) return;
+    setGameSwitchPrompt(null);
+    const target = prompt.hostGame;
+    try {
+      const { myLibrary, setMyLibrary, navigateToGame } = useAppStore.getState();
+      if (!myLibrary.includes(target)) {
+        await cmd.addToLibrary(target);
+        setMyLibrary([...myLibrary, target]);
+      }
+      await cmd.setActiveGame(target);
+      navigateToGame(target);
+      if (prompt.attempt) await retryAttempt(prompt.attempt, prompt.attempt.pin);
+    } catch (e) {
+      toastError(`Couldn't switch games: ${e}`);
+    }
+  };
   const [showManualIp, setShowManualIp] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [hostJoinCode, setHostJoinCode] = useState<string | null>(null);
@@ -323,13 +346,13 @@ export default function GameDashboard({ gameId }: Props) {
                       const selected = await open({ directory: true });
                       if (selected) {
                         const path = typeof selected === "string" ? selected : selected;
-                        await cmd.setGamePath(gameId, path);
-                        setGamePaths({ ...gamePaths, [gameId]: path });
+                        // Asks before using a folder that doesn't look like the game's.
+                        if ((await saveGamePath(gameId, path)) === null) return;
                         toastSuccess(`${gameLabel} path saved`);
                         handleScan();
                       }
-                    } catch {
-                      toastError("Failed to set path");
+                    } catch (e) {
+                      toastError(`Couldn't use that folder: ${e}`);
                     }
                   }}
                 >
@@ -447,11 +470,18 @@ export default function GameDashboard({ gameId }: Props) {
             {discoveredPeers.length > 0 && (
               <div className="mt-3 border-t border-border">
                 <p className="hud-label pt-3 pb-1.5">Found on your network</p>
-                {discoveredPeers.map((peer) => (
+                {/* Hosts sharing this game first; others are marked and offer a switch */}
+                {[...discoveredPeers]
+                  .sort((a, b) => Number(!!a.game_id && a.game_id !== gameId) - Number(!!b.game_id && b.game_id !== gameId))
+                  .map((peer) => {
+                  const otherGame = !!peer.game_id && peer.game_id !== gameId;
+                  return (
                   <button
                     key={peer.id}
                     onClick={() => {
-                      if (peer.pin_required) {
+                      if (otherGame) {
+                        setGameSwitchPrompt({ hostGame: peer.game_id!, attempt: { kind: "peer", peerId: peer.id, label: peer.name } });
+                      } else if (peer.pin_required) {
                         setPinPrompt({ attempt: { kind: "peer", peerId: peer.id, label: peer.name }, wrongPin: false });
                         setPinInput("");
                       } else {
@@ -465,14 +495,41 @@ export default function GameDashboard({ gameId }: Props) {
                       <span className="live-dot" />
                       <span className="font-medium truncate">{peer.name}</span>
                       {peer.pin_required && <Lock size={12} className="text-txt-muted shrink-0" />}
+                      {peer.game_id && (
+                        <span className={cx("font-mono text-[10.5px] uppercase tracking-[0.08em] truncate", otherGame ? "text-amber" : "text-txt-muted")}>
+                          {getGameDef(peer.game_id)?.label ?? peer.game_id}
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
-                      {peer.game_info?.game_version && <Badge tone="neon">v{peer.game_info.game_version}</Badge>}
+                      {otherGame ? (
+                        <Badge tone="amber">Other game</Badge>
+                      ) : (
+                        peer.game_info?.game_version && <Badge tone="neon">v{peer.game_info.game_version}</Badge>
+                      )}
                       <span className="font-mono text-[11px] text-txt-muted">{peer.mod_count} files</span>
                       <ChevronRight size={14} className="text-txt-muted group-hover:text-neon" />
                     </span>
                   </button>
-                ))}
+                  );
+                })}
+              </div>
+            )}
+
+            {gameSwitchPrompt && (
+              <div className="mt-4 bg-bg border border-amber/60 p-3">
+                <p className="hud-label mb-1"><b className="!text-amber">Different game</b></p>
+                <p className="text-xs text-txt-dim mb-2.5">
+                  This host is sharing <span className="text-txt font-medium">{getGameDef(gameSwitchPrompt.hostGame)?.label ?? gameSwitchPrompt.hostGame}</span>,
+                  but you have <span className="text-txt font-medium">{gameLabel}</span> selected. Nothing was synced.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="primary" onClick={() => switchGameAndJoin()} disabled={isLoading || isConnecting}>
+                    Switch to {getGameDef(gameSwitchPrompt.hostGame)?.label ?? gameSwitchPrompt.hostGame}
+                    {gameSwitchPrompt.attempt ? " and join" : ""}
+                  </Button>
+                  <button onClick={() => setGameSwitchPrompt(null)} className="text-xs text-txt-dim hover:text-txt">Cancel</button>
+                </div>
               </div>
             )}
 

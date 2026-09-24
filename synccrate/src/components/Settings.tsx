@@ -16,10 +16,13 @@ import { ACCENT_PRESETS, effectsEnabled, isLightColor } from "../lib/appearance"
 import type { Density, ThemeMode, UiScale } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
+import { saveGamePath } from "../lib/gamePath";
 import type { AutoBackupConfig } from "../lib/types";
 
 export default function Settings() {
   const gamePaths = useAppStore((s) => s.gamePaths);
+  const installedGames = useAppStore((s) => s.installedGames);
+  const setInstalledGames = useAppStore((s) => s.setInstalledGames);
   const setGamePaths = useAppStore((s) => s.setGamePaths);
   const myLibrary = useAppStore((s) => s.myLibrary);
   const gameRegistry = useAppStore((s) => s.gameRegistry);
@@ -44,6 +47,8 @@ export default function Settings() {
   const [closeToTray, setCloseToTrayState] = useState(false);
   const [showArt, setShowArtState] = useState(getShowGameArt);
   const [customArt, setCustomArt] = useState<string[]>([]);
+  // Saved folders that don't exist right now (kept, not replaced by auto-detect).
+  const [unavailable, setUnavailable] = useState<string[]>([]);
   const notificationsEnabled = useAppStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useAppStore((s) => s.setNotificationsEnabled);
 
@@ -60,6 +65,7 @@ export default function Settings() {
       setGamePaths(converted);
       setPathInputs(converted);
     }).catch(() => {});
+    cmd.getUnavailableGamePaths().then(setUnavailable).catch(() => {});
     cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
     cmd.getTransferSpeedLimit().then(setSpeedLimit).catch(() => {});
     cmd.getClearCacheAfterSync().then(setClearCache).catch(() => {});
@@ -111,35 +117,42 @@ export default function Settings() {
     }
   };
 
-  const handleBrowse = async (gameId: string) => {
+  // A user-set folder can carry install markers (e.g. Wow.exe for private-server
+  // WoW), so re-check install evidence after a path change.
+  const refreshInstalled = () => {
+    cmd.getInstalledGames().then(setInstalledGames).catch(() => {});
+    cmd.getUnavailableGamePaths().then(setUnavailable).catch(() => {});
+  };
+
+  /** Save, then show what the backend actually stored (canonical, subfolder corrected). */
+  const applyPath = async (gameId: string, path: string) => {
     try {
-      const selected = await open({ directory: true });
-      if (selected) {
-        const path = typeof selected === "string" ? selected : selected;
-        setPathInputs((prev) => ({ ...prev, [gameId]: path }));
-        await cmd.setGamePath(gameId, path);
-        setGamePaths({ ...gamePaths, [gameId]: path });
-        addLog(`${gameLabel(gameId)} path updated to: ${path}`, "success");
-        toastSuccess(`${gameLabel(gameId)} path saved`);
+      const stored = await saveGamePath(gameId, path);
+      if (stored === null) {
+        // Declined the "doesn't look like a <game> folder" prompt.
+        setPathInputs((prev) => ({ ...prev, [gameId]: gamePaths[gameId] ?? "" }));
+        return;
       }
+      setPathInputs((prev) => ({ ...prev, [gameId]: stored }));
+      refreshInstalled();
+      addLog(`${gameLabel(gameId)} path updated to: ${stored}`, "success");
+      toastSuccess(`${gameLabel(gameId)} path saved`);
     } catch (e) {
+      setPathInputs((prev) => ({ ...prev, [gameId]: gamePaths[gameId] ?? "" }));
       addLog(`Failed to set path: ${e}`, "error");
-      toastError(`Failed to set path`);
+      toastError(`Couldn't use that folder: ${e}`);
     }
+  };
+
+  const handleBrowse = async (gameId: string) => {
+    const selected = await open({ directory: true }).catch(() => null);
+    if (typeof selected === "string") await applyPath(gameId, selected);
   };
 
   const handlePathSubmit = async (gameId: string) => {
     const input = pathInputs[gameId]?.trim();
     if (!input || input === gamePaths[gameId]) return;
-    try {
-      await cmd.setGamePath(gameId, input);
-      setGamePaths({ ...gamePaths, [gameId]: input });
-      addLog(`${gameLabel(gameId)} path updated to: ${input}`, "success");
-      toastSuccess(`${gameLabel(gameId)} path saved`);
-    } catch (e) {
-      addLog(`Failed to set path: ${e}`, "error");
-      toastError(`Failed to set path`);
-    }
+    await applyPath(gameId, input);
   };
 
   const [portStatus, setPortStatus] = useState<"idle" | "available" | "taken" | "checking">("idle");
@@ -250,8 +263,14 @@ export default function Settings() {
                         />
                       </span>
                       <h3 className="font-display font-semibold uppercase tracking-[0.05em] text-[14px]">{game.label}</h3>
-                      {gamePaths[game.id] ? (
-                        <Badge tone="green" dot>Detected</Badge>
+                      {unavailable.includes(game.id) ? (
+                        <Badge tone="amber" dot title="The saved folder is kept; SyncCrate won't scan or sync this game until it's back.">
+                          Folder not found — drive disconnected?
+                        </Badge>
+                      ) : installedGames.includes(game.id) ? (
+                        <Badge tone="green" dot>Installed</Badge>
+                      ) : gamePaths[game.id] ? (
+                        <Badge dot title="The folder is set, but the game itself wasn't found installed on this PC.">Folder found</Badge>
                       ) : (
                         <Badge tone="amber" dot>Not set</Badge>
                       )}
@@ -384,7 +403,7 @@ export default function Settings() {
                 checked={autoBackupConfig.auto_backup_before_sync}
                 onChange={(v) => updateAutoBackupConfig({ auto_backup_before_sync: v })}
                 label="Back up before sync"
-                description="Snapshot your content folders right before files are received."
+                description="Before a sync replaces or deletes any of your files, back up just those files. If that backup fails, the sync stops."
               />
             </SettingRow>
             <SettingRow>
@@ -392,7 +411,7 @@ export default function Settings() {
                 checked={autoBackupConfig.auto_backup_scheduled}
                 onChange={(v) => updateAutoBackupConfig({ auto_backup_scheduled: v })}
                 label="Scheduled backups"
-                description="Take a backup every few hours while SyncCrate is running."
+                description={`Back up each game in your library every ${autoBackupConfig.auto_backup_interval_hours} hour${autoBackupConfig.auto_backup_interval_hours === 1 ? "" : "s"} while SyncCrate is running. Only changed files take new space.`}
               />
             </SettingRow>
             {autoBackupConfig.auto_backup_scheduled && (
@@ -413,7 +432,7 @@ export default function Settings() {
               </SettingRow>
             )}
             {(autoBackupConfig.auto_backup_before_sync || autoBackupConfig.auto_backup_scheduled) && (
-              <SettingRow label="Max auto-backups" hint="Oldest auto-backups are removed past this count.">
+              <SettingRow label="Max auto-backups" hint="Per game and type (scheduled / before sync). Oldest are removed past this count.">
                 <input
                   type="number"
                   value={autoBackupConfig.auto_backup_max_count}

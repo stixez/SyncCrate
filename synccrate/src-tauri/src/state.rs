@@ -94,6 +94,9 @@ pub struct PeerInfo {
     pub pin_required: bool,
     #[serde(default)]
     pub game_info: Option<GameInfo>,
+    /// Game the host is sharing, from discovery (None for older hosts / peers).
+    #[serde(default)]
+    pub game_id: Option<String>,
     /// Every address the peer was discovered on, best candidate first.
     /// `ip` is always `addresses[0]` when non-empty; connecting tries each in turn.
     #[serde(default)]
@@ -141,7 +144,7 @@ pub enum SyncAction {
     Delete(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncPlan {
     pub actions: Vec<SyncAction>,
     pub total_bytes: u64,
@@ -159,6 +162,51 @@ pub struct SyncPlan {
     /// and resume filtering). Used as the stable identity for resume checkpoints.
     #[serde(default)]
     pub plan_hash: Option<String>,
+    /// Game and folder the plan was computed against. `execute_sync` refuses a
+    /// plan whose target no longer matches the active game/path (real bug: a
+    /// plan computed for one folder executed against a newly picked folder).
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub base_path: String,
+    /// "Use theirs" resolutions, keyed by the remote path of the queued
+    /// `ReceiveFromRemote`. The download replaces `local_path` (which can differ
+    /// from the remote path in case or `.disabled` state) only if the local file
+    /// still has `local_hash`, i.e. it wasn't changed after the compare.
+    #[serde(default)]
+    pub use_theirs: HashMap<String, ReplaceTarget>,
+    /// Conflicts the user already resolved, keyed by local path, so a
+    /// resolution can be changed later (e.g. KeepBoth -> UseTheirs).
+    #[serde(default)]
+    pub resolved_conflicts: HashMap<String, ConflictPair>,
+    /// Host files dropped because no content type of the active game accepts
+    /// their path (e.g. an older host sharing a different game).
+    #[serde(default)]
+    pub skipped_foreign: usize,
+    /// Game the host said it shares (`None` for hosts older than 0.5.6).
+    #[serde(default)]
+    pub host_game: Option<String>,
+    /// Host files the client has only as a disabled copy with the same content.
+    #[serde(default)]
+    pub disabled_locally: usize,
+    /// Host files the host has disabled while the client has them enabled.
+    #[serde(default)]
+    pub disabled_on_host: usize,
+    /// Plan-level warning for the UI (e.g. "host may be sharing a different game").
+    #[serde(default)]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplaceTarget {
+    pub local_path: String,
+    pub local_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictPair {
+    pub local: FileInfo,
+    pub remote: FileInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

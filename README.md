@@ -73,12 +73,12 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
 
 **Mods**
-- **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install, pack/DLC detection and a duplicate finder. Handles 20,000+ files smoothly.
+- **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install (each file goes to the folder its type belongs in), pack/DLC detection and a duplicate finder for games where duplicate packages cause trouble (The Sims 2/3/4, Euro/American Truck Simulator, Farming Simulator). Handles 20,000+ files smoothly.
 - **Game browser.** 100 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
 **Safety**
-- **Backups.** Manual or automatic (before every sync or every 1–24 h) with pruning, plus a safety backup before every restore.
+- **Backups.** Manual or automatic, stored incrementally: unchanged files are kept once and shared between backups, so extra backups cost almost nothing. Scheduled backups cover each game in your library on its own 1–24 h timer (even across restarts). "Back up before sync" saves just the files a sync is about to replace or delete, and the sync stops if that backup fails. Restores keep file dates, skip mods you have disabled since, can optionally be exact (also removing files added since the backup), and always take a safety backup first.
 - **Script warnings.** Flags risky files (`.dll`, `.ts4script`, `.lua`, `.jar`) before syncing.
 - **Private.** Files never leave your PCs. Warns you if the game is still running.
 
@@ -233,7 +233,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Euro Truck Simulator 2** | Mods, Profiles |
 | **Farming Simulator 22** | Mods |
 | **Farming Simulator 25** | Mods |
-| **Kerbal Space Program** | Mods, Save Files, Ship Designs |
+| **Kerbal Space Program** | Mods, Save Files |
 | **Oxygen Not Included** | Local Mods, Save Files |
 | **Stardew Valley** | SMAPI Mods |
 
@@ -333,7 +333,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 ## Game-Specific Extras
 
-**Co-op games with BepInEx** (Valheim, Lethal Company, R.E.P.O., Risk of Rain 2, …): `BepInEx/plugins` and `BepInEx/config` sync as separate folders, so the host can share plugins but keep personal configs. Plugin `.dll` files are flagged as scripts before syncing.
+**Co-op games with BepInEx** (Valheim, Lethal Company, R.E.P.O., Risk of Rain 2, …): `BepInEx/plugins` and `BepInEx/config` sync as separate folders, so the host can share plugins but keep personal configs. Plugin `.dll` files are flagged as scripts before syncing. Disabling a plugin renames it to `.dll.disabled` (BepInEx loads every subfolder, so moving it wouldn't work). Stardew Valley (SMAPI) and Kerbal Space Program mods are whole folders, so they can't be switched off file by file in SyncCrate.
 
 **The Sims 4**
 - **ReShade & GShade presets.** Add *The Sims 4 (ReShade)* or *(GShade)* to share shaders and presets so everyone's game looks the same. Detected in `Game\Bin` on EA App, Origin and Steam installs. Your own `ReShade.ini` / `GShade.ini` is never synced.
@@ -386,13 +386,21 @@ Up to 2 GB per file, no limit on total size.
 <details>
 <summary><strong>Is it safe? Will it break my mods?</strong></summary>
 
-Nothing changes until you approve the sync plan, and existing files are only replaced when you choose to. Every file is hash-verified after transfer, risky script files are flagged, and backups let you roll back. Only sync with people you trust, and make sure everyone runs the same SyncCrate version.
+Nothing changes until you approve the sync plan, and existing files are only replaced when you choose to. The duplicate finder only looks at the mods folder, and before deleting a duplicate it re-checks that the copy you keep is still there and identical. Restoring a backup skips mods you've disabled or enabled since. Every file is hash-verified after transfer, risky script files are flagged, and backups let you roll back. Only sync with people you trust, and make sure everyone runs the same SyncCrate version.
 </details>
 
 <details>
 <summary><strong>My game isn't detected or supported.</strong></summary>
 
-Set the folder manually in Settings; any install with the expected folder structure works, Steam or not. To add a new game, see [Adding a game](#adding-a-game).
+Set the folder manually in Settings; any install with the expected folder structure works, Steam or not. A folder you pick yourself counts as installed. SyncCrate refuses drive roots, your user, Documents, Desktop and Downloads folders, and a folder that overlaps another game's folder. If the folder has none of the game's usual subfolders, it asks before using it. To add a new game, see [Adding a game](#adding-a-game).
+
+"Detected" means SyncCrate found the game *installed* (a Steam, Epic or GOG install, or an entry in Windows' installed apps). If only its mods/saves folder exists, for example left behind after an uninstall, SyncCrate doesn't use that folder until you set it yourself.
+</details>
+
+<details>
+<summary><strong>Settings says "Folder not found — drive disconnected?"</strong></summary>
+
+The folder you set for that game doesn't exist right now, for example because it's on an external drive that isn't plugged in. SyncCrate keeps your setting and won't scan, sync or restore that game until the folder is back. Reconnect the drive, or pick the folder again in Settings.
 </details>
 
 ## Contributing
@@ -410,7 +418,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`).
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`). Content type folders must not overlap (one nested in another), which a test checks. Set `"disable_method": "rename"` if the game loads mods from subfolders (disabling then renames to `.disabled`), `"none"` if mods are whole folders that can't be toggled per file, and `"duplicate_finder": true` only if identical files in different mod folders are genuinely a problem for the game.
 
 ### Building from Source
 

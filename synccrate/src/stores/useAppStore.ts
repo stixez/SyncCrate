@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  BackupProgress,
   BackupInfo,
   FileManifest,
   GameDefinition,
@@ -45,6 +46,11 @@ interface AppState {
   gamePaths: Record<string, string>;
   setGamePaths: (paths: Record<string, string>) => void;
 
+  // Games with real install evidence (Steam manifest, uninstall entry, ...).
+  // A path in gamePaths alone can be a leftover folder, so "Detected" uses this.
+  installedGames: string[];
+  setInstalledGames: (ids: string[]) => void;
+
   // Backend active game (used for sync/session context)
   activeGame: string;
   setActiveGame: (game: string) => void;
@@ -65,6 +71,9 @@ interface AppState {
   // Attempt awaiting a PIN from the user (shown as a PIN prompt on the dashboard)
   pinPrompt: { attempt: ConnectAttempt; wrongPin: boolean } | null;
   setPinPrompt: (prompt: { attempt: ConnectAttempt; wrongPin: boolean } | null) => void;
+  /** Set when a host refused us because we had a different game selected. */
+  gameSwitchPrompt: { hostGame: string; attempt: ConnectAttempt | null } | null;
+  setGameSwitchPrompt: (prompt: { hostGame: string; attempt: ConnectAttempt | null } | null) => void;
 
   discoveredPeers: PeerInfo[];
   setDiscoveredPeers: (peers: PeerInfo[]) => void;
@@ -95,6 +104,9 @@ interface AppState {
 
   backups: BackupInfo[];
   setBackups: (backups: BackupInfo[]) => void;
+  /** Latest backup-progress / restore-progress event (phase: manual, auto, presync, safety, restore). */
+  backupProgress: BackupProgress | null;
+  setBackupProgress: (p: BackupProgress | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -177,6 +189,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   gamePaths: {},
   setGamePaths: (paths) => set({ gamePaths: paths }),
 
+  installedGames: [],
+  setInstalledGames: (ids) => set({ installedGames: ids }),
+
   activeGame: "sims4",
   setActiveGame: (game) => set({ activeGame: game }),
 
@@ -193,6 +208,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLastConnectAttempt: (attempt) => set({ lastConnectAttempt: attempt }),
   pinPrompt: null,
   setPinPrompt: (prompt) => set({ pinPrompt: prompt }),
+  gameSwitchPrompt: null,
+  setGameSwitchPrompt: (prompt) => set({ gameSwitchPrompt: prompt }),
 
   discoveredPeers: [],
   setDiscoveredPeers: (peers) => set({ discoveredPeers: peers }),
@@ -223,6 +240,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   backups: [],
   setBackups: (backups) => set({ backups }),
+  backupProgress: null,
+  setBackupProgress: (backupProgress) => set({ backupProgress }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

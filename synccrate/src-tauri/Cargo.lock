@@ -5621,7 +5621,7 @@ dependencies = [
 
 [[package]]
 name = "synccrate"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -5652,6 +5652,7 @@ dependencies = [
  "tokio-util",
  "uuid",
  "walkdir",
+ "windows-registry",
  "zstd",
 ]
 

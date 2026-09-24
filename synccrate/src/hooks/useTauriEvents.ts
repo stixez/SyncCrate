@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import type { PeerDownloadProgress } from "../lib/types";
+import type { BackupProgress, PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
 import {
   isPermissionGranted,
@@ -184,6 +184,7 @@ export function useTauriEvents() {
           cancelRetry();
           useAppStore.getState().setIsConnecting(false);
           useAppStore.getState().setPinPrompt(null);
+          useAppStore.getState().setGameSwitchPrompt(null);
           addLog(`Peer connected: ${event.payload.name}`, "success");
           sendNotification("SyncCrate", `${event.payload.name} connected`);
           try {
@@ -249,9 +250,20 @@ export function useTauriEvents() {
           addLog(`LAN auto-discovery is unavailable: ${event.payload.message}`, "warning");
           toastInfo("Auto-discovery couldn't start — friends can still join using Connect by IP.");
         }),
-        listen<{ message: string }>("connection-failed", (event) => {
+        listen<{ message: string; host_game?: string }>("connection-failed", (event) => {
           const msg = event.payload.message;
           const attempt = useAppStore.getState().lastConnectAttempt;
+          if (event.payload.host_game) {
+            // The host shares a different game than the one we have selected.
+            // Offer a one-click switch instead of a dead-end error.
+            cancelRetry();
+            addLog(msg, "warning");
+            useAppStore.getState().setGameSwitchPrompt({ hostGame: event.payload.host_game, attempt });
+            setIsScanning(false);
+            useAppStore.getState().setIsConnecting(false);
+            setSession(null);
+            return;
+          }
           if (/invalid pin/i.test(msg) && attempt) {
             // Host requires a PIN (or ours was wrong): ask for it and retry the
             // exact same attempt instead of failing outright.
@@ -334,14 +346,17 @@ export function useTauriEvents() {
             // Ignore
           }
         }),
-        // Backup events
-        listen<{ file: string; files_done: number; files_total: number }>("backup-progress", (event) => {
-          const { files_done, files_total } = event.payload;
-          addLog(`Backup progress: ${files_done}/${files_total}`, "info");
+        // Backup events (throttled by the backend). Progress goes to the store for
+        // BackupList; logging every event flooded the activity log.
+        listen<BackupProgress>("backup-progress", (event) => {
+          useAppStore.getState().setBackupProgress(event.payload);
         }),
-        listen<{ file: string; files_done: number; files_total: number }>("restore-progress", (event) => {
-          const { files_done, files_total } = event.payload;
-          addLog(`Restore progress: ${files_done}/${files_total}`, "info");
+        listen<BackupProgress>("restore-progress", (event) => {
+          useAppStore.getState().setBackupProgress(event.payload);
+        }),
+        // A scheduled backup finished in the background.
+        listen("backups-changed", () => {
+          cmd.listBackups().then(useAppStore.getState().setBackups).catch(() => {});
         }),
         // Drag & Drop events
         appWindow.onDragDropEvent((event) => {

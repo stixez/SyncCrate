@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { Search, Plus, Check, ArrowRight, Radar, LayoutGrid, List, X, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Check, ArrowRight, Radar, LayoutGrid, List, X, ArrowUpDown, Folder } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { GameIcon } from "./Sidebar";
@@ -41,6 +41,7 @@ export default function GameBrowser() {
   const myLibrary = useAppStore((s) => s.myLibrary);
   const setMyLibrary = useAppStore((s) => s.setMyLibrary);
   const gamePaths = useAppStore((s) => s.gamePaths);
+  const installedGames = useAppStore((s) => s.installedGames);
   const navigateToGame = useAppStore((s) => s.navigateToGame);
   const addLog = useLogStore((s) => s.addLog);
 
@@ -74,7 +75,7 @@ export default function GameBrowser() {
   }, []);
 
   const statusOf = (g: GameDefinition): Exclude<Status, "all"> =>
-    myLibrary.includes(g.id) ? "library" : gamePaths[g.id] ? "detected" : "available";
+    myLibrary.includes(g.id) ? "library" : installedGames.includes(g.id) ? "detected" : "available";
 
   // Search applies first; status and genre counts are computed on top of it so
   // every chip shows how many results it would give.
@@ -100,7 +101,7 @@ export default function GameBrowser() {
       c[statusOf(g)]++;
     }
     return c;
-  }, [searched, genres, myLibrary, gamePaths]);
+  }, [searched, genres, myLibrary, installedGames]);
 
   const genreCounts = useMemo(() => {
     const c = new Map<string, number>();
@@ -110,13 +111,13 @@ export default function GameBrowser() {
       for (const x of g.genres ?? []) c.set(x, (c.get(x) ?? 0) + 1);
     }
     return [...c.entries()].sort((a, b) => genreLabel(a[0]).localeCompare(genreLabel(b[0])));
-  }, [gameRegistry, searched, status, myLibrary, gamePaths]);
+  }, [gameRegistry, searched, status, myLibrary, installedGames]);
 
   const visible = useMemo(() => {
     const list = searched.filter((g) => matchesGenres(g) && (status === "all" || statusOf(g) === status));
     const byName = (a: GameDefinition, b: GameDefinition) => a.label.localeCompare(b.label);
     return list.sort(sort === "series" ? (a, b) => a.family.localeCompare(b.family) || byName(a, b) : byName);
-  }, [searched, genres, status, sort, myLibrary, gamePaths]);
+  }, [searched, genres, status, sort, myLibrary, installedGames]);
 
   // Launcher shelves ("what's mine / on this PC / everything else") when not
   // filtering by status; a status filter shows one flat list.
@@ -127,7 +128,7 @@ export default function GameBrowser() {
     return (["library", "detected", "available"] as const)
       .map((k) => ({ key: k, label: STATUS_LABELS[k], games: groups[k] }))
       .filter((s) => s.games.length > 0);
-  }, [visible, status, myLibrary, gamePaths]);
+  }, [visible, status, myLibrary, installedGames]);
 
   const filtersActive = search.trim() !== "" || status !== "all" || genres.size > 0;
   const clearFilters = () => {
@@ -168,7 +169,10 @@ export default function GameBrowser() {
   const itemProps = (game: GameDefinition) => ({
     game,
     inLibrary: myLibrary.includes(game.id),
-    detected: !!gamePaths[game.id],
+    detected: installedGames.includes(game.id),
+    // A mods/saves folder without install evidence: often left behind by an
+    // uninstall, so it's flagged but kept out of the Detected shelf.
+    folderFound: !installedGames.includes(game.id) && !!gamePaths[game.id],
     onOpen: () => navigateToGame(game.id),
     onAdd: () => handleAdd(game.id),
     onRemove: () => handleRemove(game.id),
@@ -340,6 +344,7 @@ interface ItemProps {
   game: GameDefinition;
   inLibrary: boolean;
   detected: boolean;
+  folderFound: boolean;
   onOpen: () => void;
   onAdd: () => void;
   onRemove: () => void;
@@ -350,16 +355,24 @@ function genreLine(game: GameDefinition): string {
   return g.length ? g.map(genreLabel).join(" · ") : game.family;
 }
 
-function StatusTags({ inLibrary, detected }: { inLibrary: boolean; detected: boolean }) {
+function StatusTags({ inLibrary, detected, folderFound }: { inLibrary: boolean; detected: boolean; folderFound: boolean }) {
   return (
     <>
       {inLibrary && <span className="tag text-neon bg-bg/85 backdrop-blur-sm"><Check size={9} />Library</span>}
       {detected && <span className="tag text-status-green bg-bg/85 backdrop-blur-sm"><Radar size={9} />Detected</span>}
+      {folderFound && !inLibrary && (
+        <span
+          className="tag text-txt-muted bg-bg/85 backdrop-blur-sm"
+          title="Its mods/saves folder exists, but the game itself doesn't look installed (it may be left over from an uninstall)."
+        >
+          <Folder size={9} />Folder found
+        </span>
+      )}
     </>
   );
 }
 
-function ItemActions({ inLibrary, onOpen, onAdd, onRemove, compact }: Omit<ItemProps, "game" | "detected"> & { compact?: boolean }) {
+function ItemActions({ inLibrary, onOpen, onAdd, onRemove, compact }: Omit<ItemProps, "game" | "detected" | "folderFound"> & { compact?: boolean }) {
   if (inLibrary) {
     return (
       <div className="flex gap-2">
@@ -379,7 +392,7 @@ function ItemActions({ inLibrary, onOpen, onAdd, onRemove, compact }: Omit<ItemP
   );
 }
 
-function GameTile({ game, inLibrary, detected, ...actions }: ItemProps) {
+function GameTile({ game, inLibrary, detected, folderFound, ...actions }: ItemProps) {
   // The registry's hex color tints the tile edge (and the generated cover) so
   // every game reads as its own box, while neon stays reserved for "yours".
   const style = { "--tile": game.primary_color || "rgb(var(--color-accent))" } as CSSProperties;
@@ -408,7 +421,7 @@ function GameTile({ game, inLibrary, detected, ...actions }: ItemProps) {
         </GameArt>
         <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--tile)]" />
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
-          <StatusTags inLibrary={inLibrary} detected={detected} />
+          <StatusTags inLibrary={inLibrary} detected={detected} folderFound={folderFound} />
         </div>
       </div>
 
@@ -428,7 +441,7 @@ function GameTile({ game, inLibrary, detected, ...actions }: ItemProps) {
 }
 
 /** Dense launcher row for the list view: banner thumb, name, genres, status, actions. */
-function GameRow({ game, inLibrary, detected, ...actions }: ItemProps) {
+function GameRow({ game, inLibrary, detected, folderFound, ...actions }: ItemProps) {
   const style = { "--tile": game.primary_color || "rgb(var(--color-accent))" } as CSSProperties;
   return (
     <div style={style} className="group relative flex items-center gap-4 pl-4 pr-3 py-2 hover:bg-bg-card-hover transition-colors">
@@ -452,7 +465,7 @@ function GameRow({ game, inLibrary, detected, ...actions }: ItemProps) {
         <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-txt-muted mt-0.5 truncate">{genreLine(game)}</p>
       </div>
       <div className="hidden md:flex items-center gap-1.5">
-        <StatusTags inLibrary={inLibrary} detected={detected} />
+        <StatusTags inLibrary={inLibrary} detected={detected} folderFound={folderFound} />
       </div>
       <div className="shrink-0">
         <ItemActions inLibrary={inLibrary} compact {...actions} />

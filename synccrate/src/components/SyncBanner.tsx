@@ -295,6 +295,29 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
           </Banner>
         )}
 
+        {plan.warning && (
+          <Banner tone="warn" icon={<AlertTriangle size={14} />}>
+            {plan.warning}
+          </Banner>
+        )}
+        {!plan.warning && (plan.skipped_foreign ?? 0) > 0 && (
+          <p className="text-xs text-txt-dim">
+            {plan.skipped_foreign} host file{plan.skipped_foreign !== 1 ? "s" : ""} outside {gameLabel(activeGame)}'s folders{" "}
+            {plan.skipped_foreign !== 1 ? "were" : "was"} skipped.
+          </p>
+        )}
+        {((plan.disabled_locally ?? 0) > 0 || (plan.disabled_on_host ?? 0) > 0) && (
+          <p className="text-xs text-txt-dim">
+            {[
+              (plan.disabled_locally ?? 0) > 0 &&
+                `${plan.disabled_locally} mod${plan.disabled_locally !== 1 ? "s" : ""} you disabled already match the host and stay disabled`,
+              (plan.disabled_on_host ?? 0) > 0 &&
+                `${plan.disabled_on_host} mod${plan.disabled_on_host !== 1 ? "s" : ""} the host disabled ${plan.disabled_on_host !== 1 ? "were" : "was"} left as you have ${plan.disabled_on_host !== 1 ? "them" : "it"}`,
+            ].filter(Boolean).join(" · ")}
+            .
+          </p>
+        )}
+
         {syncProgress && (
           <div className="pt-1">
             <div className="flex items-end justify-between gap-4 mb-2">

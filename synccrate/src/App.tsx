@@ -26,7 +26,8 @@ import {
   bigSims4Demo,
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
-import { toastSuccess, toastError } from "./lib/toast";
+import { toastSuccess, toastError, toastInfo } from "./lib/toast";
+import { gameLabel } from "./lib/games";
 import { toast } from "sonner";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -54,6 +55,13 @@ function migrateLocalStorage() {
 
 // Run migration once at module load (before any render)
 migrateLocalStorage();
+
+/** Rescan `gameId` and show it, unless the user has moved on to another game. */
+function refreshIfShown(gameId: string) {
+  cmd.scanFiles(gameId)
+    .then((m) => { if (useAppStore.getState().selectedGame === gameId) useAppStore.getState().setManifest(m); })
+    .catch(() => {});
+}
 
 function App() {
   const page = useAppStore((s) => s.page);
@@ -88,11 +96,30 @@ function App() {
         }
         useAppStore.getState().setGamePaths(paths);
 
-        // Auto-select first library game if none selected (skip during onboarding)
+        // Install evidence for the "Detected" state; not awaited, the rest of the
+        // UI doesn't depend on it.
+        cmd.getInstalledGames()
+          .then((ids) => useAppStore.getState().setInstalledGames(ids))
+          .catch((e) => console.error("Failed to detect installed games:", e));
+
+        // The backend restores the saved active game; mirror it instead of
+        // assuming the store default.
+        const backendActive = await cmd.getActiveGame();
+        useAppStore.getState().setActiveGame(backendActive);
+
+        // Auto-select a game if none selected (skip during onboarding): the saved
+        // active game when it's in the library, else the first library game.
         if (!useAppStore.getState().selectedGame && library.length > 0 && isOnboardingComplete()) {
-          // May be refused if a session is still active (e.g. webview reload).
-          await cmd.setActiveGame(library[0]).catch(() => {});
-          useAppStore.getState().navigateToGame(library[0]);
+          const target = library.includes(backendActive) ? backendActive : library[0];
+          try {
+            await cmd.setActiveGame(target);
+            useAppStore.getState().setActiveGame(target);
+            useAppStore.getState().navigateToGame(target);
+          } catch {
+            // Refused (session still active, e.g. webview reload): show the game
+            // the backend is actually syncing, not one it refused to switch to.
+            useAppStore.getState().navigateToGame(backendActive);
+          }
         }
       } catch (e) {
         console.error("Failed to initialize:", e);
@@ -138,7 +165,7 @@ function App() {
             { id: "tray", label: "Tray Items", icon: "layout-grid", color: "text-purple-400", folder: "Tray", extensions: [], file_type: "Tray", syncable: true },
             { id: "screenshots", label: "Screenshots", icon: "camera", color: "text-sky-400", folder: "Screenshots", extensions: [], file_type: "Screenshot", syncable: true },
           ],
-          dangerous_script_extensions: ["ts4script"], packs: "sims4", legacy_id: "Sims4",
+          dangerous_script_extensions: ["ts4script"], packs: "sims4", legacy_id: "Sims4", disable_method: "rename", duplicate_finder: true,
         },
         {
           id: "minecraft_java", label: "Minecraft Java", family: "minecraft", icon: "box",
@@ -176,6 +203,7 @@ function App() {
         activeGame: "sims4",
         selectedGame: "sims4",
         myLibrary: ["sims4", "minecraft_java", "wow_retail"],
+        installedGames: ["sims4", "minecraft_java", "wow_retail", "stardew_valley"],
         page: "dashboard",
       });
       useLogStore.setState({ logs: demoLogs });
@@ -244,19 +272,33 @@ function App() {
     }
   }, []);
 
+  // Game the last drop went to: "Overwrite"/"Rename" in the results modal must
+  // target it even if the user switched games meanwhile.
+  const [dropGame, setDropGame] = useState<string | null>(null);
+
   const handleDrop = useCallback(
     async (e: Event) => {
       const paths = (e as CustomEvent<string[]>).detail;
       if (!paths || paths.length === 0) return;
-      const gameId = useAppStore.getState().selectedGame;
+      const { selectedGame: gameId, activeGame, session } = useAppStore.getState();
+      if (!gameId) {
+        // Without a game the backend fell back to the active game's folder.
+        toastInfo("Open a game first, then drop its mod files");
+        return;
+      }
+      if (gameId !== activeGame && session && session.session_type !== "None") {
+        toastInfo(`You're in a session for ${gameLabel(activeGame)}. Disconnect to install ${gameLabel(gameId)} files.`);
+        return;
+      }
       try {
-        const results = await cmd.installModFiles(paths, gameId ?? undefined);
+        const results = await cmd.installModFiles(paths, gameId);
+        setDropGame(gameId);
         setInstallResults(results);
         const successCount = results.filter((r) => r.status === "Success").length;
         if (successCount > 0) {
           addLog(`Installed ${successCount} mod file(s)`, "success");
           toastSuccess(`Installed ${successCount} mod file(s)`);
-          cmd.scanFiles(gameId ?? undefined).then((m) => useAppStore.getState().setManifest(m)).catch(() => {});
+          refreshIfShown(gameId);
         }
       } catch (e) {
         addLog(`Install failed: ${e}`, "error");
@@ -283,9 +325,10 @@ function App() {
   }, [installResults]);
 
   const handleResolveDuplicate = async (source: string, strategy: "overwrite" | "rename") => {
-    const gameId = useAppStore.getState().selectedGame;
+    const gameId = dropGame;
+    if (!gameId) return;
     try {
-      const result = await cmd.confirmInstallDuplicate(source, strategy, gameId ?? undefined);
+      const result = await cmd.confirmInstallDuplicate(source, strategy, gameId);
       setInstallResults((prev) =>
         prev
           ? prev.map((r) => (r.source === source ? result : r))
@@ -293,7 +336,7 @@ function App() {
       );
       if (result.status === "Success") {
         addLog(`Installed ${source.split(/[/\\]/).pop()} (${strategy})`, "success");
-        cmd.scanFiles(gameId ?? undefined).then((m) => useAppStore.getState().setManifest(m)).catch(() => {});
+        refreshIfShown(gameId);
       }
     } catch (e) {
       addLog(`Install failed: ${e}`, "error");

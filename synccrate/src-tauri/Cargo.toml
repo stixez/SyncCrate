@@ -1,6 +1,6 @@
 [package]
 name = "synccrate"
-version = "0.5.5"
+version = "0.5.6"
 edition = "2021"
 
 [lib]
@@ -41,3 +41,8 @@ iroh = "1.2"
 # Both already in the tree via iroh / the updater; same versions, ring provider.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
+# Already in the tree (windows-rs); reads uninstall/GOG keys as UTF-16, which
+# `reg query` mangles through the OEM code page (e.g. "The Sims™ 4").
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6"

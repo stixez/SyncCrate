@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAppStore } from "../stores/useAppStore";
+import { useAppStore, type ConnectAttempt } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { SyncFolderPermissions } from "../lib/types";
 import * as cmd from "../lib/commands";
@@ -108,13 +108,17 @@ export function useSession() {
   };
 
   /** Retry the attempt the host rejected for a missing/wrong PIN, with `pin`. */
-  const retryWithPin = async (pin: string) => {
-    const prompt = useAppStore.getState().pinPrompt;
-    if (!prompt) return;
-    const a = prompt.attempt;
+  /** Repeat a previous connect attempt, optionally with a (new) PIN. */
+  const retryAttempt = async (a: ConnectAttempt, pin?: string) => {
     if (a.kind === "peer") await connectTo(a.peerId, pin);
     else if (a.kind === "ip") await connectByIp(a.ip, a.port, a.name, pin, a.label);
     else await connectByCode(a.code, a.name, pin);
+  };
+
+  const retryWithPin = async (pin: string) => {
+    const prompt = useAppStore.getState().pinPrompt;
+    if (!prompt) return;
+    await retryAttempt(prompt.attempt, pin);
   };
 
   const leave = async () => {
@@ -136,5 +140,5 @@ export function useSession() {
     }
   };
 
-  return { host, join, connectTo, connectByIp, connectByCode, retryWithPin, leave, isLoading };
+  return { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading };
 }

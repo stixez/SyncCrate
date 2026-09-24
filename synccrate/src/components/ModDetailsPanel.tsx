@@ -9,6 +9,10 @@ import StatusBadge from "./StatusBadge";
 import { Badge, Banner, Button, cx } from "./ui";
 
 interface ModDetailsPanelProps {
+  /** The game whose content page opened this (not necessarily the active game). */
+  gameId: string;
+  /** False when toggling isn't possible (other content type, read-only, "none" games). */
+  canToggle: boolean;
   file: FileInfo;
   syncStatus: "synced" | "pending" | "conflict" | "local";
   tags: string[];
@@ -26,6 +30,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export default function ModDetailsPanel({
+  gameId,
+  canToggle,
   file,
   syncStatus,
   tags,
@@ -33,18 +39,19 @@ export default function ModDetailsPanel({
   onClose,
 }: ModDetailsPanelProps) {
   const gamePaths = useAppStore((s) => s.gamePaths);
-  const activeGame = useAppStore((s) => s.activeGame);
   const setManifest = useAppStore((s) => s.setManifest);
+  const setModTags = useAppStore((s) => s.setModTags);
   const isMod = file.file_type === "Mod";
   const name = file.relative_path.split(/[/\\]/).pop() || file.relative_path;
   const isDisabled = isDisabledPath(file.relative_path);
-  const basePath = gamePaths[activeGame];
+  const basePath = gamePaths[gameId];
 
   const handleToggle = async () => {
     try {
-      await cmd.toggleMod(file.relative_path, isDisabled);
-      const m = await cmd.scanFiles();
+      await cmd.toggleMod(gameId, file.relative_path, isDisabled);
+      const m = await cmd.scanFiles(gameId);
       setManifest(m);
+      cmd.getModTags(gameId).then(setModTags).catch(() => {});
       toastSuccess(isDisabled ? `Enabled ${name}` : `Disabled ${name}`);
     } catch (e) {
       toastError(`${e}`);
@@ -116,13 +123,15 @@ export default function ModDetailsPanel({
           )}
 
           <div className="flex gap-2 px-5 pb-5 pt-1">
-            <Button
-              variant={isDisabled ? "primary" : "secondary"}
-              onClick={handleToggle}
-              icon={isDisabled ? <Power size={14} /> : <PowerOff size={14} />}
-            >
-              {isDisabled ? "Enable" : "Disable"}
-            </Button>
+            {canToggle && (
+              <Button
+                variant={isDisabled ? "primary" : "secondary"}
+                onClick={handleToggle}
+                icon={isDisabled ? <Power size={14} /> : <PowerOff size={14} />}
+              >
+                {isDisabled ? "Enable" : "Disable"}
+              </Button>
+            )}
             {basePath && (
               <Button variant="ghost" onClick={handleReveal} icon={<FolderOpen size={14} />}>
                 Reveal in Explorer

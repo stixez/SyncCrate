@@ -24,12 +24,18 @@ pub enum Message {
         pin: Option<String>,
         #[serde(default)]
         supports_compression: bool,
+        /// The client's selected game. `None` from clients older than 0.5.6.
+        #[serde(default)]
+        game_id: Option<String>,
     },
     Welcome {
         name: String,
         version: String,
         #[serde(default)]
         supports_compression: bool,
+        /// The game this host is sharing. `None` from hosts older than 0.5.6.
+        #[serde(default)]
+        game_id: Option<String>,
     },
     ManifestRequest,
     ManifestResponse { manifest: FileManifest },
@@ -47,6 +53,28 @@ pub enum Message {
     Disconnect,
     GameInfoExchange { game_info: GameInfo },
     Ping,
+}
+
+/// Error a host sends when a client joins with a different game selected.
+/// Machine-readable so the client can offer "switch to <game> and join". A
+/// client with the wrong game selected would otherwise plan to download the
+/// host's files into its own game's folder (real bug: Sims 4 mods synced into
+/// Euro Truck Simulator 2).
+pub const WRONG_GAME_PREFIX: &str = "wrong-game:";
+
+pub fn wrong_game_error(host_game: &str) -> String {
+    format!("{WRONG_GAME_PREFIX}{host_game}")
+}
+
+/// The host's game id if `message` is a wrong-game error.
+pub fn parse_wrong_game(message: &str) -> Option<&str> {
+    message.strip_prefix(WRONG_GAME_PREFIX).filter(|g| !g.is_empty())
+}
+
+/// Whether the two sides are sharing different games. Unknown (an older
+/// peer that doesn't send its game) is allowed so mixed versions still connect.
+pub fn games_conflict(ours: &str, theirs: Option<&str>) -> bool {
+    matches!(theirs, Some(t) if !t.is_empty() && !ours.is_empty() && t != ours)
 }
 
 pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), String> {
@@ -123,5 +151,38 @@ pub fn configure_keepalive(stream: &TcpStream) {
         .with_interval(Duration::from_secs(15));
     if let Err(e) = sock_ref.set_tcp_keepalive(&keepalive) {
         log::warn!("Failed to set TCP keepalive: {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn games_conflict_only_when_both_known_and_different() {
+        assert!(games_conflict("ets2", Some("sims4")));
+        assert!(!games_conflict("sims4", Some("sims4")));
+        // Older peers don't send a game: allow, so mixed versions still connect.
+        assert!(!games_conflict("sims4", None));
+        assert!(!games_conflict("sims4", Some("")));
+        assert!(!games_conflict("", Some("sims4")));
+    }
+
+    #[test]
+    fn wrong_game_error_round_trips() {
+        let e = wrong_game_error("sims4");
+        assert_eq!(parse_wrong_game(&e), Some("sims4"));
+        assert_eq!(parse_wrong_game("Invalid PIN"), None);
+        assert_eq!(parse_wrong_game("wrong-game:"), None);
+    }
+
+    #[test]
+    fn hello_without_game_id_still_parses() {
+        // A 0.5.5 client's Hello has no game_id field.
+        let json = r#"{"Hello":{"name":"A","version":"0.5.5","pin":null,"supports_compression":true}}"#;
+        match serde_json::from_str::<Message>(json).unwrap() {
+            Message::Hello { game_id, .. } => assert!(game_id.is_none()),
+            _ => panic!("expected Hello"),
+        }
     }
 }

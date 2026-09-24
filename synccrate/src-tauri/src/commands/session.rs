@@ -7,6 +7,33 @@ use tauri::Emitter;
 use tokio::sync::Mutex;
 
 /// Sanitize a display name: strip control chars, limit length.
+/// `connection-failed` event payload. A wrong-game rejection becomes a readable
+/// message plus `host_game`, so the UI can offer "Switch to <game> and join".
+fn connection_failed_payload(app_state: &AppState, error: &str) -> serde_json::Value {
+    let Some(host_game) = protocol::parse_wrong_game(error) else {
+        return serde_json::json!({ "message": error });
+    };
+    let label = |id: &str| {
+        app_state
+            .game_registry
+            .games
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.label.clone())
+            .unwrap_or_else(|| id.to_string())
+    };
+    let host_label = label(host_game);
+    serde_json::json!({
+        "message": format!(
+            "This host is sharing {}, but you have {} selected. Switch to {} and join again.",
+            host_label,
+            label(&app_state.active_game),
+            host_label
+        ),
+        "host_game": host_game,
+    })
+}
+
 fn sanitize_name(name: &str) -> Result<String, String> {
     let cleaned: String = name.chars().filter(|c| !c.is_control()).collect();
     let trimmed = cleaned.trim();
@@ -45,7 +72,7 @@ pub async fn start_host(
     let name = sanitize_name(&name)?;
 
     // Validate and read state, then drop lock before async bind
-    let (port, mod_count, game_version) = {
+    let (port, mod_count, game_version, game_id) = {
         let app_state = state.lock().await;
 
         if app_state.session_type != SessionType::None {
@@ -62,7 +89,7 @@ pub async fn start_host(
             .get(&app_state.active_game)
             .and_then(|gi| gi.game_version.clone());
 
-        (app_state.session_port, app_state.local_manifest.files.len(), gv)
+        (app_state.session_port, app_state.local_manifest.files.len(), gv, app_state.active_game.clone())
     };
 
     // Bind TCP listener first — surfaces port conflicts to user before committing state
@@ -105,7 +132,7 @@ pub async fn start_host(
     let host_name = name.clone();
     let pin_required = pin.is_some();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version).await {
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, game_id).await {
             log::error!("Discovery broadcast error: {}", e);
             let _ = app_handle.emit("discovery-unavailable", serde_json::json!({"message": e}));
         }
@@ -219,10 +246,7 @@ pub async fn connect_to_peer(
             log::error!("Connection error: {}", e);
             let mut app_state = state_clone.lock().await;
             if clear_failed_client_attempt_if_active(&mut app_state, &connection_peer_id) {
-                let _ = app_handle.emit(
-                    "connection-failed",
-                    serde_json::json!({"message": format!("{}", e)}),
-                );
+                let _ = app_handle.emit("connection-failed", connection_failed_payload(&app_state, &e));
             }
         }
     });
@@ -434,10 +458,7 @@ async fn start_direct_connection(
             log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;
             if clear_failed_client_attempt_if_active(&mut app_state, &connect_peer_id) {
-                let _ = app_handle.emit(
-                    "connection-failed",
-                    serde_json::json!({"message": format!("{}", e)}),
-                );
+                let _ = app_handle.emit("connection-failed", connection_failed_payload(&app_state, &e));
             }
         }
     });
@@ -458,17 +479,29 @@ pub struct HostUpdates {
 
 /// Files the host has that we don't — exactly the `ReceiveFromRemote` actions
 /// `compute_sync_plan` would produce (a missing path; changed files become
-/// conflicts), minus disallowed content types and exclude patterns. Only paths
+/// conflicts), minus disallowed content types, paths outside this game's
+/// content folders and exclude patterns. Paths are matched like the diff does
+/// (`sync::diff::match_key`: case, `.disabled`, `_Disabled/`). Only paths
 /// matter, so a quick-scan local manifest (empty hashes) needs no re-hash.
 pub(crate) fn count_new_host_files(
     local: &crate::state::FileManifest,
     remote: &crate::state::FileManifest,
+    content_types: &[crate::registry::ContentType],
     allowed: impl Fn(&crate::state::FileInfo) -> bool,
     exclude_patterns: &[String],
 ) -> HostUpdates {
+    use crate::sync::diff::{match_key, path_accepted_by};
+    let local_keys: std::collections::HashSet<String> =
+        local.files.keys().map(|k| match_key(k)).collect();
+    let mut seen = std::collections::HashSet::new();
     let mut out = HostUpdates::default();
     for (path, info) in &remote.files {
-        if local.files.contains_key(path) || !allowed(info) {
+        let key = match_key(path);
+        if local_keys.contains(&key)
+            || !path_accepted_by(content_types, path)
+            || !allowed(info)
+            || !seen.insert(key)
+        {
             continue;
         }
         if exclude_patterns.iter().any(|p| crate::commands::sync::glob_matches(p, path)) {
@@ -500,9 +533,13 @@ pub async fn check_host_updates(
     let remote = crate::network::transfer::refresh_remote_manifest(state.inner(), &peer_id).await?;
     let patterns = crate::commands::sync::read_exclude_patterns();
     let app_state = state.lock().await;
+    let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
+        .map(|g| g.content_types.clone())
+        .unwrap_or_default();
     Ok(count_new_host_files(
         &app_state.local_manifest,
         &remote,
+        &content_types,
         |f| app_state.is_file_info_allowed(f),
         &patterns,
     ))
@@ -570,10 +607,37 @@ mod tests {
         let out = count_new_host_files(
             &local,
             &remote,
+            &content_types(),
             |f| !f.relative_path.starts_with("Saves/"),
             &["*.tmp".to_string()],
         );
         assert_eq!(out, HostUpdates { files: 1, bytes: 20 });
+    }
+
+    fn content_types() -> Vec<crate::registry::ContentType> {
+        let def = crate::registry::load_registry()
+            .games
+            .into_iter()
+            .find(|g| g.id == "sims4")
+            .expect("sims4 in registry");
+        let mut cts = def.content_types;
+        // Let the test's `.tmp` file through so the exclude pattern is what drops it.
+        for ct in &mut cts {
+            ct.extensions.push("tmp".to_string());
+        }
+        cts
+    }
+
+    #[test]
+    fn count_new_host_files_matches_like_the_diff_and_skips_foreign() {
+        let local = manifest(&[("Mods/cc/hair.package.disabled", 10)]);
+        let remote = manifest(&[
+            ("Mods/CC/Hair.package", 10), // disabled/case twin of a local file
+            ("mod/truck.scs", 30),        // another game's folder
+            ("Mods/new.package", 5),
+        ]);
+        let out = count_new_host_files(&local, &remote, &content_types(), |_| true, &[]);
+        assert_eq!(out, HostUpdates { files: 1, bytes: 5 });
     }
 
     #[test]

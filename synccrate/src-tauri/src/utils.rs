@@ -208,6 +208,16 @@ pub(crate) fn parse_steam_library_vdf(contents: &str) -> Vec<PathBuf> {
 
 /// All `steamapps/common` directories across every Steam library on this machine.
 pub fn steam_common_dirs() -> Vec<PathBuf> {
+    steam_steamapps_dirs()
+        .into_iter()
+        .map(|s| s.join("common"))
+        .filter(|c| c.exists())
+        .collect()
+}
+
+/// All `steamapps` directories (where `appmanifest_<id>.acf` files live)
+/// across every Steam library on this machine.
+pub fn steam_steamapps_dirs() -> Vec<PathBuf> {
     let mut libs: Vec<PathBuf> = Vec::new();
     for root in steam_roots() {
         libs.push(root.clone());
@@ -223,47 +233,38 @@ pub fn steam_common_dirs() -> Vec<PathBuf> {
 
     let mut result: Vec<PathBuf> = Vec::new();
     for lib in libs {
-        let common = lib.join("steamapps").join("common");
-        let key = common.to_string_lossy().to_lowercase();
-        if common.exists() && !result.iter().any(|r| r.to_string_lossy().to_lowercase() == key) {
-            result.push(common);
+        let steamapps = lib.join("steamapps");
+        let key = steamapps.to_string_lossy().to_lowercase();
+        if steamapps.exists() && !result.iter().any(|r| r.to_string_lossy().to_lowercase() == key) {
+            result.push(steamapps);
         }
     }
     result
 }
 
-/// Read a REG_SZ value from the Windows registry via `reg query`
-/// (avoids pulling in a registry crate). Checks both the 64-bit and 32-bit views.
+/// Read a REG_SZ / REG_EXPAND_SZ value (`key` like `HKLM\SOFTWARE\...`),
+/// checking both the 64-bit and 32-bit views. Native API rather than
+/// `reg query`: spawning reg.exe cost ~100 ms per call, and install detection
+/// makes dozens, and its OEM-code-page output mangled non-ASCII paths.
 #[cfg(target_os = "windows")]
 pub fn read_registry_string(key: &str, value: &str) -> Option<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    use windows_registry::{CURRENT_USER, LOCAL_MACHINE};
+    const KEY_WOW64_64KEY: u32 = 0x0100;
+    const KEY_WOW64_32KEY: u32 = 0x0200;
 
-    for view in ["/reg:64", "/reg:32"] {
-        let output = std::process::Command::new("reg")
-            .args(["query", key, "/v", value, view])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .ok()?;
-        if !output.status.success() {
+    let (root_name, path) = key.split_once('\\')?;
+    let root = match root_name.to_ascii_uppercase().as_str() {
+        "HKLM" | "HKEY_LOCAL_MACHINE" => LOCAL_MACHINE,
+        "HKCU" | "HKEY_CURRENT_USER" => CURRENT_USER,
+        _ => return None,
+    };
+    for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+        let Ok(data) = root.options().read().access(view).open(path).and_then(|k| k.get_string(value)) else {
             continue;
-        }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let line = line.trim();
-            if let Some(pos) = line.find("REG_SZ").or_else(|| line.find("REG_EXPAND_SZ")) {
-                let (name, rest) = line.split_at(pos);
-                if !name.trim().eq_ignore_ascii_case(value) {
-                    continue;
-                }
-                let data = rest
-                    .trim_start_matches("REG_EXPAND_SZ")
-                    .trim_start_matches("REG_SZ")
-                    .trim();
-                if !data.is_empty() {
-                    return Some(expand_path_vars(data));
-                }
-            }
+        };
+        let data = data.trim();
+        if !data.is_empty() {
+            return Some(expand_path_vars(data));
         }
     }
     None
@@ -276,7 +277,7 @@ pub fn read_registry_string(_key: &str, _value: &str) -> Option<String> {
 
 /// Expand environment variables and home directory references in paths.
 /// Handles `%VAR%` on Windows and `~` on all platforms.
-fn expand_path_vars(path: &str) -> String {
+pub(crate) fn expand_path_vars(path: &str) -> String {
     let mut result = path.to_string();
 
     // Expand ~ to home directory
@@ -329,14 +330,73 @@ pub fn detect_game_path_from_registry(game_id: &str, registry: &GameRegistry) ->
     detect_game_path_from_def(game_def)
 }
 
-/// Get the list of valid mod/content extensions for a game from its registry definition.
-/// Returns extensions from the first content type (primary content).
+/// Every extension listed by any of the game's content types (for messages).
 pub fn valid_extensions_for_game(game_def: &GameDefinition) -> Vec<String> {
-    game_def
-        .content_types
-        .iter()
-        .flat_map(|ct| ct.extensions.clone())
+    let mut exts: Vec<String> = Vec::new();
+    for e in game_def.content_types.iter().flat_map(|ct| ct.extensions.iter()) {
+        let e = e.to_lowercase();
+        if !exts.contains(&e) {
+            exts.push(e);
+        }
+    }
+    exts
+}
+
+/// Path components compared case-insensitively on Windows (NTFS is), exactly elsewhere.
+fn path_key(p: &std::path::Path) -> Vec<String> {
+    p.components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
+        .map(|c| {
+            let s = c.as_os_str().to_string_lossy().to_string();
+            if cfg!(target_os = "windows") {
+                s.trim_end_matches(['\\', '/']).to_lowercase()
+            } else {
+                s
+            }
+        })
         .collect()
+}
+
+/// True if `a` and `b` are the same folder or one is inside the other.
+/// Both should already be canonical/cleaned.
+pub fn paths_overlap(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let (a, b) = (path_key(a), path_key(b));
+    let n = a.len().min(b.len());
+    n > 0 && a[..n] == b[..n]
+}
+
+pub fn same_path(a: &std::path::Path, b: &std::path::Path) -> bool {
+    path_key(a) == path_key(b)
+}
+
+/// Folders a game path must never be: picking one made SyncCrate scan (and
+/// create `Mods/`, `Saves/` in) a whole drive or the user's Documents.
+pub fn protected_folders() -> Vec<(PathBuf, &'static str)> {
+    let mut out = Vec::new();
+    for (dir, what) in [
+        (dirs::home_dir(), "your user folder"),
+        (dirs::document_dir(), "your Documents folder"),
+        (dirs::desktop_dir(), "your Desktop"),
+        (dirs::download_dir(), "your Downloads folder"),
+    ] {
+        if let Some(d) = dir {
+            let d = std::fs::canonicalize(&d).map(clean_path).unwrap_or(d);
+            out.push((d, what));
+        }
+    }
+    out
+}
+
+/// Why `path` (canonical) can't be a game folder, if it's a drive root or one
+/// of `protected`.
+pub fn protected_folder_reason(path: &std::path::Path, protected: &[(PathBuf, &'static str)]) -> Option<String> {
+    if path.parent().is_none() || path_key(path).len() <= 1 {
+        return Some("a drive root".to_string());
+    }
+    protected
+        .iter()
+        .find(|(p, _)| same_path(p, path))
+        .map(|(_, what)| what.to_string())
 }
 
 /// Get the path for a specific content type folder.
@@ -478,12 +538,11 @@ const DANGEROUS_EXTENSIONS: &[&str] = &[
 ];
 
 /// Returns true if the file extension is on the blocklist of dangerous executables.
+/// Sees through a `.disabled` suffix: `evil.exe.disabled` is one rename away
+/// from running, so it's blocked like `evil.exe`.
 pub fn is_dangerous_extension(path: &str) -> bool {
-    if let Some(ext) = std::path::Path::new(path).extension().and_then(|e| e.to_str()) {
-        DANGEROUS_EXTENSIONS.contains(&ext.to_lowercase().as_str())
-    } else {
-        false
-    }
+    let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
+    DANGEROUS_EXTENSIONS.contains(&ext.as_str())
 }
 
 /// Migrate config from the old `simshare` directory to `synccrate`.
@@ -626,6 +685,53 @@ mod tests {
     }
 
     #[test]
+    fn paths_overlap_detects_nesting_both_ways() {
+        let base = std::env::temp_dir();
+        let a = base.join("Games").join("Sims");
+        assert!(paths_overlap(&a, &a));
+        assert!(paths_overlap(&a, &a.join("Mods")));
+        assert!(paths_overlap(&a.join("Mods"), &a));
+        assert!(!paths_overlap(&a, &base.join("Games").join("Sims 4")));
+        assert!(!paths_overlap(&a, &base.join("Games").join("Other")));
+        #[cfg(target_os = "windows")]
+        {
+            use std::path::Path;
+            assert!(paths_overlap(Path::new(r"C:\Games\Sims"), Path::new(r"c:\games\SIMS\Mods")));
+            assert!(same_path(Path::new(r"C:\Games\Sims\"), Path::new(r"c:\games\sims")));
+            assert!(paths_overlap(Path::new(r"C:\"), Path::new(r"C:\Games")));
+        }
+    }
+
+    #[test]
+    fn protected_folder_reason_rejects_roots_and_user_folders() {
+        let docs = std::env::temp_dir().join("synccrate_fake_docs");
+        let protected = vec![(docs.clone(), "your Documents folder")];
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(protected_folder_reason(std::path::Path::new(r"C:\"), &protected).as_deref(), Some("a drive root"));
+            assert_eq!(protected_folder_reason(std::path::Path::new(r"D:\"), &protected).as_deref(), Some("a drive root"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(protected_folder_reason(std::path::Path::new("/"), &protected).as_deref(), Some("a drive root"));
+        assert_eq!(protected_folder_reason(&docs, &protected).as_deref(), Some("your Documents folder"));
+        // A game folder *inside* Documents is fine.
+        assert_eq!(protected_folder_reason(&docs.join("Electronic Arts").join("The Sims 4"), &protected), None);
+    }
+
+    #[test]
+    fn valid_extensions_are_deduplicated() {
+        let g: GameDefinition = serde_json::from_value(serde_json::json!({
+            "id": "g", "label": "G", "family": "g",
+            "content_types": [
+                {"id": "a", "label": "A", "folder": "A", "extensions": ["zip", "PAK"], "file_type": "Mod"},
+                {"id": "b", "label": "B", "folder": "B", "extensions": ["zip"], "file_type": "Save"}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(valid_extensions_for_game(&g), vec!["zip".to_string(), "pak".to_string()]);
+    }
+
+    #[test]
     fn test_sanitize_id_valid() {
         let result = sanitize_id("abc-123-def");
         assert!(result.is_ok());
@@ -657,6 +763,15 @@ mod tests {
         assert!(!is_dangerous_extension("cc.package"));
         assert!(!is_dangerous_extension("config.xml"));
         assert!(!is_dangerous_extension("texture.png"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_read_registry_string_native() {
+        let pf = read_registry_string(r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion", "ProgramFilesDir");
+        assert!(pf.is_some_and(|p| std::path::Path::new(&p).exists()));
+        assert!(read_registry_string(r"HKLM\SOFTWARE\SyncCrateNoSuchKey", "x").is_none());
+        assert!(read_registry_string(r"BOGUS\SOFTWARE", "x").is_none());
     }
 
     #[test]

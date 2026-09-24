@@ -1,5 +1,5 @@
 use crate::network::transfer;
-use crate::state::{AppState, FileInfo, Resolution, SyncAction, SyncPlan};
+use crate::state::{AppState, ConflictPair, FileInfo, ReplaceTarget, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use crate::utils;
 use std::sync::Arc;
@@ -60,6 +60,8 @@ fn delete_checkpoint() {
     let _ = std::fs::remove_file(&path);
 }
 
+const SYNC_RUNNING: &str = "A sync is already running — wait for it to finish";
+
 #[tauri::command]
 pub async fn compute_sync_plan(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -67,29 +69,59 @@ pub async fn compute_sync_plan(
 ) -> Result<SyncPlan, String> {
     // Diffing needs real hashes: a local manifest from a quick scan has empty
     // hashes, which would turn every file both sides have into a "conflict".
+    // An empty manifest may simply never have been scanned (or was dropped on
+    // a path change); diffing it would make every host file look new.
     let needs_rehash = {
         let app_state = state.lock().await;
-        app_state.local_manifest.files.values().any(|f| f.hash.is_empty())
+        if app_state.is_any_syncing() {
+            return Err(SYNC_RUNNING.to_string());
+        }
+        let files = &app_state.local_manifest.files;
+        files.is_empty() || files.values().any(|f| f.hash.is_empty())
     };
     if needs_rehash {
         crate::commands::files::scan_files_inner(state.inner(), None, true).await?;
     }
 
     let mut app_state = state.lock().await;
+    // A sync may have started while we were scanning; replacing its plan now
+    // would desync the progress UI from what's actually running.
+    if app_state.is_any_syncing() {
+        return Err(SYNC_RUNNING.to_string());
+    }
 
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
+    let active_game = app_state.active_game.clone();
+    let base_path = app_state.active_game_path()?;
+    let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &active_game)
+        .map(|g| g.content_types.clone())
+        .ok_or_else(|| format!("Game '{}' not found in registry", active_game))?;
 
     let conn = app_state
         .connections
         .get(&resolved_id)
         .ok_or("Peer not found")?;
 
-    let remote = conn
+    let mut remote = conn
         .remote_manifest
-        .as_ref()
+        .clone()
         .ok_or("No remote manifest available. Connect to a peer first.")?;
+    let host_game = conn.info.game_id.clone();
 
-    let mut plan = diff::compute_diff(&app_state.local_manifest, remote);
+    // Never plan downloads outside this game's content folders, whatever the
+    // host sends (hosts older than 0.5.6 don't say which game they share).
+    let remote_total = remote.files.len();
+    let skipped_foreign = diff::drop_foreign(&mut remote, &content_types);
+
+    let mut plan = diff::compute_diff(&app_state.local_manifest, &remote);
+    plan.game_id = active_game;
+    plan.base_path = base_path;
+    plan.skipped_foreign = skipped_foreign;
+    plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total);
+    plan.host_game = host_game;
+    if skipped_foreign > 0 {
+        log::warn!("Skipped {} host file(s) outside this game's content folders", skipped_foreign);
+    }
 
     // Pull-only model: drop SendToRemote actions (uploads to the host aren't
     // supported by the transfer protocol). Clients download; the host serves.
@@ -153,46 +185,36 @@ pub async fn compute_sync_plan(
             .sum();
     }
 
-    // Hash of the full plan, before resume filtering or conflict resolution.
-    // It is stored on the plan and reused by run_sync for the checkpoint, so a
-    // resumed (filtered) or conflict-resolved plan still matches its checkpoint
-    // if the sync is interrupted again.
+    // Hash of the full plan, before conflict resolution. It is stored on the
+    // plan and reused by run_sync for the checkpoint, so a conflict-resolved
+    // plan still matches its checkpoint if the sync is interrupted again.
     let plan_hash = diff::compute_plan_hash(&plan);
     plan.plan_hash = Some(plan_hash.clone());
 
-    // Check for resumable checkpoint
+    // Resume: files a previous (interrupted) attempt completed are no longer
+    // dropped from the plan on the checkpoint's word. That trusted a list
+    // without checking the files, so a file deleted or changed since was
+    // silently skipped. Instead each receive checks its destination first and
+    // skips the download when the file is already there with the expected
+    // hash (see transfer::receive_file). The count is informational.
     let mut resumed_files: u64 = 0;
     if let Some(checkpoint) = read_checkpoint() {
-        if checkpoint.game == app_state.active_game
+        if checkpoint.game == plan.game_id
             && checkpoint.peer_id == resolved_id
             && checkpoint.plan_hash == plan_hash
             && !checkpoint.completed_files.is_empty()
         {
-            let completed_set: std::collections::HashSet<&str> = checkpoint
-                .completed_files
+            let completed: std::collections::HashSet<&str> =
+                checkpoint.completed_files.iter().map(|s| s.as_str()).collect();
+            resumed_files = plan
+                .actions
                 .iter()
-                .map(|s| s.as_str())
-                .collect();
-
-            plan.actions.retain(|action| {
-                let path = match action {
-                    SyncAction::ReceiveFromRemote(f) => &f.relative_path,
-                    SyncAction::Delete(p) => p,
-                    _ => return true,
-                };
-                !completed_set.contains(path.as_str())
-            });
-
-            resumed_files = checkpoint.completed_files.len() as u64;
-
-            plan.total_bytes = plan.actions.iter().map(|action| match action {
-                SyncAction::SendToRemote(f) => f.size,
-                SyncAction::ReceiveFromRemote(f) => f.size,
-                SyncAction::Conflict { local, remote } => local.size.max(remote.size),
-                SyncAction::Delete(_) => 0,
-            }).sum();
-
-            log::info!("Resuming sync: {} files already completed", resumed_files);
+                .filter(|a| match a {
+                    SyncAction::ReceiveFromRemote(f) => completed.contains(f.relative_path.as_str()),
+                    _ => false,
+                })
+                .count() as u64;
+            log::info!("Resuming sync: {} files may already be complete", resumed_files);
         } else {
             delete_checkpoint();
         }
@@ -215,20 +237,33 @@ pub async fn execute_sync(
     app: tauri::AppHandle,
     peer_id: Option<String>,
 ) -> Result<(), String> {
-    let (plan, base_path, resolved_id) = {
+    let (plan, base_path, resolved_id, content_types) = {
         let mut app_state = state.lock().await;
         let resolved_id = app_state.resolve_peer_id(peer_id)?;
         let base = app_state.active_game_path()?;
+        let active_game = app_state.active_game.clone();
+        let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &active_game)
+            .map(|g| g.content_types.clone())
+            .unwrap_or_default();
+        if app_state.is_any_syncing() {
+            return Err("Sync is already in progress".to_string());
+        }
+        if crate::commands::backup::restore_in_progress() {
+            return Err("A backup is being restored. Sync again when it's done.".to_string());
+        }
 
         let conn = app_state
             .connections
             .get_mut(&resolved_id)
             .ok_or("Peer not found")?;
 
-        if conn.is_syncing {
-            return Err("Sync is already in progress".to_string());
-        }
         let plan = conn.sync_plan.take().ok_or("No sync plan computed.")?;
+
+        // The plan was computed against one game folder; the active game or its
+        // path may have changed since. Drop the plan rather than run it here.
+        if let Some(msg) = diff::plan_target_mismatch(&plan, &active_game, &base) {
+            return Err(msg);
+        }
 
         let has_conflicts = plan.actions.iter().any(|a| matches!(a, SyncAction::Conflict { .. }));
         if has_conflicts {
@@ -239,20 +274,49 @@ pub async fn execute_sync(
         conn.is_syncing = true;
         // A stale request from an earlier sync must not cancel this one.
         CANCEL_SYNC.store(false, std::sync::atomic::Ordering::SeqCst);
-        (plan, base, resolved_id)
+        (plan, base, resolved_id, content_types)
     };
 
-    // Auto-backup before sync if enabled
-    let config = read_sync_config();
-    if config.auto_backup_before_sync {
-        log::info!("Creating pre-sync auto-backup");
-        if let Err(e) = crate::commands::backup::create_auto_backup(
-            state.inner(),
-            &app,
-            "Pre-sync",
-        ).await {
-            log::warn!("Pre-sync auto-backup failed: {}", e);
-            // Don't block sync on backup failure
+    {
+        let base = base_path.clone();
+        let content_types = content_types.clone();
+        let recovered = tokio::task::spawn_blocking(move || recover_keep_temps(&base, &content_types))
+            .await
+            .unwrap_or(0);
+        if recovered > 0 {
+            log::warn!("Restored {} local file(s) left aside by an interrupted keep-both", recovered);
+        }
+    }
+
+    // Back up only the local files this sync will overwrite or delete (a full
+    // copy took minutes and gigabytes before every sync). If that fails, stop:
+    // the user asked for a way back, so don't replace files without one.
+    if read_sync_config().auto_backup_before_sync {
+        let targets = crate::commands::backup::presync_targets(&plan);
+        if !targets.is_empty() {
+            let backup = crate::commands::backup::create_presync_backup(
+                &app,
+                plan.game_id.clone(),
+                base_path.clone(),
+                content_types,
+                targets,
+            )
+            .await;
+            if let Err(e) = backup {
+                log::warn!("Pre-sync backup failed: {}", e);
+                let mut app_state = state.lock().await;
+                if let Some(conn) = app_state.connections.get_mut(&resolved_id) {
+                    conn.is_syncing = false;
+                    // Keep the plan so the user can retry without comparing again.
+                    if conn.sync_plan.is_none() {
+                        conn.sync_plan = Some(plan);
+                    }
+                }
+                return Err(format!(
+                    "Backup before sync failed: {}. Nothing was changed. Free up space or fix the problem, or turn off \"Back up before sync\" in Settings.",
+                    e
+                ));
+            }
         }
     }
 
@@ -266,6 +330,73 @@ pub async fn execute_sync(
     }
 
     result
+}
+
+/// Put back local files that an interrupted "keep both" (in versions that
+/// moved the local copy aside while downloading) left as
+/// `<name>.synccrate-keep-<ts>.tmp`, when `<name>` is missing. Only walks the
+/// game's content folders (never follows links); returns how many were restored.
+fn recover_keep_temps(base: &str, content_types: &[crate::registry::ContentType]) -> usize {
+    let mut restored = 0;
+    for ct in content_types {
+        let dir = if ct.folder.is_empty() || ct.folder == "." {
+            std::path::PathBuf::from(base)
+        } else {
+            std::path::Path::new(base).join(&ct.folder)
+        };
+        if !dir.is_dir() {
+            continue;
+        }
+        let mut walker = walkdir::WalkDir::new(&dir).follow_links(false);
+        if !ct.recursive {
+            walker = walker.max_depth(1);
+        }
+        for entry in walker.into_iter().filter_map(|e| e.ok()) {
+            if entry.path_is_symlink() || !entry.file_type().is_file() {
+                continue;
+            }
+            let Some(original) = entry.file_name().to_str().and_then(diff::keep_tmp_original) else {
+                continue;
+            };
+            let target = entry.path().with_file_name(original);
+            if target.exists() {
+                log::warn!(
+                    "Leftover keep-both temp {} kept: {} exists",
+                    entry.path().display(),
+                    target.display()
+                );
+            } else if std::fs::rename(entry.path(), &target).is_ok() {
+                restored += 1;
+            }
+        }
+    }
+    restored
+}
+
+/// Which host file to request, where to write it and what it may replace, for
+/// one `ReceiveFromRemote` of the plan.
+pub(crate) fn receive_target(plan: &SyncPlan, file: &FileInfo) -> (String, String, transfer::ReplacePolicy) {
+    // Keep-both: the action carries the new local name; the host only knows the
+    // real path. The name was chosen to exist neither locally nor on the host.
+    if let Some(remote_path) = plan.keep_both.get(&file.relative_path) {
+        return (
+            remote_path.clone(),
+            file.relative_path.clone(),
+            transfer::ReplacePolicy::MustNotExist,
+        );
+    }
+    if let Some(target) = plan.use_theirs.get(&file.relative_path) {
+        return (
+            file.relative_path.clone(),
+            target.local_path.clone(),
+            transfer::ReplacePolicy::ReplaceIfHash(target.local_hash.clone()),
+        );
+    }
+    (
+        file.relative_path.clone(),
+        file.relative_path.clone(),
+        transfer::ReplacePolicy::MustNotExist,
+    )
 }
 
 /// Error returned by `execute_sync` when the user cancelled (the UI matches on it).
@@ -341,27 +472,19 @@ async fn run_sync(
 
         match action {
             SyncAction::ReceiveFromRemote(file_info) => {
-                let result = match plan.keep_both.get(&file_info.relative_path) {
-                    Some(remote_path) => {
-                        receive_keep_both(
-                            &state_arc,
-                            peer_id,
-                            base_path,
-                            remote_path,
-                            &file_info.relative_path,
-                        )
-                        .await
-                    }
-                    None => {
-                        transfer::request_file(
-                            &state_arc,
-                            peer_id,
-                            &file_info.relative_path,
-                            base_path,
-                        )
-                        .await
-                    }
-                };
+                let (remote_path, local_path, policy) = receive_target(plan, file_info);
+                let result = transfer::receive_file(
+                    &state_arc,
+                    peer_id,
+                    base_path,
+                    transfer::ReceiveRequest {
+                        remote_path: &remote_path,
+                        local_path: &local_path,
+                        expected_hash: &file_info.hash,
+                        policy,
+                    },
+                )
+                .await;
                 match result {
                     Ok(()) => {
                         files_done += 1;
@@ -521,67 +644,88 @@ async fn clear_post_sync_caches(
     }
 }
 
-/// Download `remote_path` from the peer but save it locally as `local_dest`,
-/// leaving the existing local file at `remote_path` untouched ("keep both").
+/// Apply (or change) the resolution of the conflict whose local path is
+/// `local_path`. Returns false when there is no such conflict.
 ///
-/// The peer only serves files under their real path and `request_file` always
-/// writes to that same relative path, so the local file is moved aside for
-/// the duration of the download and put back afterwards.
-async fn receive_keep_both(
-    state: &Arc<Mutex<AppState>>,
-    peer_id: &str,
-    base_path: &str,
-    remote_path: &str,
-    local_dest: &str,
-) -> Result<(), String> {
-    let original = utils::safe_join(base_path, remote_path)?;
-    let dest = utils::safe_join(base_path, local_dest)?;
-
-    let mut aside_name = original
-        .file_name()
-        .ok_or("Invalid file name")?
-        .to_os_string();
-    aside_name.push(format!(".synccrate-keep-{}.tmp", utils::timestamp_now()));
-    let aside = original.with_file_name(aside_name);
-
-    let had_local = tokio::fs::try_exists(&original).await.unwrap_or(false);
-    if had_local {
-        tokio::fs::rename(&original, &aside)
-            .await
-            .map_err(|e| format!("Cannot move local copy aside: {}", e))?;
-    }
-
-    let restore_local = |aside: std::path::PathBuf, original: std::path::PathBuf| async move {
-        if had_local {
-            if let Err(e) = tokio::fs::rename(&aside, &original).await {
-                log::error!(
-                    "Failed to restore local file {} from {}: {}",
-                    original.display(),
-                    aside.display(),
-                    e
-                );
-                return Err(format!(
-                    "Local copy could not be restored; it was left at {}",
-                    aside.display()
-                ));
+/// The conflict pair is remembered in `resolved_conflicts`, so re-resolving
+/// (e.g. KeepBoth -> UseTheirs) first removes the earlier resolution's
+/// download instead of queueing both. `taken` says whether a keep-both name
+/// collides with an existing local or host file (by match key).
+pub(crate) fn apply_resolution(
+    plan: &mut SyncPlan,
+    local_path: &str,
+    resolution: Resolution,
+    taken: impl Fn(&str) -> bool,
+) -> Result<bool, String> {
+    let pair = plan
+        .actions
+        .iter()
+        .find_map(|a| match a {
+            SyncAction::Conflict { local, remote } if local.relative_path == local_path => {
+                Some(ConflictPair { local: local.clone(), remote: remote.clone() })
             }
-        }
-        Ok(())
-    };
+            _ => None,
+        })
+        .or_else(|| plan.resolved_conflicts.get(local_path).cloned());
+    let Some(pair) = pair else { return Ok(false) };
+    let remote_path = pair.remote.relative_path.clone();
 
-    if let Err(e) = transfer::request_file(state, peer_id, remote_path, base_path).await {
-        // request_file writes via temp file + rename, so on failure `original`
-        // was never replaced; just put the local copy back.
-        restore_local(aside, original).await?;
-        return Err(e);
+    // Undo an earlier resolution of this conflict.
+    let old_keep_both: Vec<String> = plan
+        .keep_both
+        .iter()
+        .filter(|(_, orig)| **orig == remote_path)
+        .map(|(renamed, _)| renamed.clone())
+        .collect();
+    let had_use_theirs = plan
+        .use_theirs
+        .get(&remote_path)
+        .map_or(false, |t| t.local_path == local_path);
+    plan.actions.retain(|action| match action {
+        SyncAction::Conflict { local, .. } => local.relative_path != local_path,
+        SyncAction::ReceiveFromRemote(f) => {
+            !old_keep_both.contains(&f.relative_path) && !(had_use_theirs && f.relative_path == remote_path)
+        }
+        _ => true,
+    });
+    for renamed in &old_keep_both {
+        plan.keep_both.remove(renamed);
+    }
+    if had_use_theirs {
+        plan.use_theirs.remove(&remote_path);
     }
 
-    // `original` now holds the remote copy: move it to its keep-both name,
-    // then put the local copy back in place.
-    let moved = tokio::fs::rename(&original, &dest).await;
-    let restored = restore_local(aside, original).await;
-    moved.map_err(|e| format!("Cannot save remote copy as {}: {}", local_dest, e))?;
-    restored
+    match resolution {
+        Resolution::KeepMine => {}
+        Resolution::UseTheirs => {
+            // Written to the *local* path (keeps the user's case and disabled
+            // state) and only if the local file is unchanged since the compare.
+            plan.use_theirs.insert(
+                remote_path.clone(),
+                ReplaceTarget {
+                    local_path: local_path.to_string(),
+                    local_hash: pair.local.hash.clone(),
+                },
+            );
+            plan.actions.push(SyncAction::ReceiveFromRemote(pair.remote.clone()));
+        }
+        Resolution::KeepBoth => {
+            let pending: std::collections::HashSet<String> =
+                plan.keep_both.keys().map(|k| diff::match_key(k)).collect();
+            let name = diff::keep_both_name(local_path, |c| {
+                taken(c) || pending.contains(&diff::match_key(c))
+            })
+            .ok_or_else(|| format!("No free name to keep both copies of {}", local_path))?;
+            let mut renamed = pair.remote.clone();
+            renamed.relative_path = name.clone();
+            // The host has no file under the new name — remember which real
+            // path to request (see receive_target).
+            plan.keep_both.insert(name, remote_path);
+            plan.actions.push(SyncAction::ReceiveFromRemote(renamed));
+        }
+    }
+    plan.resolved_conflicts.insert(local_path.to_string(), pair);
+    Ok(true)
 }
 
 #[tauri::command]
@@ -594,7 +738,12 @@ pub async fn resolve_conflict(
     let mut app_state = state.lock().await;
 
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
-    let local_has_path = app_state.local_manifest.files.contains_key(&path);
+    let local_keys: std::collections::HashSet<String> = app_state
+        .local_manifest
+        .files
+        .keys()
+        .map(|k| diff::match_key(k))
+        .collect();
 
     let conn = app_state
         .connections
@@ -605,87 +754,21 @@ pub async fn resolve_conflict(
         return Err("Cannot resolve conflicts while sync is in progress".to_string());
     }
 
-    let remote_file = conn
+    let remote_keys: std::collections::HashSet<String> = conn
         .remote_manifest
         .as_ref()
-        .and_then(|m| m.files.get(&path))
-        .cloned();
+        .map(|m| m.files.keys().map(|k| diff::match_key(k)).collect())
+        .unwrap_or_default();
 
-    if let Some(ref mut plan) = conn.sync_plan {
-        let was_conflict = plan.actions.iter().any(|a| {
-            matches!(a, SyncAction::Conflict { local, .. } if local.relative_path == path)
-        });
-        // A conflict that was already resolved earlier: drop the previous
-        // resolution first so re-resolving (e.g. KeepBoth -> UseTheirs) doesn't
-        // leave both downloads queued.
-        let previously_kept_both: Vec<String> = plan
-            .keep_both
-            .iter()
-            .filter(|(_, orig)| **orig == path)
-            .map(|(renamed, _)| renamed.clone())
-            .collect();
-        let previously_resolved = !previously_kept_both.is_empty()
-            || (local_has_path
-                && plan.actions.iter().any(|a| {
-                    matches!(a, SyncAction::ReceiveFromRemote(f) if f.relative_path == path)
-                }));
-        if !was_conflict && !previously_resolved {
-            // Nothing to resolve for this path; leave the plan untouched.
-            return Ok(plan.clone());
-        }
-
-        plan.actions.retain(|action| match action {
-            SyncAction::Conflict { local, .. } => local.relative_path != path,
-            SyncAction::ReceiveFromRemote(f) => {
-                f.relative_path != path && !previously_kept_both.contains(&f.relative_path)
-            }
-            _ => true,
-        });
-        for renamed in &previously_kept_both {
-            plan.keep_both.remove(renamed);
-        }
-
-        match resolution {
-            Resolution::KeepMine => {}
-            Resolution::UseTheirs => {
-                if let Some(remote) = remote_file {
-                    plan.actions.push(SyncAction::ReceiveFromRemote(remote));
-                }
-            }
-            Resolution::KeepBoth => {
-                if let Some(mut renamed) = remote_file {
-                    let p = std::path::Path::new(&path);
-                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    let stem = p.file_stem().and_then(|e| e.to_str()).unwrap_or("file");
-                    let parent = p
-                        .parent()
-                        .map(|pp| pp.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    renamed.relative_path = if parent.is_empty() {
-                        if ext.is_empty() {
-                            format!("{}_remote", stem)
-                        } else {
-                            format!("{}_remote.{}", stem, ext)
-                        }
-                    } else if ext.is_empty() {
-                        format!("{}/{}_remote", parent, stem)
-                    } else {
-                        format!("{}/{}_remote.{}", parent, stem, ext)
-                    };
-
-                    // The peer doesn't have a file under the renamed path —
-                    // remember which real path to request (see receive_keep_both).
-                    plan.keep_both.insert(renamed.relative_path.clone(), path.clone());
-                    plan.actions.push(SyncAction::ReceiveFromRemote(renamed));
-                }
-            }
-        }
-    }
-
-    conn.sync_plan
-        .clone()
-        .ok_or_else(|| "No sync plan available".to_string())
+    let plan = conn.sync_plan.as_mut().ok_or("No sync plan available")?;
+    let base_path = plan.base_path.clone();
+    apply_resolution(plan, &path, resolution, |candidate| {
+        let key = diff::match_key(candidate);
+        local_keys.contains(&key)
+            || remote_keys.contains(&key)
+            || utils::safe_join(&base_path, candidate).map_or(true, |p| p.exists())
+    })?;
+    Ok(plan.clone())
 }
 
 #[tauri::command]
@@ -710,32 +793,22 @@ pub async fn resolve_all_conflicts(
         return Err("Cannot resolve conflicts while sync is in progress".to_string());
     }
 
-    let remote_manifest = conn.remote_manifest.clone();
-
-    if let Some(ref mut plan) = conn.sync_plan {
-        let mut to_receive: Vec<FileInfo> = Vec::new();
-        plan.actions.retain(|action| {
-            if let SyncAction::Conflict { local, remote } = action {
-                if keep_newer_resolution(local, remote) == Resolution::UseTheirs {
-                    to_receive.push(remote.clone());
-                }
-                return false;
+    let plan = conn.sync_plan.as_mut().ok_or("No sync plan available")?;
+    let decisions: Vec<(String, Resolution)> = plan
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            SyncAction::Conflict { local, remote } => {
+                Some((local.relative_path.clone(), keep_newer_resolution(local, remote)))
             }
-            true
-        });
-
-        for file_info in to_receive {
-            let receive = remote_manifest
-                .as_ref()
-                .and_then(|m| m.files.get(&file_info.relative_path).cloned())
-                .unwrap_or(file_info);
-            plan.actions.push(SyncAction::ReceiveFromRemote(receive));
-        }
+            _ => None,
+        })
+        .collect();
+    for (path, resolution) in decisions {
+        // Keep-mine / use-theirs never pick a new name, so nothing is "taken".
+        apply_resolution(plan, &path, resolution, |_| true)?;
     }
-
-    conn.sync_plan
-        .clone()
-        .ok_or_else(|| "No sync plan available".to_string())
+    Ok(plan.clone())
 }
 
 /// "Keep newer" decision for one conflict: the remote copy wins only when it
@@ -1099,6 +1172,111 @@ mod tests {
         // Unusable entries are skipped, not counted toward the sample.
         let h = vec![hist(4000, 1000), hist(100, 0)];
         assert_eq!(typical_speed(&h, 1), Some(4000));
+    }
+
+    // --- Conflict resolution / receive targets ---
+
+    fn fi(path: &str, hash: &str) -> FileInfo {
+        FileInfo {
+            relative_path: path.into(),
+            size: 1,
+            hash: hash.into(),
+            modified: 0,
+            file_type: "Mod".into(),
+        }
+    }
+
+    fn conflict_plan(local: &str, remote: &str) -> SyncPlan {
+        SyncPlan {
+            actions: vec![SyncAction::Conflict { local: fi(local, "mine"), remote: fi(remote, "theirs") }],
+            game_id: "sims4".into(),
+            base_path: "C:/Game".into(),
+            ..Default::default()
+        }
+    }
+
+    fn receives(plan: &SyncPlan) -> Vec<String> {
+        plan.actions
+            .iter()
+            .filter_map(|a| match a {
+                SyncAction::ReceiveFromRemote(f) => Some(f.relative_path.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn use_theirs_writes_to_the_local_disabled_path_if_unchanged() {
+        let mut plan = conflict_plan("Mods/x.package.disabled", "Mods/x.package");
+        assert!(apply_resolution(&mut plan, "Mods/x.package.disabled", Resolution::UseTheirs, |_| false).unwrap());
+        assert_eq!(receives(&plan), vec!["Mods/x.package"]);
+        let recv = match &plan.actions[0] { SyncAction::ReceiveFromRemote(f) => f.clone(), _ => unreachable!() };
+        let (remote, local, policy) = receive_target(&plan, &recv);
+        assert_eq!(remote, "Mods/x.package");
+        assert_eq!(local, "Mods/x.package.disabled");
+        assert_eq!(policy, transfer::ReplacePolicy::ReplaceIfHash("mine".into()));
+    }
+
+    #[test]
+    fn plain_receive_never_replaces() {
+        let plan = SyncPlan::default();
+        let (remote, local, policy) = receive_target(&plan, &fi("Mods/a.package", "h"));
+        assert_eq!((remote.as_str(), local.as_str()), ("Mods/a.package", "Mods/a.package"));
+        assert_eq!(policy, transfer::ReplacePolicy::MustNotExist);
+    }
+
+    #[test]
+    fn keep_both_picks_a_free_name_and_re_resolving_replaces_it() {
+        let mut plan = conflict_plan("Mods/x.package", "Mods/x.package");
+        // `x_remote.package` exists on the host: using it would hijack that download.
+        let taken = |c: &str| crate::sync::diff::match_key(c) == "mods/x_remote.package";
+        apply_resolution(&mut plan, "Mods/x.package", Resolution::KeepBoth, taken).unwrap();
+        assert_eq!(receives(&plan), vec!["Mods/x_remote2.package"]);
+        let recv = fi("Mods/x_remote2.package", "theirs");
+        let (remote, local, policy) = receive_target(&plan, &recv);
+        assert_eq!((remote.as_str(), local.as_str()), ("Mods/x.package", "Mods/x_remote2.package"));
+        assert_eq!(policy, transfer::ReplacePolicy::MustNotExist);
+
+        // Change of mind: only the new resolution's download stays queued.
+        apply_resolution(&mut plan, "Mods/x.package", Resolution::UseTheirs, taken).unwrap();
+        assert_eq!(receives(&plan), vec!["Mods/x.package"]);
+        assert!(plan.keep_both.is_empty());
+        apply_resolution(&mut plan, "Mods/x.package", Resolution::KeepMine, taken).unwrap();
+        assert!(plan.actions.is_empty());
+        assert!(plan.use_theirs.is_empty());
+        assert!(!apply_resolution(&mut plan, "Mods/other.package", Resolution::KeepMine, taken).unwrap());
+    }
+
+    #[test]
+    fn keep_both_suffix_goes_before_package_disabled() {
+        let mut plan = conflict_plan("Mods/x.package.disabled", "Mods/x.package");
+        apply_resolution(&mut plan, "Mods/x.package.disabled", Resolution::KeepBoth, |_| false).unwrap();
+        assert_eq!(receives(&plan), vec!["Mods/x_remote.package.disabled"]);
+    }
+
+    #[test]
+    fn recover_keep_temps_restores_missing_originals_only() {
+        let base = std::env::temp_dir().join(format!("synccrate-keep-{}", uuid::Uuid::new_v4()));
+        let mods = base.join("Mods").join("CC");
+        std::fs::create_dir_all(&mods).unwrap();
+        std::fs::write(mods.join("a.package.synccrate-keep-123.tmp"), b"mine").unwrap();
+        std::fs::write(mods.join("b.package"), b"current").unwrap();
+        std::fs::write(mods.join("b.package.synccrate-keep-456.tmp"), b"old").unwrap();
+        let def = crate::registry::load_registry().games.into_iter().find(|g| g.id == "sims4").unwrap();
+        let restored = recover_keep_temps(&base.to_string_lossy(), &def.content_types);
+        assert_eq!(restored, 1);
+        assert_eq!(std::fs::read(mods.join("a.package")).unwrap(), b"mine");
+        assert_eq!(std::fs::read(mods.join("b.package")).unwrap(), b"current");
+        assert!(mods.join("b.package.synccrate-keep-456.tmp").exists());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn dangerous_extension_sees_through_disabled_suffix() {
+        assert!(utils::is_dangerous_extension("Mods/evil.exe"));
+        assert!(utils::is_dangerous_extension("Mods/evil.EXE.disabled"));
+        assert!(!utils::is_dangerous_extension("Mods/hair.package.disabled"));
+        assert!(!utils::is_dangerous_extension("Mods/README"));
     }
 
     // --- SyncCheckpoint tests ---

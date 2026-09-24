@@ -14,6 +14,17 @@ use tokio_util::sync::CancellationToken;
 /// Maximum file size we'll accept from a peer (2 GB)
 const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 
+/// A host manifest older than this is rescanned before it's served. The file
+/// watcher normally marks changes (empty hashes), but it can miss events or
+/// not be running; with the hash cache a rescan mostly just stats files.
+const HOST_MANIFEST_MAX_AGE_SECS: u64 = 600;
+
+pub(crate) fn host_manifest_needs_rescan(manifest: &crate::state::FileManifest, now: u64) -> bool {
+    manifest.files.is_empty()
+        || manifest.files.values().any(|f| f.hash.is_empty())
+        || now.saturating_sub(manifest.generated_at) > HOST_MANIFEST_MAX_AGE_SECS
+}
+
 /// Maximum simultaneous peer connections a host will accept
 const MAX_PEERS: usize = 8;
 
@@ -210,8 +221,8 @@ async fn handle_client(
 
     let use_compression;
 
-    let (peer_name, peer_version, peer_pin) = match msg {
-        Message::Hello { name, version, pin, supports_compression } => {
+    let (peer_name, peer_version, peer_pin, peer_game) = match msg {
+        Message::Hello { name, version, pin, supports_compression, game_id } => {
             // Sanitize: truncate and strip control characters
             let sanitized = name.chars()
                 .filter(|c| !c.is_control())
@@ -219,7 +230,7 @@ async fn handle_client(
                 .collect::<String>();
             let peer_supports_compression = supports_compression;
             use_compression = peer_supports_compression;
-            (sanitized, version, pin)
+            (sanitized, version, pin, game_id)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
@@ -249,10 +260,31 @@ async fn handle_client(
         }
     }
 
+    // Refuse a client that has a different game selected: its sync plan would
+    // compare our files against the wrong game's folder and download them there.
+    {
+        let host_game = state.lock().await.active_game.clone();
+        if protocol::games_conflict(&host_game, peer_game.as_deref()) {
+            let mut s = stream.lock().await;
+            protocol::send_message(
+                &mut *s,
+                &Message::Error { message: protocol::wrong_game_error(&host_game) },
+            )
+            .await?;
+            return Err(format!(
+                "Peer '{}' has {} selected, but this session shares {}",
+                peer_name,
+                peer_game.unwrap_or_default(),
+                host_game
+            ));
+        }
+    }
+
     // Send Welcome
     {
         let app_state = state.lock().await;
         let our_name = app_state.session_name.clone();
+        let our_game = app_state.active_game.clone();
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -260,6 +292,7 @@ async fn handle_client(
                 name: our_name,
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 supports_compression: true,
+                game_id: Some(our_game),
             },
         )
         .await?;
@@ -278,6 +311,7 @@ async fn handle_client(
             version: peer_version.clone(),
             pin_required: false,
             game_info: None,
+            game_id: peer_game.clone(),
             addresses: Vec::new(),
         };
         app_state.connections.insert(
@@ -363,10 +397,12 @@ async fn handle_client(
 
         match msg {
             Message::ManifestRequest => {
-                // Check if local manifest has empty hashes (from a quick scan)
+                // Rescan (hashed) when the manifest is empty, has quick-scan
+                // empty hashes, or is old. Serving an empty/stale manifest made
+                // clients report "in sync" or fail with "File not available".
                 let needs_rehash = {
                     let app_state = state.lock().await;
-                    app_state.local_manifest.files.values().any(|f| f.hash.is_empty())
+                    host_manifest_needs_rescan(&app_state.local_manifest, crate::utils::timestamp_now())
                 };
 
                 // Re-scan with full hashes if needed so the peer gets accurate data
@@ -828,6 +864,7 @@ pub async fn connect_to_host(
     {
         let app_state = state.lock().await;
         let our_name = app_state.local_display_name.clone();
+        let our_game = app_state.active_game.clone();
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -836,17 +873,26 @@ pub async fn connect_to_host(
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 pin: pin.clone(),
                 supports_compression: true,
+                game_id: Some(our_game),
             },
         )
         .await?;
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version, host_supports_compression) = {
+    let (host_name, host_version, host_supports_compression, host_game) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
-            Message::Welcome { name, version, supports_compression } => (name, version, supports_compression),
+            Message::Welcome { name, version, supports_compression, game_id } => {
+                // Check on our side too, in case the host skipped it.
+                let ours = state.lock().await.active_game.clone();
+                if protocol::games_conflict(&ours, game_id.as_deref()) {
+                    let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+                    return Err(protocol::wrong_game_error(game_id.as_deref().unwrap_or_default()));
+                }
+                (name, version, supports_compression, game_id)
+            }
             Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
         }
@@ -936,6 +982,7 @@ pub async fn connect_to_host(
             version: host_version,
             pin_required: false,
             game_info: host_game_info,
+            game_id: host_game,
             addresses: addresses.to_vec(),
         };
         app_state.connections.insert(
@@ -1127,12 +1174,133 @@ pub async fn refresh_remote_manifest(
     Ok(manifest)
 }
 
-/// Request a file from a specific peer over their persistent connection
-pub async fn request_file(
+/// What a download may do to a file already at its destination.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReplacePolicy {
+    /// Plain receive / keep-both: never overwrite a local file with different
+    /// content. (Real bug: a case-variant path diffed as "new" and the rename
+    /// silently replaced the user's own file.)
+    MustNotExist,
+    /// "Use theirs": replace only while the local file still has this hash,
+    /// i.e. it wasn't edited between the compare and the sync.
+    ReplaceIfHash(String),
+}
+
+/// One planned download.
+pub struct ReceiveRequest<'a> {
+    /// Path the host serves the file under.
+    pub remote_path: &'a str,
+    /// Path to write locally (differs for keep-both and for "use theirs" on a
+    /// case-variant or disabled local copy).
+    pub local_path: &'a str,
+    /// Hash from the manifest the plan was built from (empty = don't check).
+    pub expected_hash: &'a str,
+    pub policy: ReplacePolicy,
+}
+
+pub const LOCAL_COPY_DIFFERS: &str =
+    "Conflict: a different local copy already exists, so yours was kept. Compare again to resolve it";
+pub const LOCAL_CHANGED: &str = "Skipped: your copy changed since the compare. Compare again";
+pub const HOST_CHANGED: &str = "Skipped: the host changed this file since the compare. Compare again";
+
+/// Outcome of checking the destination before downloading.
+#[derive(Debug, PartialEq)]
+pub(crate) enum PreCheck {
+    Download,
+    /// Already there with the expected content (e.g. completed by an
+    /// interrupted earlier attempt): nothing to transfer.
+    AlreadyPresent,
+    Refuse(&'static str),
+}
+
+pub(crate) fn precheck(existing_hash: Option<&str>, expected_hash: &str, policy: &ReplacePolicy) -> PreCheck {
+    match existing_hash {
+        None => PreCheck::Download,
+        Some(h) if !expected_hash.is_empty() && h == expected_hash => PreCheck::AlreadyPresent,
+        Some(h) => match policy {
+            ReplacePolicy::MustNotExist => PreCheck::Refuse(LOCAL_COPY_DIFFERS),
+            ReplacePolicy::ReplaceIfHash(want) if !want.is_empty() && h == want => PreCheck::Download,
+            ReplacePolicy::ReplaceIfHash(_) => PreCheck::Refuse(LOCAL_CHANGED),
+        },
+    }
+}
+
+/// Name comparison the way Windows sees it: case-insensitive, trailing dots
+/// and spaces ignored.
+fn same_file_name(a: &str, b: &str) -> bool {
+    a.trim_end_matches(['.', ' ']).to_lowercase() == b.trim_end_matches(['.', ' ']).to_lowercase()
+}
+
+/// The file already occupying `dest`, matched case-insensitively among its
+/// siblings so behavior is the same on case-sensitive file systems.
+pub(crate) fn find_existing(dest: &std::path::Path) -> Option<std::path::PathBuf> {
+    if std::fs::symlink_metadata(dest).is_ok() {
+        return Some(dest.to_path_buf());
+    }
+    let name = dest.file_name()?.to_str()?;
+    std::fs::read_dir(dest.parent()?)
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_str().map_or(false, |n| same_file_name(n, name)))
+        .map(|e| e.path())
+}
+
+struct ExistingFile {
+    path: std::path::PathBuf,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    hash: String,
+}
+
+fn hash_file_sync(path: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut reader = std::io::BufReader::with_capacity(131072, file);
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 131072];
+    loop {
+        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn inspect_existing(dest: &std::path::Path) -> Result<Option<ExistingFile>, String> {
+    let Some(path) = find_existing(dest) else { return Ok(None) };
+    let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return Err(format!("Refusing to replace a link or folder at {}", path.display()));
+    }
+    let hash = hash_file_sync(&path)?;
+    Ok(Some(ExistingFile { len: meta.len(), modified: meta.modified().ok(), path, hash }))
+}
+
+/// Whether the destination is still as it was before the download started.
+fn destination_unchanged(dest: &std::path::Path, before: Option<&ExistingFile>) -> bool {
+    match before {
+        None => find_existing(dest).is_none(),
+        Some(e) => std::fs::symlink_metadata(&e.path)
+            .map(|m| m.is_file() && m.len() == e.len && m.modified().ok() == e.modified)
+            .unwrap_or(false),
+    }
+}
+
+/// Download one planned file from the host over the persistent connection.
+///
+/// Safety checks (each one a real or audited data-loss path):
+/// - an existing local file is only replaced per `policy` (never for a plain
+///   receive), and is re-checked right before the final rename;
+/// - the host's `FileHeader` hash must match the plan's hash, so a file the
+///   host changed after the compare isn't written unseen;
+/// - a destination that already has the expected content is left alone.
+pub async fn receive_file(
     state: &Arc<Mutex<AppState>>,
     peer_id: &str,
-    path: &str,
     dest_base: &str,
+    req: ReceiveRequest<'_>,
 ) -> Result<(), String> {
     let connection = {
         let app_state = state.lock().await;
@@ -1144,16 +1312,32 @@ pub async fn request_file(
     };
 
     // Block dangerous file extensions from peers
-    if crate::utils::is_dangerous_extension(path) {
-        return Err(format!(
-            "Blocked dangerous file type: {}",
-            path
-        ));
+    for p in [req.remote_path, req.local_path] {
+        if crate::utils::is_dangerous_extension(p) {
+            return Err(format!("Blocked dangerous file type: {}", p));
+        }
     }
 
     // Validate path stays within base directory before writing
-    let dest_path = crate::utils::safe_join(dest_base, path)
-        .map_err(|e| format!("Path validation failed for {}: {}", path, e))?;
+    let mut dest_path = crate::utils::safe_join(dest_base, req.local_path)
+        .map_err(|e| format!("Path validation failed for {}: {}", req.local_path, e))?;
+
+    let existing = {
+        let d = dest_path.clone();
+        tokio::task::spawn_blocking(move || inspect_existing(&d))
+            .await
+            .map_err(|e| e.to_string())??
+    };
+    match precheck(existing.as_ref().map(|e| e.hash.as_str()), req.expected_hash, &req.policy) {
+        PreCheck::AlreadyPresent => return Ok(()),
+        PreCheck::Refuse(msg) => return Err(msg.to_string()),
+        PreCheck::Download => {}
+    }
+    // Replace the existing file under its own name: its case may differ from
+    // the plan's path, and on a case-sensitive disk we'd otherwise add a twin.
+    if let Some(e) = &existing {
+        dest_path = e.path.clone();
+    }
 
     if let Some(parent) = dest_path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -1178,10 +1362,10 @@ pub async fn request_file(
     let mut s = connection.lock().await;
 
     // Send file request
-    protocol::send_message(&mut *s, &Message::FileRequest { path: path.to_string() }).await?;
+    protocol::send_message(&mut *s, &Message::FileRequest { path: req.remote_path.to_string() }).await?;
 
     // Receive FileHeader
-    let (expected_size, expected_hash) = {
+    let (expected_size, header_hash) = {
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
             Message::FileHeader { size, hash, .. } => (size, hash),
@@ -1190,10 +1374,17 @@ pub async fn request_file(
         }
     };
 
+    if !req.expected_hash.is_empty() && header_hash != req.expected_hash {
+        // The host streams the body regardless; consume it so the next
+        // request doesn't read stale chunks.
+        drain_until_file_end(&mut s).await;
+        return Err(HOST_CHANGED.to_string());
+    }
+
     // From here on the host streams chunks until FileComplete. If we bail out
     // early, drain the rest so the next request doesn't read stale chunks
     // ("Expected FileHeader"), and always remove the temp file.
-    let result = receive_file_body(&mut s, &tmp_path, expected_size, &expected_hash, path).await;
+    let result = receive_file_body(&mut s, &tmp_path, expected_size, &header_hash, req.remote_path).await;
     if let Err((e, stream_in_sync)) = result {
         if !stream_in_sync {
             drain_until_file_end(&mut s).await;
@@ -1202,6 +1393,21 @@ pub async fn request_file(
         return Err(e);
     }
     drop(s);
+
+    // The user (or the game) may have touched the destination during the download.
+    let unchanged = {
+        let d = dest_path.clone();
+        tokio::task::spawn_blocking(move || destination_unchanged(&d, existing.as_ref()))
+            .await
+            .unwrap_or(false)
+    };
+    if !unchanged {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(match req.policy {
+            ReplacePolicy::MustNotExist => LOCAL_COPY_DIFFERS.to_string(),
+            ReplacePolicy::ReplaceIfHash(_) => LOCAL_CHANGED.to_string(),
+        });
+    }
 
     // Rename temp file to final destination
     if let Err(e) = tokio::fs::rename(&tmp_path, &dest_path).await {
@@ -1402,5 +1608,61 @@ mod tests {
         assert!(compressed.len() < large_data.len(), "repetitive 1MB should compress well");
         let decompressed = decompress_chunk(&compressed).expect("decompression should succeed");
         assert_eq!(decompressed, large_data);
+    }
+
+    #[test]
+    fn precheck_never_overwrites_a_different_local_file_on_plain_receive() {
+        use ReplacePolicy::*;
+        assert_eq!(precheck(None, "h", &MustNotExist), PreCheck::Download);
+        assert_eq!(precheck(Some("h"), "h", &MustNotExist), PreCheck::AlreadyPresent);
+        assert_eq!(precheck(Some("mine"), "h", &MustNotExist), PreCheck::Refuse(LOCAL_COPY_DIFFERS));
+        assert_eq!(precheck(Some("mine"), "", &MustNotExist), PreCheck::Refuse(LOCAL_COPY_DIFFERS));
+    }
+
+    #[test]
+    fn precheck_use_theirs_requires_unchanged_local_hash() {
+        use ReplacePolicy::*;
+        let planned = ReplaceIfHash("mine".to_string());
+        assert_eq!(precheck(Some("mine"), "theirs", &planned), PreCheck::Download);
+        assert_eq!(precheck(Some("edited"), "theirs", &planned), PreCheck::Refuse(LOCAL_CHANGED));
+        assert_eq!(precheck(Some("theirs"), "theirs", &planned), PreCheck::AlreadyPresent);
+        assert_eq!(precheck(None, "theirs", &planned), PreCheck::Download);
+        assert_eq!(precheck(Some(""), "theirs", &ReplaceIfHash(String::new())), PreCheck::Refuse(LOCAL_CHANGED));
+    }
+
+    #[test]
+    fn find_existing_matches_case_insensitively() {
+        let dir = std::env::temp_dir().join(format!("synccrate-existing-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Hair.package"), b"x").unwrap();
+        let found = find_existing(&dir.join("hair.PACKAGE")).expect("case variant found");
+        assert!(found.file_name().unwrap().to_string_lossy().eq_ignore_ascii_case("hair.package"));
+        assert!(find_existing(&dir.join("other.package")).is_none());
+        assert!(find_existing(&dir.join("missing").join("x.package")).is_none());
+
+        let before = inspect_existing(&dir.join("Hair.package")).unwrap();
+        assert!(destination_unchanged(&dir.join("Hair.package"), before.as_ref()));
+        assert!(!destination_unchanged(&dir.join("hair.package"), None), "appeared file detected");
+        std::fs::write(dir.join("Hair.package"), b"changed").unwrap();
+        assert!(!destination_unchanged(&dir.join("Hair.package"), before.as_ref()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn host_rescans_empty_quick_or_stale_manifests() {
+        use crate::state::{FileInfo, FileManifest};
+        let mut m = FileManifest { files: Default::default(), generated_at: 1000 };
+        assert!(host_manifest_needs_rescan(&m, 1000), "empty");
+        m.files.insert("Mods/a.package".into(), FileInfo {
+            relative_path: "Mods/a.package".into(),
+            size: 1,
+            hash: "h".into(),
+            modified: 0,
+            file_type: "Mod".into(),
+        });
+        assert!(!host_manifest_needs_rescan(&m, 1000));
+        assert!(host_manifest_needs_rescan(&m, 1000 + HOST_MANIFEST_MAX_AGE_SECS + 1), "stale");
+        m.files.get_mut("Mods/a.package").unwrap().hash.clear();
+        assert!(host_manifest_needs_rescan(&m, 1000), "quick-scan hashes");
     }
 }

@@ -138,8 +138,18 @@ export async function getGamePath(game: string): Promise<string> {
   return invoke("get_game_path", { game });
 }
 
-export async function setGamePath(game: string, path: string): Promise<void> {
-  return invoke("set_game_path", { game, path });
+/** Rejects with a message starting with GAME_PATH_NEEDS_CONFIRMATION when the
+ *  folder has none of the game's expected subfolders; retry with `force`. */
+export async function setGamePath(game: string, path: string, force?: boolean): Promise<void> {
+  return invoke("set_game_path", { game, path, force: force ?? null });
+}
+
+export const GAME_PATH_NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION:";
+
+/** Games whose saved folder is missing right now (e.g. unplugged drive). */
+export async function getUnavailableGamePaths(): Promise<string[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_unavailable_game_paths");
 }
 
 export async function getActiveGame(): Promise<string> {
@@ -158,11 +168,13 @@ export async function openFolder(path: string): Promise<void> {
   return invoke("open_folder", { path });
 }
 
+/** Refused unless `gameId` is the backend's active game. */
 export async function toggleMod(
+  gameId: string,
   relativePath: string,
   enabled: boolean,
 ): Promise<string> {
-  return invoke("toggle_mod", { relativePath, enabled });
+  return invoke("toggle_mod", { gameId, relativePath, enabled });
 }
 
 // --- Game Registry & Library ---
@@ -185,6 +197,11 @@ export async function removeFromLibrary(gameId: string): Promise<void> {
 
 export async function detectInstalledGames(): Promise<Record<string, string>> {
   return invoke("detect_installed_games");
+}
+
+/** Ids of games actually installed (not just a leftover mods/saves folder). */
+export async function getInstalledGames(): Promise<string[]> {
+  return invoke("get_installed_games");
 }
 
 // --- Sync ---
@@ -267,22 +284,24 @@ export async function getPredefinedTags(): Promise<string[]> {
   return invoke("get_predefined_tags");
 }
 
-export async function getModTags(): Promise<Record<string, string[]>> {
-  return invoke("get_mod_tags");
+export async function getModTags(gameId: string): Promise<Record<string, string[]>> {
+  return invoke("get_mod_tags", { gameId });
 }
 
 export async function setModTags(
+  gameId: string,
   path: string,
   tags: string[],
 ): Promise<void> {
-  return invoke("set_mod_tags", { path, tags });
+  return invoke("set_mod_tags", { gameId, path, tags });
 }
 
 export async function bulkSetTags(
+  gameId: string,
   paths: string[],
   tags: string[],
 ): Promise<void> {
-  return invoke("bulk_set_tags", { paths, tags });
+  return invoke("bulk_set_tags", { gameId, paths, tags });
 }
 
 // --- Install ---
@@ -319,8 +338,8 @@ export async function listBackups(): Promise<BackupInfo[]> {
   return invoke("list_backups");
 }
 
-export async function restoreBackup(id: string): Promise<void> {
-  return invoke("restore_backup", { id });
+export async function restoreBackup(id: string, exact = false): Promise<import("./types").RestoreResult> {
+  return invoke("restore_backup", { id, exact });
 }
 
 export async function deleteBackup(id: string): Promise<void> {
@@ -458,9 +477,14 @@ export async function findDuplicates(game?: string): Promise<import("./types").D
   return invoke("find_duplicates", { game: game ?? null });
 }
 
-/** Delete files inside the active game's content folders. */
-export async function deleteModFiles(paths: string[]): Promise<import("./types").DeleteResult> {
-  return invoke("delete_mod_files", { paths });
+/** Delete files inside the active game's content folders. `keep` maps each
+ *  duplicate being deleted to the copy that stays (re-verified by the backend). */
+export async function deleteModFiles(
+  gameId: string,
+  paths: string[],
+  keep?: Record<string, string>,
+): Promise<import("./types").DeleteResult> {
+  return invoke("delete_mod_files", { gameId, paths, keep: keep ?? null });
 }
 
 /** Unix seconds of the last game patch (games with version detection only). */
@@ -469,8 +493,8 @@ export async function getGamePatchTime(game?: string): Promise<number | null> {
 }
 
 /** Script mods of the active game older than its last patch. */
-export async function getOutdatedScripts(): Promise<import("./types").OutdatedScripts> {
-  return invoke("get_outdated_scripts");
+export async function getOutdatedScripts(gameId: string): Promise<import("./types").OutdatedScripts> {
+  return invoke("get_outdated_scripts", { gameId });
 }
 
 /** Stop the running sync after the current file. Resolves false if nothing was syncing. */

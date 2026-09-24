@@ -3,9 +3,11 @@ import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X, Loader2 } from "luc
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { formatBytes, formatDate } from "../lib/utils";
-import { gameLabel } from "../lib/games";
-import { Badge, Banner, Button, EmptyState, Input, Panel, SectionHeader, cx } from "./ui";
+import { gameLabel, getGameDef } from "../lib/games";
+import { Badge, Banner, Button, EmptyState, Input, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
 import * as cmd from "../lib/commands";
+import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import type { BackupInfo, BackupProgress, RestoreResult } from "../lib/types";
 
 function sendNotification(title: string, body: string) {
   try {
@@ -21,9 +23,51 @@ interface Props {
   gameId: string;
 }
 
+const KIND_LABEL: Record<string, string> = {
+  auto: "Scheduled",
+  presync: "Before sync",
+  safety: "Safety",
+};
+
+const PHASE_LABEL: Record<BackupProgress["phase"], string> = {
+  manual: "Backing up",
+  auto: "Scheduled backup",
+  presync: "Backing up files the sync replaces",
+  safety: "Safety backup of current files",
+  restore: "Restoring files",
+};
+
+/** Per-content-type counts with registry labels; old backups only have the Sims-shaped fields. */
+function categoryCounts(backup: BackupInfo): [string, number][] {
+  const counts =
+    backup.category_counts && Object.keys(backup.category_counts).length > 0
+      ? backup.category_counts
+      : {
+          mods: backup.mods_count ?? 0,
+          saves: backup.saves_count ?? 0,
+          tray: backup.tray_count ?? 0,
+          screenshots: backup.screenshots_count ?? 0,
+        };
+  const types = getGameDef(backup.game)?.content_types ?? [];
+  return Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .map(([id, count]): [string, number] => [types.find((t) => t.id === id)?.label ?? id, count]);
+}
+
+function restoreSummary(r: RestoreResult): string {
+  const parts = [`${r.restored} restored`];
+  if (r.unchanged) parts.push(`${r.unchanged} already up to date`);
+  if (r.removed) parts.push(`${r.removed} removed`);
+  if (r.skipped.length) parts.push(`${r.skipped.length} skipped`);
+  if (r.missing) parts.push(`${r.missing} missing from the backup`);
+  return parts.join(", ");
+}
+
 export default function BackupList({ gameId }: Props) {
   const backups = useAppStore((s) => s.backups);
   const setBackups = useAppStore((s) => s.setBackups);
+  const progress = useAppStore((s) => s.backupProgress);
+  const setProgress = useAppStore((s) => s.setBackupProgress);
   const addLog = useLogStore((s) => s.addLog);
 
   const [label, setLabel] = useState("");
@@ -32,6 +76,7 @@ export default function BackupList({ gameId }: Props) {
   const [restoring, setRestoring] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null);
+  const [exactRestore, setExactRestore] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -44,8 +89,11 @@ export default function BackupList({ gameId }: Props) {
     return backups.filter((b) => b.game === gameId);
   }, [backups, gameId]);
 
+  const busy = creating || restoring;
+
   const handleCreate = async () => {
     if (!label.trim()) return;
+    setProgress(null);
     setCreating(true);
     try {
       await cmd.createBackup(label.trim(), gameId);
@@ -57,32 +105,53 @@ export default function BackupList({ gameId }: Props) {
       sendNotification("SyncCrate", `Backup "${label.trim()}" created successfully`);
     } catch (e) {
       addLog(`Backup failed: ${e}`, "error");
+      toastError(`Backup failed: ${e}`);
     } finally {
       setCreating(false);
+      setProgress(null);
     }
   };
 
-  const handleRestore = async (id: string) => {
-    if (restoreConfirm !== id) {
-      setRestoreConfirm(id);
-      return;
-    }
+  const askRestore = (id: string) => {
+    setExactRestore(false);
+    setRestoreConfirm(id);
+  };
+
+  const handleRestore = async (id: string, exact: boolean) => {
     setRestoreConfirm(null);
+    setProgress(null);
     setRestoring(true);
     try {
-      await cmd.restoreBackup(id);
+      const r = await cmd.restoreBackup(id, exact);
       const updated = await cmd.listBackups();
       setBackups(updated);
       try {
         const m = await cmd.scanFiles(gameId);
         useAppStore.getState().setManifest(m);
       } catch {}
-      addLog("Backup restored (safety backup created)", "success");
+      const safety = r.safety_backup ? ` Your previous files are in the safety backup "${r.safety_backup}".` : "";
+      if (r.error) {
+        // Stopped part-way: say what was written and where the old files are.
+        const msg = `Restore stopped: ${r.error}. ${restoreSummary(r)} before it stopped.${safety}`;
+        addLog(msg, "error");
+        toastError(msg);
+        return;
+      }
+      addLog(`Backup restored: ${restoreSummary(r)}.${safety}`, "success");
+      toastSuccess(`Backup restored: ${restoreSummary(r)}`);
+      if (r.skipped.length > 0) {
+        // Mods the user has since disabled/enabled are left as they are.
+        const msg = `${r.skipped.length} file(s) skipped because you've disabled or enabled them since: ${r.skipped[0]}${r.skipped.length > 1 ? " …" : ""}`;
+        addLog(msg, "warning");
+        toastInfo(msg);
+      }
       sendNotification("SyncCrate", "Backup restored successfully");
     } catch (e) {
       addLog(`Restore failed: ${e}`, "error");
+      toastError(`Restore failed: ${e}`);
     } finally {
       setRestoring(false);
+      setProgress(null);
     }
   };
 
@@ -119,12 +188,14 @@ export default function BackupList({ gameId }: Props) {
     setRenaming(null);
   };
 
+  const showProgress = progress && progress.game === gameId && progress.files_total > 0;
+
   return (
     <div className="space-y-5">
       <SectionHeader
         label={<><b>// Snapshots</b> &nbsp;{filteredBackups.length} stored</>}
         title="Backups"
-        description="Point-in-time copies of every content folder. Restoring always takes a safety backup first."
+        description="Point-in-time snapshots of every content folder. Unchanged files are stored only once, so extra backups are cheap. Restoring always takes a safety backup first."
         actions={
           !showCreate && (
             <Button variant="primary" size="sm" onClick={() => setShowCreate(true)} icon={<Plus size={13} />}>
@@ -148,7 +219,7 @@ export default function BackupList({ gameId }: Props) {
             />
             <p className="text-xs text-txt-dim">This will back up all content folders for the current game.</p>
             <div className="flex gap-2">
-              <Button variant="primary" onClick={handleCreate} disabled={creating || !label.trim()} icon={creating ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}>
+              <Button variant="primary" onClick={handleCreate} disabled={busy || !label.trim()} icon={creating ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}>
                 {creating ? "Creating..." : "Create Backup"}
               </Button>
               <Button variant="ghost" onClick={() => setShowCreate(false)}>
@@ -159,9 +230,20 @@ export default function BackupList({ gameId }: Props) {
         </Panel>
       )}
 
-      {restoring && (
-        <Banner tone="info" icon={<Loader2 size={15} className="animate-spin" />} title="Restoring backup...">
-          A safety backup is being created first.
+      {busy && (
+        <Banner tone="info" icon={<Loader2 size={15} className="animate-spin" />} title={restoring ? "Restoring backup..." : "Creating backup..."}>
+          {showProgress ? (
+            <ProgressBar
+              className="mt-1"
+              value={(progress.files_done / progress.files_total) * 100}
+              label={PHASE_LABEL[progress.phase] ?? progress.phase}
+              meta={`${progress.files_done}/${progress.files_total}`}
+            />
+          ) : restoring ? (
+            "A safety backup of your current files is created first."
+          ) : (
+            "Scanning content folders..."
+          )}
         </Banner>
       )}
 
@@ -183,14 +265,10 @@ export default function BackupList({ gameId }: Props) {
         // Timeline: a hairline spine with a square node per snapshot; the newest node is neon.
         <ol className="relative pl-7 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-line-hi">
           {filteredBackups.map((backup, idx) => {
-            const cats = Object.entries(
-              backup.category_counts ?? {
-                mods: backup.mods_count ?? 0,
-                saves: backup.saves_count ?? 0,
-                tray: backup.tray_count ?? 0,
-                screenshots: backup.screenshots_count ?? 0,
-              },
-            ).filter(([, count]) => count > 0);
+            const cats = categoryCounts(backup);
+            const kind = backup.kind ?? (backup.auto ? "auto" : "manual");
+            const presync = kind === "presync";
+            const exact = exactRestore && !presync;
             const restorePending = restoreConfirm === backup.id;
             const deletePending = deleteConfirm === backup.id;
             return (
@@ -201,7 +279,7 @@ export default function BackupList({ gameId }: Props) {
                     idx === 0 ? "border-neon" : "border-line-hi",
                   )}
                 >
-                  <span className={cx("w-[7px] h-[7px]", idx === 0 ? "bg-neon" : backup.auto ? "bg-transparent" : "bg-txt-muted")} />
+                  <span className={cx("w-[7px] h-[7px]", idx === 0 ? "bg-neon" : kind !== "manual" ? "bg-transparent" : "bg-txt-muted")} />
                 </span>
                 <div
                   className={cx(
@@ -251,7 +329,11 @@ export default function BackupList({ gameId }: Props) {
                             </button>
                           </>
                         )}
-                        {backup.auto && <Badge tone="neutral" className="shrink-0">Auto</Badge>}
+                        {KIND_LABEL[kind] && (
+                          <Badge tone={kind === "safety" ? "amber" : "neutral"} className="shrink-0">
+                            {KIND_LABEL[kind]}
+                          </Badge>
+                        )}
                         <Badge tone="neutral" className="shrink-0">{gameLabel(backup.game)}</Badge>
                       </div>
                     </div>
@@ -259,12 +341,12 @@ export default function BackupList({ gameId }: Props) {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => handleRestore(backup.id)}
-                        disabled={restoring}
+                        onClick={() => (restorePending ? setRestoreConfirm(null) : askRestore(backup.id))}
+                        disabled={busy}
                         icon={<RotateCcw size={12} />}
                         className={restorePending ? "!text-amber [--btn-line:rgb(var(--color-amber))] [--btn-fill:rgb(var(--color-amber)/0.1)]" : undefined}
                       >
-                        {restorePending ? "Confirm Restore?" : "Restore"}
+                        {restorePending ? "Cancel" : "Restore"}
                       </Button>
                       <Button
                         size="sm"
@@ -279,6 +361,11 @@ export default function BackupList({ gameId }: Props) {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 font-mono text-[11px] text-txt-muted">
                     <span><span className="text-txt tabular">{backup.file_count}</span> files</span>
                     <span className="text-txt-dim tabular">{formatBytes(backup.total_size)}</span>
+                    {backup.new_bytes !== undefined && backup.new_bytes < backup.total_size && (
+                      <span title="Unchanged files are shared with other backups. This is what this backup added on disk.">
+                        new data: <span className="text-txt-dim tabular">{formatBytes(backup.new_bytes)}</span>
+                      </span>
+                    )}
                     {cats.map(([cat, count]) => (
                       <span key={cat} className="uppercase tracking-[0.06em]">
                         <span className="text-txt-dim tabular">{count}</span> {cat}
@@ -286,7 +373,34 @@ export default function BackupList({ gameId }: Props) {
                     ))}
                   </div>
                   {restorePending && (
-                    <p className="mt-2 text-[11px] text-amber">Replaces current files. A safety backup will be created first.</p>
+                    <div className="mt-3 pt-3 border-t border-line space-y-3">
+                      <p className="text-[12px] text-amber">
+                        {presync
+                          ? "Puts back the files this sync replaced or deleted."
+                          : "Replaces your current files with the ones in this backup."}{" "}
+                        A safety backup of your current files is created first. Close the game before restoring.
+                      </p>
+                      <Toggle
+                        kind="check"
+                        checked={exact}
+                        disabled={presync}
+                        onChange={setExactRestore}
+                        label="Exact restore"
+                        description={
+                          presync
+                            ? "Not available: this backup only holds the files the sync replaced."
+                            : "Also remove files added since this backup (only in the backed-up content folders, and only files SyncCrate manages). They stay in the safety backup."
+                        }
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="primary" onClick={() => handleRestore(backup.id, exact)} disabled={busy} icon={<RotateCcw size={12} />}>
+                          {exact ? "Restore exactly" : "Restore"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setRestoreConfirm(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </li>
