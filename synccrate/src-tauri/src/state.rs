@@ -94,6 +94,9 @@ pub struct PeerInfo {
     pub pin_required: bool,
     #[serde(default)]
     pub game_info: Option<GameInfo>,
+    /// Game the host is sharing, from discovery (None for older hosts / peers).
+    #[serde(default)]
+    pub game_id: Option<String>,
     /// Every address the peer was discovered on, best candidate first.
     /// `ip` is always `addresses[0]` when non-empty; connecting tries each in turn.
     #[serde(default)]

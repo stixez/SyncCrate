@@ -807,6 +807,35 @@ pub async fn detect_installed_games(
     Ok(result)
 }
 
+/// Ids of games actually installed on this PC (Steam manifest, uninstall
+/// entry, Epic/GOG, markers; see `game_install`). Unlike
+/// `detect_installed_games`, a leftover mods/saves folder alone doesn't count.
+#[tauri::command]
+pub async fn get_installed_games(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<Vec<String>, String> {
+    let app_state = state.lock().await;
+    let registry = app_state.game_registry.clone();
+    let game_paths = app_state.game_paths.clone();
+    drop(app_state);
+
+    tokio::task::spawn_blocking(move || {
+        let ctx = crate::game_install::InstallContext::build();
+        registry
+            .games
+            .iter()
+            .filter(|game| {
+                let detected = if game.auto_detect { utils::detect_game_path_from_def(game) } else { None };
+                let configured = game_paths.get(&game.id).map(|s| s.as_str());
+                crate::game_install::detect_installed(game, &ctx, detected.as_deref(), configured)
+            })
+            .map(|game| game.id.clone())
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 // --- Legacy `_Disabled/` cleanup (rename-disable games) ---
 
 /// Game path + first content type (the mods folder) of a `disable_method:

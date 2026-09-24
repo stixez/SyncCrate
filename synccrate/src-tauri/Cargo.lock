@@ -5652,6 +5652,7 @@ dependencies = [
  "tokio-util",
  "uuid",
  "walkdir",
+ "windows-registry",
  "zstd",
 ]
 

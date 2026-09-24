@@ -66,6 +66,16 @@ pub struct GameDefinition {
     /// after mods change.
     #[serde(default)]
     pub post_sync_delete: Vec<String>,
+    /// Extra names (besides `label`) matched against uninstall / Epic / GOG
+    /// entries when deciding whether the game is actually installed, e.g.
+    /// "World of Warcraft" for `wow_retail`. See `game_install`.
+    #[serde(default)]
+    pub install_names: Vec<String>,
+    /// Install evidence checked by `game_install`: a path relative to the game
+    /// folder (`Wow.exe`), an absolute path (`%ProgramFiles(x86)%/...`, `~`),
+    /// or a registry dir `HKLM\Key::Value` whose directory must exist.
+    #[serde(default)]
+    pub install_markers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

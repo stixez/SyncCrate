@@ -210,8 +210,8 @@ async fn handle_client(
 
     let use_compression;
 
-    let (peer_name, peer_version, peer_pin) = match msg {
-        Message::Hello { name, version, pin, supports_compression } => {
+    let (peer_name, peer_version, peer_pin, peer_game) = match msg {
+        Message::Hello { name, version, pin, supports_compression, game_id } => {
             // Sanitize: truncate and strip control characters
             let sanitized = name.chars()
                 .filter(|c| !c.is_control())
@@ -219,7 +219,7 @@ async fn handle_client(
                 .collect::<String>();
             let peer_supports_compression = supports_compression;
             use_compression = peer_supports_compression;
-            (sanitized, version, pin)
+            (sanitized, version, pin, game_id)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
@@ -249,10 +249,31 @@ async fn handle_client(
         }
     }
 
+    // Refuse a client that has a different game selected: its sync plan would
+    // compare our files against the wrong game's folder and download them there.
+    {
+        let host_game = state.lock().await.active_game.clone();
+        if protocol::games_conflict(&host_game, peer_game.as_deref()) {
+            let mut s = stream.lock().await;
+            protocol::send_message(
+                &mut *s,
+                &Message::Error { message: protocol::wrong_game_error(&host_game) },
+            )
+            .await?;
+            return Err(format!(
+                "Peer '{}' has {} selected, but this session shares {}",
+                peer_name,
+                peer_game.unwrap_or_default(),
+                host_game
+            ));
+        }
+    }
+
     // Send Welcome
     {
         let app_state = state.lock().await;
         let our_name = app_state.session_name.clone();
+        let our_game = app_state.active_game.clone();
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -260,6 +281,7 @@ async fn handle_client(
                 name: our_name,
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 supports_compression: true,
+                game_id: Some(our_game),
             },
         )
         .await?;
@@ -278,6 +300,7 @@ async fn handle_client(
             version: peer_version.clone(),
             pin_required: false,
             game_info: None,
+            game_id: peer_game.clone(),
             addresses: Vec::new(),
         };
         app_state.connections.insert(
@@ -828,6 +851,7 @@ pub async fn connect_to_host(
     {
         let app_state = state.lock().await;
         let our_name = app_state.local_display_name.clone();
+        let our_game = app_state.active_game.clone();
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -836,17 +860,26 @@ pub async fn connect_to_host(
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 pin: pin.clone(),
                 supports_compression: true,
+                game_id: Some(our_game),
             },
         )
         .await?;
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version, host_supports_compression) = {
+    let (host_name, host_version, host_supports_compression, host_game) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
-            Message::Welcome { name, version, supports_compression } => (name, version, supports_compression),
+            Message::Welcome { name, version, supports_compression, game_id } => {
+                // Check on our side too, in case the host skipped it.
+                let ours = state.lock().await.active_game.clone();
+                if protocol::games_conflict(&ours, game_id.as_deref()) {
+                    let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+                    return Err(protocol::wrong_game_error(game_id.as_deref().unwrap_or_default()));
+                }
+                (name, version, supports_compression, game_id)
+            }
             Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
         }
@@ -936,6 +969,7 @@ pub async fn connect_to_host(
             version: host_version,
             pin_required: false,
             game_info: host_game_info,
+            game_id: host_game,
             addresses: addresses.to_vec(),
         };
         app_state.connections.insert(

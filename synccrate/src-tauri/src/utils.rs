@@ -208,6 +208,16 @@ pub(crate) fn parse_steam_library_vdf(contents: &str) -> Vec<PathBuf> {
 
 /// All `steamapps/common` directories across every Steam library on this machine.
 pub fn steam_common_dirs() -> Vec<PathBuf> {
+    steam_steamapps_dirs()
+        .into_iter()
+        .map(|s| s.join("common"))
+        .filter(|c| c.exists())
+        .collect()
+}
+
+/// All `steamapps` directories (where `appmanifest_<id>.acf` files live)
+/// across every Steam library on this machine.
+pub fn steam_steamapps_dirs() -> Vec<PathBuf> {
     let mut libs: Vec<PathBuf> = Vec::new();
     for root in steam_roots() {
         libs.push(root.clone());
@@ -223,47 +233,38 @@ pub fn steam_common_dirs() -> Vec<PathBuf> {
 
     let mut result: Vec<PathBuf> = Vec::new();
     for lib in libs {
-        let common = lib.join("steamapps").join("common");
-        let key = common.to_string_lossy().to_lowercase();
-        if common.exists() && !result.iter().any(|r| r.to_string_lossy().to_lowercase() == key) {
-            result.push(common);
+        let steamapps = lib.join("steamapps");
+        let key = steamapps.to_string_lossy().to_lowercase();
+        if steamapps.exists() && !result.iter().any(|r| r.to_string_lossy().to_lowercase() == key) {
+            result.push(steamapps);
         }
     }
     result
 }
 
-/// Read a REG_SZ value from the Windows registry via `reg query`
-/// (avoids pulling in a registry crate). Checks both the 64-bit and 32-bit views.
+/// Read a REG_SZ / REG_EXPAND_SZ value (`key` like `HKLM\SOFTWARE\...`),
+/// checking both the 64-bit and 32-bit views. Native API rather than
+/// `reg query`: spawning reg.exe cost ~100 ms per call, and install detection
+/// makes dozens, and its OEM-code-page output mangled non-ASCII paths.
 #[cfg(target_os = "windows")]
 pub fn read_registry_string(key: &str, value: &str) -> Option<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    use windows_registry::{CURRENT_USER, LOCAL_MACHINE};
+    const KEY_WOW64_64KEY: u32 = 0x0100;
+    const KEY_WOW64_32KEY: u32 = 0x0200;
 
-    for view in ["/reg:64", "/reg:32"] {
-        let output = std::process::Command::new("reg")
-            .args(["query", key, "/v", value, view])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .ok()?;
-        if !output.status.success() {
+    let (root_name, path) = key.split_once('\\')?;
+    let root = match root_name.to_ascii_uppercase().as_str() {
+        "HKLM" | "HKEY_LOCAL_MACHINE" => LOCAL_MACHINE,
+        "HKCU" | "HKEY_CURRENT_USER" => CURRENT_USER,
+        _ => return None,
+    };
+    for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+        let Ok(data) = root.options().read().access(view).open(path).and_then(|k| k.get_string(value)) else {
             continue;
-        }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let line = line.trim();
-            if let Some(pos) = line.find("REG_SZ").or_else(|| line.find("REG_EXPAND_SZ")) {
-                let (name, rest) = line.split_at(pos);
-                if !name.trim().eq_ignore_ascii_case(value) {
-                    continue;
-                }
-                let data = rest
-                    .trim_start_matches("REG_EXPAND_SZ")
-                    .trim_start_matches("REG_SZ")
-                    .trim();
-                if !data.is_empty() {
-                    return Some(expand_path_vars(data));
-                }
-            }
+        };
+        let data = data.trim();
+        if !data.is_empty() {
+            return Some(expand_path_vars(data));
         }
     }
     None
@@ -276,7 +277,7 @@ pub fn read_registry_string(_key: &str, _value: &str) -> Option<String> {
 
 /// Expand environment variables and home directory references in paths.
 /// Handles `%VAR%` on Windows and `~` on all platforms.
-fn expand_path_vars(path: &str) -> String {
+pub(crate) fn expand_path_vars(path: &str) -> String {
     let mut result = path.to_string();
 
     // Expand ~ to home directory
@@ -657,6 +658,15 @@ mod tests {
         assert!(!is_dangerous_extension("cc.package"));
         assert!(!is_dangerous_extension("config.xml"));
         assert!(!is_dangerous_extension("texture.png"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_read_registry_string_native() {
+        let pf = read_registry_string(r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion", "ProgramFilesDir");
+        assert!(pf.is_some_and(|p| std::path::Path::new(&p).exists()));
+        assert!(read_registry_string(r"HKLM\SOFTWARE\SyncCrateNoSuchKey", "x").is_none());
+        assert!(read_registry_string(r"BOGUS\SOFTWARE", "x").is_none());
     }
 
     #[test]

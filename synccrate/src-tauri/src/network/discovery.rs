@@ -56,6 +56,9 @@ struct UdpAnnouncement {
     pin_required: bool,
     #[serde(default)]
     game_version: String,
+    /// Registry id of the game being shared (empty from hosts before 0.5.6).
+    #[serde(default)]
+    game: String,
 }
 
 pub async fn start_broadcast(
@@ -64,6 +67,7 @@ pub async fn start_broadcast(
     mod_count: usize,
     pin_required: bool,
     game_version: Option<String>,
+    game_id: String,
 ) -> Result<(), String> {
     // Replace any previous broadcast (e.g. a stale one from an earlier session).
     stop_broadcast().await;
@@ -72,7 +76,7 @@ pub async fn start_broadcast(
     let gv = game_version.unwrap_or_default();
 
     // --- mDNS ---
-    let daemon = match register_mdns(&instance, &name, port, mod_count, pin_required, &gv) {
+    let daemon = match register_mdns(&instance, &name, port, mod_count, pin_required, &gv, &game_id) {
         Ok(d) => {
             MDNS_ACTIVE.store(true, Ordering::Relaxed);
             Some(d)
@@ -93,6 +97,7 @@ pub async fn start_broadcast(
         mods: mod_count,
         pin_required,
         game_version: gv,
+        game: game_id,
     };
     match bind_udp_responder() {
         Ok(socket) => {
@@ -121,6 +126,7 @@ fn register_mdns(
     mod_count: usize,
     pin_required: bool,
     game_version: &str,
+    game_id: &str,
 ) -> Result<ServiceDaemon, String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
     // IPv6 multicast is a frequent source of send errors on Windows and we
@@ -145,6 +151,7 @@ fn register_mdns(
             ("mods", mods.as_str()),
             ("pin_required", pin_flag),
             ("game_version", game_version),
+            ("game", game_id),
             ("instance", instance),
         ]
         .as_ref(),
@@ -213,6 +220,7 @@ struct Sighting {
     version: String,
     pin_required: bool,
     game_version: Option<String>,
+    game_id: Option<String>,
     addrs: Vec<IpAddr>,
 }
 
@@ -257,6 +265,9 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
             if existing.game_version.is_none() {
                 existing.game_version = s.game_version;
             }
+            if existing.game_id.is_none() {
+                existing.game_id = s.game_id;
+            }
         } else {
             index.insert(s.key.clone(), merged.len());
             merged.push(s);
@@ -280,6 +291,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                     game_version: Some(gv),
                     installed_packs: Vec::new(),
                 }),
+                game_id: s.game_id,
                 addresses: ranked,
             })
         })
@@ -312,6 +324,7 @@ fn scan_mdns() -> Result<Vec<Sighting>, String> {
                     version: get("version").unwrap_or_else(|| "unknown".to_string()),
                     pin_required: get("pin_required").map(|v| v == "true").unwrap_or(false),
                     game_version: get("game_version").filter(|v| !v.is_empty()),
+                    game_id: get("game").filter(|v| !v.is_empty()),
                     addrs: info.get_addresses().iter().copied().collect(),
                 });
             }
@@ -358,6 +371,7 @@ async fn scan_udp() -> Result<Vec<Sighting>, String> {
                         version: a.version.chars().take(32).collect(),
                         pin_required: a.pin_required,
                         game_version: Some(a.game_version).filter(|v| !v.is_empty()),
+                        game_id: Some(a.game).filter(|v| !v.is_empty()),
                         // The reply's source address is by definition reachable from us.
                         addrs: vec![from.ip()],
                     });
@@ -382,6 +396,7 @@ mod tests {
             version: "0.5.0".into(),
             pin_required: false,
             game_version: None,
+            game_id: None,
             addrs: vec![addr.parse().unwrap()],
         }
     }
@@ -408,10 +423,12 @@ mod tests {
             mods: 2,
             pin_required: true,
             game_version: String::new(),
+            game: "sims4".into(),
         };
         let bytes = serde_json::to_vec(&a).unwrap();
         let b: UdpAnnouncement = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(b.port, 1);
         assert!(b.pin_required);
+        assert_eq!(b.game, "sims4");
     }
 }

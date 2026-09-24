@@ -393,6 +393,8 @@ Nothing changes until you approve the sync plan, and existing files are only rep
 <summary><strong>My game isn't detected or supported.</strong></summary>
 
 Set the folder manually in Settings; any install with the expected folder structure works, Steam or not. To add a new game, see [Adding a game](#adding-a-game).
+
+"Detected" means SyncCrate found the game *installed* (a Steam, Epic or GOG install, or an entry in Windows' installed apps). If only its mods/saves folder exists, for example left behind after an uninstall, the game shows **Folder found** instead. You can still add it.
 </details>
 
 ## Contributing
@@ -410,7 +412,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`).
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`).
 
 ### Building from Source
 

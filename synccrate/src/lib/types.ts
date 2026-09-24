@@ -55,6 +55,8 @@ export interface PeerInfo {
   version: string;
   pin_required: boolean;
   game_info?: GameInfo | null;
+  /** Game the host is sharing (from discovery; absent for hosts before 0.5.6). */
+  game_id?: string | null;
   /** Every address the host was discovered on, best first (`ip` is the first). */
   addresses?: string[];
 }
@@ -259,6 +261,8 @@ export interface GameDefinition {
   process_names?: string[];
   disable_method?: "folder" | "rename" | null;
   post_sync_delete?: string[];
+  install_names?: string[];
+  install_markers?: string[];
 }
 
 export interface DetectionConfig {

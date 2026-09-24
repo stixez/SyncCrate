@@ -7,6 +7,33 @@ use tauri::Emitter;
 use tokio::sync::Mutex;
 
 /// Sanitize a display name: strip control chars, limit length.
+/// `connection-failed` event payload. A wrong-game rejection becomes a readable
+/// message plus `host_game`, so the UI can offer "Switch to <game> and join".
+fn connection_failed_payload(app_state: &AppState, error: &str) -> serde_json::Value {
+    let Some(host_game) = protocol::parse_wrong_game(error) else {
+        return serde_json::json!({ "message": error });
+    };
+    let label = |id: &str| {
+        app_state
+            .game_registry
+            .games
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.label.clone())
+            .unwrap_or_else(|| id.to_string())
+    };
+    let host_label = label(host_game);
+    serde_json::json!({
+        "message": format!(
+            "This host is sharing {}, but you have {} selected. Switch to {} and join again.",
+            host_label,
+            label(&app_state.active_game),
+            host_label
+        ),
+        "host_game": host_game,
+    })
+}
+
 fn sanitize_name(name: &str) -> Result<String, String> {
     let cleaned: String = name.chars().filter(|c| !c.is_control()).collect();
     let trimmed = cleaned.trim();
@@ -45,7 +72,7 @@ pub async fn start_host(
     let name = sanitize_name(&name)?;
 
     // Validate and read state, then drop lock before async bind
-    let (port, mod_count, game_version) = {
+    let (port, mod_count, game_version, game_id) = {
         let app_state = state.lock().await;
 
         if app_state.session_type != SessionType::None {
@@ -62,7 +89,7 @@ pub async fn start_host(
             .get(&app_state.active_game)
             .and_then(|gi| gi.game_version.clone());
 
-        (app_state.session_port, app_state.local_manifest.files.len(), gv)
+        (app_state.session_port, app_state.local_manifest.files.len(), gv, app_state.active_game.clone())
     };
 
     // Bind TCP listener first — surfaces port conflicts to user before committing state
@@ -105,7 +132,7 @@ pub async fn start_host(
     let host_name = name.clone();
     let pin_required = pin.is_some();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version).await {
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, game_id).await {
             log::error!("Discovery broadcast error: {}", e);
             let _ = app_handle.emit("discovery-unavailable", serde_json::json!({"message": e}));
         }
@@ -219,10 +246,7 @@ pub async fn connect_to_peer(
             log::error!("Connection error: {}", e);
             let mut app_state = state_clone.lock().await;
             if clear_failed_client_attempt_if_active(&mut app_state, &connection_peer_id) {
-                let _ = app_handle.emit(
-                    "connection-failed",
-                    serde_json::json!({"message": format!("{}", e)}),
-                );
+                let _ = app_handle.emit("connection-failed", connection_failed_payload(&app_state, &e));
             }
         }
     });
@@ -434,10 +458,7 @@ async fn start_direct_connection(
             log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;
             if clear_failed_client_attempt_if_active(&mut app_state, &connect_peer_id) {
-                let _ = app_handle.emit(
-                    "connection-failed",
-                    serde_json::json!({"message": format!("{}", e)}),
-                );
+                let _ = app_handle.emit("connection-failed", connection_failed_payload(&app_state, &e));
             }
         }
     });

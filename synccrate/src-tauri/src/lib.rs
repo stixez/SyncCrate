@@ -1,4 +1,5 @@
 mod commands;
+mod game_install;
 mod network;
 mod packs;
 mod registry;
@@ -46,7 +47,21 @@ pub fn run() {
         }
     }
 
-    // Restore saved active game, or pick first detected
+    // A found folder can be a leftover from an uninstalled game, so first-run
+    // picks (active game, default library) prefer games with install evidence.
+    let install_ctx = game_install::InstallContext::build();
+    let installed: std::collections::HashSet<String> = game_registry
+        .games
+        .iter()
+        .filter(|g| {
+            game_paths.get(&g.id).is_some_and(|p| {
+                game_install::detect_installed(g, &install_ctx, Some(p.as_str()), None)
+            })
+        })
+        .map(|g| g.id.clone())
+        .collect();
+
+    // Restore saved active game, or pick first detected (installed first)
     let active_game = saved_config.active_game
         .and_then(|g| registry::resolve_game_id(&g, &registry_map, &legacy_map))
         .filter(|g| game_paths.contains_key(g))
@@ -73,6 +88,14 @@ pub fn run() {
                 "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom",
             ];
             for g in &priority {
+                if installed.contains(*g) {
+                    return g.to_string();
+                }
+            }
+            if let Some(g) = installed.iter().next() {
+                return g.clone();
+            }
+            for g in &priority {
                 if game_paths.contains_key(*g) {
                     return g.to_string();
                 }
@@ -83,11 +106,11 @@ pub fn run() {
             "sims4".to_string()
         });
 
-    // Restore user library, or build default from games with configured paths
+    // Restore user library, or build default from installed games with paths
     let user_library = if !saved_config.user_library.is_empty() {
         saved_config.user_library
     } else {
-        game_paths.keys().cloned().collect()
+        installed.iter().cloned().collect()
     };
 
     let mut initial_state = AppState::default();
@@ -286,6 +309,7 @@ pub fn run() {
             commands::files::add_to_library,
             commands::files::remove_from_library,
             commands::files::detect_installed_games,
+            commands::files::get_installed_games,
             commands::sync::compute_sync_plan,
             commands::sync::execute_sync,
             commands::sync::resolve_conflict,

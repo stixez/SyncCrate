@@ -45,6 +45,11 @@ interface AppState {
   gamePaths: Record<string, string>;
   setGamePaths: (paths: Record<string, string>) => void;
 
+  // Games with real install evidence (Steam manifest, uninstall entry, ...).
+  // A path in gamePaths alone can be a leftover folder, so "Detected" uses this.
+  installedGames: string[];
+  setInstalledGames: (ids: string[]) => void;
+
   // Backend active game (used for sync/session context)
   activeGame: string;
   setActiveGame: (game: string) => void;
@@ -65,6 +70,9 @@ interface AppState {
   // Attempt awaiting a PIN from the user (shown as a PIN prompt on the dashboard)
   pinPrompt: { attempt: ConnectAttempt; wrongPin: boolean } | null;
   setPinPrompt: (prompt: { attempt: ConnectAttempt; wrongPin: boolean } | null) => void;
+  /** Set when a host refused us because we had a different game selected. */
+  gameSwitchPrompt: { hostGame: string; attempt: ConnectAttempt | null } | null;
+  setGameSwitchPrompt: (prompt: { hostGame: string; attempt: ConnectAttempt | null } | null) => void;
 
   discoveredPeers: PeerInfo[];
   setDiscoveredPeers: (peers: PeerInfo[]) => void;
@@ -177,6 +185,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   gamePaths: {},
   setGamePaths: (paths) => set({ gamePaths: paths }),
 
+  installedGames: [],
+  setInstalledGames: (ids) => set({ installedGames: ids }),
+
   activeGame: "sims4",
   setActiveGame: (game) => set({ activeGame: game }),
 
@@ -193,6 +204,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLastConnectAttempt: (attempt) => set({ lastConnectAttempt: attempt }),
   pinPrompt: null,
   setPinPrompt: (prompt) => set({ pinPrompt: prompt }),
+  gameSwitchPrompt: null,
+  setGameSwitchPrompt: (prompt) => set({ gameSwitchPrompt: prompt }),
 
   discoveredPeers: [],
   setDiscoveredPeers: (peers) => set({ discoveredPeers: peers }),

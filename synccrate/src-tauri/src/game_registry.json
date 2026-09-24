@@ -4,6 +4,7 @@
     {
       "id": "sims4",
       "label": "The Sims 4",
+      "install_markers": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"],
       "family": "sims",
       "icon": "gamepad-2",
       "color": "text-accent-light",
@@ -117,6 +118,7 @@
     {
       "id": "sims4-reshade",
       "label": "The Sims 4 (ReShade)",
+      "install_names": ["The Sims 4"],
       "family": "sims",
       "icon": "sun",
       "color": "text-pink-400",
@@ -241,6 +243,7 @@
     {
       "id": "sims4-gshade",
       "label": "The Sims 4 (GShade)",
+      "install_names": ["The Sims 4"],
       "family": "sims",
       "icon": "sparkles",
       "color": "text-violet-400",
@@ -345,6 +348,7 @@
     {
       "id": "sims3",
       "label": "The Sims 3",
+      "install_markers": ["HKLM\\SOFTWARE\\Sims\\The Sims 3::Install Dir"],
       "family": "sims",
       "icon": "gamepad-2",
       "color": "text-blue-400",
@@ -449,6 +453,7 @@
     {
       "id": "sims2",
       "label": "The Sims 2",
+      "install_names": ["The Sims 2 Legacy Collection", "The Sims 2 Ultimate Collection"],
       "family": "sims",
       "icon": "gamepad-2",
       "color": "text-orange-400",
@@ -551,6 +556,8 @@
     {
       "id": "wow_retail",
       "label": "WoW Retail",
+      "install_names": ["World of Warcraft"],
+      "install_markers": ["Wow.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-yellow-400",
@@ -645,6 +652,8 @@
     {
       "id": "wow_classic",
       "label": "WoW Classic",
+      "install_names": ["World of Warcraft Classic"],
+      "install_markers": ["WowClassic.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-amber-400",
@@ -737,6 +746,7 @@
     {
       "id": "wow_classic_era",
       "label": "WoW Classic Era",
+      "install_markers": ["WowClassic.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-amber-300",
@@ -827,6 +837,7 @@
     {
       "id": "wow_wotlk",
       "label": "WoW WoTLK (3.3.5)",
+      "install_markers": ["Wow.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-sky-400",
@@ -897,6 +908,7 @@
     {
       "id": "wow_tbc",
       "label": "WoW TBC (2.4.3)",
+      "install_markers": ["Wow.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-emerald-400",
@@ -967,6 +979,7 @@
     {
       "id": "wow_vanilla",
       "label": "WoW Vanilla (1.12)",
+      "install_markers": ["Wow.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-stone-400",
@@ -1037,6 +1050,7 @@
     {
       "id": "wow_custom",
       "label": "WoW Custom Server",
+      "install_markers": ["Wow.exe"],
       "family": "wow",
       "icon": "swords",
       "color": "text-gray-400",
@@ -1107,6 +1121,7 @@
     {
       "id": "warcraft3",
       "label": "Warcraft III",
+      "install_markers": ["Warcraft III.exe", "_retail_/x86_64/Warcraft III.exe", "war3.exe", "Frozen Throne.exe"],
       "family": "warcraft3",
       "icon": "swords",
       "color": "text-red-400",
@@ -1180,6 +1195,8 @@
     {
       "id": "minecraft_java",
       "label": "Minecraft Java",
+      "install_names": ["Minecraft Launcher"],
+      "install_markers": ["%LOCALAPPDATA%/Packages/Microsoft.4297127D64EC6_8wekyb3d8bbwe", "%ProgramFiles(x86)%/Minecraft Launcher/MinecraftLauncher.exe", "%ProgramFiles(x86)%/Minecraft/MinecraftLauncher.exe"],
       "family": "minecraft",
       "icon": "box",
       "color": "text-green-400",
@@ -2302,6 +2319,7 @@
     {
       "id": "trackmania2020",
       "label": "Trackmania (2020)",
+      "install_names": ["Trackmania"],
       "family": "trackmania",
       "icon": "flag",
       "color": "text-red-500",
@@ -3396,6 +3414,7 @@
     {
       "id": "skyrim_se",
       "label": "Skyrim Special Edition",
+      "install_names": ["The Elder Scrolls V: Skyrim Special Edition", "The Elder Scrolls V: Skyrim Anniversary Edition"],
       "family": "skyrim",
       "icon": "swords",
       "color": "text-slate-300",
@@ -3767,6 +3786,7 @@
     {
       "id": "skyrim_le",
       "label": "Skyrim (Legendary Edition)",
+      "install_names": ["The Elder Scrolls V: Skyrim"],
       "family": "skyrim",
       "icon": "swords",
       "color": "text-stone-400",
@@ -3983,6 +4003,7 @@
     {
       "id": "witcher3",
       "label": "The Witcher 3: Wild Hunt",
+      "install_names": ["The Witcher 3: Wild Hunt - Game of the Year Edition", "The Witcher 3: Wild Hunt - Complete Edition"],
       "family": "witcher",
       "icon": "swords",
       "color": "text-red-600",
@@ -5757,6 +5778,7 @@
     {
       "id": "vintage_story",
       "label": "Vintage Story",
+      "install_markers": ["%APPDATA%/Vintagestory/Vintagestory.exe"],
       "family": "vintagestory",
       "icon": "pickaxe",
       "color": "text-amber-500",
@@ -5852,6 +5874,7 @@
     {
       "id": "gta5",
       "label": "Grand Theft Auto V",
+      "install_names": ["Grand Theft Auto V Enhanced", "Grand Theft Auto V Legacy"],
       "family": "gta",
       "icon": "target",
       "color": "text-green-500",

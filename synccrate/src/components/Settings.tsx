@@ -20,6 +20,8 @@ import type { AutoBackupConfig } from "../lib/types";
 
 export default function Settings() {
   const gamePaths = useAppStore((s) => s.gamePaths);
+  const installedGames = useAppStore((s) => s.installedGames);
+  const setInstalledGames = useAppStore((s) => s.setInstalledGames);
   const setGamePaths = useAppStore((s) => s.setGamePaths);
   const myLibrary = useAppStore((s) => s.myLibrary);
   const gameRegistry = useAppStore((s) => s.gameRegistry);
@@ -111,6 +113,12 @@ export default function Settings() {
     }
   };
 
+  // A user-set folder can carry install markers (e.g. Wow.exe for private-server
+  // WoW), so re-check install evidence after a path change.
+  const refreshInstalled = () => {
+    cmd.getInstalledGames().then(setInstalledGames).catch(() => {});
+  };
+
   const handleBrowse = async (gameId: string) => {
     try {
       const selected = await open({ directory: true });
@@ -119,6 +127,7 @@ export default function Settings() {
         setPathInputs((prev) => ({ ...prev, [gameId]: path }));
         await cmd.setGamePath(gameId, path);
         setGamePaths({ ...gamePaths, [gameId]: path });
+        refreshInstalled();
         addLog(`${gameLabel(gameId)} path updated to: ${path}`, "success");
         toastSuccess(`${gameLabel(gameId)} path saved`);
       }
@@ -134,6 +143,7 @@ export default function Settings() {
     try {
       await cmd.setGamePath(gameId, input);
       setGamePaths({ ...gamePaths, [gameId]: input });
+      refreshInstalled();
       addLog(`${gameLabel(gameId)} path updated to: ${input}`, "success");
       toastSuccess(`${gameLabel(gameId)} path saved`);
     } catch (e) {
@@ -250,8 +260,10 @@ export default function Settings() {
                         />
                       </span>
                       <h3 className="font-display font-semibold uppercase tracking-[0.05em] text-[14px]">{game.label}</h3>
-                      {gamePaths[game.id] ? (
-                        <Badge tone="green" dot>Detected</Badge>
+                      {installedGames.includes(game.id) ? (
+                        <Badge tone="green" dot>Installed</Badge>
+                      ) : gamePaths[game.id] ? (
+                        <Badge dot title="The folder is set, but the game itself wasn't found installed on this PC.">Folder found</Badge>
                       ) : (
                         <Badge tone="amber" dot>Not set</Badge>
                       )}

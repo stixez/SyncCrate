@@ -184,6 +184,7 @@ export function useTauriEvents() {
           cancelRetry();
           useAppStore.getState().setIsConnecting(false);
           useAppStore.getState().setPinPrompt(null);
+          useAppStore.getState().setGameSwitchPrompt(null);
           addLog(`Peer connected: ${event.payload.name}`, "success");
           sendNotification("SyncCrate", `${event.payload.name} connected`);
           try {
@@ -249,9 +250,20 @@ export function useTauriEvents() {
           addLog(`LAN auto-discovery is unavailable: ${event.payload.message}`, "warning");
           toastInfo("Auto-discovery couldn't start — friends can still join using Connect by IP.");
         }),
-        listen<{ message: string }>("connection-failed", (event) => {
+        listen<{ message: string; host_game?: string }>("connection-failed", (event) => {
           const msg = event.payload.message;
           const attempt = useAppStore.getState().lastConnectAttempt;
+          if (event.payload.host_game) {
+            // The host shares a different game than the one we have selected.
+            // Offer a one-click switch instead of a dead-end error.
+            cancelRetry();
+            addLog(msg, "warning");
+            useAppStore.getState().setGameSwitchPrompt({ hostGame: event.payload.host_game, attempt });
+            setIsScanning(false);
+            useAppStore.getState().setIsConnecting(false);
+            setSession(null);
+            return;
+          }
           if (/invalid pin/i.test(msg) && attempt) {
             // Host requires a PIN (or ours was wrong): ask for it and retry the
             // exact same attempt instead of failing outright.

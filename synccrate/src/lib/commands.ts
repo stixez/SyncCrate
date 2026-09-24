@@ -187,6 +187,11 @@ export async function detectInstalledGames(): Promise<Record<string, string>> {
   return invoke("detect_installed_games");
 }
 
+/** Ids of games actually installed (not just a leftover mods/saves folder). */
+export async function getInstalledGames(): Promise<string[]> {
+  return invoke("get_installed_games");
+}
+
 // --- Sync ---
 
 export async function computeSyncPlan(peerId?: string): Promise<SyncPlan> {

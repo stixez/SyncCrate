@@ -19,6 +19,7 @@ export function markOnboardingComplete(): void {
 export default function WelcomeScreen() {
   const gameRegistry = useAppStore((s) => s.gameRegistry);
   const gamePaths = useAppStore((s) => s.gamePaths);
+  const installedGames = useAppStore((s) => s.installedGames);
   const myLibrary = useAppStore((s) => s.myLibrary);
   const setMyLibrary = useAppStore((s) => s.setMyLibrary);
   const navigateToGame = useAppStore((s) => s.navigateToGame);
@@ -28,7 +29,7 @@ export default function WelcomeScreen() {
     // Pre-select all detected games
     const detected = new Set<string>();
     for (const g of gameRegistry) {
-      if (gamePaths[g.id] && !myLibrary.includes(g.id)) {
+      if (installedGames.includes(g.id) && !myLibrary.includes(g.id)) {
         detected.add(g.id);
       }
     }
@@ -37,11 +38,11 @@ export default function WelcomeScreen() {
   const [adding, setAdding] = useState(false);
 
   const detected = useMemo(
-    () => gameRegistry.filter((g) => gamePaths[g.id] && !myLibrary.includes(g.id)),
-    [gameRegistry, gamePaths, myLibrary],
+    () => gameRegistry.filter((g) => installedGames.includes(g.id) && !myLibrary.includes(g.id)),
+    [gameRegistry, installedGames, myLibrary],
   );
 
-  // The registry and detected paths usually load after first render, so the
+  // The registry and installed games usually load after first render, so the
   // initializer above sees nothing. Pre-select each detected game once, and
   // never re-check one the user has unchecked.
   const autoSelected = useRef(new Set<string>(selected));
@@ -53,8 +54,8 @@ export default function WelcomeScreen() {
   }, [detected]);
 
   const otherGames = useMemo(
-    () => gameRegistry.filter((g) => !gamePaths[g.id] && !myLibrary.includes(g.id)),
-    [gameRegistry, gamePaths, myLibrary],
+    () => gameRegistry.filter((g) => !installedGames.includes(g.id) && !myLibrary.includes(g.id)),
+    [gameRegistry, installedGames, myLibrary],
   );
 
   const toggleGame = (id: string) => {
@@ -142,6 +143,12 @@ export default function WelcomeScreen() {
         )}
         <span className="truncate flex-1">{game.label}</span>
         {isDetected && <span className="tag text-status-green shrink-0">Found</span>}
+        {/* Folder exists but no install evidence (often left over from an uninstall) */}
+        {!isDetected && gamePaths[game.id] && (
+          <span className="tag text-txt-muted shrink-0" title="Its mods/saves folder exists, but the game doesn't look installed.">
+            Folder found
+          </span>
+        )}
       </button>
     );
   };

@@ -88,6 +88,12 @@ function App() {
         }
         useAppStore.getState().setGamePaths(paths);
 
+        // Install evidence for the "Detected" state; not awaited, the rest of the
+        // UI doesn't depend on it.
+        cmd.getInstalledGames()
+          .then((ids) => useAppStore.getState().setInstalledGames(ids))
+          .catch((e) => console.error("Failed to detect installed games:", e));
+
         // Auto-select first library game if none selected (skip during onboarding)
         if (!useAppStore.getState().selectedGame && library.length > 0 && isOnboardingComplete()) {
           // May be refused if a session is still active (e.g. webview reload).
@@ -176,6 +182,7 @@ function App() {
         activeGame: "sims4",
         selectedGame: "sims4",
         myLibrary: ["sims4", "minecraft_java", "wow_retail"],
+        installedGames: ["sims4", "minecraft_java", "wow_retail", "stardew_valley"],
         page: "dashboard",
       });
       useLogStore.setState({ logs: demoLogs });
