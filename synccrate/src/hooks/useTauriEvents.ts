@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { toastError, toastInfo } from "../lib/toast";
+import { toastAction, toastError, toastInfo } from "../lib/toast";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
@@ -296,6 +296,26 @@ export function useTauriEvents() {
           setSyncProgress(null);
           setSyncPlan(null);
           const { files_synced, errors, cancelled } = event.payload;
+
+          // Undo applies to the client only; a host never has a record.
+          if (useAppStore.getState().session?.session_type === "Client") {
+            const game = useAppStore.getState().activeGame;
+            cmd.getUndoStatus(game).then((status) => {
+              useAppStore.getState().setUndoStatus(status);
+              if (status && (status.added || status.replaced || status.deleted)) {
+                toastAction("Sync complete.", "Undo", () => {
+                  cmd.undoLastSync(game).then((r) => {
+                    useAppStore.getState().setUndoStatus(null);
+                    const parts = [`${r.restored} restored`, `${r.removed} removed`];
+                    if (r.skipped.length) parts.push(`${r.skipped.length} skipped`);
+                    toastInfo(`Undo: ${parts.join(", ")}`);
+                    addLog(`Sync undone: ${parts.join(", ")}`, "info");
+                  }).catch((e) => toastError(`Undo failed: ${e}`));
+                });
+              }
+            }).catch(() => {});
+          }
+
           if (cancelled) {
             addLog(`Sync cancelled after ${files_synced} file(s)`, "warning");
             return;

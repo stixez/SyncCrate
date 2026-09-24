@@ -11,3 +11,8 @@ export function toastError(message: string) {
 export function toastInfo(message: string) {
   toast(message);
 }
+
+/** A toast with a single action button (e.g. "Undo"). */
+export function toastAction(message: string, actionLabel: string, onAction: () => void) {
+  toast(message, { action: { label: actionLabel, onClick: onAction } });
+}

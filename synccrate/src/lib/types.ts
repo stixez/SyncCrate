@@ -357,6 +357,24 @@ export interface DeleteResult {
   errors: string[];
 }
 
+/** Shown in the Backups area (and offered right after a sync) until another
+ * sync, an undo, or a game/folder change invalidates it. */
+export interface UndoStatus {
+  created_at: number;
+  added: number;
+  replaced: number;
+  deleted: number;
+}
+
+export interface UndoResult {
+  /** Replaced/deleted files put back from the presync backup. */
+  restored: number;
+  /** Added files (including "keep both" `_remote` copies) removed. */
+  removed: number;
+  /** Left alone, with why (changed since the sync, or no backup for it). */
+  skipped: string[];
+}
+
 export interface RestoreResult {
   restored: number;
   /** Already identical (same size and modification time). */
