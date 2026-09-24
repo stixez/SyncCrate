@@ -47,7 +47,7 @@ pub fn restore_in_progress() -> bool {
     RESTORING.load(Ordering::SeqCst)
 }
 
-struct RestoringGuard;
+pub(crate) struct RestoringGuard;
 impl Drop for RestoringGuard {
     fn drop(&mut self) {
         RESTORING.store(false, Ordering::SeqCst);
@@ -794,6 +794,171 @@ fn restore_inner(
 }
 
 // ---------------------------------------------------------------------------
+// Undo last sync
+
+/// Whether a restore may start; also blocks a second undo (and a restore
+/// blocks undo) since both use this one flag. `None` if one is already running.
+pub(crate) fn try_begin_restoring() -> Option<RestoringGuard> {
+    if RESTORING.swap(true, Ordering::SeqCst) {
+        None
+    } else {
+        Some(RestoringGuard)
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UndoResult {
+    /// Replaced or deleted files put back from the presync backup (includes
+    /// ones already matching, so restoring twice is harmless).
+    pub restored: usize,
+    /// Added files (including "keep both" `_remote` copies) deleted.
+    pub removed: usize,
+    /// Left alone, with why: changed or recreated since the sync, or no
+    /// backup available for that file.
+    pub skipped: Vec<String>,
+}
+
+fn hash_file(path: &Path) -> Option<String> {
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Some(hex::encode(hasher.finalize()))
+}
+
+/// Whether the file at `base`/`rel` is exactly what a sync wrote: same size,
+/// mtime and content. Used to refuse touching a file the user has since
+/// changed (or the sync never actually wrote, e.g. it failed mid-sync).
+fn file_matches(base: &str, rel: &crate::commands::undo::RecordedFile) -> bool {
+    let Ok(abs) = utils::safe_join(base, &rel.relative_path) else { return false };
+    let Ok(meta) = std::fs::symlink_metadata(&abs) else { return false };
+    meta.is_file()
+        && meta.len() == rel.size
+        && mtime_ms(&meta) == Some(rel.mtime_ms)
+        && hash_file(&abs).as_deref() == Some(rel.hash.as_str())
+}
+
+/// The game-folder-relative path a presync backup entry was collected from
+/// (the reverse of `content_type_for`/`collect_targeted`): `ct.folder` + `/` +
+/// `entry.relative_path`, or just the latter for a `.`-folder content type.
+fn entry_game_root_path(cts: &[ContentType], entry: &BackupFileEntry) -> Option<String> {
+    let ct = resolve_ct(cts, &entry.category)?;
+    let folder = ct.folder.replace('\\', "/");
+    let folder = folder.trim_end_matches('/').trim_start_matches("./");
+    Some(if folder.is_empty() || folder == "." {
+        entry.relative_path.clone()
+    } else {
+        format!("{}/{}", folder, entry.relative_path)
+    })
+}
+
+/// Undo one sync: delete the files it added (only the ones still exactly as
+/// it left them), and restore the files it replaced or deleted from the
+/// presync backup it points to (only the ones the user hasn't touched
+/// since). Never overwrites a file that doesn't match. The caller holds the
+/// restoring guard.
+pub(crate) fn undo_apply(
+    record: &crate::commands::undo::SyncRecord,
+    base: &Path,
+    cts: &[ContentType],
+) -> UndoResult {
+    let mut result = UndoResult::default();
+    let base_str = base.to_string_lossy().to_string();
+    let _lock = store_lock();
+
+    for f in &record.added {
+        let Ok(abs) = utils::safe_join(&base_str, &f.relative_path) else {
+            result.skipped.push(format!("{} (invalid path)", f.relative_path));
+            continue;
+        };
+        if std::fs::symlink_metadata(&abs).is_err() {
+            continue; // already gone
+        }
+        if !file_matches(&base_str, f) {
+            result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
+            continue;
+        }
+        match std::fs::remove_file(&abs) {
+            Ok(()) => result.removed += 1,
+            Err(e) => result.skipped.push(format!("{}: {}", f.relative_path, e)),
+        }
+    }
+
+    let Some(backup_id) = &record.presync_backup_id else {
+        for f in &record.replaced {
+            result.skipped.push(format!("{} (no backup was made for this sync)", f.relative_path));
+        }
+        for p in &record.deleted {
+            result.skipped.push(format!("{} (no backup was made for this sync)", p));
+        }
+        return result;
+    };
+
+    let root = utils::backups_dir();
+    let manifest = match read_manifest(&root.join(backup_id)) {
+        Ok(m) => m,
+        Err(_) => {
+            for f in &record.replaced {
+                result.skipped.push(format!("{} (the presync backup is gone)", f.relative_path));
+            }
+            for p in &record.deleted {
+                result.skipped.push(format!("{} (the presync backup is gone)", p));
+            }
+            return result;
+        }
+    };
+
+    let mut wanted: HashSet<String> = HashSet::new();
+    for f in &record.replaced {
+        if file_matches(&base_str, f) {
+            wanted.insert(crate::sync::diff::match_key(&f.relative_path));
+        } else {
+            result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
+        }
+    }
+    for p in &record.deleted {
+        let still_absent = utils::safe_join(&base_str, p).map_or(true, |abs| !abs.exists());
+        if still_absent {
+            wanted.insert(crate::sync::diff::match_key(p));
+        } else {
+            result.skipped.push(format!("{} (recreated since the sync)", p));
+        }
+    }
+
+    if !wanted.is_empty() {
+        let restricted = BackupManifest {
+            version: manifest.version,
+            info: manifest.info.clone(),
+            files: manifest
+                .files
+                .iter()
+                .filter(|e| {
+                    entry_game_root_path(cts, e)
+                        .is_some_and(|p| wanted.contains(&crate::sync::diff::match_key(&p)))
+                })
+                .cloned()
+                .collect(),
+        };
+        let r = restore_inner(&root, backup_id, &restricted, base, cts, false, &mut |_, _, _| {});
+        result.restored += r.restored + r.unchanged;
+        result.skipped.extend(r.skipped);
+        if r.missing > 0 {
+            result.skipped.push(format!("{} file(s) missing from the backup", r.missing));
+        }
+        if let Some(e) = r.error {
+            result.skipped.push(format!("restore stopped: {}", e));
+        }
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
 // Pre-sync backup
 
 /// Game-folder-relative local files the plan will overwrite ("use theirs"
@@ -842,8 +1007,13 @@ pub async fn create_presync_backup(
             BackupRequest { game: &game, base: Path::new(&base), cts: &cts, label, kind: KIND_PRESYNC, only: Some(targets.as_slice()) },
             &mut progress,
         )?;
-        if info.is_some() && prune_kind(&root, &game, KIND_PRESYNC, max_count, None) > 0 {
-            gc_logged(&root);
+        if info.is_some() {
+            // Never prune the presync backup a live undo record still points
+            // to, even if it's fallen out of the newest-`max_count` window.
+            let protect = crate::commands::undo::protected_presync_id(&game);
+            if prune_kind(&root, &game, KIND_PRESYNC, max_count, protect.as_deref()) > 0 {
+                gc_logged(&root);
+            }
         }
         Ok(info)
     })

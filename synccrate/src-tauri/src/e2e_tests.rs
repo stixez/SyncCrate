@@ -606,3 +606,414 @@ async fn multi_client_tcp() {
     let _ = std::fs::remove_dir_all(&client_a_dir);
     let _ = std::fs::remove_dir_all(&client_b_dir);
 }
+
+// ---------------------------------------------------------------------------
+// Undo last sync
+
+async fn undo(client_state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>) -> Result<crate::commands::backup::UndoResult, String> {
+    tokio::time::timeout(std::time::Duration::from_secs(15), crate::commands::undo::undo_last_sync_inner(client_state, None))
+        .await
+        .expect("undo_last_sync timed out")
+}
+
+#[tokio::test]
+async fn undo_happy_path_tcp() {
+    let _g = e2e_guard().await;
+    let _reset = ResetAutoBackup;
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 5).await.expect("enable auto backup");
+
+    let host_dir = temp_dir("undo-happy-host");
+    let client_dir = temp_dir("undo-happy-client");
+    write_file(&host_dir, "Mods/a.package", b"NEW_A");
+    write_file(&host_dir, "Mods/b.package", b"BBBB");
+    write_file(&host_dir, "Mods/c.package", b"CCCC");
+    write_file_mtime(&client_dir, "Mods/a.package", b"OLD_A", 1_700_000_000);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/a.package".to_string(), Resolution::UseTheirs, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"NEW_A");
+    assert_eq!(read_file(&client_dir, "Mods/b.package"), b"BBBB");
+    assert_eq!(read_file(&client_dir, "Mods/c.package"), b"CCCC");
+
+    // Session is still open, matching the real "undo right after sync" flow.
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.restored, 1, "the replaced file: {:?}", summary.skipped);
+    assert_eq!(summary.removed, 2, "the two added files: {:?}", summary.skipped);
+    assert!(summary.skipped.is_empty(), "{:?}", summary.skipped);
+
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"OLD_A");
+    let meta = std::fs::metadata(client_dir.join("Mods/a.package")).unwrap();
+    assert_eq!(
+        meta.modified().unwrap(),
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
+        "undo must restore the exact original mtime"
+    );
+    assert!(!file_exists(&client_dir, "Mods/b.package"));
+    assert!(!file_exists(&client_dir, "Mods/c.package"));
+    assert!(no_leftover_temp_files(&client_dir));
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_happy_path_iroh() {
+    let _g = e2e_guard().await;
+    let _reset = ResetAutoBackup;
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 5).await.expect("enable auto backup");
+
+    let host_dir = temp_dir("undo-happy-iroh-host");
+    let client_dir = temp_dir("undo-happy-iroh-client");
+    write_file(&host_dir, "Mods/a.package", b"NEW_A");
+    write_file(&host_dir, "Mods/b.package", b"BBBB");
+    write_file_mtime(&client_dir, "Mods/a.package", b"OLD_A", 1_700_000_000);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let (host_ep, client_ep) = iroh_pair().await;
+    tokio::spawn(serve_one_iroh_connection(host_ep.clone(), host_state));
+
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_iroh(client_ep, &host_ep, client_state.clone(), &peer_id)
+        .await
+        .expect("iroh connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/a.package".to_string(), Resolution::UseTheirs, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"NEW_A");
+    assert_eq!(read_file(&client_dir, "Mods/b.package"), b"BBBB");
+
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.restored, 1, "{:?}", summary.skipped);
+    assert_eq!(summary.removed, 1, "{:?}", summary.skipped);
+    assert!(summary.skipped.is_empty(), "{:?}", summary.skipped);
+
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"OLD_A");
+    assert!(!file_exists(&client_dir, "Mods/b.package"));
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_keep_both_removes_only_the_remote_copy_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("undo-both-host");
+    let client_dir = temp_dir("undo-both-client");
+    write_file(&host_dir, "Mods/x.package", b"HOST_V");
+    write_file_mtime(&client_dir, "Mods/x.package", b"CLIENT_V", 1_700_000_000);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/x.package".to_string(), Resolution::KeepBoth, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/x_remote.package"), b"HOST_V");
+
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.removed, 1);
+    assert_eq!(summary.restored, 0);
+    assert!(summary.skipped.is_empty(), "{:?}", summary.skipped);
+
+    assert!(!file_exists(&client_dir, "Mods/x_remote.package"));
+    // The original, never touched by this sync, is untouched by the undo too.
+    assert_eq!(read_file(&client_dir, "Mods/x.package"), b"CLIENT_V");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_keeps_an_added_file_the_user_edited_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("undo-editadd-host");
+    let client_dir = temp_dir("undo-editadd-client");
+    write_file(&host_dir, "Mods/new.package", b"FROM_HOST");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/new.package"), b"FROM_HOST");
+
+    // The user (or the game) edits the newly-added file before undoing.
+    write_file(&client_dir, "Mods/new.package", b"EDITED_BY_USER");
+
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.removed, 0);
+    assert_eq!(summary.skipped.len(), 1);
+    assert!(summary.skipped[0].contains("Mods/new.package"), "{:?}", summary.skipped);
+
+    assert_eq!(read_file(&client_dir, "Mods/new.package"), b"EDITED_BY_USER");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_never_overwrites_a_replaced_file_the_user_edited_tcp() {
+    let _g = e2e_guard().await;
+    let _reset = ResetAutoBackup;
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 5).await.expect("enable auto backup");
+
+    let host_dir = temp_dir("undo-editrep-host");
+    let client_dir = temp_dir("undo-editrep-client");
+    write_file(&host_dir, "Mods/a.package", b"NEW_A");
+    write_file(&client_dir, "Mods/a.package", b"OLD_A");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    compute_plan(&client_state).await.expect("compute plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/a.package".to_string(), Resolution::UseTheirs, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"NEW_A");
+
+    // The user edits the file the sync just wrote, before undoing.
+    write_file(&client_dir, "Mods/a.package", b"EDITED_BY_USER");
+
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.restored, 0);
+    assert_eq!(summary.skipped.len(), 1);
+    assert!(summary.skipped[0].contains("Mods/a.package"), "{:?}", summary.skipped);
+
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"EDITED_BY_USER");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_after_cancel_reverts_only_what_was_written_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("undo-cancel-host");
+    let client_dir = temp_dir("undo-cancel-client");
+    const FILE_COUNT: usize = 8;
+    for i in 0..FILE_COUNT {
+        let content = format!("FILE-{i}-").repeat(50_000);
+        write_file(&host_dir, &format!("Mods/f{i}.package"), content.as_bytes());
+    }
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+    compute_plan(&client_state).await.expect("compute plan");
+
+    let handle = spawn_sync(client_state.clone());
+    wait_until_file_exists(&client_dir, "Mods/f0.package").await;
+    let was_syncing = crate::commands::sync::cancel_sync_inner(&client_state).await.expect("cancel");
+    assert!(was_syncing);
+    let result = handle.await.expect("join");
+    assert_eq!(result, Err(crate::commands::sync::SYNC_CANCELLED.to_string()));
+
+    let synced_before_undo: Vec<usize> =
+        (0..FILE_COUNT).filter(|i| file_exists(&client_dir, &format!("Mods/f{i}.package"))).collect();
+    assert!(synced_before_undo.len() < FILE_COUNT, "test is not exercising a real mid-sync cancel");
+    assert!(!synced_before_undo.is_empty());
+
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo");
+    assert_eq!(summary.removed, synced_before_undo.len());
+    assert!(summary.skipped.is_empty(), "{:?}", summary.skipped);
+
+    for i in 0..FILE_COUNT {
+        assert!(!file_exists(&client_dir, &format!("Mods/f{i}.package")), "f{i} should have been removed by undo");
+    }
+    assert!(no_leftover_temp_files(&client_dir));
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn second_undo_is_refused_and_undo_targets_the_newer_sync_tcp() {
+    let _g = e2e_guard().await;
+    let client_dir = temp_dir("undo-twice-client");
+
+    async fn sync_one_file(client_state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>, host_dir: &std::path::Path, path: &str, content: &[u8]) {
+        write_file(host_dir, path, content);
+        let host_state = make_state("sims4", host_dir);
+        set_host(&host_state, "Host").await;
+        let port = start_tcp_host(host_state).await;
+        let peer_id = new_peer_id();
+        mark_pending_client(client_state, &peer_id).await;
+        connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+        compute_plan(client_state).await.expect("compute plan");
+        run_sync_now(client_state).await.expect("sync");
+        let mut s = client_state.lock().await;
+        s.connections.remove(&peer_id);
+        s.session_type = crate::state::SessionType::None;
+    }
+
+    let client_state = make_state("sims4", &client_dir);
+    let host_dir_1 = temp_dir("undo-twice-host-1");
+    sync_one_file(&client_state, &host_dir_1, "Mods/one.package", b"ONE").await;
+    assert!(file_exists(&client_dir, "Mods/one.package"));
+
+    let summary = undo(&client_state).await.expect("first undo");
+    assert_eq!(summary.removed, 1);
+    assert!(!file_exists(&client_dir, "Mods/one.package"));
+
+    let err = undo(&client_state).await.expect_err("a second undo must be refused");
+    assert!(err.contains("Nothing to undo"), "unexpected error: {err}");
+
+    let host_dir_2 = temp_dir("undo-twice-host-2");
+    sync_one_file(&client_state, &host_dir_2, "Mods/two.package", b"TWO").await;
+    assert!(file_exists(&client_dir, "Mods/two.package"));
+
+    let summary = undo(&client_state).await.expect("undo after the newer sync");
+    assert_eq!(summary.removed, 1);
+    assert!(!file_exists(&client_dir, "Mods/two.package"));
+    // Nothing from the first (already-undone) sync should be touched again.
+    assert!(!file_exists(&client_dir, "Mods/one.package"));
+
+    let _ = std::fs::remove_dir_all(&host_dir_1);
+    let _ = std::fs::remove_dir_all(&host_dir_2);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn presync_backup_survives_pruning_while_its_record_exists_tcp() {
+    let _g = e2e_guard().await;
+    let _reset = ResetAutoBackup;
+    // max_count = 1: without protecting the record's own backup, creating a
+    // newer presync backup would immediately prune the older one.
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 1).await.expect("enable auto backup");
+
+    let client_dir = temp_dir("undo-gc-client");
+    write_file(&client_dir, "Mods/a.package", b"C1");
+    write_file(&client_dir, "Mods/b.package", b"C2");
+    write_file(&client_dir, "Mods/c.package", b"C3");
+    let client_state = make_state("sims4", &client_dir);
+
+    async fn replace_one(
+        client_state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
+        path: &str,
+        host_content: &[u8],
+    ) -> String {
+        let host_dir = temp_dir("undo-gc-host");
+        write_file(&host_dir, path, host_content);
+        let host_state = make_state("sims4", &host_dir);
+        set_host(&host_state, "Host").await;
+        let port = start_tcp_host(host_state).await;
+        let peer_id = new_peer_id();
+        mark_pending_client(client_state, &peer_id).await;
+        connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+        compute_plan(client_state).await.expect("compute plan");
+        crate::commands::sync::resolve_conflict_inner(client_state, path.to_string(), Resolution::UseTheirs, None)
+            .await
+            .expect("resolve");
+        run_sync_now(client_state).await.expect("sync");
+        client_state.lock().await.connections.remove(&peer_id);
+        let _ = std::fs::remove_dir_all(&host_dir);
+        crate::commands::undo::read_record("sims4").expect("record").presync_backup_id.expect("presync backup")
+    }
+
+    async fn backup_exists(id: &str) -> bool {
+        crate::commands::backup::list_backups().await.unwrap().iter().any(|b| b.id == id)
+    }
+
+    let p1 = replace_one(&client_state, "Mods/a.package", b"H1").await;
+    assert!(backup_exists(&p1).await);
+
+    // Round 2 creates a newer presync backup while p1's record is still the
+    // current one (round 2 hasn't finished writing its own record yet at the
+    // moment its presync backup is created and pruned) — p1 must survive.
+    let p2 = replace_one(&client_state, "Mods/b.package", b"H2").await;
+    assert_ne!(p1, p2);
+    assert!(backup_exists(&p1).await, "p1's backup was pruned while its record still pointed to it");
+    assert!(backup_exists(&p2).await);
+
+    // Round 3: p1's record was superseded by round 2, so p1 is no longer
+    // protected and falls out of the keep-1 window like any other backup.
+    let p3 = replace_one(&client_state, "Mods/c.package", b"H3").await;
+    assert_ne!(p2, p3);
+    assert!(!backup_exists(&p1).await, "p1 should be pruned once its record is no longer current");
+    assert!(backup_exists(&p2).await);
+    assert!(backup_exists(&p3).await);
+
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn undo_refused_during_a_sync_or_session_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("undo-guard-host");
+    let client_dir = temp_dir("undo-guard-client");
+    write_file(&host_dir, "Mods/new.package", b"FROM_HOST");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+    compute_plan(&client_state).await.expect("compute plan");
+    run_sync_now(&client_state).await.expect("sync");
+
+    // Still connected: the same session-active guard `restore_backup` uses.
+    let err = undo(&client_state).await.expect_err("undo must refuse while a session is open");
+    assert!(err.contains("Disconnect"), "unexpected error: {err}");
+
+    // Simulate a sync in progress (independent of session state).
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = true;
+    let err = undo(&client_state).await.expect_err("undo must refuse during a sync");
+    assert!(err.contains("sync is in progress"), "unexpected error: {err}");
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = false;
+
+    // Disconnect for real, then undo succeeds.
+    client_state.lock().await.session_type = crate::state::SessionType::None;
+    let summary = undo(&client_state).await.expect("undo after disconnecting");
+    assert_eq!(summary.removed, 1);
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}

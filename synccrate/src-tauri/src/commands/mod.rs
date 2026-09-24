@@ -10,3 +10,4 @@ pub mod sync;
 pub mod system;
 pub mod tags;
 pub mod tray;
+pub mod undo;
