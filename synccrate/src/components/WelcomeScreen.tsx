@@ -8,13 +8,29 @@ import { Button, GameArt, Input, LiveDot, cx } from "./ui";
 
 const ONBOARDING_KEY = "synccrate-onboarding-complete";
 
+// localStorage can throw (private mode, blocked storage): never let that
+// break the first run.
 export function isOnboardingComplete(): boolean {
-  return localStorage.getItem(ONBOARDING_KEY) === "1";
+  try {
+    return localStorage.getItem(ONBOARDING_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function markOnboardingComplete(): void {
-  localStorage.setItem(ONBOARDING_KEY, "1");
+  try {
+    localStorage.setItem(ONBOARDING_KEY, "1");
+  } catch {
+    // Storage unavailable: onboarding shows again next time, which is harmless.
+  }
 }
+
+const HOW_IT_WORKS: [string, string, string][] = [
+  ["01", "Pick your games", "We found these on your PC."],
+  ["02", "One person hosts", "Whoever has the mods clicks Start Hosting and sends the join code."],
+  ["03", "Everyone else joins", "Paste the code, check the list, click Sync. Replaced files are kept, so you can undo."],
+];
 
 export default function WelcomeScreen() {
   const gameRegistry = useAppStore((s) => s.gameRegistry);
@@ -172,9 +188,17 @@ export default function WelcomeScreen() {
             <span className="block text-transparent [-webkit-text-stroke:1.5px_rgb(var(--color-txt))]">No excuses.</span>
           </h1>
           <p className="text-txt-dim text-[15px] leading-relaxed mt-6 max-w-[44ch]">
-            Welcome to SyncCrate. Sync your game mods, saves, and settings with friends — on your LAN or over the internet
-            with a join code.
+            One friend hosts. Everyone else gets an exact copy of their mods, saves and settings, on the same Wi-Fi or over
+            the internet with a join code.
           </p>
+          <ol className="grid grid-cols-3 gap-3 mt-6 max-w-[560px]" aria-label="How SyncCrate works">
+            {HOW_IT_WORKS.map(([n, title, text]) => (
+              <li key={n} className="border border-border bg-bg-2 px-3 py-2.5">
+                <p className="hud-label"><b>{n}</b> &nbsp;{title}</p>
+                <p className="text-[12px] text-txt-dim leading-snug mt-1">{text}</p>
+              </li>
+            ))}
+          </ol>
 
           <div className="flex items-center gap-3 mt-8">
             <Button

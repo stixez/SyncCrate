@@ -54,8 +54,36 @@ fn read_checkpoint() -> Option<SyncCheckpoint> {
 
 fn write_checkpoint(checkpoint: &SyncCheckpoint) {
     let path = checkpoint_path();
-    if let Ok(data) = serde_json::to_string_pretty(checkpoint) {
+    if let Ok(data) = serde_json::to_string(checkpoint) {
         let _ = std::fs::write(&path, data);
+    }
+}
+
+/// Writes the resume checkpoint at most every `EVERY_FILES` files or
+/// `EVERY` seconds (plus once after the loop). Rewriting the whole, growing
+/// list after every file made a 50k-file sync quadratic (~50k writes of up
+/// to a few MB); losing the last few entries on a crash only means those
+/// files are found already present on resume.
+struct CheckpointWriter {
+    last: std::time::Instant,
+    pending: usize,
+}
+
+impl CheckpointWriter {
+    const EVERY_FILES: usize = 100;
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(2);
+
+    fn new() -> Self {
+        Self { last: std::time::Instant::now(), pending: 0 }
+    }
+
+    fn file_done(&mut self, checkpoint: &SyncCheckpoint) {
+        self.pending += 1;
+        if self.pending >= Self::EVERY_FILES || self.last.elapsed() >= Self::EVERY {
+            write_checkpoint(checkpoint);
+            self.pending = 0;
+            self.last = std::time::Instant::now();
+        }
     }
 }
 
@@ -534,6 +562,7 @@ async fn run_sync(
         started_at: crate::utils::timestamp_now(),
     };
     write_checkpoint(&checkpoint);
+    let mut checkpoint_writer = CheckpointWriter::new();
     let mut cancelled = false;
 
     // What this sync actually wrote, for "undo last sync" — only files an
@@ -601,14 +630,14 @@ async fn run_sync(
                         files_done += 1;
                         bytes_done += file_info.size;
                         checkpoint.completed_files.push(file_info.relative_path.clone());
-                        write_checkpoint(&checkpoint);
+                        checkpoint_writer.file_done(&checkpoint);
                     }
                     Ok(true) => {
                         files_done += 1;
                         files_received += 1;
                         bytes_done += file_info.size;
                         checkpoint.completed_files.push(file_info.relative_path.clone());
-                        write_checkpoint(&checkpoint);
+                        checkpoint_writer.file_done(&checkpoint);
                         let mtime_ms = crate::utils::safe_join(base_path, &local_path)
                             .map(|p| mtime_ms_of(&p))
                             .unwrap_or(0);
@@ -626,7 +655,7 @@ async fn run_sync(
                     }
                     Err(e) => {
                         files_done += 1;
-                        sync_errors.push(format!("{}: {}", file_info.relative_path, e));
+                        sync_errors.push(format!("{}: {}", file_info.relative_path, crate::utils::plain_io_error(&e)));
                         let _ = app.emit(
                             "sync-error",
                             serde_json::json!({"message": format!("Failed to receive {}: {}", file_info.relative_path, e)}),
@@ -668,10 +697,10 @@ async fn run_sync(
                 match crate::utils::safe_join(base_path, path) {
                     Ok(full_path) => {
                         if let Err(e) = tokio::fs::remove_file(&full_path).await {
-                            sync_errors.push(format!("Delete {}: {}", path, e));
+                            sync_errors.push(format!("Delete {}: {}", path, crate::utils::plain_io_error(&e.to_string())));
                         } else {
                             checkpoint.completed_files.push(path.clone());
-                            write_checkpoint(&checkpoint);
+                            checkpoint_writer.file_done(&checkpoint);
                             undo_deleted.push(path.clone());
                         }
                     }
@@ -684,6 +713,8 @@ async fn run_sync(
             SyncAction::Conflict { .. } => {}
         }
     }
+    // Whatever the throttled writer hasn't saved yet (a cancelled sync resumes from this).
+    write_checkpoint(&checkpoint);
 
     // Only overwrite the last-sync record if this sync actually changed a
     // file — a no-op sync (e.g. everything failed, or there was nothing to

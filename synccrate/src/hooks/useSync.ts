@@ -32,7 +32,7 @@ export function useSync() {
       } else if (count > 0) {
         toastSuccess(`Found ${count} difference(s) to sync`);
       } else {
-        toastSuccess("Everything is in sync!");
+        toastSuccess("Everything is in sync");
       }
       addLog(`Sync plan: ${count} actions`, "info");
     } catch (e: any) {
@@ -49,7 +49,7 @@ export function useSync() {
     setLoadingPhase("Syncing files...");
     try {
       await cmd.executeSync();
-      toastSuccess("Sync complete!");
+      toastSuccess("Sync complete");
       const count = incrementSyncCount();
       const milestone = checkMilestone(count);
       if (milestone) {
@@ -65,6 +65,10 @@ export function useSync() {
         toastError(`${e}`);
       } else if (String(e).includes("Sync cancelled")) {
         toastInfo("Sync cancelled. Compute the plan again to resume.");
+      } else if (/file\(s\) failed to sync/.test(String(e))) {
+        // Partly done: sync-complete reports it (with the details in the log
+        // and an Undo for what did arrive); a second, red "Sync failed" toast
+        // on top of that contradicted it.
       } else {
         addLog(`Sync failed: ${e}`, "error");
         toastError(`Sync failed: ${e}`);

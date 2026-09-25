@@ -28,13 +28,16 @@ pub fn start_watching(
     // Spawn a thread to process FS events with debouncing
     let app_handle = app.clone();
     std::thread::spawn(move || {
-        let debounce = Duration::from_millis(500);
-        // Events are coalesced: the first event of a burst is emitted right away
-        // (if we haven't emitted recently); anything arriving inside the debounce
-        // window is held and emitted once the window closes. Previously such
-        // events were simply dropped, so the final state after a burst (e.g. a
-        // large copy finishing) never reached the frontend.
-        let mut last_emit: Option<std::time::Instant> = None;
+        // Trailing debounce: emit once the folder has been quiet for `quiet`,
+        // or every `max_wait` during a long burst so the list still moves.
+        // Emitting on the leading edge of every 500 ms window made a big copy
+        // (or a sync writing thousands of files) trigger a full rescan plus a
+        // full manifest over IPC twice a second. Nothing is dropped: the
+        // final state after a burst always gets one event.
+        let quiet = Duration::from_millis(1200);
+        let max_wait = Duration::from_secs(5);
+        let mut last_event: Option<std::time::Instant> = None;
+        let mut first_pending: Option<std::time::Instant> = None;
         let mut pending_paths: Vec<String> = Vec::new();
         let mut pending_kind: Option<String> = None;
 
@@ -58,6 +61,9 @@ pub fn start_watching(
                         }
                     }
                     pending_kind = Some(format!("{:?}", event.kind));
+                    let now = std::time::Instant::now();
+                    last_event = Some(now);
+                    first_pending.get_or_insert(now);
                 }
                 Ok(Err(e)) => {
                     log::error!("Watch error: {}", e);
@@ -66,11 +72,11 @@ pub fn start_watching(
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
 
-            if pending_kind.is_some()
-                && last_emit.map_or(true, |t| t.elapsed() >= debounce)
-            {
+            let settled = last_event.is_some_and(|t| t.elapsed() >= quiet);
+            let overdue = first_pending.is_some_and(|t| t.elapsed() >= max_wait);
+            if pending_kind.is_some() && (settled || overdue) {
                 emit(&mut pending_paths, &mut pending_kind);
-                last_emit = Some(std::time::Instant::now());
+                first_pending = None;
             }
         }
     });

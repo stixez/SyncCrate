@@ -6,6 +6,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { gameLabel } from "../lib/games";
 import SyncActionItem from "./SyncActionItem";
 import * as cmd from "../lib/commands";
+import { toastError } from "../lib/toast";
 import { Banner, Button, LiveDot, ProgressBar, cx } from "./ui";
 
 interface SyncBannerProps {
@@ -133,7 +134,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
         const updated = await cmd.updateSyncSelection(peerId, newExcluded);
         setSyncPlan(updated);
       } catch (e) {
-        console.error("Failed to update selection:", e);
+        toastError(`Couldn't change the selection: ${e}`);
       }
     },
     [excluded, session, setSyncPlan],
@@ -190,7 +191,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
         const updated = await cmd.updateSyncSelection(peerId, newExcluded);
         setSyncPlan(updated);
       } catch (e) {
-        console.error("Failed to apply filter:", e);
+        toastError(`Couldn't apply the filter: ${e}`);
       }
     },
     [plan, session, setSyncPlan],

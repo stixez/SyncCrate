@@ -21,7 +21,7 @@ export default function ConnectionGuide() {
         <Panel label={<><b>A</b> &nbsp;LAN</>} title="Same network" icon={<Wifi size={15} className="text-neon" />}>
           <p className="text-xs text-txt-dim leading-relaxed">
             If you and your friends are on the same Wi-Fi or LAN, SyncCrate finds hosts automatically.
-            Have one person host and the others click Scan. If a host doesn't show up, paste the
+            Have one person host and the others click Scan for Hosts. If a host doesn't show up, paste the
             <span className="font-medium text-txt"> join code</span> from the host's screen instead.
           </p>
         </Panel>

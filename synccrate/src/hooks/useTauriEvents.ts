@@ -14,6 +14,30 @@ import {
   sendNotification as sendOsNotification,
 } from "@tauri-apps/plugin-notification";
 
+// One rescan at a time: a change during a scan queues exactly one more.
+let scanInFlight = false;
+let scanQueued = false;
+async function refreshManifest() {
+  if (scanInFlight) {
+    scanQueued = true;
+    return;
+  }
+  scanInFlight = true;
+  try {
+    const gameId = useAppStore.getState().selectedGame ?? undefined;
+    const manifest = await cmd.scanFiles(gameId);
+    if ((useAppStore.getState().selectedGame ?? undefined) === gameId) useAppStore.getState().setManifest(manifest);
+  } catch {
+    // Ignore scan failures from the file watcher
+  } finally {
+    scanInFlight = false;
+    if (scanQueued) {
+      scanQueued = false;
+      refreshManifest();
+    }
+  }
+}
+
 /** Desktop notification, only when enabled and the window is in the background. */
 async function sendNotification(title: string, body: string) {
   try {
@@ -172,15 +196,11 @@ export function useTauriEvents() {
       const appWindow = getCurrentWebviewWindow();
 
       const listeners: Promise<UnlistenFn>[] = [
-        listen<{ paths: string[]; kind: string }>("files-changed", async (event) => {
-          addLog(`Files changed: ${event.payload.kind}`, "info");
-          try {
-            const gameId = useAppStore.getState().selectedGame ?? undefined;
-            const manifest = await cmd.scanFiles(gameId);
-            if ((useAppStore.getState().selectedGame ?? undefined) === gameId) setManifest(manifest);
-          } catch {
-            // Ignore scan failures from file watcher
-          }
+        listen<{ paths: string[]; kind: string }>("files-changed", () => {
+          // A running sync writes files constantly; rescan once when it ends
+          // (sync-complete) instead of on every burst.
+          if (useAppStore.getState().syncProgress) return;
+          refreshManifest();
         }),
         listen<{ name: string }>("peer-connected", async (event) => {
           cancelRetry();
@@ -298,6 +318,8 @@ export function useTauriEvents() {
         listen<{ files_synced: number; total_bytes: number; errors: string[]; cancelled?: boolean }>("sync-complete", (event) => {
           setSyncProgress(null);
           setSyncPlan(null);
+          // Watcher events were skipped while the sync wrote files.
+          refreshManifest();
           const { files_synced, errors, cancelled } = event.payload;
 
           // "Apply pack exactly": disable/re-enable only after a clean
@@ -323,7 +345,11 @@ export function useTauriEvents() {
             cmd.getUndoStatus(game).then((status) => {
               useAppStore.getState().setUndoStatus(status);
               if (status && (status.added || status.replaced || status.deleted)) {
-                toastAction("Sync complete.", "Undo", () => {
+                const problems = event.payload.errors?.length ?? 0;
+                toastAction(
+                  problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see Activity).` : "Sync complete.",
+                  "Undo",
+                  () => {
                   cmd.undoLastSync(game).then((r) => {
                     useAppStore.getState().setUndoStatus(null);
                     const parts = [`${r.restored} restored`, `${r.removed} removed`];
@@ -332,6 +358,10 @@ export function useTauriEvents() {
                     addLog(`Sync undone: ${parts.join(", ")}`, "info");
                   }).catch((e) => toastError(`Undo failed: ${e}`));
                 });
+              } else if (event.payload.errors?.length) {
+                // Nothing arrived, so no Undo toast: say what happened instead.
+                const n = event.payload.errors.length;
+                toastError(`${n} file${n !== 1 ? "s" : ""} couldn't be synced. The Activity log has the details.`);
               }
             }).catch(() => {});
           }

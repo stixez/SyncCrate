@@ -1,9 +1,29 @@
+import type { FileManifest } from "./types";
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+/** Apply toggle results (old path -> new path) to a manifest without a
+ * rescan: toggling one mod used to rescan everything and resend the whole
+ * file list. The file watcher's rescan catches anything else afterwards. */
+export function renameInManifest(m: FileManifest, moves: [string, string][]): FileManifest {
+  const files: FileManifest["files"] = { ...m.files };
+  for (const [from, to] of moves) {
+    const f = files[from];
+    if (!f || from === to) continue;
+    delete files[from];
+    files[to] = { ...f, relative_path: to };
+  }
+  return { ...m, files };
+}
+
+/** "1 file" / "3 files" (the "file(s)" style reads like an error message). */
+export function plural(n: number, word: string, many = `${word}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? word : many}`;
 }
 
 export function formatDate(ts: number): string {

@@ -139,7 +139,10 @@ export default function ActivityLog() {
       {tab === "history" && (
         <div className="box max-h-[calc(var(--app-h)-250px)] overflow-y-auto">
           {history.length === 0 ? (
-            <p className="px-4 py-8 font-mono text-[11px] uppercase tracking-[0.08em] text-txt-muted">No sync history yet</p>
+            <div className="px-4 py-6">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-muted">No syncs yet</p>
+              <p className="text-xs text-txt-dim mt-1">Every sync with a friend is listed here, with what was downloaded and any problems.</p>
+            </div>
           ) : (
             <div className="divide-y divide-border">
               {history.slice().reverse().map((entry, i) => (

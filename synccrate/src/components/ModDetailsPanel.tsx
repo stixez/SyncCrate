@@ -1,10 +1,10 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS } from "../lib/modMeta";
 import { ModIcon } from "./ModItem";
-import { formatBytes, formatDate, isDisabledPath } from "../lib/utils";
+import { formatBytes, formatDate, isDisabledPath, renameInManifest } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
@@ -56,15 +56,28 @@ export default function ModDetailsPanel({
 
   const handleToggle = async () => {
     try {
-      await cmd.toggleMod(gameId, file.relative_path, isDisabled);
-      const m = await cmd.scanFiles(gameId);
-      setManifest(m);
+      const newPath = await cmd.toggleMod(gameId, file.relative_path, isDisabled);
+      const m = useAppStore.getState().manifest;
+      if (m) setManifest(renameInManifest(m, [[file.relative_path, newPath]]));
       cmd.getModTags(gameId).then(setModTags).catch(() => {});
       toastSuccess(isDisabled ? `Enabled ${name}` : `Disabled ${name}`);
+      // The file now has a new path; this panel still points at the old one.
+      onClose();
     } catch (e) {
       toastError(`${e}`);
     }
   };
+
+  // Escape closes, and focus starts on the close button (keyboard users).
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const handleReveal = () => {
     if (!basePath) return;
@@ -76,7 +89,7 @@ export default function ModDetailsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="corner-brackets w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="corner-brackets w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mod-details-title">
         <div className="panel shadow-2xl">
           <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border">
             <div className="flex items-center gap-3 min-w-0">
@@ -90,13 +103,13 @@ export default function ModDetailsPanel({
               </div>
               <div className="min-w-0">
                 <p className="hud-label"><b>//</b> {meta ? MOD_SOURCE_LABELS[meta.source] ?? "Mod" : isMod ? "Script mod" : "Custom content"}</p>
-                <h3 className="font-display font-semibold uppercase tracking-[0.04em] text-[15px] leading-tight truncate" title={meta?.name ?? name}>
+                <h3 id="mod-details-title" className="font-display font-semibold uppercase tracking-[0.04em] text-[15px] leading-tight truncate" title={meta?.name ?? name}>
                   {meta?.name ?? name}
                 </h3>
                 {meta && !meta.is_file && <p className="font-mono text-[11px] text-txt-muted truncate" title={name}>{name}</p>}
               </div>
             </div>
-            <button onClick={onClose} className="p-1 text-txt-muted hover:text-txt transition-colors" aria-label="Close">
+            <button ref={closeRef} onClick={onClose} className="p-1 text-txt-muted hover:text-txt transition-colors" aria-label="Close">
               <X size={18} />
             </button>
           </div>
@@ -136,7 +149,7 @@ export default function ModDetailsPanel({
             </Row>
             <Row label="Size"><span className="font-mono text-xs tabular">{formatBytes(file.size)}</span></Row>
             <Row label="Modified"><span className="font-mono text-xs">{formatDate(file.modified)}</span></Row>
-            <Row label="Hash"><span className="block font-mono text-[11px] text-txt-dim break-all">{file.hash || "N/A"}</span></Row>
+            {file.hash && <Row label="Hash"><span className="block font-mono text-[11px] text-txt-dim break-all">{file.hash}</span></Row>}
             <Row label="Status">
               <div className="flex items-center gap-2">
                 <StatusBadge status={syncStatus} />

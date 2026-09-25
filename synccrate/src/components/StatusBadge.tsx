@@ -6,15 +6,15 @@ interface StatusBadgeProps {
 }
 
 const tooltips: Record<string, string> = {
-  synced: "This file matches across all connected peers",
+  synced: "Same as the host's copy",
   pending: "This file will be synced in the next transfer",
   conflict: "Different versions exist — resolve before syncing",
-  local: "This file only exists on your machine",
+  local: "Only on this PC (the host doesn't have it)",
 };
 
 const config: Record<StatusBadgeProps["status"], { label: string; tone: BadgeTone }> = {
   synced: { label: "Synced", tone: "green" },
-  pending: { label: "Pending", tone: "amber" },
+  pending: { label: "To sync", tone: "amber" },
   conflict: { label: "Conflict", tone: "red" },
   local: { label: "Local only", tone: "neutral" },
 };
