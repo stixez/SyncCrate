@@ -38,7 +38,7 @@ pub const KIND_SAFETY: &str = "safety";
 static STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static RESTORING: AtomicBool = AtomicBool::new(false);
 
-fn store_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn store_lock() -> std::sync::MutexGuard<'static, ()> {
     STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -148,7 +148,7 @@ pub(crate) fn mtime_ms(meta: &std::fs::Metadata) -> Option<i64> {
     i64::try_from(d.as_millis()).ok()
 }
 
-fn set_mtime(path: &Path, ms: i64) -> std::io::Result<()> {
+pub(crate) fn set_mtime(path: &Path, ms: i64) -> std::io::Result<()> {
     if ms < 0 {
         return Ok(());
     }
@@ -255,16 +255,16 @@ fn collect_targeted(base: &Path, cts: &[ContentType], paths: &[String]) -> Vec<S
 // ---------------------------------------------------------------------------
 // Object store
 
-fn is_valid_hash(h: &str) -> bool {
+pub(crate) fn is_valid_hash(h: &str) -> bool {
     h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-fn object_path(root: &Path, hash: &str) -> PathBuf {
+pub(crate) fn object_path(root: &Path, hash: &str) -> PathBuf {
     root.join(OBJECTS_DIR).join(&hash[..2]).join(hash)
 }
 
 /// Copy `src` into the store while hashing it. Returns (hash, bytes, newly stored).
-fn store_object(root: &Path, src: &Path) -> Result<(String, u64, bool), String> {
+pub(crate) fn store_object(root: &Path, src: &Path) -> Result<(String, u64, bool), String> {
     let tmp_dir = root.join(OBJECTS_DIR).join("tmp");
     std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
     let tmp = tmp_dir.join(format!("{}.tmp", Uuid::new_v4()));
@@ -578,6 +578,10 @@ fn gc_objects(root: &Path) -> Result<usize, String> {
             .map_err(|e| format!("GC skipped, unreadable manifest in {}: {}", dir.display(), e))?;
         referenced.extend(manifest.files.into_iter().filter_map(|f| f.hash));
     }
+    // Per-file version history keeps objects of its own (`commands::history`).
+    referenced.extend(
+        crate::commands::history::referenced_hashes(root).map_err(|e| format!("GC skipped, unreadable file history: {}", e))?,
+    );
     let objects = root.join(OBJECTS_DIR);
     // Temp files only exist while a backup holds the store lock (so do we).
     let _ = std::fs::remove_dir_all(objects.join("tmp"));
@@ -601,7 +605,7 @@ fn gc_objects(root: &Path) -> Result<usize, String> {
     Ok(removed)
 }
 
-fn gc_logged(root: &Path) {
+pub(crate) fn gc_logged(root: &Path) {
     match gc_objects(root) {
         Ok(n) if n > 0 => log::info!("Backup store: removed {} unreferenced object(s)", n),
         Ok(_) => {}

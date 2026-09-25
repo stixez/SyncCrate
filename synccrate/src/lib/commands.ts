@@ -9,6 +9,7 @@ import type {
   CrewSet,
   CrewStatus,
   ModMeta,
+  FileVersion,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -490,6 +491,24 @@ export async function getModMetadata(game: string): Promise<ModMeta[]> {
 
 export async function getModIcon(key: string): Promise<string | null> {
   return invoke("get_mod_icon", { key });
+}
+
+/** Previous versions of files syncs replaced or deleted, newest first. */
+export async function listFileHistory(game: string, path?: string): Promise<FileVersion[]> {
+  if (isDemoMode()) return [];
+  return invoke("list_file_history", { game, path });
+}
+
+export async function restoreFileVersion(game: string, id: string): Promise<FileVersion> {
+  return invoke("restore_file_version", { game, id });
+}
+
+export async function getKeepFileHistory(): Promise<boolean> {
+  return invoke("get_keep_file_history");
+}
+
+export async function setKeepFileHistory(enabled: boolean): Promise<void> {
+  return invoke("set_keep_file_history", { enabled });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

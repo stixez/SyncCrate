@@ -4,6 +4,7 @@ pub mod chat;
 pub mod crew;
 pub mod files;
 pub mod game_state;
+pub mod history;
 pub mod install;
 pub mod mod_info;
 pub mod modpack;

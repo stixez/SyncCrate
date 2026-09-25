@@ -44,6 +44,7 @@ export default function Settings() {
   });
   const [speedLimit, setSpeedLimit] = useState(0);
   const [clearCache, setClearCache] = useState(true);
+  const [keepHistory, setKeepHistory] = useState(true);
   const [closeToTray, setCloseToTrayState] = useState(false);
   const [showArt, setShowArtState] = useState(getShowGameArt);
   const [customArt, setCustomArt] = useState<string[]>([]);
@@ -69,6 +70,7 @@ export default function Settings() {
     cmd.getExcludePatterns().then(setExcludePatterns).catch(() => {});
     cmd.getTransferSpeedLimit().then(setSpeedLimit).catch(() => {});
     cmd.getClearCacheAfterSync().then(setClearCache).catch(() => {});
+    cmd.getKeepFileHistory().then(setKeepHistory).catch(() => {});
     cmd.getCloseToTray().then(setCloseToTrayState).catch(() => {});
   }, [setGamePaths, setExcludePatterns]);
 
@@ -484,6 +486,17 @@ export default function Settings() {
                 }}
                 label="Clear game caches after sync"
                 description="For example the Sims 4 localthumbcache, so new CC shows up correctly."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={keepHistory}
+                onChange={(v) => {
+                  setKeepHistory(v);
+                  cmd.setKeepFileHistory(v).catch(console.error);
+                }}
+                label="Keep earlier versions of synced files"
+                description="When a sync replaces or deletes a file, keep the old one so you can put just that file back (Backups → File history)."
               />
             </SettingRow>
             <SettingRow>

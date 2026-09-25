@@ -345,7 +345,28 @@ pub(crate) async fn execute_sync_inner(
         }
     }
 
-    let result = run_sync(state, &events, &plan, &base_path, &resolved_id, presync_backup_id).await;
+    // Keep the versions this sync will replace or delete (best-effort; see
+    // `commands::history`). Only the ones it really changes are kept after.
+    let mut history_capture: Option<String> = None;
+    if read_sync_config().keep_file_history {
+        let targets = crate::commands::backup::presync_targets(&plan);
+        if !targets.is_empty() {
+            let peer = state.lock().await.connections.get(&resolved_id).map(|c| c.info.name.clone()).unwrap_or_default();
+            let capture_id = uuid::Uuid::new_v4().to_string();
+            let (game, base, id) = (plan.game_id.clone(), base_path.clone(), capture_id.clone());
+            let captured = tokio::task::spawn_blocking(move || {
+                crate::commands::history::begin_capture(&crate::utils::backups_dir(), &game, &base, &targets, &peer, &id, crate::utils::timestamp_now())
+            })
+            .await;
+            match captured {
+                Ok(Ok(_)) => history_capture = Some(capture_id),
+                Ok(Err(e)) => log::warn!("File history capture failed: {}", e),
+                Err(e) => log::warn!("File history capture failed: {}", e),
+            }
+        }
+    }
+
+    let result = run_sync(state, &events, &plan, &base_path, &resolved_id, presync_backup_id, history_capture).await;
 
     {
         let mut app_state = state.lock().await;
@@ -446,6 +467,7 @@ async fn run_sync(
     base_path: &str,
     peer_id: &str,
     presync_backup_id: Option<String>,
+    history_capture: Option<String>,
 ) -> Result<(), String> {
     let total_files = plan.actions.iter()
         .filter(|action| {
@@ -618,6 +640,19 @@ async fn run_sync(
     // Only overwrite the last-sync record if this sync actually changed a
     // file — a no-op sync (e.g. everything failed, or there was nothing to
     // do) leaves whatever's undoable from before alone.
+    if let Some(capture_id) = history_capture {
+        let replaced: Vec<String> = undo_replaced.iter().map(|f| f.relative_path.clone()).collect();
+        let deleted = undo_deleted.clone();
+        let (game, root) = (game_id.clone(), crate::utils::backups_dir());
+        let done = tokio::task::spawn_blocking(move || {
+            crate::commands::history::finish(&root, &game, &capture_id, &replaced, &deleted, crate::utils::timestamp_now())
+        })
+        .await;
+        if let Ok(Err(e)) | Err(e) = done.map_err(|e| e.to_string()) {
+            log::warn!("File history: {}", e);
+        }
+    }
+
     let undo_record = SyncRecord {
         sync_id: uuid::Uuid::new_v4().to_string(),
         created_at: crate::utils::timestamp_now(),
@@ -968,6 +1003,10 @@ pub struct SyncConfig {
     /// Hide to the system tray instead of quitting when the main window is closed.
     #[serde(default)]
     pub close_to_tray: bool,
+    /// Keep the previous version of every file a sync replaces or deletes
+    /// (`commands::history`).
+    #[serde(default = "default_true")]
+    pub keep_file_history: bool,
 }
 
 fn default_true() -> bool { true }
@@ -989,6 +1028,7 @@ impl Default for SyncConfig {
             transfer_speed_limit: 0,
             clear_cache_after_sync: true,
             close_to_tray: false,
+            keep_file_history: true,
         }
     }
 }
@@ -1150,12 +1190,17 @@ mod tests {
             transfer_speed_limit: 10_485_760, // 10 MB/s
             clear_cache_after_sync: false,
             close_to_tray: true,
+            keep_file_history: false,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let parsed: SyncConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.transfer_speed_limit, 10_485_760);
         assert_eq!(parsed.exclude_patterns, vec!["*.tmp"]);
         assert!(parsed.auto_backup_before_sync);
+        assert!(!parsed.keep_file_history);
+        // Older config files have no such field: history is on for them.
+        let old: SyncConfig = serde_json::from_str("{}").unwrap();
+        assert!(old.keep_file_history);
     }
 
     #[test]
@@ -1465,6 +1510,20 @@ pub async fn get_clear_cache_after_sync() -> Result<bool, String> {
 pub async fn set_clear_cache_after_sync(enabled: bool) -> Result<(), String> {
     let mut config = read_sync_config();
     config.clear_cache_after_sync = enabled;
+    let path = crate::utils::sync_config_path();
+    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_keep_file_history() -> Result<bool, String> {
+    Ok(read_sync_config().keep_file_history)
+}
+
+#[tauri::command]
+pub async fn set_keep_file_history(enabled: bool) -> Result<(), String> {
+    let mut config = read_sync_config();
+    config.keep_file_history = enabled;
     let path = crate::utils::sync_config_path();
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     std::fs::write(&path, data).map_err(|e| e.to_string())

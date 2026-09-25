@@ -20,6 +20,8 @@ mod e2e_tests;
 mod crew_e2e_tests;
 #[cfg(test)]
 mod chat_e2e_tests;
+#[cfg(test)]
+mod history_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -419,6 +421,10 @@ pub fn run() {
             commands::chat::send_chat,
             commands::mod_info::get_mod_metadata,
             commands::mod_info::get_mod_icon,
+            commands::history::list_file_history,
+            commands::history::restore_file_version,
+            commands::sync::get_keep_file_history,
+            commands::sync::set_keep_file_history,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
