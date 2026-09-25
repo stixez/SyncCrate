@@ -386,6 +386,8 @@ async fn run_fake_old_host(
             version: "0.5.5".to_string(),
             supports_compression: false,
             game_id: host_game_id,
+            node_id: None,
+            crews: vec![],
         },
     )
     .await

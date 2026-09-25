@@ -22,6 +22,12 @@ function routeOpenIntent(intent: OpenIntent) {
     return;
   }
   const game = s.activeGame;
+  if (intent.kind === "crew") {
+    // Shown as "Add crew?" on the Crews page; adding never connects.
+    s.navigateToGlobal("crews");
+    s.setPendingCrewInvite(intent.invite);
+    return;
+  }
   if (intent.kind === "pack") {
     // The pack view compares against the active game and offers the switch
     // itself when the pack is for another one.

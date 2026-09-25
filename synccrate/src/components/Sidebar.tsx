@@ -38,6 +38,7 @@ import {
   Trees,
   X,
   Share2,
+  Users,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { resolveTheme, useMediaPreference } from "../lib/appearance";
@@ -310,6 +311,7 @@ export default function Sidebar() {
 
         <div className="mt-4 pt-3 border-t border-border">
           <p className="hud-label px-4 pb-2"><b>//</b> System</p>
+          {globalLink("crews", "Crews", Users)}
           {globalLink("activity", "Activity Log", Activity)}
           {globalLink("settings", "Settings", Settings)}
         </div>

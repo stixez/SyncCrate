@@ -59,6 +59,10 @@ struct UdpAnnouncement {
     /// Registry id of the game being shared (empty from hosts before 0.5.6).
     #[serde(default)]
     game: String,
+    /// Hex iroh endpoint id (empty from hosts before 0.6.0), so crew members
+    /// recognise each other on the LAN without a code.
+    #[serde(default)]
+    node: String,
 }
 
 pub async fn start_broadcast(
@@ -68,6 +72,7 @@ pub async fn start_broadcast(
     pin_required: bool,
     game_version: Option<String>,
     game_id: String,
+    node_id: String,
 ) -> Result<(), String> {
     // Replace any previous broadcast (e.g. a stale one from an earlier session).
     stop_broadcast().await;
@@ -76,7 +81,7 @@ pub async fn start_broadcast(
     let gv = game_version.unwrap_or_default();
 
     // --- mDNS ---
-    let daemon = match register_mdns(&instance, &name, port, mod_count, pin_required, &gv, &game_id) {
+    let daemon = match register_mdns(&instance, &name, port, mod_count, pin_required, &gv, &game_id, &node_id) {
         Ok(d) => {
             MDNS_ACTIVE.store(true, Ordering::Relaxed);
             Some(d)
@@ -98,6 +103,7 @@ pub async fn start_broadcast(
         pin_required,
         game_version: gv,
         game: game_id,
+        node: node_id,
     };
     match bind_udp_responder() {
         Ok(socket) => {
@@ -127,6 +133,7 @@ fn register_mdns(
     pin_required: bool,
     game_version: &str,
     game_id: &str,
+    node_id: &str,
 ) -> Result<ServiceDaemon, String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
     // IPv6 multicast is a frequent source of send errors on Windows and we
@@ -153,6 +160,7 @@ fn register_mdns(
             ("game_version", game_version),
             ("game", game_id),
             ("instance", instance),
+            ("node", node_id),
         ]
         .as_ref(),
     )
@@ -221,6 +229,7 @@ struct Sighting {
     pin_required: bool,
     game_version: Option<String>,
     game_id: Option<String>,
+    node_id: Option<String>,
     addrs: Vec<IpAddr>,
 }
 
@@ -268,6 +277,9 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
             if existing.game_id.is_none() {
                 existing.game_id = s.game_id;
             }
+            if existing.node_id.is_none() {
+                existing.node_id = s.node_id;
+            }
         } else {
             index.insert(s.key.clone(), merged.len());
             merged.push(s);
@@ -293,6 +305,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                 }),
                 game_id: s.game_id,
                 addresses: ranked,
+                node_id: s.node_id,
             })
         })
         .collect()
@@ -325,6 +338,7 @@ fn scan_mdns() -> Result<Vec<Sighting>, String> {
                     pin_required: get("pin_required").map(|v| v == "true").unwrap_or(false),
                     game_version: get("game_version").filter(|v| !v.is_empty()),
                     game_id: get("game").filter(|v| !v.is_empty()),
+                    node_id: get("node").filter(|v| crate::crews::is_valid_node_id(v)),
                     addrs: info.get_addresses().iter().copied().collect(),
                 });
             }
@@ -372,6 +386,7 @@ async fn scan_udp() -> Result<Vec<Sighting>, String> {
                         pin_required: a.pin_required,
                         game_version: Some(a.game_version).filter(|v| !v.is_empty()),
                         game_id: Some(a.game).filter(|v| !v.is_empty()),
+                        node_id: Some(a.node).filter(|v| crate::crews::is_valid_node_id(v)),
                         // The reply's source address is by definition reachable from us.
                         addrs: vec![from.ip()],
                     });
@@ -397,6 +412,7 @@ mod tests {
             pin_required: false,
             game_version: None,
             game_id: None,
+            node_id: None,
             addrs: vec![addr.parse().unwrap()],
         }
     }
@@ -424,11 +440,20 @@ mod tests {
             pin_required: true,
             game_version: String::new(),
             game: "sims4".into(),
+            node: "ab".into(),
         };
         let bytes = serde_json::to_vec(&a).unwrap();
         let b: UdpAnnouncement = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(b.port, 1);
         assert!(b.pin_required);
         assert_eq!(b.game, "sims4");
+        assert_eq!(b.node, "ab");
+    }
+
+    #[test]
+    fn announcement_from_a_host_without_node_still_parses() {
+        let old = r#"{"instance":"i","name":"n","port":1,"version":"0.5.6","mods":0,"pin_required":false,"game":"sims4"}"#;
+        let a: UdpAnnouncement = serde_json::from_str(old).unwrap();
+        assert!(a.node.is_empty());
     }
 }

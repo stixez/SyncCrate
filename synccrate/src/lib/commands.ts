@@ -2,6 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  Crew,
+  CrewInvite,
+  CrewLanHost,
+  CrewSet,
+  CrewStatus,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -406,6 +411,62 @@ export async function loadPackFile(path: string): Promise<ModPack> {
 
 export async function loadPackLink(text: string): Promise<ModPack> {
   return invoke("load_pack_link", { text });
+}
+
+// Crews
+
+export async function listCrews(): Promise<Crew[]> {
+  if (isDemoMode()) return [];
+  return invoke("list_crews");
+}
+
+export async function getLocalNodeId(): Promise<string> {
+  return invoke("get_local_node_id");
+}
+
+export async function createCrew(name: string, myName: string): Promise<Crew> {
+  return invoke("create_crew", { name, myName });
+}
+
+export async function renameCrew(id: string, name: string): Promise<Crew> {
+  return invoke("rename_crew", { id, name });
+}
+
+export async function leaveCrew(id: string): Promise<void> {
+  return invoke("leave_crew", { id });
+}
+
+export async function crewInviteLink(id: string, myName: string): Promise<string> {
+  return invoke("crew_invite_link", { id, myName });
+}
+
+export async function previewCrewInvite(text: string): Promise<CrewInvite> {
+  return invoke("preview_crew_invite", { text });
+}
+
+export async function joinCrew(invite: CrewInvite, myName: string): Promise<Crew> {
+  return invoke("join_crew", { invite, myName });
+}
+
+export async function setCrewMemberRemoved(crewId: string, nodeId: string, removed: boolean): Promise<Crew> {
+  return invoke("set_crew_member_removed", { crewId, nodeId, removed });
+}
+
+export async function publishCrewSet(crewId: string, contentTypes: string[] | undefined, myName: string): Promise<CrewSet> {
+  return invoke("publish_crew_set", { crewId, contentTypes, myName });
+}
+
+export async function crewStatus(crewId: string): Promise<CrewStatus> {
+  return invoke("crew_status", { crewId });
+}
+
+export async function scanCrewHosts(): Promise<CrewLanHost[]> {
+  return invoke("scan_crew_hosts");
+}
+
+/** Returns immediately; the outcome arrives via peer-connected / connection-failed. */
+export async function connectCrew(crewId: string, nodeId: string | undefined, name: string, pin?: string): Promise<SessionInfo> {
+  return invoke("connect_crew", { crewId, nodeId, name, pin });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

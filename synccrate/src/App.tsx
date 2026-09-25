@@ -6,6 +6,7 @@ import ContentBrowser from "./components/ContentBrowser";
 import ProfileList from "./components/ProfileList";
 import BackupList from "./components/BackupList";
 import ModpackList from "./components/ModpackList";
+import CrewList from "./components/CrewList";
 import ActivityLog from "./components/ActivityLog";
 import Settings from "./components/Settings";
 import GameBrowser from "./components/GameBrowser";
@@ -363,6 +364,8 @@ function App() {
 
     // Global pages (no game required)
     switch (page) {
+      case "crews":
+        return <CrewList />;
       case "activity":
         return <ActivityLog />;
       case "settings":

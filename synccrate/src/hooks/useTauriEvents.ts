@@ -372,6 +372,9 @@ export function useTauriEvents() {
             }
           }, PEER_IDLE_MS);
         }),
+        listen("crews-changed", () => {
+          useAppStore.getState().bumpCrewsVersion();
+        }),
         listen<{ files: string[] }>("caches-cleared", (event) => {
           addLog(`Cleared game caches after sync: ${event.payload.files.join(", ")}`, "info");
         }),

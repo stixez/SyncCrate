@@ -131,8 +131,9 @@ pub async fn start_host(
     let app_handle = app.clone();
     let host_name = name.clone();
     let pin_required = pin.is_some();
+    let node_id = state.lock().await.local_node_id.clone().unwrap_or_default();
     tokio::spawn(async move {
-        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, game_id).await {
+        if let Err(e) = discovery::start_broadcast(host_name, port, mod_count, pin_required, game_version, game_id, node_id).await {
             log::error!("Discovery broadcast error: {}", e);
             let _ = app_handle.emit("discovery-unavailable", serde_json::json!({"message": e}));
         }
@@ -428,7 +429,7 @@ pub(crate) async fn join_code_for(state: &Arc<Mutex<AppState>>) -> Result<String
 /// Shared by Connect-by-IP and join codes: mark the pending client session and
 /// connect in the background (the frontend waits for `peer-connected` /
 /// `connection-failed`).
-async fn start_direct_connection(
+pub(crate) async fn start_direct_connection(
     state: &Arc<Mutex<AppState>>,
     app: tauri::AppHandle,
     addresses: Vec<String>,
