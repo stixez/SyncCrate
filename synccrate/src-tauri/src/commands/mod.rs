@@ -9,6 +9,7 @@ pub mod pack_apply;
 pub mod packs;
 pub mod profiles;
 pub mod session;
+pub mod stay_in_sync;
 pub mod sync;
 pub mod system;
 pub mod tags;

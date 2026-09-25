@@ -32,6 +32,16 @@ export function saveDisplayName(name: string) {
   write(NAME_KEY, name);
 }
 
+const STAY_IN_SYNC_KEY = "synccrate.stayInSync";
+
+export function loadStayInSync(): boolean {
+  return read(STAY_IN_SYNC_KEY) === "1";
+}
+
+export function saveStayInSync(on: boolean) {
+  write(STAY_IN_SYNC_KEY, on ? "1" : "0");
+}
+
 export function loadUsePin(): boolean {
   return read(USE_PIN_KEY) === "1";
 }

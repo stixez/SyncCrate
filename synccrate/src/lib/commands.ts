@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  AutoPullResult,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -406,6 +407,11 @@ export async function loadPackFile(path: string): Promise<ModPack> {
 
 export async function loadPackLink(text: string): Promise<ModPack> {
   return invoke("load_pack_link", { text });
+}
+
+/** "Stay in sync": pull the host's new, non-script files (never replaces or deletes). */
+export async function autoPull(): Promise<AutoPullResult> {
+  return invoke("auto_pull");
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

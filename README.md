@@ -69,6 +69,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 **Connect**
 - **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`synccrate://join/…`): clicking it opens SyncCrate with the code filled in for the right game (or offers to switch games). Nothing connects or syncs until the friend clicks Join and confirms the plan.
+- **Stay in sync.** Turn it on while you're connected and SyncCrate pulls the host's new mods by itself, every minute. It only ever adds files: anything that would replace or delete one of yours, and script mods, still wait for you to review. It pauses while the game is running.
 - **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
 - **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
 
