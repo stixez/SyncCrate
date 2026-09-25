@@ -49,7 +49,7 @@ pub(crate) fn any_process_matches(wanted: &[String], running: &[String]) -> bool
 fn list_process_names() -> Result<Vec<String>, String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let output = std::process::Command::new("tasklist")
+    let output = std::process::Command::new(crate::utils::windows_system_exe("tasklist.exe"))
         .args(["/FO", "CSV", "/NH"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()

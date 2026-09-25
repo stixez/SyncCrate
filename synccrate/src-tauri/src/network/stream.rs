@@ -139,6 +139,24 @@ impl PeerStream {
             Transport::Iroh { send, .. } => AsyncWriteExt::flush(send).await,
         }
     }
+
+    /// After a final message (a refusal), make sure it's delivered before the
+    /// connection is dropped. Dropping an iroh connection right after writing
+    /// discarded the data, so a client refused for a wrong PIN or game over
+    /// the internet saw only "connection lost" instead of the PIN prompt or
+    /// the switch-game offer.
+    pub async fn close_gracefully(&mut self) {
+        match &mut self.inner {
+            Transport::Tcp(s) => {
+                let _ = s.flush().await;
+                let _ = AsyncWriteExt::shutdown(s).await;
+            }
+            Transport::Iroh { send, .. } => {
+                let _ = send.finish();
+                let _ = tokio::time::timeout(Duration::from_secs(3), send.stopped()).await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

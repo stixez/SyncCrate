@@ -52,7 +52,7 @@ mod win {
         use base64::Engine as _;
         let utf16: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
         let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
-        std::process::Command::new("powershell.exe")
+        std::process::Command::new(crate::utils::windows_system_exe("powershell.exe"))
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded])
             .creation_flags(CREATE_NO_WINDOW)
             .output()
@@ -66,7 +66,7 @@ mod win {
 
     pub fn is_elevated() -> bool {
         // `net session` only succeeds for administrators.
-        std::process::Command::new("net")
+        std::process::Command::new(crate::utils::windows_system_exe("net.exe"))
             .arg("session")
             .creation_flags(CREATE_NO_WINDOW)
             .output()

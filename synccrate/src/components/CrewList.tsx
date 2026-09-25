@@ -508,8 +508,8 @@ function CrewDetail({ crew, myNode, activeGame, inSession, isHosting, lanHosts, 
           })}
         </div>
         <p className="text-[11px] text-txt-muted mt-2 leading-relaxed">
-          Join works over the internet with no code; it's faster on the same network. The host's PIN and game checks still
-          apply. Removing someone stops sharing crew info with them and spreads to members as they connect, but they keep
+          Join works over the internet with no code (that connection proves it's really them); on a LAN without internet,
+          use the host's join code. The host's PIN and game checks still apply. Removing someone stops sharing crew info with them and spreads to members as they connect, but they keep
           their copy of the crew: to lock someone out, change your PIN.
         </p>
       </div>

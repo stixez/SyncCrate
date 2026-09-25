@@ -61,6 +61,17 @@ pub(crate) fn validate_pack(pack: &ModPack) -> Result<(), String> {
     if pack.game_id.trim().is_empty() {
         return Err("Pack has no game.".to_string());
     }
+    // Shown in the UI; a 64 MB name is just an attack.
+    if pack.name.chars().count() > 128
+        || pack.description.chars().count() > 1024
+        || pack.author.chars().count() > 128
+        || pack.game_id.len() > 64
+        || pack.content_types.len() > 64
+        || pack.content_types.iter().any(|c| c.len() > 64)
+        || pack.join.as_ref().is_some_and(|j| j.code.len() > 256)
+    {
+        return Err("Pack has oversized fields.".to_string());
+    }
     if pack.files.len() > MAX_PACK_FILES {
         return Err(format!("Pack has too many files (>{MAX_PACK_FILES}).", ));
     }
@@ -401,6 +412,17 @@ pub(crate) async fn compute_pack_sync_plan_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_pack_fields_are_refused() {
+        let mut p = pack(&[("Mods/a.package", H)]);
+        assert!(validate_pack(&p).is_ok());
+        p.name = "x".repeat(10_000);
+        assert!(validate_pack(&p).unwrap_err().contains("oversized"));
+        let mut p = pack(&[("Mods/a.package", H)]);
+        p.content_types = vec!["m".repeat(65)];
+        assert!(validate_pack(&p).is_err());
+    }
 
     fn pack(files: &[(&str, &str)]) -> ModPack {
         ModPack {

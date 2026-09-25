@@ -62,8 +62,14 @@ pub struct ChatLog {
 
 /// Strip control characters (newlines included: one line per message),
 /// trim, cap. `None` if nothing is left.
+/// Bidirectional-text overrides and isolates: harmless as data, but in a name
+/// or path they make text display reversed (`gpj.exe` shown as `exe.jpg`).
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
 pub fn clean_text(text: &str, max: usize) -> Option<String> {
-    let s: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let s: String = text.chars().filter(|c| !is_bidi_control(*c)).map(|c| if c.is_control() { ' ' } else { c }).collect();
     let s: String = s.trim().chars().take(max).collect();
     let s = s.trim().to_string();
     (!s.is_empty()).then_some(s)
@@ -169,7 +175,9 @@ pub fn host_sync(
         accepted += 1;
         changed |= log.post(peer_name, &text, false, now).is_some();
     }
-    if let Some(n) = synced_files.filter(|n| *n > 0) {
+    // Rate-limited like chat lines: repeated ChatSyncs with synced_files could
+    // otherwise flood the log with system lines.
+    if let Some(n) = synced_files.filter(|n| *n > 0 && limiter.allow(now)) {
         let files = if n == 1 { "file".to_string() } else { "files".to_string() };
         changed |= log.post(peer_name, &format!("{} finished syncing {n} {files}", clean_name(peer_name)), true, now).is_some();
     }
@@ -183,6 +191,22 @@ pub fn supports(features: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bidi_overrides_are_stripped_from_chat() {
+        assert_eq!(clean_text("look \u{202e}exe.gpj", 500).as_deref(), Some("look exe.gpj"));
+    }
+
+    #[test]
+    fn finished_syncing_lines_are_rate_limited_too() {
+        let mut log = ChatLog::default();
+        let mut rl = RateLimiter::default();
+        for _ in 0..50 {
+            let since = log.last_seq();
+            host_sync(&mut log, &mut rl, "Sam", since, vec![], Some(3), 100);
+        }
+        assert_eq!(log.messages.len(), RATE_MAX, "system lines can't flood the log");
+    }
 
     #[test]
     fn text_is_cleaned_and_capped() {

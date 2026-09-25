@@ -35,10 +35,29 @@ pub fn secret_key() -> SecretKey {
         }
     }
     let key = SecretKey::generate();
-    if let Err(e) = std::fs::write(&path, key.to_bytes()) {
+    if let Err(e) = write_private(&path, &key.to_bytes()) {
         log::warn!("Could not save iroh key ({}); the join code will change on restart", e);
     }
     key
+}
+
+/// Owner-only (0600 on Unix; Windows profile folders are already private)
+/// and written to a temp file first, so a crash can't leave half a key.
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let tmp = path.with_extension("tmp");
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(&tmp)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    drop(f);
+    std::fs::rename(&tmp, path)
 }
 
 /// This install's endpoint id (known without binding — derived from the key).
@@ -86,6 +105,13 @@ async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: Events) {
                 drop(incoming);
                 return;
             }
+            // Counts against the same limit as handshakes in progress, so
+            // unauthenticated QUIC connections can't pile up either.
+            let Some(slot) = crate::network::transfer::HandshakeSlot::try_acquire() else {
+                log::warn!("Refusing internet connection: too many handshakes in progress");
+                drop(incoming);
+                return;
+            };
             let conn = match incoming.await {
                 Ok(c) => c,
                 Err(e) => {
@@ -103,6 +129,7 @@ async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: Events) {
                 }
             };
             let stream = PeerStream::iroh(conn, send, recv);
+            drop(slot);
             let label = format!("internet:{}", remote.fmt_short());
             crate::network::transfer::serve_incoming(stream, state, app, label).await;
         });

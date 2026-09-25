@@ -95,9 +95,10 @@ pub async fn start_host(
     // Bind TCP listener first — surfaces port conflicts to user before committing state
     let (listener, port) = crate::network::transfer::bind_listener(port).await?;
 
-    // Optionally generate a 4-digit session PIN
+    // Optionally generate a session PIN. Five digits (it has to fit the join
+    // code's u16), with lockouts against guessing in `network::pin_guard`.
     let pin = if use_pin.unwrap_or(false) {
-        Some(format!("{:04}", rand::thread_rng().gen_range(1000..=9999)))
+        Some(rand::thread_rng().gen_range(10000..=65535u16).to_string())
     } else {
         None
     };

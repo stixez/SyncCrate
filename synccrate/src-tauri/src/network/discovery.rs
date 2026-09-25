@@ -264,7 +264,11 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
     let mut merged: Vec<Sighting> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     for s in sightings {
-        if let Some(&i) = index.get(&s.key) {
+        // The instance id is broadcast in the clear, so a spoofed reply could
+        // reuse it to add an attacker's address to a real host's list; only
+        // merge sightings that also agree on port and node id.
+        let merge_key = format!("{}|{}|{}", s.key, s.port, s.node_id.as_deref().unwrap_or(""));
+        if let Some(&i) = index.get(&merge_key) {
             let existing = &mut merged[i];
             for a in s.addrs {
                 if !existing.addrs.contains(&a) {
@@ -281,7 +285,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                 existing.node_id = s.node_id;
             }
         } else {
-            index.insert(s.key.clone(), merged.len());
+            index.insert(merge_key, merged.len());
             merged.push(s);
         }
     }
@@ -324,7 +328,12 @@ fn scan_mdns() -> Result<Vec<Sighting>, String> {
             Ok(ServiceEvent::ServiceResolved(info)) => {
                 let props = info.get_properties();
                 let get = |k: &str| props.get(k).map(|v| v.val_str().to_string());
-                let name = get("name").unwrap_or_else(|| info.get_fullname().to_string());
+                let name: String = get("name")
+                    .unwrap_or_else(|| info.get_fullname().to_string())
+                    .chars()
+                    .filter(|c| !c.is_control() && !crate::chat::is_bidi_control(*c))
+                    .take(64)
+                    .collect();
                 // Older hosts don't send an instance id — fall back to the service name.
                 let key = get("instance")
                     .filter(|s| !s.is_empty())
@@ -401,6 +410,15 @@ async fn scan_udp() -> Result<Vec<Sighting>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_spoofed_reply_reusing_an_instance_id_is_not_merged() {
+        let mut spoof = sighting("abc", "10.0.0.66");
+        spoof.port = 9999;
+        let peers = merge_sightings(vec![sighting("abc", "192.168.1.10"), spoof]);
+        assert_eq!(peers.len(), 2, "different port: shown separately, not added to the real host's addresses");
+        assert!(peers.iter().all(|p| p.addresses.len() == 1));
+    }
 
     fn sighting(key: &str, addr: &str) -> Sighting {
         Sighting {

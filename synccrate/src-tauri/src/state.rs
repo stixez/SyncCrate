@@ -384,6 +384,8 @@ pub struct AppState {
     pub local_node_id: Option<String>,
     /// This session's chat (`crate::chat`); cleared when a new session starts.
     pub chat: crate::chat::ChatLog,
+    /// Wrong-PIN attempts per source while hosting (`network::pin_guard`).
+    pub pin_guard: crate::network::pin_guard::PinGuard,
 }
 
 impl AppState {
@@ -490,6 +492,7 @@ impl Default for AppState {
             crews_path: None,
             local_node_id: None,
             chat: crate::chat::ChatLog::default(),
+            pin_guard: Default::default(),
         }
     }
 }

@@ -559,7 +559,7 @@ export default function GameDashboard({ gameId }: Props) {
                   <input
                     type="text"
                     inputMode="numeric"
-                    maxLength={4}
+                    maxLength={5}
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     placeholder="0000"
@@ -617,7 +617,7 @@ export default function GameDashboard({ gameId }: Props) {
                     mono
                     size="sm"
                     inputMode="numeric"
-                    maxLength={4}
+                    maxLength={5}
                     value={manualPin}
                     onChange={(e) => setManualPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     placeholder="PIN (optional)"

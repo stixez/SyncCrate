@@ -129,18 +129,31 @@ pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), 
     .map_err(|_| "Connection timed out writing message".to_string())?
 }
 
+/// A Hello is a few hundred bytes (a name, a PIN, up to 32 crew ids); an
+/// unauthenticated peer gets no more than this, and not for long.
+pub const MAX_HELLO_SIZE: usize = 64 * 1024;
+const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bytes read per step: the buffer grows as data really arrives, so a length
+/// prefix alone can't make us allocate 10 MB.
+const READ_STEP: usize = 64 * 1024;
+
 /// Internal: reads one length-prefixed JSON message without a timeout wrapper.
-async fn recv_message_raw(stream: &mut PeerStream) -> Result<Message, String> {
+async fn recv_message_raw(stream: &mut PeerStream, max: usize) -> Result<Message, String> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await.map_err(|e| e.to_string())?;
     let len = u32::from_be_bytes(len_buf) as usize;
 
-    if len > MAX_MESSAGE_SIZE {
-        return Err(format!("Message too large: {} bytes (max {})", len, MAX_MESSAGE_SIZE));
+    if len > max {
+        return Err(format!("Message too large: {} bytes (max {})", len, max));
     }
 
-    let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf).await.map_err(|e| e.to_string())?;
+    let mut buf = Vec::with_capacity(len.min(READ_STEP));
+    let mut step = vec![0u8; len.clamp(1, READ_STEP)];
+    while buf.len() < len {
+        let n = (len - buf.len()).min(READ_STEP);
+        stream.read_exact(&mut step[..n]).await.map_err(|e| e.to_string())?;
+        buf.extend_from_slice(&step[..n]);
+    }
 
     let msg: Message = serde_json::from_slice(&buf).map_err(|e| e.to_string())?;
 
@@ -159,9 +172,16 @@ async fn recv_message_raw(stream: &mut PeerStream) -> Result<Message, String> {
 }
 
 pub async fn recv_message(stream: &mut PeerStream) -> Result<Message, String> {
-    tokio::time::timeout(RECV_TIMEOUT, recv_message_raw(stream))
+    tokio::time::timeout(RECV_TIMEOUT, recv_message_raw(stream, MAX_MESSAGE_SIZE))
         .await
         .map_err(|_| "Connection timed out reading message".to_string())?
+}
+
+/// The host's first read from a new, unauthenticated peer: small and quick.
+pub async fn recv_hello(stream: &mut PeerStream) -> Result<Message, String> {
+    tokio::time::timeout(HELLO_TIMEOUT, recv_message_raw(stream, MAX_HELLO_SIZE))
+        .await
+        .map_err(|_| "Timed out waiting for Hello".to_string())?
 }
 
 /// Wait up to `timeout` for a message to *start* arriving, then read it fully.

@@ -444,6 +444,9 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
     // Prefix/RootDir component explicitly, not just "..".
     for component in rel.components() {
         match component {
+            std::path::Component::Normal(name) if is_unsafe_windows_name(&name.to_string_lossy()) => {
+                return Err(format!("Invalid file name in path: {}", relative));
+            }
             std::path::Component::Normal(_) | std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
                 return Err(format!("Path traversal rejected: {}", relative));
@@ -541,18 +544,60 @@ pub fn hash_cache_path() -> PathBuf {
 /// Note: .jar and .dll are intentionally excluded — they are legitimate mod
 /// formats for Minecraft Java and Stardew Valley (SMAPI) respectively.
 /// Those are handled by the per-game `dangerous_script_extensions` warning system instead.
+/// Also Explorer-triggered ones (.url/.scf/.library-ms/.search-ms can leak
+/// the user's NTLM hash just by opening the folder) and other launchable or
+/// mountable types; none of them is a mod format in the registry.
 const DANGEROUS_EXTENSIONS: &[&str] = &[
     "exe", "bat", "cmd", "ps1", "vbs", "scr", "lnk",
     "sys", "com", "pif", "msi", "app", "sh", "bash",
     "cpl", "inf", "reg", "ws", "wsf", "hta",
+    "url", "scf", "library-ms", "search-ms", "js", "jse", "vbe", "wsh", "msc", "psm1", "psd1",
+    "chm", "iso", "img", "vhd", "vhdx", "appref-ms", "settingcontent-ms", "msp", "mst", "application",
+    "gadget", "jnlp", "diagcab", "appx", "msix", "appinstaller", "command",
 ];
+/// Whole file names blocked the same way (Explorer reads them on open).
+const DANGEROUS_FILE_NAMES: &[&str] = &["desktop.ini", "autorun.inf"];
 
 /// Returns true if the file extension is on the blocklist of dangerous executables.
 /// Sees through a `.disabled` suffix: `evil.exe.disabled` is one rename away
 /// from running, so it's blocked like `evil.exe`.
 pub fn is_dangerous_extension(path: &str) -> bool {
-    let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
+    let p = std::path::Path::new(path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    let name = name.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(&name);
+    if DANGEROUS_FILE_NAMES.contains(&name) {
+        return true;
+    }
+    let ext = crate::commands::files::effective_extension(p);
     DANGEROUS_EXTENSIONS.contains(&ext.as_str())
+}
+
+/// Windows can't create (or silently alters) these names: device names like
+/// `CON`/`NUL`/`COM1` (with any extension) and names ending in a dot or
+/// space (`evil.exe.` is stored as `evil.exe` by some APIs and literally by
+/// others, and dodges the extension blocklist either way).
+fn is_unsafe_windows_name(name: &str) -> bool {
+    if name.ends_with('.') || name.ends_with(' ') {
+        return true;
+    }
+    let stem = name.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4 && (stem.starts_with("COM") || stem.starts_with("LPT")) && stem.as_bytes()[3].is_ascii_digit())
+}
+
+/// Absolute path of a Windows system program (`%SystemRoot%\System32\<name>`,
+/// or `%SystemRoot%\<name>` for explorer.exe). Spawning a bare name made
+/// Windows look in the app's own (user-writable) folder first.
+#[cfg(target_os = "windows")]
+pub fn windows_system_exe(name: &str) -> PathBuf {
+    let root = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+    if name.eq_ignore_ascii_case("explorer.exe") {
+        root.join(name)
+    } else if name.eq_ignore_ascii_case("powershell.exe") {
+        root.join("System32").join("WindowsPowerShell").join("v1.0").join(name)
+    } else {
+        root.join("System32").join(name)
+    }
 }
 
 /// Migrate config from the old `simshare` directory to `synccrate`.
@@ -626,12 +671,46 @@ pub fn sanitize_id(id: &str) -> Result<(), String> {
     if id.contains('/') || id.contains('\\') || id.contains("..") || id.contains('\0') {
         return Err("Invalid ID: contains path separators or traversal".to_string());
     }
+    // A whitelist, not a blacklist: on Windows "D:evil" joined onto a folder
+    // replaces it with drive D's current directory.
+    if id.len() > 128 || id.starts_with('.') || !id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) {
+        return Err("Invalid ID".to_string());
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsafe_windows_names_and_dangerous_types_are_refused() {
+        let dir = std::env::temp_dir().join(format!("sc-names-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = dir.to_str().unwrap();
+        for bad in ["Mods/CON", "Mods/nul.package", "Mods/com1.txt", "Mods/LPT9", "Mods/evil.exe.", "Mods/evil.exe ", "Mods/dir./x.package"] {
+            assert!(safe_join(base, bad).is_err(), "{bad} should be rejected");
+        }
+        for ok in ["Mods/console.package", "Mods/COM10.package", "Mods/a.b.package", "Mods/nul_hair.package"] {
+            assert!(safe_join(base, ok).is_ok(), "{ok} should be allowed");
+        }
+        for bad in ["Mods/x.url", "Mods/x.scf", "Mods/desktop.ini", "Mods/DESKTOP.INI.disabled", "Mods/x.library-ms", "Mods/x.js", "Mods/x.iso"] {
+            assert!(is_dangerous_extension(bad), "{bad} should be blocked");
+        }
+        assert!(!is_dangerous_extension("Mods/x.package"));
+        assert!(!is_dangerous_extension("mods/sodium.jar"), "jar/dll stay allowed (real mod formats)");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ids_are_whitelisted() {
+        for ok in ["0b7c7c2e-1a2b-4c3d-9e8f-001122334455", "backup_2026-09-25", "a.b"] {
+            assert!(sanitize_id(ok).is_ok(), "{ok}");
+        }
+        for bad in ["D:evil", "C:x", "a/b", "..", ".hidden", "a b", "x\u{0}", ""] {
+            assert!(sanitize_id(bad).is_err(), "{bad:?}");
+        }
+    }
 
     #[test]
     fn test_safe_join_normal_path() {
