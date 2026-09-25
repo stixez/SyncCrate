@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
-import ModItem, { COL } from "./ModItem";
+import ModItem, { COL, ModIcon } from "./ModItem";
 import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
 import ConflictResolver from "./ConflictResolver";
@@ -17,7 +17,8 @@ import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
-import type { FileInfo, FileManifest, ModCompatibility } from "../lib/types";
+import type { FileInfo, FileManifest, ModCompatibility, ModMeta } from "../lib/types";
+import { clearModIconCache, metaLookup } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
 type View = "folders" | "flat";
@@ -204,6 +205,18 @@ export default function ContentBrowser({ gameId }: Props) {
     return () => { cancelled = true; };
   }, [manifest, gameId, hasVersionDetection, readOnly]);
 
+  // Mod names/versions/icons from the mods' own metadata files. Only the
+  // active game has a current manifest, so read-only pages get none.
+  const [modMetas, setModMetas] = useState<ModMeta[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    clearModIconCache();
+    if (readOnly || !manifest) { setModMetas([]); return; }
+    cmd.getModMetadata(gameId).then((m) => { if (!cancelled) setModMetas(m); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [manifest, gameId, readOnly]);
+  const metaFor = useMemo(() => metaLookup(modMetas), [modMetas]);
+
   useEffect(() => {
     cmd.getModTags(gameId).then(setModTags).catch(console.error);
     cmd.getPredefinedTags().then(setPredefinedTags).catch(() => {});
@@ -358,8 +371,10 @@ export default function ContentBrowser({ gameId }: Props) {
 
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? tabFiles.filter((f) => f.relative_path.toLowerCase().includes(q)) : tabFiles;
-  }, [tabFiles, search]);
+    return q
+      ? tabFiles.filter((f) => f.relative_path.toLowerCase().includes(q) || !!metaFor(f.relative_path)?.name.toLowerCase().includes(q))
+      : tabFiles;
+  }, [tabFiles, search, metaFor]);
 
   // OR within a chip group, AND across groups.
   const matchStatus = useCallback(
@@ -578,6 +593,7 @@ export default function ContentBrowser({ gameId }: Props) {
           key={`g:${g.dir}`}
           style={style}
           group={g}
+          meta={metaFor(g.dir)}
           open={!collapsed.has(g.dir)}
           onToggleOpen={() => toggleCollapsed(g.dir)}
           bulkMode={bulkMode && isModLike}
@@ -601,6 +617,7 @@ export default function ContentBrowser({ gameId }: Props) {
         key={p}
         style={style}
         file={f}
+        meta={metaFor(p)}
         syncStatus={getSyncStatus(p)}
         tags={modTags[p]}
         onTagsChanged={handleTagsChanged}
@@ -1007,6 +1024,7 @@ export default function ContentBrowser({ gameId }: Props) {
           gameId={gameId}
           canToggle={canToggle}
           file={detailFile}
+          meta={metaFor(detailFile.relative_path)}
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
@@ -1042,6 +1060,7 @@ function VirtualList({
 function FolderHeader({
   style,
   group,
+  meta,
   open,
   onToggleOpen,
   bulkMode,
@@ -1055,6 +1074,7 @@ function FolderHeader({
 }: {
   style: CSSProperties;
   group: Group;
+  meta?: ModMeta;
   open: boolean;
   onToggleOpen: () => void;
   bulkMode: boolean;
@@ -1072,6 +1092,8 @@ function FolderHeader({
   const leaf = slash >= 0 ? group.dir.slice(slash + 1) : group.dir || "(top level)";
   const allSelected = selectedCount === n;
   const enabled = n - group.disabled;
+  // A folder header names the mod only for folder mods (a jar's name is on its own row).
+  const folderMeta = meta && !meta.is_file ? meta : undefined;
 
   return (
     <div
@@ -1103,11 +1125,24 @@ function FolderHeader({
       <span className="w-6 shrink-0 flex items-center justify-center text-txt-muted">
         <ChevronRight size={13} className={cx("transition-transform", open && "rotate-90")} />
       </span>
-      <Folder size={13} className={cx("shrink-0 -ml-2", open ? "text-accent-light" : "text-txt-muted")} />
-      <p className="min-w-0 truncate font-mono text-[12px]" title={group.dir}>
-        <span className="text-txt-muted">{parent}</span>
-        <span className="text-txt font-semibold">{leaf}</span>
-      </p>
+      {folderMeta ? (
+        <>
+          <ModIcon meta={folderMeta} size={18} className="-ml-2" fallback={<Folder size={13} className={open ? "text-accent-light" : "text-txt-muted"} />} />
+          <p className="min-w-0 truncate text-[12.5px]" title={`${folderMeta.name} · ${group.dir}`}>
+            <span className="text-txt font-semibold">{folderMeta.name}</span>
+            {folderMeta.version && <span className="font-mono text-[10.5px] text-txt-dim ml-1.5">v{folderMeta.version.replace(/^v/i, "")}</span>}
+            <span className="font-mono text-[11px] text-txt-muted ml-2">{group.dir}</span>
+          </p>
+        </>
+      ) : (
+        <>
+          <Folder size={13} className={cx("shrink-0 -ml-2", open ? "text-accent-light" : "text-txt-muted")} />
+          <p className="min-w-0 truncate font-mono text-[12px]" title={group.dir}>
+            <span className="text-txt-muted">{parent}</span>
+            <span className="text-txt font-semibold">{leaf}</span>
+          </p>
+        </>
+      )}
       <span className="shrink-0 font-mono text-[10.5px] text-txt-muted tabular whitespace-nowrap">
         {n.toLocaleString()} file{n !== 1 ? "s" : ""}
         <span className="text-line-hi mx-1.5">/</span>

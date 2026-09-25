@@ -4,6 +4,7 @@ mod crews;
 mod event_sink;
 mod game_install;
 mod network;
+mod mod_meta;
 mod packs;
 mod registry;
 mod state;
@@ -416,6 +417,8 @@ pub fn run() {
             commands::crew::connect_crew,
             commands::chat::get_chat,
             commands::chat::send_chat,
+            commands::mod_info::get_mod_metadata,
+            commands::mod_info::get_mod_icon,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

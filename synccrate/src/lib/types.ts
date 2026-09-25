@@ -166,6 +166,21 @@ export interface ModPack {
 
 /** What a clicked `synccrate://` link or opened `.scpack` file asked for
  * (validated by the backend; see `commands/open_intent.rs`). */
+/** Mod info read from metadata files mods ship (src-tauri/src/mod_meta.rs). */
+export interface ModMeta {
+  /** The mod's folder, or the file itself when `is_file` (jars). */
+  key: string;
+  is_file: boolean;
+  source: string;
+  id?: string | null;
+  name: string;
+  version?: string | null;
+  authors: string[];
+  description?: string | null;
+  website?: string | null;
+  has_icon: boolean;
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }

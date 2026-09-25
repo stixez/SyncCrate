@@ -8,6 +8,7 @@ import type {
   CrewLanHost,
   CrewSet,
   CrewStatus,
+  ModMeta,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -479,6 +480,16 @@ export async function scanCrewHosts(): Promise<CrewLanHost[]> {
 /** Returns immediately; the outcome arrives via peer-connected / connection-failed. */
 export async function connectCrew(crewId: string, nodeId: string | undefined, name: string, pin?: string): Promise<SessionInfo> {
   return invoke("connect_crew", { crewId, nodeId, name, pin });
+}
+
+/** Names, versions, authors and icons from mods' own metadata files (active game only). */
+export async function getModMetadata(game: string): Promise<ModMeta[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_mod_metadata", { game });
+}
+
+export async function getModIcon(key: string): Promise<string | null> {
+  return invoke("get_mod_icon", { key });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

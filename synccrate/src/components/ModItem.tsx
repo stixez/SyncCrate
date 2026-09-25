@@ -1,6 +1,7 @@
-import { memo, useState, type CSSProperties } from "react";
+import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
-import type { FileInfo, ModCompatibility } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta } from "../lib/types";
+import { useModIcon } from "../lib/modMeta";
 import { dirOf, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
@@ -17,8 +18,20 @@ export const COL = {
   toggle: "w-[40px] shrink-0 flex justify-end",
 };
 
+/** A mod's own icon, or `fallback` while loading / when it has none. */
+export function ModIcon({ meta, size, className, fallback }: { meta?: ModMeta; size: number; className?: string; fallback: ReactNode }) {
+  const url = useModIcon(meta);
+  return (
+    <span className={cx("shrink-0 grid place-items-center overflow-hidden", className)} style={{ width: size, height: size }}>
+      {url ? <img src={url} alt="" className="w-full h-full object-cover" draggable={false} /> : fallback}
+    </span>
+  );
+}
+
 interface ModItemProps {
   file: FileInfo;
+  /** Metadata of the mod this file belongs to (its own for jars, its folder's otherwise). */
+  meta?: ModMeta;
   /** Fixed row height from the virtual list (density-dependent). */
   style?: CSSProperties;
   syncStatus?: "synced" | "pending" | "conflict" | "local";
@@ -42,6 +55,7 @@ interface ModItemProps {
 
 function ModItem({
   file,
+  meta,
   style,
   syncStatus = "local",
   tags = [],
@@ -64,6 +78,9 @@ function ModItem({
   const isDisabled = isDisabledPath(file.relative_path);
   const isOutdated = outdatedSince !== undefined;
   const missingPacks = compatibility?.status === "MissingPacks";
+  // A single-file mod (jar) is named by its metadata; files inside a folder
+  // mod keep their file name (the folder header names the mod).
+  const ownMeta = meta?.is_file ? meta : undefined;
 
   return (
     <div
@@ -100,14 +117,17 @@ function ModItem({
         )}
         title={isMod ? "Script mod" : "Custom content"}
       >
-        {isMod ? <Puzzle size={12} /> : <Palette size={12} />}
+        <ModIcon meta={ownMeta} size={22} fallback={isMod ? <Puzzle size={12} /> : <Palette size={12} />} />
       </div>
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <p
           className={cx("text-[13px] font-medium truncate", isDisabled ? "text-txt-muted line-through decoration-txt-muted/60" : "text-txt")}
-          title={file.relative_path}
+          title={ownMeta ? `${ownMeta.name} · ${file.relative_path}` : file.relative_path}
         >
-          {name}
+          {ownMeta ? ownMeta.name : name}
+          {ownMeta?.version && <span className="font-mono text-[10.5px] text-txt-dim font-normal ml-1.5 no-underline">v{ownMeta.version.replace(/^v/i, "")}</span>}
+          {ownMeta && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
+          {!ownMeta && meta && showDir && <span className="text-[11px] text-txt-muted font-normal ml-2">· {meta.name}</span>}
         </p>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
         {isOutdated && (
