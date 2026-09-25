@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import {
   Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles,
-  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info,
+  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
@@ -659,6 +659,26 @@ export default function ContentBrowser({ gameId }: Props) {
   const allVisibleSelected = visible.length > 0 && visible.every((f) => selected.has(f.relative_path));
   const selectedDisabled = useMemo(() => [...selected].filter(isDisabledPath).length, [selected]);
 
+  // A friend (client) can offer files the host lacks (backend `crate::offers`).
+  const session = useAppStore((s) => s.session);
+  const offersVersion = useAppStore((s) => s.offersVersion);
+  const [offersAvailable, setOffersAvailable] = useState(false);
+  useEffect(() => {
+    if (session?.session_type !== "Client") { setOffersAvailable(false); return; }
+    cmd.getOutgoingOffer().then((v) => setOffersAvailable(v.available)).catch(() => setOffersAvailable(false));
+  }, [session?.session_type, offersVersion]);
+  const offerSelected = async () => {
+    try {
+      const offer = await cmd.offerFiles([...selected]);
+      const n = offer?.files.length ?? 0;
+      toastSuccess(`Offered ${n} file${n !== 1 ? "s" : ""} to the host. You'll see on the Dashboard what they take.`);
+      setBulkMode(false);
+      setSelected(new Set());
+    } catch (e) {
+      toastError(`${e}`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <SectionHeader
@@ -924,6 +944,17 @@ export default function ContentBrowser({ gameId }: Props) {
                 Disable
               </Button>
             </>
+          )}
+          {selected.size > 0 && offersAvailable && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={offerSelected}
+              title="Ask the host to take these files. Only ones the host doesn't have are offered; nothing is sent until the host accepts."
+              icon={<Gift size={11} />}
+            >
+              Offer to host
+            </Button>
           )}
           {selected.size > 0 && (!bulkTagInput ? (
             <Button size="sm" variant="primary" onClick={() => setBulkTagInput(true)} icon={<Tag size={11} />}>

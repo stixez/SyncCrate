@@ -44,6 +44,9 @@ interface AppState {
   /** Library games hidden from the sidebar (backend `hidden_games`). */
   hiddenGames: string[];
   setHiddenGames: (hidden: string[]) => void;
+  /** Bumped on the backend's offers-updated / offer-updated events. */
+  offersVersion: number;
+  bumpOffersVersion: () => void;
   /** Last "Check for updates" result per game (kept while the app runs). */
   modUpdates: Record<string, UpdateReport>;
   setModUpdates: (game: string, report: UpdateReport) => void;
@@ -223,6 +226,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setMyLibrary: (library) => set({ myLibrary: library }),
   hiddenGames: [],
   setHiddenGames: (hiddenGames) => set({ hiddenGames }),
+  offersVersion: 0,
+  bumpOffersVersion: () => set((s) => ({ offersVersion: s.offersVersion + 1 })),
   modUpdates: {},
   setModUpdates: (game, report) => set((s) => ({ modUpdates: { ...s.modUpdates, [game]: report } })),
 

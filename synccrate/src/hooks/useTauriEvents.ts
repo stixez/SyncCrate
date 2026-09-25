@@ -392,6 +392,12 @@ export function useTauriEvents() {
             // Ignore
           }
         }),
+        listen("offers-updated", () => {
+          useAppStore.getState().bumpOffersVersion();
+        }),
+        listen("offer-updated", () => {
+          useAppStore.getState().bumpOffersVersion();
+        }),
         listen("crews-changed", () => {
           useAppStore.getState().bumpCrewsVersion();
         }),

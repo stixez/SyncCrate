@@ -9,6 +9,7 @@ pub mod history;
 pub mod install;
 pub mod mod_info;
 pub mod modpack;
+pub mod offers;
 pub mod open_intent;
 pub mod pack_apply;
 pub mod packs;

@@ -17,6 +17,7 @@ import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ChatPanel from "./ChatPanel";
+import OffersPanel from "./OffersPanel";
 import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
 import DonationBanner from "./DonationBanner";
@@ -561,7 +562,7 @@ export default function GameDashboard({ gameId }: Props) {
                     inputMode="numeric"
                     maxLength={5}
                     value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
                     placeholder="0000"
                     aria-label="Session PIN"
                     className="input input-mono flex-1 !h-11 text-center text-xl !tracking-[0.5em]"
@@ -619,7 +620,7 @@ export default function GameDashboard({ gameId }: Props) {
                     inputMode="numeric"
                     maxLength={5}
                     value={manualPin}
-                    onChange={(e) => setManualPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onChange={(e) => setManualPin(e.target.value.replace(/\D/g, "").slice(0, 5))}
                     placeholder="PIN (optional)"
                     aria-label="PIN (optional)"
                   />
@@ -924,6 +925,8 @@ export default function GameDashboard({ gameId }: Props) {
       )}
 
       {isScanning && !manifest ? <ScanSkeleton /> : <StatCardGrid cards={statCards} />}
+
+      <OffersPanel />
 
       <ChatPanel />
 

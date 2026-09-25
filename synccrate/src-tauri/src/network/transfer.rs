@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 /// Maximum file size we'll accept from a peer (2 GB)
-const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
+pub(crate) const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 
 /// A host manifest older than this is rescanned before it's served. The file
 /// watcher normally marks changes (empty hashes), but it can miss events or
@@ -386,7 +386,7 @@ async fn handle_client(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string()],
             },
         )
         .await?;
@@ -770,6 +770,16 @@ async fn handle_client(
             Message::Ping => {
                 // Keepalive — no-op, resets the idle timeout
             }
+            Message::OfferSync { files } => {
+                let reply = host_offer_sync(&state, &app, &peer_id, &peer_name, files).await;
+                let mut s = stream.lock().await;
+                protocol::send_message(&mut *s, &reply).await?;
+            }
+            Message::FileHeader { path, size, hash } => {
+                let mut s = stream.lock().await;
+                let reply = host_receive_offered(&state, &app, &mut s, &peer_id, path, size, hash).await?;
+                protocol::send_message(&mut *s, &reply).await?;
+            }
             Message::ChatSync { since, outgoing, synced_files } => {
                 let (reply, changed, accepted) = {
                     let mut app_state = state.lock().await;
@@ -825,6 +835,9 @@ async fn handle_client(
     {
         let mut app_state = state.lock().await;
         app_state.connections.remove(&peer_id);
+        if app_state.offers_in.remove(&peer_id).is_some() {
+            let _ = app.emit("offers-updated", serde_json::json!({}));
+        }
     }
 
     Ok(())
@@ -1027,7 +1040,7 @@ pub(crate) async fn run_client_session(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string()],
             },
         )
         .await?;
@@ -1063,7 +1076,7 @@ pub(crate) async fn run_client_session(
                         let _ = app.emit("crews-changed", serde_json::json!({}));
                     }
                 }
-                (name, clean_peer_text(&version, 32), supports_compression, game_id, host_node, crate::chat::supports(&features))
+                (name, clean_peer_text(&version, 32), supports_compression, game_id, host_node, (crate::chat::supports(&features), crate::offers::supports(&features)))
             }
             // Shown to the user: a host must not be able to paste a novel into the UI.
             Message::Error { message } => return Err(clean_peer_text(&message, 300)),
@@ -1171,7 +1184,9 @@ pub(crate) async fn run_client_session(
         );
         app_state.pending_client_peer_id = None;
         app_state.chat.clear();
-        app_state.chat.available = host_chat;
+        app_state.chat.available = host_chat.0;
+        app_state.offers_available = host_chat.1;
+        app_state.offer_out = None;
     }
 
     // Emit peer-connected AFTER connection is stored so getSessionStatus() returns peers
@@ -1182,7 +1197,7 @@ pub(crate) async fn run_client_session(
 
     // Client message loop — keeps connection alive, handles host messages,
     // detects disconnects. Runs until the connection drops.
-    client_message_loop(state, app, stream, peer_id, host_name_for_loop, host_chat).await;
+    client_message_loop(state, app, stream, peer_id, host_name_for_loop, host_chat.0, host_chat.1).await;
 
     Ok(())
 }
@@ -1197,11 +1212,13 @@ async fn client_message_loop(
     peer_id: &str,
     host_name: String,
     chat: bool,
+    offers: bool,
 ) {
     let mut clean_disconnect = false;
     let mut disconnect_reason = String::new();
     let mut last_ping = std::time::Instant::now();
     let mut last_chat = std::time::Instant::now() - CHAT_POLL;
+    let mut last_offer = std::time::Instant::now() - OFFER_POLL;
 
     loop {
         // Check if we're still connected (user may have called disconnect)
@@ -1228,6 +1245,9 @@ async fn client_message_loop(
             None
         };
         let mut chat_reply: Option<((Vec<crate::chat::ChatMessage>, Option<usize>), usize, bool)> = None;
+        // Same pattern for an offer to the host (`crate::offers`).
+        let mut offer_req = if offers { offer_poll_request(&state, last_offer.elapsed() >= OFFER_POLL).await } else { None };
+        let mut offer_outcome: Option<OfferOutcome> = None;
 
         // Try to read from stream without blocking sync operations.
         // try_lock avoids holding the stream while a file transfer is in progress.
@@ -1239,6 +1259,20 @@ async fn client_message_loop(
                         last_ping = std::time::Instant::now();
                     }
                 }
+                let offer_early = match offer_req.take() {
+                    Some(req) => {
+                        last_offer = std::time::Instant::now();
+                        match offer_round_trip(&mut s, req).await {
+                            Ok((outcome, pending)) => {
+                                offer_outcome = Some(outcome);
+                                pending.map(|m| Ok(Some(m)))
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    None => None,
+                };
+                if let Some(early) = offer_early { early } else {
                 match chat_req.take() {
                     Some((since, outgoing, synced)) => {
                         last_chat = std::time::Instant::now();
@@ -1258,12 +1292,17 @@ async fn client_message_loop(
                     }
                     None => protocol::try_recv_message(&mut *s, std::time::Duration::from_millis(200)).await,
                 }
+                }
             }
             Err(_) => {
                 // Stream in use by sync operation (which sends its own messages) — skip
                 Ok(None)
             }
         };
+
+        if let Some(outcome) = offer_outcome {
+            apply_offer_outcome(&state, &app, outcome).await;
+        }
 
         if let Some((batch, sent, reported)) = chat_reply {
             let (batch, accepted) = batch;
@@ -1344,6 +1383,277 @@ async fn client_message_loop(
             "reason": reason,
         }),
     );
+}
+
+/// How often a client with an open offer asks the host about it.
+const OFFER_POLL: std::time::Duration = std::time::Duration::from_millis(2000);
+/// Uploads per idle-loop pass, so pings and chat keep flowing between them.
+const OFFER_UPLOADS_PER_PASS: usize = 5;
+
+struct OfferRequest {
+    base: String,
+    /// The file list, until the host has it.
+    files: Option<Vec<crate::state::FileInfo>>,
+    /// Accepted files still to upload.
+    uploads: Vec<crate::state::FileInfo>,
+}
+
+#[derive(Default)]
+struct OfferOutcome {
+    delivered: bool,
+    accepted: Vec<String>,
+    declined: Vec<String>,
+    results: Vec<(String, bool, String)>,
+}
+
+/// What this pass should do for our offer, read before taking the stream
+/// lock (lock order, see the chat poll).
+async fn offer_poll_request(state: &Arc<Mutex<AppState>>, due: bool) -> Option<OfferRequest> {
+    let st = state.lock().await;
+    let offer = st.offer_out.as_ref().filter(|o| o.active())?;
+    let uploads: Vec<_> = offer
+        .files
+        .iter()
+        .filter(|f| f.state == crate::offers::OfferState::Accepted)
+        .take(OFFER_UPLOADS_PER_PASS)
+        .map(|f| f.file.clone())
+        .collect();
+    if !due && uploads.is_empty() && offer.delivered {
+        return None;
+    }
+    Some(OfferRequest {
+        base: st.active_game_path().ok()?,
+        files: (!offer.delivered).then(|| offer.files.iter().map(|f| f.file.clone()).collect()),
+        uploads,
+    })
+}
+
+/// Upload accepted files, then ask for the latest decisions. Runs with the
+/// stream lock held; the host only ever replies.
+async fn offer_round_trip(s: &mut PeerStream, req: OfferRequest) -> Result<(OfferOutcome, Option<Message>), String> {
+    let mut out = OfferOutcome::default();
+    for f in &req.uploads {
+        match upload_offered_file(s, &req.base, f).await? {
+            Ok((ok, message)) => out.results.push((f.relative_path.clone(), ok, message)),
+            Err(m) => return Ok((out, Some(m))),
+        }
+    }
+    let sending = req.files.is_some();
+    protocol::send_message(s, &Message::OfferSync { files: req.files }).await?;
+    loop {
+        let msg = protocol::try_recv_message(s, std::time::Duration::from_secs(15))
+            .await?
+            .ok_or_else(|| "The host stopped answering".to_string())?;
+        match msg {
+            Message::OfferStatus { accepted, declined } => {
+                out.delivered = sending;
+                out.accepted = accepted;
+                out.declined = declined;
+                return Ok((out, None));
+            }
+            m @ (Message::Disconnect | Message::GameInfoExchange { .. }) => return Ok((out, Some(m))),
+            other => log::debug!("Offer poll: ignoring {:?}", other),
+        }
+    }
+}
+
+/// Send one accepted file (the host checks it all again) and read the
+/// host's verdict. `Ok(Err(msg))` hands back a message the loop must act on.
+async fn upload_offered_file(s: &mut PeerStream, base: &str, f: &crate::state::FileInfo) -> Result<Result<(bool, String), Message>, String> {
+    use tokio::io::AsyncReadExt;
+    let path = match crate::utils::safe_join(base, &f.relative_path) {
+        Ok(p) => p,
+        Err(e) => return Ok(Ok((false, e))),
+    };
+    let mut file = match tokio::fs::File::open(&path).await {
+        Ok(file) => file,
+        Err(_) => return Ok(Ok((false, "The file is gone from your folder.".into()))),
+    };
+    let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+    if size != f.size {
+        return Ok(Ok((false, "The file changed since you offered it; offer it again.".into())));
+    }
+    protocol::send_message(s, &Message::FileHeader { path: f.relative_path.clone(), size, hash: f.hash.clone() }).await?;
+    let mut buf = vec![0u8; 65536];
+    let mut offset = 0u64;
+    loop {
+        let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        protocol::send_message(s, &Message::FileChunk { data: BASE64.encode(&buf[..n]), offset, compressed: false }).await?;
+        offset += n as u64;
+    }
+    protocol::send_message(s, &Message::FileComplete { path: f.relative_path.clone() }).await?;
+    loop {
+        let msg = protocol::try_recv_message(s, std::time::Duration::from_secs(60))
+            .await?
+            .ok_or_else(|| "The host stopped answering".to_string())?;
+        match msg {
+            Message::OfferResult { ok, message, .. } => return Ok(Ok((ok, clean_peer_text(&message, 300)))),
+            m @ (Message::Disconnect | Message::GameInfoExchange { .. }) => return Ok(Err(m)),
+            other => log::debug!("Offer upload: ignoring {:?}", other),
+        }
+    }
+}
+
+async fn apply_offer_outcome(state: &Arc<Mutex<AppState>>, app: &Events, outcome: OfferOutcome) {
+    use crate::offers::OfferState;
+    let mut st = state.lock().await;
+    let Some(offer) = st.offer_out.as_mut() else { return };
+    if outcome.delivered {
+        offer.delivered = true;
+    }
+    for f in offer.files.iter_mut() {
+        let p = &f.file.relative_path;
+        if let Some((_, ok, message)) = outcome.results.iter().find(|(r, _, _)| r == p) {
+            f.state = if *ok { OfferState::Received } else { OfferState::Failed };
+            f.message = (!message.is_empty()).then(|| message.clone());
+        } else if f.state == OfferState::Pending && outcome.accepted.contains(p) {
+            f.state = OfferState::Accepted;
+        } else if f.state == OfferState::Pending && outcome.declined.contains(p) {
+            f.state = OfferState::Declined;
+        }
+    }
+    let _ = app.emit("offer-updated", serde_json::json!({}));
+}
+
+/// Host side: an offer's list arrived (or a poll). Returns the reply.
+async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str, peer_name: &str, files: Option<Vec<crate::state::FileInfo>>) -> Message {
+    use crate::offers::{IncomingOffer, OfferState, OfferedFile};
+    let mut st = state.lock().await;
+    let mut rejected = Vec::new();
+    if let Some(files) = files {
+        let cts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
+        let paths: Vec<String> = files.iter().map(|f| f.relative_path.clone()).collect();
+        let files: Vec<_> = files
+            .into_iter()
+            .take(crate::offers::MAX_OFFER_FILES * 2)
+            .map(|mut f| {
+                f.relative_path = clean_peer_text(&f.relative_path, 512);
+                f.file_type = clean_peer_text(&f.file_type, 32);
+                f
+            })
+            .collect();
+        let valid = crate::offers::valid_offer(files, &cts, &st.local_manifest);
+        rejected = paths.into_iter().filter(|p| !valid.iter().any(|v| &v.relative_path == p)).collect();
+        let count = valid.len();
+        st.offers_in.insert(
+            peer_id.to_string(),
+            IncomingOffer {
+                peer_id: peer_id.to_string(),
+                peer_name: peer_name.to_string(),
+                files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
+            },
+        );
+        if count > 0 {
+            let now = crate::utils::timestamp_now();
+            let line = format!("{} offers {} file{} to the host", crate::chat::clean_name(peer_name), count, if count == 1 { "" } else { "s" });
+            st.chat.post(peer_name, &line, true, now);
+            let _ = app.emit("chat-updated", serde_json::json!({}));
+        }
+        let _ = app.emit("offers-updated", serde_json::json!({}));
+    }
+    let offer = st.offers_in.get(peer_id);
+    let pick = |state: OfferState| -> Vec<String> {
+        offer.map(|o| o.files.iter().filter(|f| f.state == state).map(|f| f.file.relative_path.clone()).collect()).unwrap_or_default()
+    };
+    let accepted = pick(OfferState::Accepted);
+    let mut declined = pick(OfferState::Declined);
+    declined.extend(rejected);
+    Message::OfferStatus { accepted, declined }
+}
+
+/// Host side: a friend uploads a file it offered. Everything is checked
+/// again here; the body is always consumed so the stream stays in sync.
+async fn host_receive_offered(
+    state: &Arc<Mutex<AppState>>,
+    app: &Events,
+    s: &mut PeerStream,
+    peer_id: &str,
+    path: String,
+    size: u64,
+    hash: String,
+) -> Result<Message, String> {
+    use crate::offers::OfferState;
+    let result = |ok: bool, message: &str| Message::OfferResult { path: path.clone(), ok, message: message.to_string() };
+    let checked = {
+        let st = state.lock().await;
+        let accepted = st
+            .offers_in
+            .get(peer_id)
+            .and_then(|o| o.files.iter().find(|f| f.file.relative_path == path))
+            .filter(|f| f.state == OfferState::Accepted && f.file.size == size && f.file.hash == hash)
+            .is_some();
+        let cts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
+        let already = st.local_manifest.files.keys().any(|k| crate::sync::diff::match_key(k) == crate::sync::diff::match_key(&path));
+        let dest = st.active_game_path().and_then(|base| crate::utils::safe_join(&base, &path));
+        if !accepted {
+            Err("You didn't accept that file.")
+        } else if already {
+            Err("You already have a file with that name.")
+        } else if !crate::sync::diff::path_accepted_by(&cts, &path) || crate::utils::is_dangerous_extension(&path) || size > MAX_FILE_SIZE {
+            Err("That file can't be added to this game.")
+        } else {
+            dest.map_err(|_| "Invalid file path.")
+        }
+    };
+    let dest = match checked {
+        Ok(d) if !d.exists() => d,
+        Ok(_) => {
+            drain_until_file_end(s).await;
+            return Ok(result(false, "You already have a file with that name."));
+        }
+        Err(why) => {
+            drain_until_file_end(s).await;
+            return Ok(result(false, why));
+        }
+    };
+    if let Some(parent) = dest.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            drain_until_file_end(s).await;
+            return Ok(result(false, &e.to_string()));
+        }
+    }
+    let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let tmp = dest.with_file_name(format!(".{}.synccrate-offer-{}.tmp", name, uuid::Uuid::new_v4()));
+    let received = receive_file_body(s, &tmp, size, &hash, &path).await;
+    let outcome = match received {
+        Ok(()) if dest.exists() => {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            Err("You already have a file with that name.".to_string())
+        }
+        Ok(()) => tokio::fs::rename(&tmp, &dest).await.map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            e.to_string()
+        }),
+        Err((e, in_sync)) => {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            if !in_sync {
+                drain_until_file_end(s).await;
+            }
+            Err(e)
+        }
+    };
+    {
+        let mut st = state.lock().await;
+        if let Some(f) = st.offers_in.get_mut(peer_id).and_then(|o| o.files.iter_mut().find(|f| f.file.relative_path == path)) {
+            f.state = if outcome.is_ok() { OfferState::Received } else { OfferState::Failed };
+            f.message = outcome.as_ref().err().cloned();
+        }
+    }
+    let _ = app.emit("offers-updated", serde_json::json!({}));
+    if outcome.is_ok() {
+        // New files belong in the manifest friends pull from.
+        let st = state.clone();
+        tokio::spawn(async move {
+            let _ = crate::commands::files::scan_files_inner(&st, None, true).await;
+        });
+    }
+    Ok(match outcome {
+        Ok(()) => result(true, ""),
+        Err(e) => result(false, &e),
+    })
 }
 
 /// How often an idle client asks the host for new chat lines.

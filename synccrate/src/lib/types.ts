@@ -234,6 +234,27 @@ export interface UpdateReport {
   errors: string[];
 }
 
+/** Friends offering files to the host (src-tauri/src/offers.rs). */
+export type OfferState = "pending" | "accepted" | "declined" | "received" | "failed";
+
+export interface OfferedFile {
+  file: FileInfo;
+  state: OfferState;
+  message?: string | null;
+}
+
+export interface IncomingOffer {
+  peer_id: string;
+  peer_name: string;
+  files: OfferedFile[];
+}
+
+export interface OutgoingOfferView {
+  /** Connected to a host that accepts offers. */
+  available: boolean;
+  offer: { files: OfferedFile[] } | null;
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }
