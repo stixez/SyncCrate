@@ -1428,6 +1428,16 @@
     },
     {
       "id": "stardew_valley",
+      "mod_loader": {
+        "name": "SMAPI",
+        "content_type": "mods",
+        "any_of": [
+          "StardewModdingAPI.dll",
+          "StardewModdingAPI.exe",
+          "StardewModdingAPI"
+        ],
+        "url": "https://smapi.io"
+      },
       "disable_method": "none",
       "label": "Stardew Valley",
       "family": "stardew",
@@ -1485,6 +1495,15 @@
     },
     {
       "id": "valheim",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "Valheim",
       "family": "valheim",
@@ -5502,6 +5521,15 @@
     },
     {
       "id": "risk_of_rain_2",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "Risk of Rain 2",
       "family": "ror",
@@ -5574,6 +5602,15 @@
     },
     {
       "id": "lethal_company",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "Lethal Company",
       "family": "lethalcompany",
@@ -5992,6 +6029,15 @@
     },
     {
       "id": "among_us",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "Among Us",
       "family": "amongus",
@@ -6660,6 +6706,15 @@
     },
     {
       "id": "repo",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "R.E.P.O.",
       "family": "repo",
@@ -6732,6 +6787,15 @@
     },
     {
       "id": "v_rising",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "V Rising",
       "family": "vrising",
@@ -6804,6 +6868,15 @@
     },
     {
       "id": "dyson_sphere_program",
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
       "disable_method": "rename",
       "label": "Dyson Sphere Program",
       "family": "dsp",

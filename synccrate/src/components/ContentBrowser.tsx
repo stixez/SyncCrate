@@ -8,6 +8,7 @@ import { getGameDef } from "../lib/games";
 import ModItem, { COL, ModIcon } from "./ModItem";
 import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
+import CompatIssues from "./CompatIssues";
 import ConflictResolver from "./ConflictResolver";
 import DuplicateFinder from "./DuplicateFinder";
 import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "./ui";
@@ -694,6 +695,8 @@ export default function ContentBrowser({ gameId }: Props) {
           {scanError}
         </Banner>
       )}
+
+      {!readOnly && <CompatIssues gameId={gameId} />}
 
       {workshopMods > 0 && (
         <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>

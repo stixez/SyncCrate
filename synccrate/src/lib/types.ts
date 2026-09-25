@@ -204,6 +204,18 @@ export interface AutoPullResult {
   skipped?: string | null;
 }
 
+/** A problem that stops mods from loading (src-tauri/src/compat.rs). */
+export interface CompatIssue {
+  kind: string;
+  severity: "error" | "warn";
+  title: string;
+  detail: string;
+  count: number;
+  paths: string[];
+  fix?: string;
+  url?: string;
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }
