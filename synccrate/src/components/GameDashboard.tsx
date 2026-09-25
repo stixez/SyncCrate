@@ -398,7 +398,7 @@ export default function GameDashboard({ gameId }: Props) {
               checked={usePin}
               onChange={setUsePin}
               label="Require PIN to join"
-              description="Anyone with your code can join. Posting it publicly? Turn this on."
+              description={usePin ? "Friends need the PIN shown after you start hosting. Your join code and join link include it; crew invites never do." : "Anyone with your code, or an old invite, can join and pull your files."}
               className="mb-5"
             />
             <div className="mb-5">

@@ -417,7 +417,6 @@ async fn handle_client(
                 remote_manifest: None,
                 sync_plan: None,
                 is_syncing: false,
-                supports_compression: use_compression,
             },
         );
         let now = crate::utils::timestamp_now();
@@ -938,7 +937,6 @@ async fn connect_best(
     addresses: &[String],
     port: u16,
     internet_id: Option<iroh::EndpointId>,
-    prefer_internet: bool,
     state: &Arc<Mutex<AppState>>,
     app: &Events,
 ) -> Result<PeerStream, String> {
@@ -949,18 +947,9 @@ async fn connect_best(
         return crate::network::iroh_net::connect(state, app, remote).await;
     }
 
-    // Normally LAN gets the head start. `prefer_internet` (crew connects)
-    // flips it: iroh proves the host really has the node id we're dialling,
-    // while a LAN address came from an unauthenticated discovery broadcast
-    // anyone on the network can fake. LAN stays the fallback for a party
-    // without internet, with the same trust as joining any discovered host.
-    let (lan_delay, net_delay) = if prefer_internet { (6000, 0) } else { (0, 1500) };
-    let lan = async {
-        tokio::time::sleep(std::time::Duration::from_millis(lan_delay)).await;
-        connect_any(addresses, port).await.map(PeerStream::tcp)
-    };
+    let lan = async { connect_any(addresses, port).await.map(PeerStream::tcp) };
     let internet = async {
-        tokio::time::sleep(std::time::Duration::from_millis(net_delay)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
         crate::network::iroh_net::connect(state, app, remote).await
     };
     tokio::pin!(lan);
@@ -987,22 +976,7 @@ pub async fn connect_to_host(
     app: Events,
     pin: Option<String>,
 ) -> Result<(), String> {
-    connect_to_host_with(addresses, port, internet_id, false, peer_id, state, app, pin).await
-}
-
-/// `connect_to_host`, optionally dialling the internet id first (see `connect_best`).
-#[allow(clippy::too_many_arguments)]
-pub async fn connect_to_host_with(
-    addresses: &[String],
-    port: u16,
-    internet_id: Option<iroh::EndpointId>,
-    prefer_internet: bool,
-    peer_id: &str,
-    state: Arc<Mutex<AppState>>,
-    app: Events,
-    pin: Option<String>,
-) -> Result<(), String> {
-    let stream = connect_best(addresses, port, internet_id, prefer_internet, &state, &app).await?;
+    let stream = connect_best(addresses, port, internet_id, &state, &app).await?;
     run_client_session(stream, addresses, port, peer_id, state, app, pin).await
 }
 
@@ -1060,7 +1034,7 @@ pub(crate) async fn run_client_session(
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version, host_supports_compression, host_game, host_node, host_chat) = {
+    let (host_name, host_version, _host_supports_compression, host_game, host_node, host_chat) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
@@ -1193,7 +1167,6 @@ pub(crate) async fn run_client_session(
                 remote_manifest: Some(remote_manifest),
                 sync_plan: None,
                 is_syncing: false,
-                supports_compression: host_supports_compression,
             },
         );
         app_state.pending_client_peer_id = None;

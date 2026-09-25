@@ -320,7 +320,7 @@ pub(crate) async fn execute_sync_inner(
                 &events,
                 plan.game_id.clone(),
                 base_path.clone(),
-                content_types,
+                content_types.clone(),
                 targets,
             )
             .await;
@@ -353,9 +353,17 @@ pub(crate) async fn execute_sync_inner(
         if !targets.is_empty() {
             let peer = state.lock().await.connections.get(&resolved_id).map(|c| c.info.name.clone()).unwrap_or_default();
             let capture_id = uuid::Uuid::new_v4().to_string();
-            let (game, base, id) = (plan.game_id.clone(), base_path.clone(), capture_id.clone());
+            let (game, base, id, backup, cts) = (plan.game_id.clone(), base_path.clone(), capture_id.clone(), presync_backup_id.clone(), content_types.clone());
             let captured = tokio::task::spawn_blocking(move || {
-                crate::commands::history::begin_capture(&crate::utils::backups_dir(), &game, &base, &targets, &peer, &id, crate::utils::timestamp_now())
+                let root = crate::utils::backups_dir();
+                let now = crate::utils::timestamp_now();
+                match backup {
+                    // "Back up before sync" already copied exactly these files
+                    // into the store: index those objects instead of reading
+                    // and hashing every file a second time.
+                    Some(backup_id) => crate::commands::history::begin_capture_from_backup(&root, &game, &base, &backup_id, &cts, &targets, &peer, &id, now),
+                    None => crate::commands::history::begin_capture(&root, &game, &base, &targets, &peer, &id, now),
+                }
             })
             .await;
             match captured {
@@ -452,12 +460,7 @@ pub const SYNC_CANCELLED: &str = "Sync cancelled";
 /// can't be read (never fails the sync over it — undo would just skip that
 /// file's match check later).
 fn mtime_ms_of(path: &std::path::Path) -> i64 {
-    std::fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .and_then(|d| i64::try_from(d.as_millis()).ok())
-        .unwrap_or(0)
+    std::fs::metadata(path).ok().and_then(|m| crate::commands::backup::mtime_ms(&m)).unwrap_or(0)
 }
 
 /// An auto-pull's additions folded into the previous record for the same

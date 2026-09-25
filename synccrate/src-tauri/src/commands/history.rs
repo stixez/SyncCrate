@@ -188,6 +188,63 @@ pub(crate) fn begin_capture(root: &Path, game: &str, base: &str, targets: &[Stri
     Ok(n)
 }
 
+/// `begin_capture` when "back up before sync" just stored exactly these files:
+/// index the presync backup's objects instead of copying and hashing them
+/// again. Targets the backup doesn't hold (it skipped them) are copied as usual.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn begin_capture_from_backup(
+    root: &Path,
+    game: &str,
+    base: &str,
+    backup_id: &str,
+    cts: &[crate::registry::ContentType],
+    targets: &[String],
+    peer: &str,
+    capture_id: &str,
+    now: u64,
+) -> Result<usize, String> {
+    let (n, missing) = {
+        let _lock = backup::store_lock();
+        let objects = backup::backup_objects(root, backup_id, cts)?;
+        let by_path: HashMap<String, &(String, String, u64, Option<i64>)> = objects.iter().map(|o| (o.0.to_lowercase(), o)).collect();
+        let mut h = load(root, game)?;
+        let mut n = 0;
+        let mut missing = Vec::new();
+        let mut seen = HashSet::new();
+        for rel in targets {
+            let key = rel.replace('\\', "/").to_lowercase();
+            if !seen.insert(key.clone()) {
+                continue;
+            }
+            match by_path.get(&key) {
+                Some((path, hash, size, mtime)) => {
+                    h.entries.push(FileVersion {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        path: path.clone(),
+                        hash: hash.clone(),
+                        size: *size,
+                        mtime_ms: *mtime,
+                        at: now,
+                        reason: REASON_REPLACED.into(),
+                        peer: peer.to_string(),
+                        pending: Some(capture_id.to_string()),
+                    });
+                    n += 1;
+                }
+                None => missing.push(rel.clone()),
+            }
+        }
+        if n > 0 {
+            save(root, game, &h)?;
+        }
+        (n, missing)
+    };
+    if missing.is_empty() {
+        return Ok(n);
+    }
+    Ok(n + begin_capture(root, game, base, &missing, peer, capture_id, now)?)
+}
+
 /// After the sync: keep the pending versions of files it really replaced or
 /// deleted (marking deletions as such), drop the rest, apply retention.
 pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[String], deleted: &[String], now: u64) -> Result<(), String> {

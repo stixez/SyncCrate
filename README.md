@@ -97,7 +97,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **File history.** Whenever a sync replaces or deletes a file, SyncCrate keeps the old version (stored once, shared with backups). Open a mod's details, or Backups → File history for deleted files, to see its earlier versions ("replaced by a sync from Alex, Friday 21:40") and put back just that one file. Restoring keeps the version it replaces too, so you can change your mind. Kept for 180 days, up to 10 versions per file and 2 GB per game, and it can be turned off in Settings.
 - **Script warnings.** Flags risky files (`.dll`, `.ts4script`, `.lua`, `.jar`) before syncing.
 - **Private.** Files never leave your PCs. Warns you if the game is still running.
-- **Hardened against bad peers.** A host can only write into the game's content folders, never executables or shortcut-style files; downloads must match the sizes and hashes in the host's file list; session PINs are five digits and lock out guessers (three tries, then a growing wait).
+- **Hardened against bad peers.** A host can only write into the game's content folders, never executables or shortcut-style files; downloads must match the sizes and hashes in the host's file list; session PINs are on by default, five digits, and lock out guessers (three tries, then a growing wait).
 
 **Yours**
 - **Appearance.** Any accent color (or each game's own), dark/light/system theme, UI scale, compact rows, and effects off for a calmer look.
