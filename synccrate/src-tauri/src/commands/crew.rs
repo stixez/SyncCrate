@@ -304,7 +304,7 @@ pub async fn connect_crew(
         connect_target(crew, &node, &s.discovered_peers)?
     };
     let pin = pin.filter(|p| !p.trim().is_empty());
-    crate::commands::session::start_direct_connection(state.inner(), app, addresses, port, Some(id), name, pin, label).await
+    crate::commands::session::start_direct_connection(state.inner(), app, addresses, port, Some(id), true, name, pin, label).await
 }
 
 #[cfg(test)]

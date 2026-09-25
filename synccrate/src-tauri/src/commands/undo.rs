@@ -143,8 +143,13 @@ pub(crate) async fn undo_last_sync_inner(
         if app_state.is_any_syncing() {
             return Err("Can't undo while a sync is in progress.".to_string());
         }
-        if app_state.session_type != crate::state::SessionType::None {
-            return Err("Disconnect from the current session before undoing a sync.".to_string());
+        // A host may be serving these files to someone, so never rewrite them
+        // there (restore_backup's rule). A connected client can undo: the
+        // restore flag below stops a new sync (or a stay-in-sync pull) from
+        // starting until it's done, and the "Undo" toast right after a sync
+        // is shown while still connected.
+        if app_state.session_type == crate::state::SessionType::Host {
+            return Err("Stop hosting before undoing a sync.".to_string());
         }
         let game_label = app_state.game_label(&game_id);
         let base_path = app_state.game_paths.get(&game_id).cloned();
@@ -183,6 +188,10 @@ pub(crate) async fn undo_last_sync_inner(
         .map_err(|e| e.to_string())?;
 
     delete_record(&game_id);
+    // Any plan on screen was computed against the files as they were.
+    for conn in state.lock().await.connections.values_mut() {
+        conn.sync_plan = None;
+    }
     Ok(result)
 }
 

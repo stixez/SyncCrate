@@ -1173,7 +1173,7 @@ async fn pack_for_another_game_is_refused_tcp() {
 }
 
 #[tokio::test]
-async fn undo_refused_during_a_sync_or_session_tcp() {
+async fn undo_refused_during_a_sync_or_while_hosting_tcp() {
     let _g = e2e_guard().await;
     let host_dir = temp_dir("undo-guard-host");
     let client_dir = temp_dir("undo-guard-client");
@@ -1189,20 +1189,25 @@ async fn undo_refused_during_a_sync_or_session_tcp() {
     compute_plan(&client_state).await.expect("compute plan");
     run_sync_now(&client_state).await.expect("sync");
 
-    // Still connected: the same session-active guard `restore_backup` uses.
-    let err = undo(&client_state).await.expect_err("undo must refuse while a session is open");
-    assert!(err.contains("Disconnect"), "unexpected error: {err}");
-
     // Simulate a sync in progress (independent of session state).
     client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = true;
     let err = undo(&client_state).await.expect_err("undo must refuse during a sync");
     assert!(err.contains("sync is in progress"), "unexpected error: {err}");
     client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = false;
 
-    // Disconnect for real, then undo succeeds.
-    client_state.lock().await.session_type = crate::state::SessionType::None;
-    let summary = undo(&client_state).await.expect("undo after disconnecting");
+    // A host never rewrites files it may be serving.
+    client_state.lock().await.session_type = crate::state::SessionType::Host;
+    let err = undo(&client_state).await.expect_err("undo must refuse while hosting");
+    assert!(err.contains("hosting"), "unexpected error: {err}");
+    client_state.lock().await.session_type = crate::state::SessionType::Client;
+
+    // Still connected as a client: undo works (the "Undo" toast right after a
+    // sync is shown while connected) and drops any plan computed before it.
+    compute_plan(&client_state).await.ok();
+    let summary = undo(&client_state).await.expect("undo while connected");
     assert_eq!(summary.removed, 1);
+    assert!(!file_exists(&client_dir, "Mods/new.package"));
+    assert!(client_state.lock().await.connections[&peer_id].sync_plan.is_none(), "stale plan dropped");
 
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);
@@ -1529,6 +1534,40 @@ async fn apply_pack_exactly_refused_during_sync_hosting_restore_or_changed_folde
     let result = apply().await.expect("apply");
     assert_eq!(result.disabled, 1);
     pack_apply::delete_record("sims4");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+/// A file the plan wanted to download but that was already there (the local
+/// manifest was stale) was never written by the sync, so undo must leave it.
+#[tokio::test]
+async fn undo_never_deletes_a_file_the_sync_found_already_present_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("undo-present-host");
+    let client_dir = temp_dir("undo-present-client");
+    write_file(&host_dir, "Mods/same.package", b"SAME");
+    write_file(&host_dir, "Mods/new.package", b"NEW");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+    let plan = compute_plan(&client_state).await.expect("plan");
+    assert_eq!(plan.actions.len(), 2);
+    // The same mod gets copied in by hand after the compare.
+    write_file(&client_dir, "Mods/same.package", b"SAME");
+    run_sync_now(&client_state).await.expect("sync");
+
+    let record = crate::commands::undo::read_record("sims4").expect("record");
+    let added: Vec<_> = record.added.iter().map(|f| f.relative_path.as_str()).collect();
+    assert_eq!(added, vec!["Mods/new.package"], "only what the sync wrote");
+    undo(&client_state).await.expect("undo");
+    assert!(!file_exists(&client_dir, "Mods/new.package"));
+    assert_eq!(read_file(&client_dir, "Mods/same.package"), b"SAME", "the hand-copied file stays");
 
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);

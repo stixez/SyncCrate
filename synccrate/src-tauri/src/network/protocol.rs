@@ -85,7 +85,13 @@ pub enum Message {
         synced_files: Option<u64>,
     },
     /// Host → client, only ever as the reply to `ChatSync` (see `chat` docs).
-    ChatBatch { messages: Vec<ChatMessage> },
+    ChatBatch {
+        messages: Vec<ChatMessage>,
+        /// How many of the `ChatSync`'s lines the host posted (the rest hit
+        /// its rate limit; the client keeps them queued).
+        #[serde(default)]
+        accepted: Option<usize>,
+    },
 }
 
 /// Error a host sends when a client joins with a different game selected.

@@ -460,6 +460,23 @@ fn mtime_ms_of(path: &std::path::Path) -> i64 {
         .unwrap_or(0)
 }
 
+/// An auto-pull's additions folded into the previous record for the same
+/// folder (kept as-is otherwise: a record for another folder can't be undone
+/// here anyway, so the new one replaces it).
+fn merge_auto_pull_record(prev: SyncRecord, new: SyncRecord) -> SyncRecord {
+    if prev.base_path != new.base_path || prev.game != new.game {
+        return new;
+    }
+    let mut merged = prev;
+    merged.created_at = new.created_at;
+    for f in new.added {
+        if !merged.added.iter().any(|a| a.relative_path == f.relative_path) {
+            merged.added.push(f);
+        }
+    }
+    merged
+}
+
 async fn run_sync(
     state: &Arc<Mutex<AppState>>,
     app: &Events,
@@ -559,7 +576,16 @@ async fn run_sync(
                 )
                 .await;
                 match result {
-                    Ok(()) => {
+                    // Already there with the right content: nothing was
+                    // written, so it isn't this sync's to undo (recording it
+                    // as "added" let undo delete a file the user had).
+                    Ok(false) => {
+                        files_done += 1;
+                        bytes_done += file_info.size;
+                        checkpoint.completed_files.push(file_info.relative_path.clone());
+                        write_checkpoint(&checkpoint);
+                    }
+                    Ok(true) => {
                         files_done += 1;
                         files_received += 1;
                         bytes_done += file_info.size;
@@ -653,7 +679,7 @@ async fn run_sync(
         }
     }
 
-    let undo_record = SyncRecord {
+    let mut undo_record = SyncRecord {
         sync_id: uuid::Uuid::new_v4().to_string(),
         created_at: crate::utils::timestamp_now(),
         game: game_id,
@@ -663,6 +689,14 @@ async fn run_sync(
         replaced: undo_replaced,
         deleted: undo_deleted,
     };
+    if plan.auto_pull {
+        // A stay-in-sync pull only adds files. Replacing the record would make
+        // the user's last real sync (its replacements, deletions and presync
+        // backup) impossible to undo; extend it instead.
+        if let Some(prev) = crate::commands::undo::read_record(&undo_record.game) {
+            undo_record = merge_auto_pull_record(prev, undo_record);
+        }
+    }
     if !undo_record.is_empty() {
         crate::commands::undo::write_record(&undo_record);
     }
@@ -1126,6 +1160,26 @@ pub async fn get_exclude_patterns() -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_pull_record_merges_into_the_same_folder_only() {
+        use crate::commands::undo::{RecordedFile, SyncRecord};
+        let f = |p: &str| RecordedFile { relative_path: p.into(), size: 1, mtime_ms: 1, hash: "h".into() };
+        let rec = |id: &str, base: &str, added: Vec<RecordedFile>, replaced: Vec<RecordedFile>| SyncRecord {
+            sync_id: id.into(), created_at: 1, game: "sims4".into(), base_path: base.into(),
+            presync_backup_id: Some("b".into()), added, replaced, deleted: vec!["Mods/gone.package".into()],
+        };
+        let prev = rec("manual", "C:/g", vec![f("Mods/a.package")], vec![f("Mods/r.package")]);
+        let new = rec("auto", "C:/g", vec![f("Mods/a.package"), f("Mods/b.package")], vec![]);
+        let m = merge_auto_pull_record(prev.clone(), new);
+        assert_eq!(m.sync_id, "manual");
+        assert_eq!(m.replaced.len(), 1);
+        assert_eq!(m.deleted.len(), 1);
+        assert_eq!(m.presync_backup_id.as_deref(), Some("b"));
+        assert_eq!(m.added.iter().map(|x| x.relative_path.as_str()).collect::<Vec<_>>(), vec!["Mods/a.package", "Mods/b.package"]);
+        let other = rec("auto", "D:/elsewhere", vec![f("Mods/c.package")], vec![]);
+        assert_eq!(merge_auto_pull_record(prev, other).sync_id, "auto", "a record for another folder isn't merged");
+    }
 
     #[test]
     fn test_glob_matches_wildcard_all() {

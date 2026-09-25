@@ -9,6 +9,9 @@ use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Rescan the local folder before the next pull (at start, and after a pull).
+static NEEDS_RESCAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 /// Always treated as scripts, on top of the game's `dangerous_script_extensions`.
 const SCRIPT_EXTENSIONS: &[&str] = &["dll", "exe", "ts4script", "lua", "jar", "js", "py", "bat", "cmd", "ps1", "asi", "so", "dylib"];
 
@@ -31,7 +34,7 @@ pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan,
         let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
         SCRIPT_EXTENSIONS.contains(&ext.as_str()) || script_exts.iter().any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(&ext))
     };
-    let mut subset = SyncPlan { game_id: plan.game_id.clone(), base_path: plan.base_path.clone(), host_game: plan.host_game.clone(), ..Default::default() };
+    let mut subset = SyncPlan { game_id: plan.game_id.clone(), base_path: plan.base_path.clone(), host_game: plan.host_game.clone(), auto_pull: true, ..Default::default() };
     let (mut scripts, mut review) = (0, 0);
     for action in &plan.actions {
         match action {
@@ -88,10 +91,18 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
         return skip("The game is running.");
     }
 
-    // Our own manifest must be current too: a stale one (the frontend usually
-    // rescans after a sync, but nothing does between unattended pulls) would
-    // show files we just pulled as missing again.
-    crate::commands::files::scan_files_inner(state, None, true).await?;
+    // Our own manifest must be current after a pull (the frontend usually
+    // rescans after a sync, but nothing does between unattended pulls), or
+    // the files we just pulled look missing again. Rescanning every minute
+    // regardless walked big Mods folders for nothing; a stale entry for a
+    // file the user added themselves is harmless (the download finds it
+    // already there and writes nothing).
+    if NEEDS_RESCAN.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        if let Err(e) = crate::commands::files::scan_files_inner(state, None, true).await {
+            NEEDS_RESCAN.store(true, std::sync::atomic::Ordering::SeqCst);
+            return Err(e);
+        }
+    }
     crate::network::transfer::refresh_remote_manifest(state, &peer_id).await?;
     let plan = crate::commands::sync::compute_sync_plan_inner(state, Some(peer_id.clone())).await?;
     let (subset, scripts_held, needs_review) = safe_subset(&plan, &script_exts);
@@ -107,6 +118,7 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
         conn.sync_plan = (pulled > 0).then_some(subset);
     }
     if pulled > 0 {
+        NEEDS_RESCAN.store(true, std::sync::atomic::Ordering::SeqCst);
         crate::commands::sync::execute_sync_inner(state, events, Some(peer_id)).await?;
     }
     Ok(AutoPullResult { pulled, scripts_held, needs_review, skipped: None })

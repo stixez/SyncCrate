@@ -695,7 +695,7 @@ async fn handle_client(
                 // Keepalive — no-op, resets the idle timeout
             }
             Message::ChatSync { since, outgoing, synced_files } => {
-                let (reply, changed) = {
+                let (reply, changed, accepted) = {
                     let mut app_state = state.lock().await;
                     let now = crate::utils::timestamp_now();
                     crate::chat::host_sync(&mut app_state.chat, &mut chat_limiter, &peer_name, since, outgoing, synced_files, now)
@@ -704,7 +704,7 @@ async fn handle_client(
                     let _ = app.emit("chat-updated", serde_json::json!({}));
                 }
                 let mut s = stream.lock().await;
-                protocol::send_message(&mut *s, &Message::ChatBatch { messages: reply }).await?;
+                protocol::send_message(&mut *s, &Message::ChatBatch { messages: reply, accepted: Some(accepted) }).await?;
             }
             Message::Disconnect => {
                 clean_disconnect = true;
@@ -858,6 +858,7 @@ async fn connect_best(
     addresses: &[String],
     port: u16,
     internet_id: Option<iroh::EndpointId>,
+    prefer_internet: bool,
     state: &Arc<Mutex<AppState>>,
     app: &Events,
 ) -> Result<PeerStream, String> {
@@ -868,9 +869,18 @@ async fn connect_best(
         return crate::network::iroh_net::connect(state, app, remote).await;
     }
 
-    let lan = async { connect_any(addresses, port).await.map(PeerStream::tcp) };
+    // Normally LAN gets the head start. `prefer_internet` (crew connects)
+    // flips it: iroh proves the host really has the node id we're dialling,
+    // while a LAN address came from an unauthenticated discovery broadcast
+    // anyone on the network can fake. LAN stays the fallback for a party
+    // without internet, with the same trust as joining any discovered host.
+    let (lan_delay, net_delay) = if prefer_internet { (6000, 0) } else { (0, 1500) };
+    let lan = async {
+        tokio::time::sleep(std::time::Duration::from_millis(lan_delay)).await;
+        connect_any(addresses, port).await.map(PeerStream::tcp)
+    };
     let internet = async {
-        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(net_delay)).await;
         crate::network::iroh_net::connect(state, app, remote).await
     };
     tokio::pin!(lan);
@@ -897,7 +907,22 @@ pub async fn connect_to_host(
     app: Events,
     pin: Option<String>,
 ) -> Result<(), String> {
-    let stream = connect_best(addresses, port, internet_id, &state, &app).await?;
+    connect_to_host_with(addresses, port, internet_id, false, peer_id, state, app, pin).await
+}
+
+/// `connect_to_host`, optionally dialling the internet id first (see `connect_best`).
+#[allow(clippy::too_many_arguments)]
+pub async fn connect_to_host_with(
+    addresses: &[String],
+    port: u16,
+    internet_id: Option<iroh::EndpointId>,
+    prefer_internet: bool,
+    peer_id: &str,
+    state: Arc<Mutex<AppState>>,
+    app: Events,
+    pin: Option<String>,
+) -> Result<(), String> {
+    let stream = connect_best(addresses, port, internet_id, prefer_internet, &state, &app).await?;
     run_client_session(stream, addresses, port, peer_id, state, app, pin).await
 }
 
@@ -1143,7 +1168,7 @@ async fn client_message_loop(
         } else {
             None
         };
-        let mut chat_reply: Option<(Vec<crate::chat::ChatMessage>, usize, bool)> = None;
+        let mut chat_reply: Option<((Vec<crate::chat::ChatMessage>, Option<usize>), usize, bool)> = None;
 
         // Try to read from stream without blocking sync operations.
         // try_lock avoids holding the stream while a file transfer is in progress.
@@ -1182,6 +1207,10 @@ async fn client_message_loop(
         };
 
         if let Some((batch, sent, reported)) = chat_reply {
+            let (batch, accepted) = batch;
+            // Lines past the host's rate limit weren't posted: keep them
+            // queued for the next poll instead of dropping them silently.
+            let sent = accepted.map_or(sent, |a| a.min(sent));
             let mut st = state.lock().await;
             let n = sent.min(st.chat.outbox.len());
             st.chat.outbox.drain(..n);
@@ -1270,7 +1299,7 @@ async fn chat_round_trip(
     since: u64,
     outgoing: Vec<String>,
     synced_files: Option<u64>,
-) -> Result<(Option<Vec<crate::chat::ChatMessage>>, Option<Message>), String> {
+) -> Result<(Option<(Vec<crate::chat::ChatMessage>, Option<usize>)>, Option<Message>), String> {
     protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files }).await?;
     let mut pending = None;
     loop {
@@ -1278,7 +1307,7 @@ async fn chat_round_trip(
             .await?
             .ok_or_else(|| "The host stopped answering".to_string())?;
         match msg {
-            Message::ChatBatch { messages } => return Ok((Some(messages), pending)),
+            Message::ChatBatch { messages, accepted } => return Ok((Some((messages, accepted)), pending)),
             Message::Disconnect => return Ok((None, Some(Message::Disconnect))),
             m @ Message::GameInfoExchange { .. } => pending = Some(m),
             other => log::debug!("Chat poll: ignoring {:?}", other),
@@ -1467,7 +1496,7 @@ pub async fn receive_file(
     peer_id: &str,
     dest_base: &str,
     req: ReceiveRequest<'_>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let connection = {
         let app_state = state.lock().await;
         app_state
@@ -1495,7 +1524,7 @@ pub async fn receive_file(
             .map_err(|e| e.to_string())??
     };
     match precheck(existing.as_ref().map(|e| e.hash.as_str()), req.expected_hash, &req.policy) {
-        PreCheck::AlreadyPresent => return Ok(()),
+        PreCheck::AlreadyPresent => return Ok(false),
         PreCheck::Refuse(msg) => return Err(msg.to_string()),
         PreCheck::Download => {}
     }
@@ -1580,7 +1609,7 @@ pub async fn receive_file(
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(e.to_string());
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Receive chunks into `tmp_path` and verify size + hash.

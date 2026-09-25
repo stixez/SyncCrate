@@ -150,6 +150,7 @@ export function useSession() {
       setDiscoveredPeers([]);
       setSyncPlan(null);
       setSyncProgress(null);
+      useAppStore.getState().setPendingPackApply(null);
       useAppStore.getState().clearPeerDownloadProgress();
       // Keep the last host so the dashboard can offer "Reconnect to <host>" later
       addLog("Disconnected", "info");
