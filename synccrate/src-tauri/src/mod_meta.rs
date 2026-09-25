@@ -45,6 +45,9 @@ pub struct ModMeta {
     pub has_icon: bool,
     #[serde(skip)]
     pub icon: IconRef,
+    /// SMAPI `UpdateKeys` ("Nexus:541", "GitHub:owner/repo"), for update checks.
+    #[serde(skip)]
+    pub update_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -188,6 +191,11 @@ pub fn parse_manifest_json(text: &str, dir_name: &str) -> Option<ModMeta> {
             version: str_of(&v, "Version").and_then(clean_version),
             authors: authors_from(v.get("Author")),
             description: str_of(&v, "Description").and_then(clean_desc),
+            update_keys: v
+                .get("UpdateKeys")
+                .and_then(Value::as_array)
+                .map(|keys| keys.iter().filter_map(Value::as_str).filter_map(|k| clean(k, 128)).take(10).collect())
+                .unwrap_or_default(),
             ..Default::default()
         });
     }
@@ -598,6 +606,7 @@ mod tests {
         assert_eq!(m.id.as_deref(), Some("Pathoschild.LookupAnything"));
         assert_eq!(m.authors, vec!["Pathoschild".to_string()]);
         assert_eq!(m.description.as_deref(), Some("See // not a comment"));
+        assert_eq!(m.update_keys, vec!["Nexus:518".to_string()]);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
-import type { FileInfo, ModCompatibility, ModMeta } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS } from "../lib/modMeta";
 import { ModIcon } from "./ModItem";
@@ -19,6 +19,7 @@ interface ModDetailsPanelProps {
   canToggle: boolean;
   file: FileInfo;
   meta?: ModMeta;
+  update?: ModUpdate;
   syncStatus: "synced" | "pending" | "conflict" | "local";
   tags: string[];
   compatibility?: ModCompatibility;
@@ -39,6 +40,7 @@ export default function ModDetailsPanel({
   canToggle,
   file,
   meta,
+  update,
   syncStatus,
   tags,
   compatibility,
@@ -103,6 +105,17 @@ export default function ModDetailsPanel({
             {meta && (
               <>
                 {meta.version && <Row label="Version"><span className="font-mono text-xs">{meta.version}</span></Row>}
+                {update && (
+                  <Row label="Update">
+                    <span className="font-mono text-xs text-neon">{update.latest}</span>
+                    {update.deprecated && <span className="text-xs text-amber ml-2">no longer maintained</span>}
+                    {update.url && (
+                      <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(update.url!).catch(() => {})}>
+                        Get it
+                      </button>
+                    )}
+                  </Row>
+                )}
                 {meta.authors.length > 0 && <Row label={meta.authors.length > 1 ? "Authors" : "Author"}>{meta.authors.join(", ")}</Row>}
                 {meta.description && (
                   <Row label="About">

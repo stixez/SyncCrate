@@ -9,6 +9,7 @@ import ModItem, { COL, ModIcon } from "./ModItem";
 import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
 import CompatIssues from "./CompatIssues";
+import ModUpdates, { canCheckUpdates } from "./ModUpdates";
 import ConflictResolver from "./ConflictResolver";
 import DuplicateFinder from "./DuplicateFinder";
 import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "./ui";
@@ -18,7 +19,7 @@ import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
-import type { FileInfo, FileManifest, ModCompatibility, ModMeta } from "../lib/types";
+import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { clearModIconCache, metaLookup } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
@@ -227,6 +228,11 @@ export default function ContentBrowser({ gameId }: Props) {
     return () => { cancelled = true; };
   }, [manifest, gameId, readOnly]);
   const metaFor = useMemo(() => metaLookup(modMetas), [modMetas]);
+  const updateReport = useAppStore((s) => s.modUpdates[gameId]);
+  const updateFor = useMemo(() => {
+    const byKey = new Map((updateReport?.updates ?? []).map((u) => [u.key, u]));
+    return (key?: string) => (key ? byKey.get(key) : undefined);
+  }, [updateReport]);
 
   useEffect(() => {
     cmd.getModTags(gameId).then(setModTags).catch(console.error);
@@ -605,6 +611,7 @@ export default function ContentBrowser({ gameId }: Props) {
           style={style}
           group={g}
           meta={metaFor(g.dir)}
+          update={updateFor(metaFor(g.dir)?.key)}
           open={!collapsed.has(g.dir)}
           onToggleOpen={() => toggleCollapsed(g.dir)}
           bulkMode={bulkMode && isModLike}
@@ -629,6 +636,7 @@ export default function ContentBrowser({ gameId }: Props) {
         style={style}
         file={f}
         meta={metaFor(p)}
+        update={metaFor(p)?.is_file ? updateFor(metaFor(p)?.key) : undefined}
         syncStatus={getSyncStatus(p)}
         tags={modTags[p]}
         onTagsChanged={handleTagsChanged}
@@ -697,6 +705,8 @@ export default function ContentBrowser({ gameId }: Props) {
       )}
 
       {!readOnly && <CompatIssues gameId={gameId} />}
+
+      {!readOnly && isModLike && canCheckUpdates(modMetas) && <ModUpdates gameId={gameId} metas={modMetas} />}
 
       {workshopMods > 0 && (
         <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>
@@ -1046,6 +1056,7 @@ export default function ContentBrowser({ gameId }: Props) {
           canToggle={canToggle}
           file={detailFile}
           meta={metaFor(detailFile.relative_path)}
+          update={updateFor(metaFor(detailFile.relative_path)?.key)}
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
@@ -1082,6 +1093,7 @@ function FolderHeader({
   style,
   group,
   meta,
+  update,
   open,
   onToggleOpen,
   bulkMode,
@@ -1096,6 +1108,7 @@ function FolderHeader({
   style: CSSProperties;
   group: Group;
   meta?: ModMeta;
+  update?: ModUpdate;
   open: boolean;
   onToggleOpen: () => void;
   bulkMode: boolean;
@@ -1152,6 +1165,7 @@ function FolderHeader({
           <p className="min-w-0 truncate text-[12.5px]" title={`${folderMeta.name} · ${group.dir}`}>
             <span className="text-txt font-semibold">{folderMeta.name}</span>
             {folderMeta.version && <span className="font-mono text-[10.5px] text-txt-dim ml-1.5">v{folderMeta.version.replace(/^v/i, "")}</span>}
+            {update && <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-neon ml-2" title={`Update available: ${update.latest}`}>update {update.latest}</span>}
             <span className="font-mono text-[11px] text-txt-muted ml-2">{group.dir}</span>
           </p>
         </>

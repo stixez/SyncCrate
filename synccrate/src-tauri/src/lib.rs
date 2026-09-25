@@ -6,6 +6,7 @@ mod event_sink;
 mod game_install;
 mod network;
 mod mod_meta;
+mod mod_updates;
 mod packs;
 mod registry;
 mod state;
@@ -438,6 +439,7 @@ pub fn run() {
             commands::chat::send_chat,
             commands::mod_info::get_mod_metadata,
             commands::mod_info::get_mod_icon,
+            commands::mod_info::check_mod_updates,
             commands::history::list_file_history,
             commands::history::restore_file_version,
             commands::sync::get_keep_file_history,

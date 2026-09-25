@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  UpdateReport,
   ChatLog,
   CrewInvite,
   BackupProgress,
@@ -43,6 +44,9 @@ interface AppState {
   /** Library games hidden from the sidebar (backend `hidden_games`). */
   hiddenGames: string[];
   setHiddenGames: (hidden: string[]) => void;
+  /** Last "Check for updates" result per game (kept while the app runs). */
+  modUpdates: Record<string, UpdateReport>;
+  setModUpdates: (game: string, report: UpdateReport) => void;
 
   // Currently selected game in sidebar (drives Dashboard/Content/Profiles/Backups views)
   selectedGame: string | null;
@@ -219,6 +223,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setMyLibrary: (library) => set({ myLibrary: library }),
   hiddenGames: [],
   setHiddenGames: (hiddenGames) => set({ hiddenGames }),
+  modUpdates: {},
+  setModUpdates: (game, report) => set((s) => ({ modUpdates: { ...s.modUpdates, [game]: report } })),
 
   selectedGame: null,
   setSelectedGame: (game) => set({ selectedGame: game }),

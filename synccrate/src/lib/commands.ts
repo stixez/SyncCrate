@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  UpdateReport,
   CompatIssue,
   ChatLog,
   Crew,
@@ -489,6 +490,11 @@ export async function connectCrew(crewId: string, nodeId: string | undefined, na
 export async function getModMetadata(game: string): Promise<ModMeta[]> {
   if (isDemoMode()) return [];
   return invoke("get_mod_metadata", { game });
+}
+
+/** Ask Modrinth / Thunderstore / SMAPI for newer versions (only on the user's click). */
+export async function checkModUpdates(game: string): Promise<UpdateReport> {
+  return invoke("check_mod_updates", { game });
 }
 
 export async function getModIcon(key: string): Promise<string | null> {

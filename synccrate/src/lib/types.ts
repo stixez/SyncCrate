@@ -216,6 +216,24 @@ export interface CompatIssue {
   url?: string;
 }
 
+/** An available mod update (src-tauri/src/mod_updates.rs). */
+export interface ModUpdate {
+  /** ModMeta.key of the mod. */
+  key: string;
+  /** "modrinth" | "thunderstore" | "smapi" */
+  source: string;
+  current?: string | null;
+  latest: string;
+  url?: string | null;
+  deprecated?: boolean;
+}
+
+export interface UpdateReport {
+  updates: ModUpdate[];
+  checked: number;
+  errors: string[];
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }

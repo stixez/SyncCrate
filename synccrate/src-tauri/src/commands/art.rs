@@ -84,7 +84,7 @@ fn custom_cover(dir: &Path, game_id: &str) -> Option<PathBuf> {
 /// could exhaust memory.
 const MAX_ART_BYTES: usize = 10 * 1024 * 1024;
 
-async fn read_capped(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
+pub(crate) async fn read_capped(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
     if resp.content_length().is_some_and(|n| n > max as u64) {
         return Err("image too large".into());
     }
