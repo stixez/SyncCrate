@@ -172,6 +172,23 @@ export type OpenIntent =
   | { kind: "crew"; invite: CrewInvite }
   | { kind: "invalid"; reason: string };
 
+// Session chat (src-tauri/src/chat.rs). The host keeps the log; clients poll it.
+export interface ChatMessage {
+  seq: number;
+  from: string;
+  text: string;
+  at: number;
+  system?: boolean;
+}
+
+export interface ChatLog {
+  messages: ChatMessage[];
+  /** Typed on this client, not yet delivered to the host. */
+  outbox: string[];
+  /** False when not in a session, or the host is older than 0.6.0. */
+  available: boolean;
+}
+
 // Crews (src-tauri/src/crews.rs). Local data; moves host → client during a session.
 export interface CrewMember {
   node_id: string;

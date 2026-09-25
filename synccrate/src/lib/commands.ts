@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  ChatLog,
   Crew,
   CrewInvite,
   CrewLanHost,
@@ -411,6 +412,17 @@ export async function loadPackFile(path: string): Promise<ModPack> {
 
 export async function loadPackLink(text: string): Promise<ModPack> {
   return invoke("load_pack_link", { text });
+}
+
+// Session chat
+
+export async function getChat(): Promise<ChatLog> {
+  if (isDemoMode()) return { messages: [], outbox: [], available: false };
+  return invoke("get_chat");
+}
+
+export async function sendChat(text: string): Promise<ChatLog> {
+  return invoke("send_chat", { text });
 }
 
 // Crews

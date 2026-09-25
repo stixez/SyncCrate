@@ -1,3 +1,4 @@
+use crate::chat::ChatMessage;
 use crate::crews::{CrewHello, CrewWelcome};
 use crate::state::{FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,10 @@ pub enum Message {
         node_id: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         crews: Vec<CrewHello>,
+        /// Optional protocol features this side speaks (e.g. `chat::FEATURE`).
+        /// New `Message` variants are only sent to a peer that listed them.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        features: Vec<String>,
     },
     Welcome {
         name: String,
@@ -50,6 +55,8 @@ pub enum Message {
         node_id: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         crews: Vec<CrewWelcome>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        features: Vec<String>,
     },
     ManifestRequest,
     ManifestResponse { manifest: FileManifest },
@@ -67,6 +74,18 @@ pub enum Message {
     Disconnect,
     GameInfoExchange { game_info: GameInfo },
     Ping,
+    /// Client → host chat poll (only to a host whose Welcome listed
+    /// `chat::FEATURE`): our new lines, and the last seq we've seen.
+    ChatSync {
+        since: u64,
+        #[serde(default)]
+        outgoing: Vec<String>,
+        /// Files our last sync received; the host announces it.
+        #[serde(default)]
+        synced_files: Option<u64>,
+    },
+    /// Host → client, only ever as the reply to `ChatSync` (see `chat` docs).
+    ChatBatch { messages: Vec<ChatMessage> },
 }
 
 /// Error a host sends when a client joins with a different game selected.
@@ -220,9 +239,10 @@ mod tests {
             game_id: Some("sims4".into()),
             node_id: None,
             crews: vec![],
+            features: vec![],
         };
         let s = serde_json::to_string(&hello).unwrap();
-        assert!(!s.contains("node_id") && !s.contains("crews"), "{s}");
+        assert!(!s.contains("node_id") && !s.contains("crews") && !s.contains("features"), "{s}");
         // Unknown extra fields (what an old peer sees from a new one) are ignored.
         let json = r#"{"Hello":{"name":"A","version":"0.7.0","pin":null,"game_id":"sims4","node_id":"ab","crews":[{"id":"x"}],"future":1}}"#;
         assert!(serde_json::from_str::<Message>(json).is_ok());

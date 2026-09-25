@@ -1,5 +1,6 @@
 pub mod art;
 pub mod backup;
+pub mod chat;
 pub mod crew;
 pub mod files;
 pub mod game_state;

@@ -388,6 +388,7 @@ async fn run_fake_old_host(
             game_id: host_game_id,
             node_id: None,
             crews: vec![],
+            features: vec![],
         },
     )
     .await

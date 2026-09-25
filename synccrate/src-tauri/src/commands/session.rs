@@ -111,6 +111,8 @@ pub async fn start_host(
         app_state.local_display_name = name.clone();
         app_state.session_pin = pin.clone();
         app_state.folder_permissions = allowed_folders.unwrap_or_default();
+        app_state.chat.clear();
+        app_state.chat.available = true;
     }
 
     // Warm the hash cache in the background so the first client's manifest request

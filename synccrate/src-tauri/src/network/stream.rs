@@ -200,7 +200,7 @@ mod tests {
                 Message::Hello { name, .. } => assert_eq!(name, "Alice"),
                 other => panic!("unexpected {:?}", other),
             }
-            send_message(&mut s, &Message::Welcome { name: "Host".into(), version: "t".into(), supports_compression: true, game_id: None, node_id: None, crews: vec![] })
+            send_message(&mut s, &Message::Welcome { name: "Host".into(), version: "t".into(), supports_compression: true, game_id: None, node_id: None, crews: vec![], features: vec![] })
                 .await
                 .unwrap();
             // Keep the connection open until the client has read the reply.
@@ -210,7 +210,7 @@ mod tests {
         let conn = client.connect(host_addr, ALPN).await.unwrap();
         let (send, recv) = conn.open_bi().await.unwrap();
         let mut c = PeerStream::iroh(conn, send, recv);
-        send_message(&mut c, &Message::Hello { name: "Alice".into(), version: "t".into(), pin: None, supports_compression: true, game_id: None, node_id: None, crews: vec![] })
+        send_message(&mut c, &Message::Hello { name: "Alice".into(), version: "t".into(), pin: None, supports_compression: true, game_id: None, node_id: None, crews: vec![], features: vec![] })
             .await
             .unwrap();
         match try_recv_message(&mut c, Duration::from_secs(10)).await.unwrap() {

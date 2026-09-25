@@ -15,6 +15,7 @@ import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
+import ChatPanel from "./ChatPanel";
 import ConnectionGuide from "./ConnectionGuide";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
@@ -884,6 +885,8 @@ export default function GameDashboard({ gameId }: Props) {
       )}
 
       {isScanning && !manifest ? <ScanSkeleton /> : <StatCardGrid cards={statCards} />}
+
+      <ChatPanel />
 
       <PeerList />
     </div>
