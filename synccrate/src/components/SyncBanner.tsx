@@ -306,6 +306,11 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
             {plan.skipped_foreign !== 1 ? "were" : "was"} skipped.
           </p>
         )}
+        {(plan.pack_unavailable?.length ?? 0) > 0 && (
+          <p className="text-xs text-txt-dim">
+            {plan.pack_unavailable!.length} pack file{plan.pack_unavailable!.length !== 1 ? "s" : ""} this host doesn't have — try someone else who has them.
+          </p>
+        )}
         {((plan.disabled_locally ?? 0) > 0 || (plan.disabled_on_host ?? 0) > 0) && (
           <p className="text-xs text-txt-dim">
             {[

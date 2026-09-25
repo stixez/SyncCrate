@@ -336,7 +336,32 @@ pub(crate) async fn start_fake_old_host_tcp(
     port
 }
 
-fn sha256_hex(data: &[u8]) -> String {
+/// A minimal pack listing `files` at the sizes/hashes of the given content
+/// bytes (which the test writes to disk itself — this only builds the
+/// manifest, matching how a real export never carries the bytes).
+pub(crate) fn test_pack(game_id: &str, files: &[(&str, &[u8])]) -> crate::state::ModPack {
+    crate::state::ModPack {
+        format_version: crate::commands::modpack::FORMAT_VERSION,
+        app_version: "0.0.0-test".to_string(),
+        game_id: game_id.to_string(),
+        name: "Test Pack".to_string(),
+        description: String::new(),
+        author: String::new(),
+        created_at: 0,
+        content_types: vec![],
+        join: None,
+        files: files
+            .iter()
+            .map(|(path, content)| crate::state::PackFile {
+                relative_path: path.to_string(),
+                size: content.len() as u64,
+                hash: sha256_hex(content),
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(data);

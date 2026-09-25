@@ -982,6 +982,196 @@ async fn presync_backup_survives_pruning_while_its_record_exists_tcp() {
     let _ = std::fs::remove_dir_all(&client_dir);
 }
 
+// ---------------------------------------------------------------------------
+// Modpacks
+
+async fn pack_plan(client_state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>, pack: crate::state::ModPack) -> Result<crate::state::SyncPlan, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        crate::commands::modpack::compute_pack_sync_plan_inner(client_state, None, pack),
+    )
+    .await
+    .expect("compute_pack_sync_plan timed out")
+}
+
+#[tokio::test]
+async fn pack_import_syncs_exactly_the_missing_files_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("pack-happy-host");
+    let client_dir = temp_dir("pack-happy-client");
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+    write_file(&host_dir, "Mods/b.package", b"BBBB");
+    write_file(&client_dir, "Mods/a.package", b"AAAA");
+    // A local extra the pack doesn't mention — must survive untouched.
+    write_file(&client_dir, "Mods/extra.package", b"MINE");
+
+    let pack = test_pack("sims4", &[("Mods/a.package", b"AAAA"), ("Mods/b.package", b"BBBB")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    let cmp = crate::commands::modpack::compare_pack_inner(&client_state, pack.clone()).await.expect("compare");
+    assert!(!cmp.wrong_game);
+    assert_eq!(cmp.have, 1);
+    assert_eq!(cmp.missing.len(), 1);
+    assert_eq!(cmp.missing[0].relative_path, "Mods/b.package");
+
+    let plan = pack_plan(&client_state, pack).await.expect("pack plan");
+    assert_eq!(plan.actions.len(), 1, "only the missing file should be queued");
+    assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/b.package"));
+    assert!(plan.pack_unavailable.is_empty());
+
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/b.package"), b"BBBB");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"AAAA");
+    assert_eq!(read_file(&client_dir, "Mods/extra.package"), b"MINE", "an untouched local extra must survive");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn pack_import_happy_path_iroh() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("pack-happy-iroh-host");
+    let client_dir = temp_dir("pack-happy-iroh-client");
+    write_file(&host_dir, "Mods/b.package", b"BBBB");
+
+    let pack = test_pack("sims4", &[("Mods/b.package", b"BBBB")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let (host_ep, client_ep) = iroh_pair().await;
+    tokio::spawn(serve_one_iroh_connection(host_ep.clone(), host_state));
+
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_iroh(client_ep, &host_ep, client_state.clone(), &peer_id)
+        .await
+        .expect("iroh connect");
+
+    let plan = pack_plan(&client_state, pack).await.expect("pack plan");
+    assert_eq!(plan.actions.len(), 1);
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/b.package"), b"BBBB");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn pack_import_conflict_never_silently_overwrites_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("pack-conflict-host");
+    let client_dir = temp_dir("pack-conflict-client");
+    write_file(&host_dir, "Mods/a.package", b"PACK_CONTENT");
+    write_file(&client_dir, "Mods/a.package", b"MY_OWN_CONTENT");
+
+    let pack = test_pack("sims4", &[("Mods/a.package", b"PACK_CONTENT")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    let cmp = crate::commands::modpack::compare_pack_inner(&client_state, pack.clone()).await.expect("compare");
+    assert_eq!(cmp.different.len(), 1);
+    assert_eq!(cmp.different[0].relative_path, "Mods/a.package");
+
+    let plan = pack_plan(&client_state, pack).await.expect("pack plan");
+    assert_eq!(plan.actions.len(), 1);
+    assert!(matches!(&plan.actions[0], SyncAction::Conflict { .. }));
+
+    let err = run_sync_now(&client_state).await.expect_err("unresolved conflicts must refuse to sync");
+    assert!(err.contains("Resolve all conflicts"), "unexpected error: {err}");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"MY_OWN_CONTENT", "never a silent overwrite");
+
+    crate::commands::sync::resolve_conflict_inner(&client_state, "Mods/a.package".to_string(), Resolution::UseTheirs, None)
+        .await
+        .expect("resolve");
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"PACK_CONTENT");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn pack_import_reports_unavailable_and_still_syncs_the_rest_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("pack-unavail-host");
+    let client_dir = temp_dir("pack-unavail-client");
+    // Host has "b" but not the pack's exact content for it, and doesn't have "c" at all.
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+    write_file(&host_dir, "Mods/b.package", b"HOST_VERSION_OF_B");
+
+    let pack = test_pack(
+        "sims4",
+        &[("Mods/a.package", b"AAAA"), ("Mods/b.package", b"PACK_VERSION_OF_B"), ("Mods/c.package", b"CCCC")],
+    );
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    let plan = pack_plan(&client_state, pack).await.expect("pack plan");
+    assert_eq!(plan.actions.len(), 1, "only the available file should be queued");
+    assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/a.package"));
+    let mut unavailable = plan.pack_unavailable.clone();
+    unavailable.sort();
+    assert_eq!(unavailable, vec!["Mods/b.package".to_string(), "Mods/c.package".to_string()]);
+
+    run_sync_now(&client_state).await.expect("sync");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"AAAA");
+    assert!(!file_exists(&client_dir, "Mods/b.package"), "unavailable files must never be written");
+    assert!(!file_exists(&client_dir, "Mods/c.package"));
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn pack_for_another_game_is_refused_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("pack-wronggame-host");
+    let client_dir = temp_dir("pack-wronggame-client");
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+
+    // The pack is for ETS2; the client has Sims 4 active.
+    let pack = test_pack("ets2", &[("mod/truck.scs", b"TRUCK")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    let cmp = crate::commands::modpack::compare_pack_inner(&client_state, pack.clone()).await.expect("compare");
+    assert!(cmp.wrong_game, "the pack's game doesn't match the active game");
+
+    let err = pack_plan(&client_state, pack).await.expect_err("a wrong-game pack must be refused");
+    assert!(err.contains("different game"), "unexpected error: {err}");
+    assert!(walkdir::WalkDir::new(&client_dir).into_iter().filter_map(|e| e.ok()).all(|e| !e.file_type().is_file()), "nothing should be written");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
 #[tokio::test]
 async fn undo_refused_during_a_sync_or_session_tcp() {
     let _g = e2e_guard().await;

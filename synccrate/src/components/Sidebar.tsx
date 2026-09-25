@@ -37,6 +37,7 @@ import {
   Skull,
   Trees,
   X,
+  Share2,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { resolveTheme, useMediaPreference } from "../lib/appearance";
@@ -86,6 +87,7 @@ const gameSubPages: { page: Page; label: string; icon: typeof LayoutDashboard }[
   { page: "content", label: "Content", icon: Package },
   { page: "profiles", label: "Profiles", icon: FolderOpen },
   { page: "backups", label: "Backups", icon: Archive },
+  { page: "modpacks", label: "Modpacks", icon: Share2 },
 ];
 
 /** Crate glyph on a clipped neon tile (the app icon, redrawn in the HUD style). */

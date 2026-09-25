@@ -18,6 +18,8 @@ import type {
   Resolution,
   SessionInfo,
   SessionStatus,
+  ModPack,
+  PackComparison,
   SyncFolderPermissions,
   SyncHistoryEntry,
   SyncPlan,
@@ -363,6 +365,50 @@ export async function getUndoStatus(game?: string): Promise<UndoStatus | null> {
 
 export async function undoLastSync(game?: string): Promise<UndoResult> {
   return invoke("undo_last_sync", { game: game ?? null });
+}
+
+// --- Modpacks ---
+
+export async function createPack(
+  name: string,
+  description: string,
+  game?: string,
+  contentTypes?: string[],
+  paths?: string[],
+  includeJoinCode = false,
+): Promise<ModPack> {
+  return invoke("create_pack", {
+    game: game ?? null,
+    contentTypes: contentTypes ?? null,
+    paths: paths ?? null,
+    name,
+    description,
+    includeJoinCode,
+  });
+}
+
+export async function savePack(pack: ModPack, dest: string): Promise<void> {
+  return invoke("save_pack", { pack, dest });
+}
+
+export async function packToLink(pack: ModPack): Promise<string> {
+  return invoke("pack_to_link", { pack });
+}
+
+export async function loadPackFile(path: string): Promise<ModPack> {
+  return invoke("load_pack_file", { path });
+}
+
+export async function loadPackLink(text: string): Promise<ModPack> {
+  return invoke("load_pack_link", { text });
+}
+
+export async function comparePack(pack: ModPack): Promise<PackComparison> {
+  return invoke("compare_pack", { pack });
+}
+
+export async function computePackSyncPlan(pack: ModPack, peerId?: string): Promise<SyncPlan> {
+  return invoke("compute_pack_sync_plan", { peerId: peerId ?? null, pack });
 }
 
 // --- Auto-Backup Config ---
