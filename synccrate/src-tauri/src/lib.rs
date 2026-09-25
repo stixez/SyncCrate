@@ -22,6 +22,8 @@ mod crew_e2e_tests;
 mod chat_e2e_tests;
 #[cfg(test)]
 mod history_e2e_tests;
+#[cfg(test)]
+mod stay_in_sync_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -425,6 +427,7 @@ pub fn run() {
             commands::history::restore_file_version,
             commands::sync::get_keep_file_history,
             commands::sync::set_keep_file_history,
+            commands::stay_in_sync::auto_pull,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

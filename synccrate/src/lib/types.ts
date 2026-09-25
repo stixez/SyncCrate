@@ -196,6 +196,14 @@ export interface FileVersion {
   pending?: string | null;
 }
 
+/** One "stay in sync" pull (src-tauri/src/commands/stay_in_sync.rs). */
+export interface AutoPullResult {
+  pulled: number;
+  scripts_held: number;
+  needs_review: number;
+  skipped?: string | null;
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }

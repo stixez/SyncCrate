@@ -7,7 +7,8 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
-import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
+import { useStayInSync } from "../hooks/useStayInSync";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadStayInSync, saveStayInSync } from "../lib/prefs";
 import { formatBytes } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
@@ -61,7 +62,10 @@ export default function GameDashboard({ gameId }: Props) {
     !syncProgress &&
     !isSyncLoading &&
     !(syncPlan && syncPlan.actions.length > 0);
-  const { updates: hostUpdates, dismiss: dismissHostUpdates } = useHostUpdates(hostUpdatesEnabled);
+  const [stayInSync, setStayInSync] = useState(loadStayInSync);
+  // With "stay in sync" on, the auto-pull replaces the "host added files" check.
+  const { updates: hostUpdates, dismiss: dismissHostUpdates } = useHostUpdates(hostUpdatesEnabled && !stayInSync);
+  const { last: autoPull } = useStayInSync(hostUpdatesEnabled && stayInSync);
 
   const gameDef = getGameDef(gameId);
   const gameLabel = gameDef?.label ?? gameId;
@@ -838,6 +842,38 @@ export default function GameDashboard({ gameId }: Props) {
         <Banner tone="warn" icon={<AlertTriangle size={16} />} title="Version mismatch">
           {mismatchedPeers.map((p) => `${p.name} (v${p.version})`).join(", ")} — you have v{localVersion}.
         </Banner>
+      )}
+
+      {isClient && (
+        <Panel padded className="!py-3">
+          <Toggle
+            checked={stayInSync}
+            onChange={(on) => {
+              setStayInSync(on);
+              saveStayInSync(on);
+            }}
+            label="Stay in sync"
+            description="Pull the host's new mods automatically, every minute. Only adds files: anything that would replace or delete one of yours, and script mods, still wait for you. Paused while the game runs."
+          />
+          {stayInSync && autoPull && (autoPull.scripts_held > 0 || autoPull.needs_review > 0) && (
+            <div className="flex items-center gap-3 mt-2 pl-1">
+              <p className="text-xs text-txt-dim flex-1">
+                Waiting for you:{" "}
+                {[
+                  autoPull.needs_review > 0 && `${autoPull.needs_review} change${autoPull.needs_review !== 1 ? "s" : ""} to review`,
+                  autoPull.scripts_held > 0 && `${autoPull.scripts_held} script file${autoPull.scripts_held !== 1 ? "s" : ""}`,
+                ].filter(Boolean).join(", ")}
+                .
+              </p>
+              <Button size="sm" variant="secondary" onClick={() => computePlan()} disabled={isSyncLoading}>
+                Compare &amp; Sync
+              </Button>
+            </div>
+          )}
+          {stayInSync && autoPull?.skipped && autoPull.skipped !== "A sync plan is open." && (
+            <p className="text-[11px] text-txt-muted mt-2 pl-1">Paused: {autoPull.skipped}</p>
+          )}
+        </Panel>
       )}
 
       {isClient && hostUpdates && hostUpdates.files > 0 && (

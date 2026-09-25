@@ -10,6 +10,7 @@ import type {
   CrewStatus,
   ModMeta,
   FileVersion,
+  AutoPullResult,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -509,6 +510,11 @@ export async function getKeepFileHistory(): Promise<boolean> {
 
 export async function setKeepFileHistory(enabled: boolean): Promise<void> {
   return invoke("set_keep_file_history", { enabled });
+}
+
+/** "Stay in sync": pull the host's new, non-script files (never replaces or deletes). */
+export async function autoPull(): Promise<AutoPullResult> {
+  return invoke("auto_pull");
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */
