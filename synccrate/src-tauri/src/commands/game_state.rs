@@ -25,7 +25,9 @@ pub async fn check_game_running(
 
 /// Whether any of the given executables is running (false when none are known).
 pub(crate) async fn is_game_running(process_names: &[String]) -> Result<bool, String> {
-    if process_names.is_empty() {
+    // Tests must not depend on what's open on the dev machine (real case:
+    // every undo/apply E2E test failed while The Sims 4 was running).
+    if process_names.is_empty() || cfg!(test) {
         return Ok(false);
     }
     let running = tokio::task::spawn_blocking(list_process_names)
