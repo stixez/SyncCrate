@@ -1,6 +1,9 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
-import type { FileInfo, ModCompatibility } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta } from "../lib/types";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { MOD_SOURCE_LABELS } from "../lib/modMeta";
+import { ModIcon } from "./ModItem";
 import { formatBytes, formatDate, isDisabledPath } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
@@ -14,6 +17,7 @@ interface ModDetailsPanelProps {
   /** False when toggling isn't possible (other content type, read-only, "none" games). */
   canToggle: boolean;
   file: FileInfo;
+  meta?: ModMeta;
   syncStatus: "synced" | "pending" | "conflict" | "local";
   tags: string[];
   compatibility?: ModCompatibility;
@@ -33,6 +37,7 @@ export default function ModDetailsPanel({
   gameId,
   canToggle,
   file,
+  meta,
   syncStatus,
   tags,
   compatibility,
@@ -78,13 +83,14 @@ export default function ModDetailsPanel({
                   isMod ? "border-accent/50 text-accent-light bg-accent/10" : "border-line-hi text-txt-dim bg-bg",
                 )}
               >
-                {isMod ? <Puzzle size={18} /> : <Palette size={18} />}
+                <ModIcon meta={meta} size={38} fallback={isMod ? <Puzzle size={18} /> : <Palette size={18} />} />
               </div>
               <div className="min-w-0">
-                <p className="hud-label"><b>//</b> {isMod ? "Script mod" : "Custom content"}</p>
-                <h3 className="font-display font-semibold uppercase tracking-[0.04em] text-[15px] leading-tight truncate" title={name}>
-                  {name}
+                <p className="hud-label"><b>//</b> {meta ? MOD_SOURCE_LABELS[meta.source] ?? "Mod" : isMod ? "Script mod" : "Custom content"}</p>
+                <h3 className="font-display font-semibold uppercase tracking-[0.04em] text-[15px] leading-tight truncate" title={meta?.name ?? name}>
+                  {meta?.name ?? name}
                 </h3>
+                {meta && !meta.is_file && <p className="font-mono text-[11px] text-txt-muted truncate" title={name}>{name}</p>}
               </div>
             </div>
             <button onClick={onClose} className="p-1 text-txt-muted hover:text-txt transition-colors" aria-label="Close">
@@ -93,6 +99,24 @@ export default function ModDetailsPanel({
           </div>
 
           <div className="px-5 py-3">
+            {meta && (
+              <>
+                {meta.version && <Row label="Version"><span className="font-mono text-xs">{meta.version}</span></Row>}
+                {meta.authors.length > 0 && <Row label={meta.authors.length > 1 ? "Authors" : "Author"}>{meta.authors.join(", ")}</Row>}
+                {meta.description && (
+                  <Row label="About">
+                    <p className="text-xs text-txt-dim whitespace-pre-line max-h-28 overflow-y-auto">{meta.description}</p>
+                  </Row>
+                )}
+                {meta.website && (
+                  <Row label="Website">
+                    <button className="font-mono text-[11px] text-accent-light hover:text-neon break-all text-left" onClick={() => openUrl(meta.website!).catch(() => {})}>
+                      {meta.website}
+                    </button>
+                  </Row>
+                )}
+              </>
+            )}
             <Row label="Path">
               <span className="block font-mono text-[11px] text-txt-dim break-all">{file.relative_path}</span>
             </Row>

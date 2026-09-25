@@ -38,6 +38,9 @@ socket2 = "0.5"
 if-addrs = "0.13"
 rayon = "1.10"
 zstd = "0.13"
+# Both already in the tree (zip 4.6 via tauri, flate2 via png and the updater): read mod metadata out of .jar files.
+zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
+flate2 = "1.1"
 iroh = "1.2"
 # Both already in the tree via iroh / the updater; same versions, ring provider.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }

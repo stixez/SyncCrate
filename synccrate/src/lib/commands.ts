@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  ModMeta,
   AutoBackupConfig,
   BackupInfo,
   ConnectionTestResult,
@@ -406,6 +407,16 @@ export async function loadPackFile(path: string): Promise<ModPack> {
 
 export async function loadPackLink(text: string): Promise<ModPack> {
   return invoke("load_pack_link", { text });
+}
+
+/** Names, versions, authors and icons from mods' own metadata files (active game only). */
+export async function getModMetadata(game: string): Promise<ModMeta[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_mod_metadata", { game });
+}
+
+export async function getModIcon(key: string): Promise<string | null> {
+  return invoke("get_mod_icon", { key });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

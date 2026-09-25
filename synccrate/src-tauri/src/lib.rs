@@ -2,6 +2,7 @@ mod commands;
 mod event_sink;
 mod game_install;
 mod network;
+mod mod_meta;
 mod packs;
 mod registry;
 mod state;
@@ -385,6 +386,8 @@ pub fn run() {
             commands::pack_apply::get_pack_apply_status,
             commands::pack_apply::revert_pack_apply,
             commands::open_intent::take_open_intents,
+            commands::mod_info::get_mod_metadata,
+            commands::mod_info::get_mod_icon,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
