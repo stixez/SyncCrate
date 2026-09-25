@@ -11,22 +11,40 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+# Every action is pinned to a commit: this workflow holds the updater
+# signing key, and a moved tag on a third-party action would run its code
+# with that key (and could sign a malicious update every install accepts).
+# Nothing gets write access unless its job needs it.
+permissions: {}
 
 jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       release_id: ${{ steps.create.outputs.result }}
     steps:
+      # A manually run release must name a real version tag; it's passed
+      # through the environment, never pasted into the script (injection).
+      - name: Validate tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ] && ! printf '%s' "$INPUT_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag must look like v1.2.3, got: $INPUT_TAG" >&2
+            exit 1
+          fi
+
       - name: Create GitHub Release
         id: create
-        uses: actions/github-script@v7
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const workflowTag = '${{ inputs.tag }}'.trim();
+            const workflowTag = (process.env.INPUT_TAG || '').trim();
             const tag = workflowTag || context.ref.replace('refs/tags/', '');
             const releaseBody = `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n> **macOS:** The app is not signed yet. If macOS says "app is damaged", open Terminal and run:\n> \`\`\`\n> xattr -cr /Applications/SyncCrate.app\n> \`\`\`\n> Then open SyncCrate normally.`;
 
@@ -91,23 +109,28 @@ jobs:
 
     name: Build (${{ matrix.label }})
     runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write # upload the installers to the release
 
     steps:
+      # A manual run builds the tag it publishes, not whatever branch it was
+      # started from.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: synccrate/src-tauri
+      # No Rust cache here: this job holds the signing key, and a poisoned
+      # cache entry would run its code (build scripts) next to it.
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
@@ -129,7 +152,7 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
