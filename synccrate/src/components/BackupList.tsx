@@ -5,6 +5,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { formatBytes, formatDate } from "../lib/utils";
 import { gameLabel, getGameDef } from "../lib/games";
 import { Badge, Banner, Button, EmptyState, Input, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
+import FileHistory from "./FileHistory";
 import * as cmd from "../lib/commands";
 import { toastError, toastInfo, toastSuccess } from "../lib/toast";
 import type { BackupInfo, BackupProgress, RestoreResult, UndoResult, UndoStatus } from "../lib/types";
@@ -271,6 +272,14 @@ export default function BackupList({ gameId }: Props) {
           {undoConfirm && " — puts your files back exactly as they were before that sync."}
         </Banner>
       )}
+
+      <Panel label={<b>// Per file</b>} title="File history">
+        <p className="text-xs text-txt-dim mb-3">
+          The old version of every file a sync replaced or deleted, so one bad update can be rolled back without restoring
+          a whole backup. Kept for 180 days, up to 10 versions per file and 2 GB per game.
+        </p>
+        <FileHistory gameId={gameId} limit={25} />
+      </Panel>
 
       {showCreate && (
         <Panel tone="accent" label={<b>// New snapshot</b>} title="New Backup">

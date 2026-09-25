@@ -164,6 +164,21 @@ export interface ModPack {
 
 /** What a clicked `synccrate://` link or opened `.scpack` file asked for
  * (validated by the backend; see `commands/open_intent.rs`). */
+/** A previous version of a synced file (src-tauri/src/commands/history.rs). */
+export interface FileVersion {
+  id: string;
+  path: string;
+  hash: string;
+  size: number;
+  mtime_ms?: number | null;
+  /** When it stopped being the current file (unix secs). */
+  at: number;
+  /** "replaced" | "deleted" | "before-restore" */
+  reason: string;
+  peer?: string;
+  pending?: string | null;
+}
+
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }

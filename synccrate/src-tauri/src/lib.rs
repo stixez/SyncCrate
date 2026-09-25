@@ -13,6 +13,8 @@ mod watcher;
 mod testutil;
 #[cfg(test)]
 mod e2e_tests;
+#[cfg(test)]
+mod history_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -385,6 +387,10 @@ pub fn run() {
             commands::pack_apply::get_pack_apply_status,
             commands::pack_apply::revert_pack_apply,
             commands::open_intent::take_open_intents,
+            commands::history::list_file_history,
+            commands::history::restore_file_version,
+            commands::sync::get_keep_file_history,
+            commands::sync::set_keep_file_history,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

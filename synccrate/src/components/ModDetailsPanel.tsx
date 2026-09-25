@@ -6,6 +6,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import StatusBadge from "./StatusBadge";
+import FileHistory from "./FileHistory";
 import { Badge, Banner, Button, cx } from "./ui";
 
 interface ModDetailsPanelProps {
@@ -114,6 +115,11 @@ export default function ModDetailsPanel({
                 </div>
               </Row>
             )}
+          </div>
+
+          <div className="px-5 pb-3">
+            <p className="hud-label mb-1.5">// Earlier versions</p>
+            <FileHistory gameId={gameId} path={file.relative_path} className="max-h-48 overflow-y-auto" />
           </div>
 
           {compatibility?.status === "MissingPacks" && (
