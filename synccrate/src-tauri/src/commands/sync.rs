@@ -508,9 +508,12 @@ async fn run_sync(
         .plan_hash
         .clone()
         .unwrap_or_else(|| diff::compute_plan_hash(plan));
-    let game_id = {
+    let (game_id, content_types) = {
         let app_state = state.lock().await;
-        app_state.active_game.clone()
+        let cts = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
+            .map(|g| g.content_types.clone())
+            .unwrap_or_default();
+        (app_state.active_game.clone(), cts)
     };
     // When resuming, carry over the files already completed by the previous
     // attempt so a second interruption doesn't forget them.
@@ -559,6 +562,17 @@ async fn run_sync(
         match action {
             SyncAction::ReceiveFromRemote(file_info) => {
                 let (remote_path, local_path, policy) = receive_target(plan, file_info);
+                // Last line of defence, whatever built the plan (a host's
+                // manifest, a pack, a crew set, stay-in-sync): never write
+                // outside this game's content folders. A crafted manifest entry
+                // whose path differed from its key used to slip past the
+                // content-folder filter and could drop e.g. a proxy DLL next
+                // to a game's exe.
+                if !diff::path_accepted_by(&content_types, &local_path) || !diff::path_accepted_by(&content_types, &remote_path) {
+                    files_done += 1;
+                    sync_errors.push(format!("{}: outside this game's content folders, skipped", file_info.relative_path));
+                    continue;
+                }
                 // `policy` is moved into the request below; this is the same
                 // condition `receive_target` used to choose it (replace vs.
                 // new), kept here for the undo record.
@@ -571,6 +585,7 @@ async fn run_sync(
                         remote_path: &remote_path,
                         local_path: &local_path,
                         expected_hash: &file_info.hash,
+                        expected_size: Some(file_info.size),
                         policy,
                     },
                 )
@@ -641,6 +656,10 @@ async fn run_sync(
                         "peer_id": peer_id,
                     }),
                 );
+            }
+            SyncAction::Delete(path) if !diff::path_accepted_by(&content_types, path) => {
+                files_done += 1;
+                sync_errors.push(format!("Delete {}: outside this game's content folders, skipped", path));
             }
             SyncAction::Delete(path) => {
                 match crate::utils::safe_join(base_path, path) {

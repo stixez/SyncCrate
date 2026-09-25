@@ -210,6 +210,11 @@ pub async fn import_profile(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     path: String,
 ) -> Result<ModProfile, String> {
+    // A profile is a file list; anything this big isn't one.
+    const MAX_PROFILE_BYTES: u64 = 16 * 1024 * 1024;
+    if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > MAX_PROFILE_BYTES {
+        return Err("That file is too large to be a SyncCrate profile.".to_string());
+    }
     let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let mut profile: ModProfile = serde_json::from_str(&data).map_err(|e| e.to_string())?;
 

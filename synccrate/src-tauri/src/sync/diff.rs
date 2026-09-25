@@ -101,9 +101,13 @@ pub fn content_type_for<'a>(content_types: &'a [ContentType], rel: &str) -> Opti
 
 /// Remove host files no content type of the active game accepts. Returns how
 /// many were dropped.
+///
+/// Also drops entries whose key and `relative_path` disagree: everything
+/// after this uses `relative_path`, so a host could label an entry
+/// `Mods/a.package` and have it written to `dinput8.dll`.
 pub fn drop_foreign(remote: &mut FileManifest, content_types: &[ContentType]) -> usize {
     let before = remote.files.len();
-    remote.files.retain(|path, _| path_accepted_by(content_types, path));
+    remote.files.retain(|path, info| path == &info.relative_path && path_accepted_by(content_types, path));
     before - remote.files.len()
 }
 
@@ -400,6 +404,23 @@ pub fn compute_plan_hash(plan: &SyncPlan) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drop_foreign_drops_entries_whose_key_and_path_disagree() {
+        let cts = vec![crate::registry::ContentType {
+            id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
+            classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
+            must_contain: None, exclude_files: vec![],
+        }];
+        let mut m = FileManifest::default();
+        let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
+        m.files.insert("Mods/ok.package".into(), info("Mods/ok.package"));
+        // Labelled as a mod, but its path (which everything after uses) is the game root.
+        m.files.insert("Mods/a.package".into(), info("dinput8.dll"));
+        m.files.insert("dinput8.dll".into(), info("dinput8.dll"));
+        assert_eq!(drop_foreign(&mut m, &cts), 2);
+        assert_eq!(m.files.keys().collect::<Vec<_>>(), vec!["Mods/ok.package"]);
+    }
     use crate::state::{FileInfo, FileManifest};
     use std::collections::HashMap;
 

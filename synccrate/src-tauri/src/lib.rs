@@ -18,6 +18,8 @@ mod testutil;
 #[cfg(test)]
 mod e2e_tests;
 #[cfg(test)]
+mod security_e2e_tests;
+#[cfg(test)]
 mod crew_e2e_tests;
 #[cfg(test)]
 mod chat_e2e_tests;

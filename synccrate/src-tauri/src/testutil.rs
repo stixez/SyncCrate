@@ -274,6 +274,64 @@ pub(crate) async fn connect_client_iroh(
     wait_connected(&client_state, peer_id).await
 }
 
+/// A fresh client-side iroh endpoint (relays off), for tests that connect
+/// more than once: each endpoint is a distinct, proven node id.
+pub(crate) async fn iroh_client() -> iroh::Endpoint {
+    use iroh::{endpoint::presets, Endpoint, RelayMode};
+    Endpoint::builder(presets::Minimal).relay_mode(RelayMode::Disabled).bind().await.expect("bind client iroh endpoint")
+}
+
+/// Serve every incoming iroh connection on `host_ep` (unlike
+/// `serve_one_iroh_connection`), for tests with several attempts.
+pub(crate) fn serve_iroh_connections(host_ep: iroh::Endpoint, state: Arc<Mutex<AppState>>) {
+    tokio::spawn(async move {
+        while let Some(incoming) = host_ep.accept().await {
+            let state = state.clone();
+            tokio::spawn(async move {
+                let Ok(conn) = incoming.await else { return };
+                let Ok(Ok((send, recv))) = tokio::time::timeout(CONNECT_TIMEOUT, conn.accept_bi()).await else { return };
+                transfer::serve_incoming(PeerStream::iroh(conn, send, recv), state, null_events(), "internet:test".to_string()).await;
+            });
+        }
+    });
+}
+
+/// Dial `host_ep` over iroh with an optional PIN and return how the
+/// handshake ended: Ok once connected, or the host's refusal.
+pub(crate) async fn connect_iroh_with_pin(
+    client_ep: iroh::Endpoint,
+    host_ep: &iroh::Endpoint,
+    client_state: Arc<Mutex<AppState>>,
+    pin: Option<String>,
+) -> Result<String, String> {
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    let conn = tokio::time::timeout(CONNECT_TIMEOUT, client_ep.connect(host_ep.addr(), IROH_ALPN))
+        .await
+        .map_err(|_| "timed out dialing iroh host".to_string())?
+        .map_err(|e| e.to_string())?;
+    let (send, recv) = conn.open_bi().await.map_err(|e| e.to_string())?;
+    let stream = PeerStream::iroh(conn, send, recv);
+    let (pid, st) = (peer_id.clone(), client_state.clone());
+    let task = tokio::spawn(async move {
+        let _keep_alive = client_ep;
+        transfer::run_client_session(stream, &[], 0, &pid, st, null_events(), pin).await
+    });
+    tokio::time::timeout(CONNECT_TIMEOUT, async {
+        loop {
+            if client_state.lock().await.connections.contains_key(&peer_id) {
+                return Ok(peer_id.clone());
+            }
+            if task.is_finished() {
+                return Err(task.await.map_err(|e| e.to_string())?.err().unwrap_or_else(|| "ended".into()));
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .map_err(|_| "timed out waiting for the handshake".to_string())?
+}
+
 pub(crate) fn new_peer_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }

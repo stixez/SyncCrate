@@ -25,7 +25,11 @@ pub(crate) async fn check_compat_inner(state: &Arc<Mutex<AppState>>, game: &str)
         let exists = |rel: &str| crate::utils::safe_join(&base, rel).is_ok_and(|p| p.is_file());
         let mut out: Vec<CompatIssue> = compat::check_loader(&def, &manifest, exists).into_iter().collect();
         if def.id == "sims4" {
-            let ini = std::fs::read_to_string(Path::new(&base).join("Options.ini")).ok();
+            let ini_path = Path::new(&base).join("Options.ini");
+            let ini = std::fs::metadata(&ini_path)
+                .ok()
+                .filter(|m| m.is_file() && m.len() <= 1024 * 1024)
+                .and_then(|_| std::fs::read_to_string(&ini_path).ok());
             let zip_has_package = |rel: &str| crate::utils::safe_join(&base, rel).is_ok_and(|p| compat::zip_contains_package(&p));
             out.extend(compat::check_sims4(&manifest, ini.as_deref(), zip_has_package));
         }

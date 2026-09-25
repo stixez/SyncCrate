@@ -79,6 +79,24 @@ fn custom_cover(dir: &Path, game_id: &str) -> Option<PathBuf> {
 
 /// Image type from the file's magic bytes. Publisher CDNs don't always match
 /// the extension (Blizzard serves JPEGs named `.png`), so never trust it.
+/// Box art is a few hundred KB; stop reading well before a bad response
+/// could exhaust memory.
+const MAX_ART_BYTES: usize = 10 * 1024 * 1024;
+
+async fn read_capped(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
+    if resp.content_length().is_some_and(|n| n > max as u64) {
+        return Err("image too large".into());
+    }
+    let mut out = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        if out.len() + chunk.len() > max {
+            return Err("image too large".into());
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
+}
+
 fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
         Some("image/jpeg")
@@ -107,6 +125,7 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
     if dest.is_file() {
         return Ok(()); // another request finished it while we waited
     }
+    // (read_capped / MAX_ART_BYTES below bound the download.)
     // reqwest is built without a bundled crypto provider (shared with iroh and
     // the updater); install ring once, the same way the updater plugin does.
     if rustls::crypto::CryptoProvider::get_default().is_none() {
@@ -115,6 +134,11 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("SyncCrate/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(20))
+        // https only, a few hops: art URLs come from the registry, but a CDN
+        // redirect must not downgrade to http or bounce around.
+        .redirect(reqwest::redirect::Policy::custom(|a| {
+            if a.url().scheme() == "https" && a.previous().len() < 5 { a.follow() } else { a.stop() }
+        }))
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -122,7 +146,13 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
     for url in urls {
         match client.get(url).send().await {
             Ok(resp) if resp.status().is_success() => {
-                let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+                let bytes = match read_capped(resp, MAX_ART_BYTES).await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        last_err = format!("{url}: {e}");
+                        continue;
+                    }
+                };
                 // Guard against error pages / placeholders served with 200.
                 if bytes.len() < 1024 || sniff_mime(&bytes).is_none() {
                     last_err = format!("{url}: not an image");

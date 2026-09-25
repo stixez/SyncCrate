@@ -589,12 +589,19 @@ fn gc_objects(root: &Path) -> Result<usize, String> {
     let mut removed = 0;
     for prefix in prefixes.filter_map(|e| e.ok()) {
         let pdir = prefix.path();
-        if !pdir.is_dir() {
+        // Only real `ab/` prefix folders: a junction placed here (`objects/ab
+        // -> C:\Somewhere`) would otherwise have its contents deleted.
+        let pname = prefix.file_name().to_string_lossy().to_string();
+        let is_real_dir = std::fs::symlink_metadata(&pdir).is_ok_and(|m| m.file_type().is_dir());
+        if !is_real_dir || pname.len() != 2 || !pname.bytes().all(|b| b.is_ascii_hexdigit()) {
             continue;
         }
         if let Ok(files) = std::fs::read_dir(&pdir) {
             for f in files.filter_map(|e| e.ok()) {
                 let name = f.file_name().to_string_lossy().to_string();
+                if !is_valid_hash(&name) || !f.file_type().is_ok_and(|t| t.is_file()) {
+                    continue;
+                }
                 if !referenced.contains(&name) && std::fs::remove_file(f.path()).is_ok() {
                     removed += 1;
                 }
@@ -729,6 +736,15 @@ fn restore_inner(
             result.missing += 1;
             continue;
         };
+        // Same check as every other write from outside the game folder: no
+        // ADS ':' names, and no escaping through a junction placed in the
+        // folder after the backup was made. (`dest` itself keeps the plain
+        // spelling: exact restore compares it with scanned paths.)
+        let under_base = if ct.folder == "." { entry.relative_path.clone() } else { format!("{}/{}", ct.folder, entry.relative_path) };
+        if utils::safe_join(&base.to_string_lossy(), &under_base).is_err() {
+            result.skipped.push(format!("{} (unsafe path)", entry.relative_path));
+            continue;
+        }
         let dest_base = base.join(&ct.folder);
         let dest = dest_base.join(&entry.relative_path);
         keep.insert(norm_key(&dest));

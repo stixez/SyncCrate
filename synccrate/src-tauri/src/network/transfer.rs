@@ -62,10 +62,11 @@ fn compress_chunk(data: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Compression failed: {}", e))
 }
 
-/// Decompress a zstd-compressed chunk.
+/// Decompress a zstd-compressed chunk, never to more than `MAX_CHUNK_SIZE`:
+/// unbounded `decode_all` let a few MB from a malicious host expand to
+/// hundreds of GB in memory (a decompression bomb).
 fn decompress_chunk(data: &[u8]) -> Result<Vec<u8>, String> {
-    zstd::decode_all(std::io::Cursor::new(data))
-        .map_err(|e| format!("Decompression failed: {}", e))
+    zstd::bulk::decompress(data, MAX_CHUNK_SIZE).map_err(|e| format!("Decompression failed (or chunk over {} bytes): {}", MAX_CHUNK_SIZE, e))
 }
 
 /// Sanitize GameInfo received from an untrusted peer.
@@ -82,8 +83,11 @@ fn sanitize_game_info(info: GameInfo) -> GameInfo {
         .into_iter()
         .take(MAX_PEER_PACKS)
         .map(|mut p| {
-            p.id.code.truncate(MAX_PACK_STRING_LEN);
-            p.name.truncate(MAX_PACK_STRING_LEN);
+            // chars(), not String::truncate: that panics when the cut lands
+            // inside a multi-byte character (a crafted pack name killed the
+            // handler and left a ghost peer behind).
+            p.id.code = clean_peer_text(&p.id.code, MAX_PACK_STRING_LEN);
+            p.name = clean_peer_text(&p.name, MAX_PACK_STRING_LEN);
             p
         })
         .collect();
@@ -180,12 +184,75 @@ pub async fn run_listener(
 }
 
 /// Serve one incoming peer (LAN TCP or internet/iroh) until it disconnects.
+/// Connections being served at once (handshaking or connected). `MAX_PEERS`
+/// only counted peers that had finished the handshake, so thousands of
+/// half-open connections could each hold a buffer before the PIN check.
+static IN_FLIGHT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+const MAX_IN_FLIGHT: usize = MAX_PEERS + 8;
+
+pub(crate) struct HandshakeSlot;
+
+impl HandshakeSlot {
+    pub(crate) fn try_acquire() -> Option<HandshakeSlot> {
+        use std::sync::atomic::Ordering;
+        if IN_FLIGHT.fetch_add(1, Ordering::SeqCst) >= MAX_IN_FLIGHT {
+            IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+            return None;
+        }
+        Some(HandshakeSlot)
+    }
+}
+
+impl Drop for HandshakeSlot {
+    fn drop(&mut self) {
+        IN_FLIGHT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Removes a peer that `handle_client` added if the handler exits early (an
+/// error mid-session or a panic): without it the peer stayed in
+/// `connections` forever, and eight of them locked the host.
+struct PeerCleanup {
+    state: Arc<Mutex<AppState>>,
+    app: Events,
+    peer_id: String,
+    name: String,
+    armed: bool,
+}
+
+impl Drop for PeerCleanup {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let (state, app, peer_id, name) = (self.state.clone(), self.app.clone(), self.peer_id.clone(), self.name.clone());
+        tokio::spawn(async move {
+            if state.lock().await.connections.remove(&peer_id).is_some() {
+                let _ = app.emit(
+                    "peer-disconnected",
+                    serde_json::json!({"name": name, "peer_id": peer_id, "clean": false, "reason": "Connection error"}),
+                );
+            }
+        });
+    }
+}
+
+/// Strip control and bidi-override characters and cap the length of a
+/// string a peer sent that we store or show.
+fn clean_peer_text(s: &str, max: usize) -> String {
+    s.chars().filter(|c| !c.is_control() && !crate::chat::is_bidi_control(*c)).take(max).collect::<String>().trim().to_string()
+}
+
 pub async fn serve_incoming(
     stream: PeerStream,
     state: Arc<Mutex<AppState>>,
     app: Events,
     label: String,
 ) {
+    let Some(_slot) = HandshakeSlot::try_acquire() else {
+        log::warn!("Rejecting connection from {} — too many connections in progress", label);
+        return;
+    };
     // Enforce connection limit
     {
         let app_state = state.lock().await;
@@ -213,10 +280,10 @@ async fn handle_client(
     log::info!("Incoming {} connection from {}", stream.kind(), peer_label);
     let stream = Arc::new(Mutex::new(stream));
 
-    // Wait for Hello
+    // Wait for Hello (size- and time-limited: the peer isn't authenticated yet)
     let msg = {
         let mut s = stream.lock().await;
-        protocol::recv_message(&mut *s).await?
+        protocol::recv_hello(&mut *s).await?
     };
 
     let use_compression;
@@ -226,14 +293,12 @@ async fn handle_client(
     let (peer_name, peer_version, peer_pin, peer_game, peer_node, peer_crews) = match msg {
         Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews, .. } => {
             // Sanitize: truncate and strip control characters
-            let sanitized = name.chars()
-                .filter(|c| !c.is_control())
-                .take(MAX_PEER_NAME_LEN)
-                .collect::<String>();
+            let sanitized = clean_peer_text(&name, MAX_PEER_NAME_LEN);
             let peer_supports_compression = supports_compression;
             use_compression = peer_supports_compression;
-            let node = authenticated_node.or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
-            (sanitized, version, pin, game_id, node, crews)
+            // A node id claimed over TCP is display data only (see crews docs).
+            let node = authenticated_node.clone().or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
+            (sanitized, clean_peer_text(&version, 32), pin, game_id, node, crews)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
@@ -242,23 +307,33 @@ async fn handle_client(
         return Err("Peer sent empty name".to_string());
     }
 
-    // Validate PIN if the host has one set
+    // Validate PIN if the host has one set, with lockouts against guessing
+    // (`network::pin_guard`). The source is the proven node id over iroh,
+    // the IP over TCP.
     {
-        let app_state = state.lock().await;
-        if let Some(ref expected_pin) = app_state.session_pin {
-            match &peer_pin {
-                Some(provided) if provided == expected_pin => {}
-                _ => {
-                    let mut s = stream.lock().await;
-                    protocol::send_message(
-                        &mut *s,
-                        &Message::Error {
-                            message: "Invalid PIN".to_string(),
-                        },
-                    )
-                    .await?;
-                    return Err("Peer provided invalid PIN".to_string());
-                }
+        let mut app_state = state.lock().await;
+        let source = authenticated_node.clone().unwrap_or_else(|| peer_ip.clone());
+        if let Some(expected_pin) = app_state.session_pin.clone() {
+            let now = std::time::Instant::now();
+            let verdict = match app_state.pin_guard.check(&source, now) {
+                Err(wait) => Err(format!("Too many wrong PIN attempts. Try again in {} s.", wait.as_secs().max(1))),
+                Ok(()) => match &peer_pin {
+                    Some(provided) if crate::network::pin_guard::pin_matches(provided, &expected_pin) => {
+                        app_state.pin_guard.record_success(&source);
+                        Ok(())
+                    }
+                    _ => {
+                        app_state.pin_guard.record_failure(&source, now);
+                        Err("Invalid PIN".to_string())
+                    }
+                },
+            };
+            drop(app_state);
+            if let Err(message) = verdict {
+                let mut s = stream.lock().await;
+                protocol::send_message(&mut *s, &Message::Error { message: message.clone() }).await?;
+                s.close_gracefully().await;
+                return Err(format!("Refused peer {}: {}", source, message));
             }
         }
     }
@@ -274,6 +349,7 @@ async fn handle_client(
                 &Message::Error { message: protocol::wrong_game_error(&host_game) },
             )
             .await?;
+            s.close_gracefully().await;
             return Err(format!(
                 "Peer '{}' has {} selected, but this session shares {}",
                 peer_name,
@@ -284,14 +360,14 @@ async fn handle_client(
     }
 
     // Send Welcome. Crew data only after the PIN and game checks above:
-    // being in a crew never gets anyone past them.
+    // being in a crew never gets anyone past them. And only to a peer whose
+    // identity iroh proved: over TCP anyone can claim any node id and any
+    // crew id, which let a stranger read crew data or rename members.
     {
         let mut app_state = state.lock().await;
-        let member = peer_node.clone().map(|n| (n, peer_name.clone()));
-        let crews = if peer_crews.is_empty() {
-            Vec::new()
-        } else {
-            crate::crews::host_handshake(&mut app_state, &peer_crews, member)
+        let crews = match (&authenticated_node, peer_crews.is_empty()) {
+            (Some(node), false) => crate::crews::host_handshake(&mut app_state, &peer_crews, Some((node.clone(), peer_name.clone()))),
+            _ => Vec::new(),
         };
         if !crews.is_empty() {
             let _ = app.emit("crews-changed", serde_json::json!({}));
@@ -349,6 +425,7 @@ async fn handle_client(
             let _ = app.emit("chat-updated", serde_json::json!({}));
         }
     }
+    let mut cleanup = PeerCleanup { state: state.clone(), app: app.clone(), peer_id: peer_id.clone(), name: peer_name.clone(), armed: true };
 
     let _ = app.emit(
         "peer-connected",
@@ -726,6 +803,9 @@ async fn handle_client(
         }
     }
 
+    // The normal exit does its own cleanup (and emits the event) below.
+    cleanup.armed = false;
+
     // disconnect / disconnect_peer already removed the peer and emitted the event.
     if removed_externally {
         return Ok(());
@@ -958,7 +1038,9 @@ pub(crate) async fn run_client_session(
         let our_name = app_state.local_display_name.clone();
         let our_game = app_state.active_game.clone();
         let our_node = app_state.local_node_id.clone();
-        let crews = crate::crews::hellos_for(&app_state);
+        // Crew ids only to a host iroh proved is a member of that crew: sent
+        // to any host, they leaked to spoofed LAN hosts and random join codes.
+        let crews = dialled_node.as_deref().map(|h| crate::crews::hellos_for_host(&app_state, h)).unwrap_or_default();
         drop(app_state);
         let mut s = stream.lock().await;
         protocol::send_message(
@@ -990,23 +1072,27 @@ pub(crate) async fn run_client_session(
                     return Err(protocol::wrong_game_error(game_id.as_deref().unwrap_or_default()));
                 }
                 let host_node = dialled_node.clone().or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
-                if !crews.is_empty() {
-                    let host = host_node.clone().map(|node_id| crate::crews::CrewHost {
-                        node_id,
+                let name = clean_peer_text(&name, MAX_PEER_NAME_LEN);
+                // Crew data only from a host iroh proved, and only for crews
+                // it's a member of (checked in client_handshake).
+                if let (Some(proven), false) = (&dialled_node, crews.is_empty()) {
+                    let host = crate::crews::CrewHost {
+                        node_id: proven.clone(),
                         name: crate::crews::clean_name(&name).unwrap_or_else(|| "Host".into()),
                         addresses: addresses.to_vec(),
                         port,
                         game_id: ours.clone(),
                         at: crate::utils::timestamp_now(),
-                    });
+                    };
                     let mut app_state = state.lock().await;
                     if crate::crews::client_handshake(&mut app_state, crews, host) {
                         let _ = app.emit("crews-changed", serde_json::json!({}));
                     }
                 }
-                (name, version, supports_compression, game_id, host_node, crate::chat::supports(&features))
+                (name, clean_peer_text(&version, 32), supports_compression, game_id, host_node, crate::chat::supports(&features))
             }
-            Message::Error { message } => return Err(message),
+            // Shown to the user: a host must not be able to paste a novel into the UI.
+            Message::Error { message } => return Err(clean_peer_text(&message, 300)),
             _ => return Err("Expected Welcome message".to_string()),
         }
     };
@@ -1390,6 +1476,9 @@ pub struct ReceiveRequest<'a> {
     pub local_path: &'a str,
     /// Hash from the manifest the plan was built from (empty = don't check).
     pub expected_hash: &'a str,
+    /// Size from that manifest: the host's FileHeader must agree, or a host
+    /// could fill the disk with files the plan showed as tiny.
+    pub expected_size: Option<u64>,
     pub policy: ReplacePolicy,
 }
 
@@ -1569,6 +1658,10 @@ pub async fn receive_file(
         }
     };
 
+    if req.expected_size.is_some_and(|want| want != expected_size) {
+        drain_until_file_end(&mut s).await;
+        return Err(format!("Host sent {} bytes for {}, but its file list said {}", expected_size, req.remote_path, req.expected_size.unwrap_or(0)));
+    }
     if !req.expected_hash.is_empty() && header_hash != req.expected_hash {
         // The host streams the body regardless; consume it so the next
         // request doesn't read stale chunks.
@@ -1647,6 +1740,11 @@ async fn receive_file_body(
                 if decoded.len() > MAX_CHUNK_SIZE {
                     return Err((format!("Chunk too large: {} bytes (max {})", decoded.len(), MAX_CHUNK_SIZE), false));
                 }
+                // Empty chunks make no progress; accepting them let a host
+                // hold the stream (and the sync) forever.
+                if decoded.is_empty() {
+                    return Err(("Host sent an empty chunk".to_string(), false));
+                }
                 bytes_written += decoded.len() as u64;
                 if bytes_written > expected_size {
                     return Err(("Received more data than declared size".to_string(), false));
@@ -1687,6 +1785,30 @@ async fn drain_until_file_end(s: &mut PeerStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decompression_is_bounded() {
+        // 64 MB of zeros compresses to a few KB; it must not expand past a chunk.
+        let bomb = zstd::encode_all(std::io::Cursor::new(vec![0u8; 64 * 1024 * 1024]), 3).unwrap();
+        assert!(bomb.len() < 1024 * 1024);
+        assert!(decompress_chunk(&bomb).is_err());
+        let ok = compress_chunk(b"hello").unwrap();
+        assert_eq!(decompress_chunk(&ok).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn game_info_sanitizing_never_panics_on_multibyte_names() {
+        let name = format!("a{}", "\u{e9}".repeat(200));
+        let mut gi = GameInfo::default();
+        gi.installed_packs.push(crate::state::PackInfo {
+            id: crate::state::PackId { code: name.clone(), pack_type: crate::state::PackType::GamePack },
+            name: format!("{name}\u{202e}"),
+        });
+        let out = sanitize_game_info(gi);
+        let p = &out.installed_packs[0];
+        assert!(p.name.chars().count() <= MAX_PACK_STRING_LEN && !p.name.contains('\u{202e}'));
+        assert!(p.id.code.chars().count() <= MAX_PACK_STRING_LEN);
+    }
 
     #[test]
     fn test_compress_decompress_roundtrip() {

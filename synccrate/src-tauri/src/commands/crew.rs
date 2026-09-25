@@ -74,7 +74,7 @@ pub async fn rename_crew(state: tauri::State<'_, Arc<Mutex<AppState>>>, id: Stri
     let mut s = state.lock().await;
     let crew = crew_mut(&mut s, &id)?;
     crew.name = name;
-    crew.name_updated_at = crate::utils::timestamp_now().max(crew.name_updated_at + 1);
+    crew.name_updated_at = crate::utils::timestamp_now().max(crew.name_updated_at.saturating_add(1));
     let crew = crew.clone();
     crews::persist(&s);
     Ok(crew)
@@ -121,9 +121,10 @@ pub(crate) async fn join_crew_inner(state: &Arc<Mutex<AppState>>, invite: CrewIn
     let invite = crews::validate_invite(invite, is_known_game(&s))?;
     let now = crate::utils::timestamp_now();
     let me = me(&s, my_name, now)?;
-    let crew = if let Some(existing) = s.crews.get_mut(&invite.id) {
-        let inviter = CrewMember { node_id: invite.from_node.clone(), name: invite.from_name.clone(), updated_at: 0, removed: false, last_seen: 0 };
-        crews::merge_member(&mut existing.members, inviter);
+    let crew = if let Some(existing) = s.crews.get(&invite.id) {
+        // Already in it: an invite doesn't change who's a member. Anyone who
+        // ever saw the crew id could otherwise forge an "invite" that adds
+        // their own node id under a friend's name.
         existing.clone()
     } else {
         if s.crews.crews.len() >= crews::MAX_CREWS {
@@ -304,7 +305,12 @@ pub async fn connect_crew(
         connect_target(crew, &node, &s.discovered_peers)?
     };
     let pin = pin.filter(|p| !p.trim().is_empty());
-    crate::commands::session::start_direct_connection(state.inner(), app, addresses, port, Some(id), true, name, pin, label).await
+    // Internet (iroh) only: it proves the host really has this node id. A LAN
+    // address comes from an unauthenticated broadcast anyone can fake, so it
+    // would let a stranger pose as a crew member. On a LAN without internet,
+    // join with the host's code instead.
+    let _ = addresses;
+    crate::commands::session::start_direct_connection(state.inner(), app, Vec::new(), port, Some(id), true, name, pin, label).await
 }
 
 #[cfg(test)]

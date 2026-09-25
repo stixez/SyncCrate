@@ -12,6 +12,10 @@ use tokio::sync::Mutex;
 /// Rescan the local folder before the next pull (at start, and after a pull).
 static NEEDS_RESCAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
+/// Unattended pulls stop here; anything bigger waits for a manual sync, so a
+/// host can't fill the disk while nobody's watching.
+const MAX_AUTO_PULL_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
 /// Always treated as scripts, on top of the game's `dangerous_script_extensions`.
 const SCRIPT_EXTENSIONS: &[&str] = &["dll", "exe", "ts4script", "lua", "jar", "js", "py", "bat", "cmd", "ps1", "asi", "so", "dylib"];
 
@@ -54,6 +58,11 @@ pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan,
             SyncAction::SendToRemote(_) => {}
             _ => review += 1,
         }
+    }
+    if subset.total_bytes > MAX_AUTO_PULL_BYTES {
+        review += subset.actions.len();
+        subset.actions.clear();
+        subset.total_bytes = 0;
     }
     subset.plan_hash = Some(crate::sync::diff::compute_plan_hash(&subset));
     (subset, scripts, review)

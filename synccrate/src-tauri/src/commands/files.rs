@@ -908,16 +908,38 @@ fn toggle_destination(
     })
 }
 
-#[tauri::command]
-pub async fn open_folder(path: String) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
-    if !p.exists() {
-        return Err("Path does not exist".into());
+/// Only folders inside a game folder or SyncCrate's own data can be opened.
+/// It used to hand any existing path to explorer, which runs a file it's
+/// given (`...\calc.exe`) and connects to a UNC path (`\\attacker\share`,
+/// leaking the Windows login hash).
+pub(crate) fn openable_folder(path: &str, allowed_roots: &[std::path::PathBuf]) -> Result<std::path::PathBuf, String> {
+    if path.starts_with("\\\\") || path.starts_with("//") {
+        return Err("Network paths can't be opened from SyncCrate.".into());
     }
+    let canonical = std::fs::canonicalize(path).map_err(|_| "Path does not exist".to_string())?;
+    if !canonical.is_dir() {
+        return Err("Only folders can be opened.".into());
+    }
+    let inside = allowed_roots
+        .iter()
+        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .any(|root| canonical.starts_with(&root));
+    if !inside {
+        return Err("That folder isn't part of a game SyncCrate manages.".into());
+    }
+    Ok(canonical)
+}
+
+#[tauri::command]
+pub async fn open_folder(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: String) -> Result<(), String> {
+    let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
+    roots.push(utils::config_root().join("synccrate"));
+    let dir = openable_folder(&path, &roots)?;
+    let path = crate::utils::clean_path(dir).to_string_lossy().to_string();
 
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
+        std::process::Command::new(utils::windows_system_exe("explorer.exe"))
             .arg(&path)
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -1552,6 +1574,23 @@ pub async fn get_outdated_scripts(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn open_folder_only_opens_managed_folders() {
+        let root = std::env::temp_dir().join(format!("sc-open-{}", uuid::Uuid::new_v4()));
+        let game = root.join("Game");
+        std::fs::create_dir_all(game.join("Mods")).unwrap();
+        std::fs::write(game.join("Mods").join("tool.exe"), b"MZ").unwrap();
+        let other = root.join("Elsewhere");
+        std::fs::create_dir_all(&other).unwrap();
+        let roots = vec![game.clone()];
+        assert!(openable_folder(game.join("Mods").to_str().unwrap(), &roots).is_ok());
+        assert!(openable_folder(game.join("Mods").join("tool.exe").to_str().unwrap(), &roots).unwrap_err().contains("folders"), "a file (would run it)");
+        assert!(openable_folder(other.to_str().unwrap(), &roots).is_err(), "outside every game");
+        assert!(openable_folder("\\\\attacker\\share", &roots).unwrap_err().contains("Network"));
+        assert!(openable_folder(root.join("missing").to_str().unwrap(), &roots).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn workshop_items_are_counted_once_across_libraries() {

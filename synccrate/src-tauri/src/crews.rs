@@ -177,7 +177,7 @@ pub fn is_valid_node_id(id: &str) -> bool {
 
 /// Strip control characters, trim, cap length. `None` if nothing is left.
 pub fn clean_name(name: &str) -> Option<String> {
-    let cleaned: String = name.chars().filter(|c| !c.is_control()).collect();
+    let cleaned: String = name.chars().filter(|c| !c.is_control() && !crate::chat::is_bidi_control(*c)).collect();
     let trimmed: String = cleaned.trim().chars().take(MAX_NAME_CHARS).collect();
     let trimmed = trimmed.trim().to_string();
     (!trimmed.is_empty()).then_some(trimmed)
@@ -193,6 +193,11 @@ pub fn new_crew_id() -> String {
 
 /// Validate and normalise a host's Welcome entry. `is_known_game` rejects
 /// games this app version doesn't have (an unknown id could never be synced).
+const MAX_CLOCK_SKEW_SECS: u64 = 24 * 3600;
+/// Real sets are published a handful of times; anything near u64::MAX is an
+/// attempt to win every merge (and overflow the next publish).
+const MAX_SET_VERSION: u64 = 1_000_000;
+
 pub fn validate_welcome(mut w: CrewWelcome, session_game: &str, is_known_game: impl Fn(&str) -> bool) -> Result<CrewWelcome, String> {
     if !is_valid_crew_id(&w.id) {
         return Err("invalid crew id".into());
@@ -203,11 +208,24 @@ pub fn validate_welcome(mut w: CrewWelcome, session_game: &str, is_known_game: i
     }
     w.games.retain(|g| is_plausible_game_id(g) && is_known_game(g));
     w.games.dedup();
+    // Clocks from a host are clamped to "now + a day": a u64::MAX timestamp
+    // would win every later last-writer-wins merge and freeze a name or a
+    // removal forever.
+    let latest = crate::utils::timestamp_now().saturating_add(MAX_CLOCK_SKEW_SECS);
+    w.name_updated_at = w.name_updated_at.min(latest);
     for m in &mut w.members {
         if !is_valid_node_id(&m.node_id) {
             return Err("invalid member id".into());
         }
         m.name = clean_name(&m.name).unwrap_or_else(|| "Unknown".into());
+        m.updated_at = m.updated_at.min(latest);
+        m.last_seen = m.last_seen.min(latest);
+    }
+    if w.set.as_ref().is_some_and(|s| s.version > MAX_SET_VERSION) {
+        return Err("crew set version is out of range".into());
+    }
+    if let Some(set) = &mut w.set {
+        set.published_at = set.published_at.min(latest);
     }
     if let Some(set) = &w.set {
         crate::commands::modpack::validate_pack(&set.pack)?;
@@ -286,7 +304,7 @@ pub fn host_answer(crew: &mut Crew, hello: &CrewHello, member: Option<(String, S
             Some(m) => {
                 if m.name != name {
                     m.name = name;
-                    m.updated_at = now.max(m.updated_at + 1);
+                    m.updated_at = now.max(m.updated_at.saturating_add(1));
                 }
                 m.last_seen = now;
                 changed = true;
@@ -350,7 +368,7 @@ pub fn client_apply(crew: &mut Crew, w: CrewWelcome, host: Option<CrewHost>) -> 
 /// Local "publish as crew set": bump past whatever we've seen.
 pub fn publish_set<'a>(crew: &'a mut Crew, pack: ModPack, publisher: &str, now: u64) -> &'a CrewSet {
     let game = pack.game_id.clone();
-    let version = crew.sets.get(&game).map_or(0, |s| s.version) + 1;
+    let version = crew.sets.get(&game).map_or(0, |s| s.version).saturating_add(1);
     add_game(&mut crew.games, &game);
     crew.sets.insert(game.clone(), CrewSet { pack, version, published_at: now, publisher: publisher.to_string() });
     &crew.sets[&game]
@@ -361,7 +379,7 @@ pub fn publish_set<'a>(crew: &'a mut Crew, pack: ModPack, publisher: &str, now: 
 pub fn set_member_removed(crew: &mut Crew, node_id: &str, removed: bool, now: u64) -> Result<(), String> {
     let m = crew.members.iter_mut().find(|m| m.node_id == node_id).ok_or("Not a member of this crew")?;
     m.removed = removed;
-    m.updated_at = now.max(m.updated_at + 1);
+    m.updated_at = now.max(m.updated_at.saturating_add(1));
     Ok(())
 }
 
@@ -371,8 +389,21 @@ pub fn set_member_removed(crew: &mut Crew, node_id: &str, removed: bool, now: u6
 
 /// The client's Hello entries: every crew it's in (capped), keyed to the
 /// game it's joining with. Hosts that aren't in a crew just ignore them.
-pub fn hellos_for(state: &crate::state::AppState) -> Vec<CrewHello> {
-    state.crews.crews.iter().take(MAX_CREWS).map(|c| hello_for(c, &state.active_game)).collect()
+/// Only crews that `host` (a node id iroh proved) is a current member of:
+/// crew ids sent to any host leaked to spoofed hosts and strangers' codes.
+pub fn hellos_for_host(state: &crate::state::AppState, host: &str) -> Vec<CrewHello> {
+    state
+        .crews
+        .crews
+        .iter()
+        .filter(|c| is_active_member(c, host))
+        .take(MAX_CREWS)
+        .map(|c| hello_for(c, &state.active_game))
+        .collect()
+}
+
+pub fn is_active_member(crew: &Crew, node_id: &str) -> bool {
+    crew.members.iter().any(|m| m.node_id == node_id && !m.removed)
 }
 
 /// Host side. `member` is (node id, display name): the authenticated id
@@ -408,7 +439,7 @@ pub fn host_handshake(state: &mut crate::state::AppState, hellos: &[CrewHello], 
 /// Client side: merge the host's answers into crews we're in (a Welcome can't
 /// add a crew we never joined). Invalid entries are skipped with a log line,
 /// never fatal: the sync session itself doesn't depend on crew data.
-pub fn client_handshake(state: &mut crate::state::AppState, welcomes: Vec<CrewWelcome>, host: Option<CrewHost>) -> bool {
+pub fn client_handshake(state: &mut crate::state::AppState, welcomes: Vec<CrewWelcome>, host: CrewHost) -> bool {
     let game = state.active_game.clone();
     let registry = crate::registry::build_registry_map(&state.game_registry);
     let mut changed = false;
@@ -421,8 +452,9 @@ pub fn client_handshake(state: &mut crate::state::AppState, welcomes: Vec<CrewWe
                 continue;
             }
         };
-        if let Some(crew) = state.crews.get_mut(&id) {
-            changed |= client_apply(crew, w, host.clone());
+        // Only a current member (by the id iroh proved) speaks for a crew.
+        if let Some(crew) = state.crews.get_mut(&id).filter(|c| is_active_member(c, &host.node_id)) {
+            changed |= client_apply(crew, w, Some(host.clone()));
         }
     }
     if changed {
@@ -579,6 +611,31 @@ pub fn behind(cmp: &crate::commands::modpack::PackComparison) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_clocks_and_versions_are_clamped() {
+        let c = crew();
+        let far = u64::MAX;
+        let mut w = CrewWelcome { id: c.id.clone(), name: "C".into(), name_updated_at: far, games: vec![], members: vec![], set: None };
+        w.members.push(CrewMember { node_id: node(2), name: "Ann".into(), updated_at: far, removed: true, last_seen: far });
+        let v = validate_welcome(w.clone(), "sims4", known).unwrap();
+        let limit = crate::utils::timestamp_now() + MAX_CLOCK_SKEW_SECS + 5;
+        assert!(v.name_updated_at <= limit && v.members[0].updated_at <= limit && v.members[0].last_seen <= limit);
+        // A u64::MAX set version would win every merge and overflow the next publish.
+        let mut p = crate::testutil::test_pack("sims4", &[("Mods/a.package", b"A")]);
+        p.name = "S".into();
+        w.set = Some(CrewSet { pack: p, version: far, published_at: 1, publisher: "H".into() });
+        assert!(validate_welcome(w, "sims4", known).is_err());
+        // And publishing past a huge local version saturates instead of wrapping to 0.
+        let mut c = crew();
+        c.sets.insert("sims4".into(), CrewSet { pack: pack("sims4", 1), version: u64::MAX, published_at: 1, publisher: "X".into() });
+        assert_eq!(publish_set(&mut c, pack("sims4", 1), "Me", 2).version, u64::MAX);
+    }
+
+    #[test]
+    fn bidi_overrides_are_stripped_from_names() {
+        assert_eq!(clean_name("Ann\u{202e}gpj.exe").as_deref(), Some("Anngpj.exe"));
+    }
 
     pub(crate) fn node(n: u8) -> String {
         // Real ed25519 public keys (from deterministic secret keys), since
