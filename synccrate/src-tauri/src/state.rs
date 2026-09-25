@@ -376,6 +376,8 @@ pub struct AppState {
     pub crews_path: Option<std::path::PathBuf>,
     /// Hex of this install's iroh endpoint id (sent in Hello/Welcome).
     pub local_node_id: Option<String>,
+    /// This session's chat (`crate::chat`); cleared when a new session starts.
+    pub chat: crate::chat::ChatLog,
 }
 
 impl AppState {
@@ -480,6 +482,7 @@ impl Default for AppState {
             crews: crate::crews::CrewStore::default(),
             crews_path: None,
             local_node_id: None,
+            chat: crate::chat::ChatLog::default(),
         }
     }
 }

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  ChatLog,
   CrewInvite,
   BackupProgress,
   BackupInfo,
@@ -128,6 +129,9 @@ interface AppState {
   /** A validated crew invite from a clicked link; CrewList shows "Add crew?". */
   pendingCrewInvite: CrewInvite | null;
   setPendingCrewInvite: (invite: CrewInvite | null) => void;
+  /** This session's chat, refreshed on the backend's `chat-updated` event. */
+  chat: ChatLog | null;
+  setChat: (chat: ChatLog | null) => void;
   /** Bumped on the backend's `crews-changed` event so CrewList reloads. */
   crewsVersion: number;
   bumpCrewsVersion: () => void;
@@ -281,6 +285,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPendingImportPack: (pendingImportPack) => set({ pendingImportPack }),
   pendingCrewInvite: null,
   setPendingCrewInvite: (pendingCrewInvite) => set({ pendingCrewInvite }),
+  chat: null,
+  setChat: (chat) => set({ chat }),
   crewsVersion: 0,
   bumpCrewsVersion: () => set((s) => ({ crewsVersion: s.crewsVersion + 1 })),
   pendingPackApply: null,

@@ -224,7 +224,7 @@ async fn handle_client(
     // Only an iroh peer's id is proven (QUIC handshake); over TCP it's a claim.
     let authenticated_node = stream.lock().await.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
     let (peer_name, peer_version, peer_pin, peer_game, peer_node, peer_crews) = match msg {
-        Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews } => {
+        Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews, .. } => {
             // Sanitize: truncate and strip control characters
             let sanitized = name.chars()
                 .filter(|c| !c.is_control())
@@ -310,6 +310,7 @@ async fn handle_client(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
+                features: vec![crate::chat::FEATURE.to_string()],
             },
         )
         .await?;
@@ -343,6 +344,10 @@ async fn handle_client(
                 supports_compression: use_compression,
             },
         );
+        let now = crate::utils::timestamp_now();
+        if app_state.chat.post(&peer_name, &format!("{} joined", crate::chat::clean_name(&peer_name)), true, now).is_some() {
+            let _ = app.emit("chat-updated", serde_json::json!({}));
+        }
     }
 
     let _ = app.emit(
@@ -378,6 +383,7 @@ async fn handle_client(
     let mut removed_externally = false;
     let mut disconnect_reason = String::new();
     let mut peer_files_sent: u64 = 0;
+    let mut chat_limiter = crate::chat::RateLimiter::default();
     let speed_limit = crate::commands::sync::get_speed_limit();
     loop {
         let idle_since = std::time::Instant::now();
@@ -688,6 +694,18 @@ async fn handle_client(
             Message::Ping => {
                 // Keepalive — no-op, resets the idle timeout
             }
+            Message::ChatSync { since, outgoing, synced_files } => {
+                let (reply, changed) = {
+                    let mut app_state = state.lock().await;
+                    let now = crate::utils::timestamp_now();
+                    crate::chat::host_sync(&mut app_state.chat, &mut chat_limiter, &peer_name, since, outgoing, synced_files, now)
+                };
+                if changed {
+                    let _ = app.emit("chat-updated", serde_json::json!({}));
+                }
+                let mut s = stream.lock().await;
+                protocol::send_message(&mut *s, &Message::ChatBatch { messages: reply }).await?;
+            }
             Message::Disconnect => {
                 clean_disconnect = true;
                 break;
@@ -695,6 +713,16 @@ async fn handle_client(
             other => {
                 log::warn!("Unexpected message from peer: {:?}", other);
             }
+        }
+    }
+
+    {
+        let mut app_state = state.lock().await;
+        let now = crate::utils::timestamp_now();
+        if app_state.session_type == crate::state::SessionType::Host
+            && app_state.chat.post(&peer_name, &format!("{} left", crate::chat::clean_name(&peer_name)), true, now).is_some()
+        {
+            let _ = app.emit("chat-updated", serde_json::json!({}));
         }
     }
 
@@ -918,17 +946,18 @@ pub(crate) async fn run_client_session(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
+                features: vec![crate::chat::FEATURE.to_string()],
             },
         )
         .await?;
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version, host_supports_compression, host_game, host_node) = {
+    let (host_name, host_version, host_supports_compression, host_game, host_node, host_chat) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
-            Message::Welcome { name, version, supports_compression, game_id, node_id, crews } => {
+            Message::Welcome { name, version, supports_compression, game_id, node_id, crews, features } => {
                 // Check on our side too, in case the host skipped it.
                 let ours = state.lock().await.active_game.clone();
                 if protocol::games_conflict(&ours, game_id.as_deref()) {
@@ -950,7 +979,7 @@ pub(crate) async fn run_client_session(
                         let _ = app.emit("crews-changed", serde_json::json!({}));
                     }
                 }
-                (name, version, supports_compression, game_id, host_node)
+                (name, version, supports_compression, game_id, host_node, crate::chat::supports(&features))
             }
             Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
@@ -1057,6 +1086,8 @@ pub(crate) async fn run_client_session(
             },
         );
         app_state.pending_client_peer_id = None;
+        app_state.chat.clear();
+        app_state.chat.available = host_chat;
     }
 
     // Emit peer-connected AFTER connection is stored so getSessionStatus() returns peers
@@ -1067,7 +1098,7 @@ pub(crate) async fn run_client_session(
 
     // Client message loop — keeps connection alive, handles host messages,
     // detects disconnects. Runs until the connection drops.
-    client_message_loop(state, app, stream, peer_id, host_name_for_loop).await;
+    client_message_loop(state, app, stream, peer_id, host_name_for_loop, host_chat).await;
 
     Ok(())
 }
@@ -1081,10 +1112,12 @@ async fn client_message_loop(
     stream: Arc<Mutex<PeerStream>>,
     peer_id: &str,
     host_name: String,
+    chat: bool,
 ) {
     let mut clean_disconnect = false;
     let mut disconnect_reason = String::new();
     let mut last_ping = std::time::Instant::now();
+    let mut last_chat = std::time::Instant::now() - CHAT_POLL;
 
     loop {
         // Check if we're still connected (user may have called disconnect)
@@ -1097,6 +1130,21 @@ async fn client_message_loop(
             }
         }
 
+        // Chat poll inputs are read before taking the stream lock and applied
+        // after releasing it: elsewhere the AppState lock is taken first, so
+        // taking it while holding the stream could deadlock.
+        let mut chat_req = if chat {
+            let st = state.lock().await;
+            let due = last_chat.elapsed() >= CHAT_POLL || !st.chat.outbox.is_empty() || st.chat.pending_synced.is_some();
+            due.then(|| {
+                let out: Vec<String> = st.chat.outbox.iter().take(crate::chat::MAX_OUTGOING).cloned().collect();
+                (st.chat.last_seq(), out, st.chat.pending_synced)
+            })
+        } else {
+            None
+        };
+        let mut chat_reply: Option<(Vec<crate::chat::ChatMessage>, usize, bool)> = None;
+
         // Try to read from stream without blocking sync operations.
         // try_lock avoids holding the stream while a file transfer is in progress.
         let msg_result = match stream.try_lock() {
@@ -1107,13 +1155,43 @@ async fn client_message_loop(
                         last_ping = std::time::Instant::now();
                     }
                 }
-                protocol::try_recv_message(&mut *s, std::time::Duration::from_millis(200)).await
+                match chat_req.take() {
+                    Some((since, outgoing, synced)) => {
+                        last_chat = std::time::Instant::now();
+                        let (sent, reported) = (outgoing.len(), synced.is_some());
+                        match chat_round_trip(&mut s, since, outgoing, synced).await {
+                            Ok((batch, pending)) => {
+                                if let Some(batch) = batch {
+                                    chat_reply = Some((batch, sent, reported));
+                                }
+                                match pending {
+                                    Some(m) => Ok(Some(m)),
+                                    None => protocol::try_recv_message(&mut *s, std::time::Duration::from_millis(200)).await,
+                                }
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
+                    None => protocol::try_recv_message(&mut *s, std::time::Duration::from_millis(200)).await,
+                }
             }
             Err(_) => {
                 // Stream in use by sync operation (which sends its own messages) — skip
                 Ok(None)
             }
         };
+
+        if let Some((batch, sent, reported)) = chat_reply {
+            let mut st = state.lock().await;
+            let n = sent.min(st.chat.outbox.len());
+            st.chat.outbox.drain(..n);
+            if reported {
+                st.chat.pending_synced = None;
+            }
+            if st.chat.merge_batch(batch) || n > 0 {
+                let _ = app.emit("chat-updated", serde_json::json!({}));
+            }
+        }
 
         match msg_result {
             Ok(Some(msg)) => match msg {
@@ -1178,6 +1256,34 @@ async fn client_message_loop(
             "reason": reason,
         }),
     );
+}
+
+/// How often an idle client asks the host for new chat lines.
+const CHAT_POLL: std::time::Duration = std::time::Duration::from_millis(1000);
+
+/// One chat poll (see `crate::chat`), with the stream lock held by the
+/// caller so the host's reply can't reach a sync reader. Returns the batch
+/// (None if the host disconnected first) and a message the loop must still
+/// act on (the host's `Disconnect` or `GameInfoExchange`).
+async fn chat_round_trip(
+    s: &mut PeerStream,
+    since: u64,
+    outgoing: Vec<String>,
+    synced_files: Option<u64>,
+) -> Result<(Option<Vec<crate::chat::ChatMessage>>, Option<Message>), String> {
+    protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files }).await?;
+    let mut pending = None;
+    loop {
+        let msg = protocol::try_recv_message(s, std::time::Duration::from_secs(15))
+            .await?
+            .ok_or_else(|| "The host stopped answering".to_string())?;
+        match msg {
+            Message::ChatBatch { messages } => return Ok((Some(messages), pending)),
+            Message::Disconnect => return Ok((None, Some(Message::Disconnect))),
+            m @ Message::GameInfoExchange { .. } => pending = Some(m),
+            other => log::debug!("Chat poll: ignoring {:?}", other),
+        }
+    }
 }
 
 /// Client side: re-request the host's manifest over the existing connection and

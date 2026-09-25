@@ -652,6 +652,10 @@ async fn run_sync(
     // A cancelled sync keeps its checkpoint so the next plan resumes.
     if !cancelled {
         delete_checkpoint();
+        if files_received > 0 {
+            // Announced in the session chat on the next poll.
+            state.lock().await.chat.pending_synced = Some(files_received as u64);
+        }
     }
 
     // Record sync history

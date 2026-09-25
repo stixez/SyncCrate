@@ -1,3 +1,4 @@
+mod chat;
 mod commands;
 mod crews;
 mod event_sink;
@@ -16,6 +17,8 @@ mod testutil;
 mod e2e_tests;
 #[cfg(test)]
 mod crew_e2e_tests;
+#[cfg(test)]
+mod chat_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -411,6 +414,8 @@ pub fn run() {
             commands::crew::crew_status,
             commands::crew::scan_crew_hosts,
             commands::crew::connect_crew,
+            commands::chat::get_chat,
+            commands::chat::send_chat,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

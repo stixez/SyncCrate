@@ -7,6 +7,7 @@ import { useLogStore } from "../stores/useLogStore";
 import type { BackupProgress, PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
 import { runPackApply } from "../lib/packApply";
+import { loadDisplayName } from "../lib/prefs";
 import {
   isPermissionGranted,
   requestPermission,
@@ -371,6 +372,24 @@ export function useTauriEvents() {
               sendNotification("SyncCrate", `${p.peer_name} finished downloading`);
             }
           }, PEER_IDLE_MS);
+        }),
+        listen("chat-updated", async () => {
+          try {
+            const prev = useAppStore.getState().chat;
+            const next = await cmd.getChat();
+            useAppStore.getState().setChat(next);
+            // Notify (only when the window is in the background, see
+            // sendNotification) about new lines from other people.
+            const lastSeen = prev?.messages[prev.messages.length - 1]?.seq ?? 0;
+            const me = loadDisplayName().trim().toLowerCase();
+            const fresh = next.messages.filter((m) => m.seq > lastSeen && !m.system && m.from.toLowerCase() !== me);
+            if (prev && fresh.length > 0) {
+              const m = fresh[fresh.length - 1];
+              sendNotification(`${m.from} in chat`, m.text);
+            }
+          } catch {
+            // Ignore
+          }
         }),
         listen("crews-changed", () => {
           useAppStore.getState().bumpCrewsVersion();
