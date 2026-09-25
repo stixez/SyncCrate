@@ -150,7 +150,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs |
 | **Space Engineers** | Mods, Worlds, Blueprints |
 | **Starbound** | Mods, Characters, Universe |
-| **Terraria** | Worlds, Players, tModLoader Mods, Resource Packs |
+| **Terraria** | Worlds, Players, tModLoader Mods, tModLoader Worlds, tModLoader Players, Resource Packs |
 | **Vintage Story** | Mods, Save Files, Mod Configs |
 
 </details>
@@ -410,6 +410,24 @@ Nothing changes until you approve the sync plan, and existing files are only rep
 Set the folder manually in Settings; any install with the expected folder structure works, Steam or not. A folder you pick yourself counts as installed. SyncCrate refuses drive roots, your user, Documents, Desktop and Downloads folders, and a folder that overlaps another game's folder. If the folder has none of the game's usual subfolders, it asks before using it. To add a new game, see [Adding a game](#adding-a-game).
 
 "Detected" means SyncCrate found the game *installed* (a Steam, Epic or GOG install, or an entry in Windows' installed apps). If only its mods/saves folder exists, for example left behind after an uninstall, SyncCrate doesn't use that folder until you set it yourself.
+</details>
+
+<details>
+<summary><strong>My tModLoader (Terraria) mods don't show up.</strong></summary>
+
+Mods you subscribed to on the Steam Workshop are kept by Steam in its own folder, not in Terraria's, so SyncCrate can't list, sync or back them up; the Content page tells you how many there are. Friends can subscribe to the same Workshop mods. SyncCrate syncs tModLoader's worlds and players, `enabled.json` (which mods are on) and any `.tmod` files in `Documents/My Games/Terraria/tModLoader/Mods`.
+</details>
+
+<details>
+<summary><strong>How do I hide a game I don't play any more?</strong></summary>
+
+Settings → Games → **In sidebar** toggles it off (or **Hide them from the sidebar** for every game that isn't installed). Its folder and backups stay; turn it back on the same way. The × next to a game in the sidebar removes it from your library instead.
+</details>
+
+<details>
+<summary><strong>Where does SyncCrate keep its data? Does uninstalling remove it?</strong></summary>
+
+Profiles, backups, file history, crews and settings live in `%APPDATA%\synccrate` on Windows (`~/Library/Application Support/synccrate` on macOS, `~/.config/synccrate` on Linux). The Windows uninstaller removes it when you tick **Delete the application data**; otherwise it stays so a reinstall picks up where you left off. Updates never remove it.
 </details>
 
 <details>

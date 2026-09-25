@@ -25,6 +25,12 @@ pub struct GameDefinition {
     /// games that aren't sold on Steam (WoW, Minecraft, ...).
     #[serde(default)]
     pub steam_app_id: Option<u32>,
+    /// Steam app whose Workshop items are this game's mods, when they live in
+    /// Steam's workshop folder rather than the game folder (tModLoader:
+    /// 1281930). Only used to tell the user why those mods don't show up;
+    /// SyncCrate doesn't sync Workshop content.
+    #[serde(default)]
+    pub steam_workshop_app_id: Option<u32>,
     /// Official publisher-hosted art for non-Steam games, by kind (`cover`,
     /// `header`, `hero`); missing kinds fall back to the others.
     #[serde(default)]

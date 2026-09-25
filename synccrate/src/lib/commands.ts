@@ -517,6 +517,22 @@ export async function autoPull(): Promise<AutoPullResult> {
   return invoke("auto_pull");
 }
 
+/** Library games hidden from the sidebar (still configured). */
+export async function getHiddenGames(): Promise<string[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_hidden_games");
+}
+
+export async function setGameHidden(gameId: string, hidden: boolean): Promise<string[]> {
+  return invoke("set_game_hidden", { gameId, hidden });
+}
+
+/** Mods installed from the Steam Workshop (they live outside the game folder). */
+export async function getWorkshopModCount(game: string): Promise<number> {
+  if (isDemoMode()) return 0;
+  return invoke("get_workshop_mod_count", { game });
+}
+
 /** Drain links/files opened from outside the app (queued by the backend). */
 export async function takeOpenIntents(): Promise<OpenIntent[]> {
   return invoke("take_open_intents");

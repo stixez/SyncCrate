@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import {
   Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles,
-  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown,
+  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
@@ -161,6 +161,16 @@ export default function ContentBrowser({ gameId }: Props) {
   useEffect(() => {
     cmd.checkCompatibility(gameId).then(setModCompatibility).catch(() => {});
   }, [manifest, gameId, setModCompatibility]);
+
+  // Workshop-installed mods (tModLoader) live outside the game folder; say so,
+  // or an empty Mods list looks like a detection bug (GitHub issue #2).
+  const [workshopMods, setWorkshopMods] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    if (!gameDef?.steam_workshop_app_id) { setWorkshopMods(0); return; }
+    cmd.getWorkshopModCount(gameId).then((n) => { if (!cancelled) setWorkshopMods(n); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [gameId, gameDef?.steam_workshop_app_id]);
 
   // Legacy `_Disabled/` folder: The Sims loads subfolders, so those mods still load.
   const renameDisable = gameDef?.disable_method === "rename";
@@ -682,6 +692,14 @@ export default function ContentBrowser({ gameId }: Props) {
       {scanError && (
         <Banner tone="warn" icon={<AlertTriangle size={14} />} title="Couldn't scan this game's folder">
           {scanError}
+        </Banner>
+      )}
+
+      {workshopMods > 0 && (
+        <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>
+          Steam keeps Workshop mods in its own folder, outside the game folder, so SyncCrate can't list, sync or back them up.
+          Friends can subscribe to the same mods on the Workshop. SyncCrate still syncs your worlds, players,{" "}
+          <span className="font-mono text-[11px]">enabled.json</span> (which mods are turned on) and any mod files in the Mods folder.
         </Banner>
       )}
 

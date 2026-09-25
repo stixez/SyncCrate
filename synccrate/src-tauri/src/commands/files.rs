@@ -62,6 +62,10 @@ pub struct GameConfig {
     /// auto-detected paths; those are kept but don't count as install evidence.
     #[serde(default)]
     pub user_set_paths: Vec<String>,
+    /// Library games hidden from the sidebar (GitHub issue #3): still
+    /// configured (folder, backups), just not listed.
+    #[serde(default)]
+    pub hidden_games: Vec<String>,
 }
 
 pub fn load_game_config() -> GameConfig {
@@ -115,6 +119,7 @@ pub(crate) fn save_game_config(app_state: &AppState) {
             active_game: Some(app_state.active_game.clone()),
             user_library: app_state.user_library.clone(),
             user_set_paths: user_set,
+            hidden_games: app_state.hidden_games.clone(),
         }
     };
     let path = utils::game_config_path();
@@ -981,6 +986,68 @@ pub async fn add_to_library(
     Ok(())
 }
 
+/// Workshop items (one folder per item id) under every Steam library's
+/// `steamapps/workshop/content/<app_id>`.
+pub(crate) fn count_workshop_items(steamapps_dirs: &[std::path::PathBuf], app_id: u32) -> usize {
+    let mut ids = std::collections::HashSet::new();
+    for dir in steamapps_dirs {
+        let Ok(rd) = std::fs::read_dir(dir.join("workshop").join("content").join(app_id.to_string())) else { continue };
+        for e in rd.filter_map(|e| e.ok()) {
+            if e.file_type().is_ok_and(|t| t.is_dir()) {
+                ids.insert(e.file_name());
+            }
+        }
+    }
+    ids.len()
+}
+
+/// How many of the game's mods are Steam Workshop subscriptions (0 when the
+/// game has no Workshop-installed mods). Those live outside the game folder,
+/// so the Content page explains why they aren't listed (GitHub issue #2).
+#[tauri::command]
+pub async fn get_workshop_mod_count(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String) -> Result<usize, String> {
+    let app_id = {
+        let s = state.lock().await;
+        let id = resolve_game(&s, &game)?;
+        s.game_registry.games.iter().find(|g| g.id == id).and_then(|g| g.steam_workshop_app_id)
+    };
+    let Some(app_id) = app_id else { return Ok(0) };
+    tokio::task::spawn_blocking(move || count_workshop_items(&utils::steam_steamapps_dirs(), app_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Hide or show `id` in `hidden`, keeping it sorted and duplicate-free.
+pub(crate) fn set_hidden(hidden: &mut Vec<String>, id: &str, hide: bool) {
+    hidden.retain(|g| g != id);
+    if hide {
+        hidden.push(id.to_string());
+        hidden.sort();
+    }
+}
+
+#[tauri::command]
+pub async fn get_hidden_games(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<String>, String> {
+    Ok(state.lock().await.hidden_games.clone())
+}
+
+/// Hide a library game from the sidebar (or show it again). Its folder and
+/// everything else stay configured.
+#[tauri::command]
+pub async fn set_game_hidden(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
+    hidden: bool,
+) -> Result<Vec<String>, String> {
+    let mut app_state = state.lock().await;
+    if !app_state.game_registry.games.iter().any(|g| g.id == game_id) {
+        return Err(format!("Unknown game: {}", game_id));
+    }
+    set_hidden(&mut app_state.hidden_games, &game_id, hidden);
+    save_game_config(&app_state);
+    Ok(app_state.hidden_games.clone())
+}
+
 #[tauri::command]
 pub async fn remove_from_library(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -1485,6 +1552,35 @@ pub async fn get_outdated_scripts(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn workshop_items_are_counted_once_across_libraries() {
+        let a = crate::testutil::temp_dir("ws-a");
+        let b = crate::testutil::temp_dir("ws-b");
+        for (lib, id) in [(&a, "111"), (&a, "222"), (&b, "222"), (&b, "333")] {
+            std::fs::create_dir_all(lib.join("workshop/content/1281930").join(id).join("2024.1")).unwrap();
+        }
+        std::fs::write(a.join("workshop/content/1281930/stray.txt"), b"x").unwrap();
+        std::fs::create_dir_all(a.join("workshop/content/999/444")).unwrap();
+        assert_eq!(count_workshop_items(&[a.clone(), b.clone(), a.join("missing")], 1281930), 3);
+        assert_eq!(count_workshop_items(&[a.clone()], 5), 0);
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn hidden_games_toggle_and_old_configs_parse() {
+        let mut h = vec![];
+        set_hidden(&mut h, "valheim", true);
+        set_hidden(&mut h, "cs2", true);
+        set_hidden(&mut h, "valheim", true);
+        assert_eq!(h, vec!["cs2".to_string(), "valheim".to_string()], "sorted, no duplicates");
+        set_hidden(&mut h, "valheim", false);
+        assert_eq!(h, vec!["cs2".to_string()]);
+        // A config from before hidden games existed still loads.
+        let old: GameConfig = serde_json::from_str(r#"{"game_paths":{},"active_game":"sims4","user_library":["sims4"]}"#).unwrap();
+        assert!(old.hidden_games.is_empty());
+    }
     use super::*;
 
     fn mods_ct() -> crate::registry::ContentType {
