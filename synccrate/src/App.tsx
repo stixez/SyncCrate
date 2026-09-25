@@ -16,6 +16,7 @@ import { useAppStore } from "./stores/useAppStore";
 import { useLogStore } from "./stores/useLogStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useOpenIntents } from "./hooks/useOpenIntents";
 import { setGameRegistry } from "./lib/games";
 import {
   isDemoMode,
@@ -75,6 +76,7 @@ function App() {
 
   const [installResults, setInstallResults] = useState<InstallResult[] | null>(null);
   const [ready, setReady] = useState(false);
+  useOpenIntents(ready);
 
   // Startup: load registry + library, detect paths
   useEffect(() => {

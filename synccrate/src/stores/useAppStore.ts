@@ -14,6 +14,7 @@ import type {
   SyncPlan,
   SyncProgress,
   UndoStatus,
+  ModPack,
 } from "../lib/types";
 import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, type Appearance, type ThemeMode } from "../lib/prefs";
 import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
@@ -117,6 +118,13 @@ interface AppState {
    * handler); ModpackList picks it up and clears it once loaded. */
   pendingImportPackPath: string | null;
   setPendingImportPackPath: (path: string | null) => void;
+  /** An already-validated pack from a clicked link or opened `.scpack` file
+   * (`useOpenIntents`); ModpackList compares it and clears it. */
+  pendingImportPack: ModPack | null;
+  setPendingImportPack: (pack: ModPack | null) => void;
+  /** Join code from a clicked invite link; the dashboard fills its join box. */
+  pendingJoinCode: string | null;
+  setPendingJoinCode: (code: string | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -256,6 +264,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUndoStatus: (undoStatus) => set({ undoStatus }),
   pendingImportPackPath: null,
   setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),
+  pendingImportPack: null,
+  setPendingImportPack: (pendingImportPack) => set({ pendingImportPack }),
+  pendingJoinCode: null,
+  setPendingJoinCode: (pendingJoinCode) => set({ pendingJoinCode }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),
