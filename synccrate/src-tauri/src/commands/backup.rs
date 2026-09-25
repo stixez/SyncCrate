@@ -1089,6 +1089,7 @@ pub async fn create_backup(
 ) -> Result<BackupInfo, String> {
     let label = validate_label(&label)?;
 
+    let workshop_app: Option<u32>;
     let (base, game_id, content_types, game_label) = {
         let app_state = state.lock().await;
         let game_id = match game {
@@ -1096,6 +1097,7 @@ pub async fn create_backup(
             None => app_state.active_game.clone(),
         };
         let game_label = app_state.game_label(&game_id);
+        workshop_app = app_state.game_registry.games.iter().find(|g| g.id == game_id).and_then(|g| g.steam_workshop_app_id);
         let path = app_state.game_paths.get(&game_id).cloned()
             .ok_or_else(|| format!("{} path not set", game_label))?;
         if !Path::new(&path).is_dir() {
@@ -1118,7 +1120,21 @@ pub async fn create_backup(
     })
     .await
     .map_err(|e| e.to_string())??;
-    info.ok_or_else(|| format!("Nothing to back up: no files found in {}'s content folders.", game_label))
+    info.ok_or_else(|| {
+        // Workshop-installed mods (tModLoader) live in Steam's folder, not
+        // the game's; say so instead of a bare "no files" (GitHub issue #2).
+        let workshop = workshop_app
+            .map(|id| crate::commands::files::count_workshop_items(&utils::steam_steamapps_dirs(), id))
+            .unwrap_or(0);
+        if workshop > 0 {
+            format!(
+                "Nothing to back up: no files found in {}'s folders. Your {} mods from the Steam Workshop are stored by Steam, outside the game folder, so SyncCrate can't back them up.",
+                game_label, workshop
+            )
+        } else {
+            format!("Nothing to back up: no files found in {}'s content folders.", game_label)
+        }
+    })
 }
 
 #[tauri::command]

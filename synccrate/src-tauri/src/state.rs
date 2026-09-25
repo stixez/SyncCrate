@@ -369,6 +369,8 @@ pub struct AppState {
     pub game_registry: GameRegistry,
     /// Game IDs the user has added to their library.
     pub user_library: Vec<String>,
+    /// Library games hidden from the sidebar (still configured).
+    pub hidden_games: Vec<String>,
     /// The user's crews (`crate::crews`), loaded at startup.
     pub crews: crate::crews::CrewStore,
     /// Where `crews` is saved; None in tests and when the file on disk
@@ -479,6 +481,7 @@ impl Default for AppState {
             file_watcher: None,
             game_registry: GameRegistry { version: 0, games: Vec::new() },
             user_library: Vec::new(),
+            hidden_games: Vec::new(),
             crews: crate::crews::CrewStore::default(),
             crews_path: None,
             local_node_id: None,

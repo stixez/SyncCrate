@@ -146,6 +146,12 @@ pub fn run() {
         });
 
     // Restore user library, or build default from installed games with paths
+    let hidden_games: Vec<String> = saved_config
+        .hidden_games
+        .iter()
+        .filter(|g| registry_map.contains_key(g.as_str()))
+        .cloned()
+        .collect();
     let user_library = if !saved_config.user_library.is_empty() {
         saved_config.user_library
     } else {
@@ -157,6 +163,7 @@ pub fn run() {
     initial_state.active_game = active_game;
     initial_state.game_registry = game_registry;
     initial_state.user_library = user_library;
+    initial_state.hidden_games = hidden_games;
     initial_state.local_node_id = Some(crews::node_id_hex(&network::iroh_net::local_id()));
     let crews_path = crews::store_path();
     match crews::load_store(&crews_path) {
@@ -406,6 +413,9 @@ pub fn run() {
             commands::pack_apply::get_pack_apply_status,
             commands::pack_apply::revert_pack_apply,
             commands::open_intent::take_open_intents,
+            commands::files::get_hidden_games,
+            commands::files::set_game_hidden,
+            commands::files::get_workshop_mod_count,
             commands::crew::list_crews,
             commands::crew::get_local_node_id,
             commands::crew::create_crew,

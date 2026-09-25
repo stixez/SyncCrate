@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -55,6 +55,15 @@ export default function Settings() {
 
   // Only show games in the user's library
   const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id));
+  const hiddenGames = useAppStore((s) => s.hiddenGames);
+  const setHiddenGames = useAppStore((s) => s.setHiddenGames);
+  const toggleHidden = async (gameId: string, hidden: boolean) => {
+    try {
+      setHiddenGames(await cmd.setGameHidden(gameId, hidden));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     cmd.getAppVersion().then(setVersion).catch(() => {});
@@ -235,7 +244,28 @@ export default function Settings() {
 
       <AppearanceSection />
 
-      <Section num="02" title="Games" description="Where each game in your library keeps its files.">
+      <Section num="02" title="Games" description="Where each game in your library keeps its files, and which ones the sidebar shows.">
+        {(() => {
+          // Leftover folders of uninstalled games (GitHub issue #3): offer to hide them in one go.
+          const notInstalled = libraryGames.filter((g) => !installedGames.includes(g.id) && !hiddenGames.includes(g.id));
+          return notInstalled.length > 0 && libraryGames.length > 1 ? (
+            <div className="flex items-center gap-3 mb-3">
+              <p className="text-xs text-txt-dim flex-1">
+                {notInstalled.length} game{notInstalled.length !== 1 ? "s" : ""} in your library {notInstalled.length !== 1 ? "aren't" : "isn't"} installed on this PC.
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<EyeOff size={12} />}
+                onClick={async () => {
+                  for (const g of notInstalled) await toggleHidden(g.id, true);
+                }}
+              >
+                Hide them from the sidebar
+              </Button>
+            </div>
+          ) : null;
+        })()}
         {libraryGames.length === 0 ? (
           <EmptyState
             title="No games in your library yet"
@@ -277,6 +307,15 @@ export default function Settings() {
                         <Badge tone="amber" dot>Not set</Badge>
                       )}
                       <span className="ml-auto flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleHidden(game.id, !hiddenGames.includes(game.id))}
+                          icon={hiddenGames.includes(game.id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                          title={hiddenGames.includes(game.id) ? "Hidden from the sidebar: click to show it again" : "Shown in the sidebar: click to hide it (its folder and backups stay)"}
+                        >
+                          {hiddenGames.includes(game.id) ? "Hidden" : "In sidebar"}
+                        </Button>
                         {customArt.includes(game.id) && (
                           <Button variant="ghost" size="sm" onClick={() => handleResetCover(game.id)} icon={<RotateCcw size={12} />} title="Go back to the default art">
                             Reset cover

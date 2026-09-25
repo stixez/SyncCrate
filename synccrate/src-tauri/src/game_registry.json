@@ -1564,6 +1564,7 @@
       "primary_color": "#34d399",
       "genres": ["sandbox", "survival"],
       "steam_app_id": 105600,
+      "steam_workshop_app_id": 1281930,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -1628,9 +1629,36 @@
           "color": "text-status-green",
           "folder": "tModLoader/Mods",
           "extensions": [
-            "tmod"
+            "tmod",
+            "json"
           ],
           "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "tmod_worlds",
+          "label": "tModLoader Worlds",
+          "icon": "globe",
+          "color": "text-emerald-400",
+          "folder": "tModLoader/Worlds",
+          "extensions": [
+            "wld",
+            "twld"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "tmod_players",
+          "label": "tModLoader Players",
+          "icon": "user",
+          "color": "text-purple-400",
+          "folder": "tModLoader/Players",
+          "extensions": [
+            "plr",
+            "tplr"
+          ],
+          "file_type": "Save",
           "syncable": true
         },
         {

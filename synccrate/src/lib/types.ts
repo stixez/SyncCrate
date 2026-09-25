@@ -485,6 +485,8 @@ export interface GameDefinition {
   primary_color: string;
   /** Steam app id for store artwork; absent for non-Steam games. */
   steam_app_id?: number;
+  /** Steam app whose Workshop items are this game's mods (tModLoader), stored outside the game folder. */
+  steam_workshop_app_id?: number;
   /** Official publisher art for non-Steam games, by kind (cover/header/hero). */
   art_urls?: Record<string, string>;
   /** Genre tags (see GENRE_LABELS in lib/games.ts). */

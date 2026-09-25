@@ -91,6 +91,7 @@ function App() {
         // Load user library
         const library = await cmd.getUserLibrary();
         useAppStore.getState().setMyLibrary(library);
+        cmd.getHiddenGames().then((h) => useAppStore.getState().setHiddenGames(h)).catch(() => {});
 
         // Load all known game paths (saved config + auto-detected)
         const allPaths = await cmd.getAllGamePaths();

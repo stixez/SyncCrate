@@ -131,7 +131,11 @@ export default function Sidebar() {
   const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set());
   const setMyLibrary = useAppStore((s) => s.setMyLibrary);
 
-  const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id));
+  const hiddenGames = useAppStore((s) => s.hiddenGames);
+  // Hidden games stay in the library (Settings → Games) but not here. The
+  // selected game is always shown, so the sidebar never loses where you are.
+  const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id) && (!hiddenGames.includes(g.id) || g.id === selectedGame));
+  const hiddenCount = gameRegistry.filter((g) => myLibrary.includes(g.id) && hiddenGames.includes(g.id) && g.id !== selectedGame).length;
 
   // Auto-expand the selected game
   useEffect(() => {
@@ -294,6 +298,16 @@ export default function Sidebar() {
               </div>
             );
           })
+        )}
+
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => navigateToGlobal("settings")}
+            className="mx-4 mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted hover:text-txt"
+            title="Show them again in Settings → Games"
+          >
+            {hiddenCount} hidden
+          </button>
         )}
 
         <button

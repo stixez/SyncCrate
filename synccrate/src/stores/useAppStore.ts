@@ -40,6 +40,9 @@ interface AppState {
   // User's personal game library (game IDs)
   myLibrary: string[];
   setMyLibrary: (library: string[]) => void;
+  /** Library games hidden from the sidebar (backend `hidden_games`). */
+  hiddenGames: string[];
+  setHiddenGames: (hidden: string[]) => void;
 
   // Currently selected game in sidebar (drives Dashboard/Content/Profiles/Backups views)
   selectedGame: string | null;
@@ -214,6 +217,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   myLibrary: [],
   setMyLibrary: (library) => set({ myLibrary: library }),
+  hiddenGames: [],
+  setHiddenGames: (hiddenGames) => set({ hiddenGames }),
 
   selectedGame: null,
   setSelectedGame: (game) => set({ selectedGame: game }),
