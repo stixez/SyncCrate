@@ -101,6 +101,10 @@ pub struct PeerInfo {
     /// `ip` is always `addresses[0]` when non-empty; connecting tries each in turn.
     #[serde(default)]
     pub addresses: Vec<String>,
+    /// The host's iroh endpoint id (hex) from discovery, so crew members can
+    /// be recognised on the LAN. None for hosts older than 0.6.0.
+    #[serde(default)]
+    pub node_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -365,6 +369,13 @@ pub struct AppState {
     pub game_registry: GameRegistry,
     /// Game IDs the user has added to their library.
     pub user_library: Vec<String>,
+    /// The user's crews (`crate::crews`), loaded at startup.
+    pub crews: crate::crews::CrewStore,
+    /// Where `crews` is saved; None in tests and when the file on disk
+    /// couldn't be read (so a newer app's data is never overwritten).
+    pub crews_path: Option<std::path::PathBuf>,
+    /// Hex of this install's iroh endpoint id (sent in Hello/Welcome).
+    pub local_node_id: Option<String>,
 }
 
 impl AppState {
@@ -466,6 +477,9 @@ impl Default for AppState {
             file_watcher: None,
             game_registry: GameRegistry { version: 0, games: Vec::new() },
             user_library: Vec::new(),
+            crews: crate::crews::CrewStore::default(),
+            crews_path: None,
+            local_node_id: None,
         }
     }
 }

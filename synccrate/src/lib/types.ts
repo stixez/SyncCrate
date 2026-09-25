@@ -59,6 +59,8 @@ export interface PeerInfo {
   game_id?: string | null;
   /** Every address the host was discovered on, best first (`ip` is the first). */
   addresses?: string[];
+  /** Host's iroh node id (hex), for recognising crew members; absent before 0.6.0. */
+  node_id?: string | null;
 }
 
 export interface SessionInfo {
@@ -167,7 +169,66 @@ export interface ModPack {
 export type OpenIntent =
   | { kind: "pack"; pack: ModPack }
   | { kind: "join"; code: string; game_id: string }
+  | { kind: "crew"; invite: CrewInvite }
   | { kind: "invalid"; reason: string };
+
+// Crews (src-tauri/src/crews.rs). Local data; moves host → client during a session.
+export interface CrewMember {
+  node_id: string;
+  name: string;
+  updated_at?: number;
+  removed?: boolean;
+  last_seen?: number;
+}
+
+export interface CrewSet {
+  pack: ModPack;
+  version: number;
+  published_at: number;
+  publisher?: string;
+}
+
+export interface CrewHost {
+  node_id: string;
+  name: string;
+  addresses?: string[];
+  port?: number;
+  game_id?: string;
+  at: number;
+}
+
+export interface Crew {
+  id: string;
+  name: string;
+  name_updated_at?: number;
+  games: string[];
+  members: CrewMember[];
+  sets: Record<string, CrewSet>;
+  last_host?: CrewHost | null;
+  created_at?: number;
+}
+
+export interface CrewInvite {
+  v: number;
+  id: string;
+  name: string;
+  games: string[];
+  from_node: string;
+  from_name: string;
+}
+
+export interface CrewStatus {
+  game_id: string;
+  has_set: boolean;
+  behind: number;
+  comparison: PackComparison | null;
+}
+
+export interface CrewLanHost {
+  crew_id: string;
+  node_id: string;
+  peer: PeerInfo;
+}
 
 export interface PackFileStatus {
   relative_path: string;
@@ -295,6 +356,7 @@ export type Page =
   | "profiles"
   | "backups"
   | "modpacks"
+  | "crews"
   | "activity"
   | "settings"
   | "game-browser";

@@ -1,5 +1,6 @@
 pub mod art;
 pub mod backup;
+pub mod crew;
 pub mod files;
 pub mod game_state;
 pub mod install;

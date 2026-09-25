@@ -1,4 +1,5 @@
 mod commands;
+mod crews;
 mod event_sink;
 mod game_install;
 mod network;
@@ -13,6 +14,8 @@ mod watcher;
 mod testutil;
 #[cfg(test)]
 mod e2e_tests;
+#[cfg(test)]
+mod crew_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -146,6 +149,16 @@ pub fn run() {
     initial_state.active_game = active_game;
     initial_state.game_registry = game_registry;
     initial_state.user_library = user_library;
+    initial_state.local_node_id = Some(crews::node_id_hex(&network::iroh_net::local_id()));
+    let crews_path = crews::store_path();
+    match crews::load_store(&crews_path) {
+        Ok(store) => {
+            initial_state.crews = store;
+            initial_state.crews_path = Some(crews_path);
+        }
+        // Keep running without crews rather than overwrite a newer app's file.
+        Err(e) => log::warn!("{e}"),
+    }
     let app_state = Arc::new(Mutex::new(initial_state));
 
     let mut builder = tauri::Builder::default();
@@ -385,6 +398,19 @@ pub fn run() {
             commands::pack_apply::get_pack_apply_status,
             commands::pack_apply::revert_pack_apply,
             commands::open_intent::take_open_intents,
+            commands::crew::list_crews,
+            commands::crew::get_local_node_id,
+            commands::crew::create_crew,
+            commands::crew::rename_crew,
+            commands::crew::leave_crew,
+            commands::crew::crew_invite_link,
+            commands::crew::preview_crew_invite,
+            commands::crew::join_crew,
+            commands::crew::set_crew_member_removed,
+            commands::crew::publish_crew_set,
+            commands::crew::crew_status,
+            commands::crew::scan_crew_hosts,
+            commands::crew::connect_crew,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,

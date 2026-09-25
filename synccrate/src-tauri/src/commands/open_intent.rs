@@ -1,5 +1,5 @@
-//! "Open from anywhere": `synccrate://pack/...` and `synccrate://join/...`
-//! links and double-clicked `.scpack` files all end up here, whether they
+//! "Open from anywhere": `synccrate://pack/...`, `synccrate://join/...` and
+//! `synccrate://crew/...` links and double-clicked `.scpack` files all end up here, whether they
 //! started the app (cold start: argv, or macOS `RunEvent::Opened`) or were
 //! forwarded to the running window (single-instance plugin).
 //!
@@ -36,6 +36,8 @@ pub enum OpenTarget {
     /// The (percent-decoded) base64 payload of a pack link.
     PackLink(String),
     Join { code: String, game_id: String },
+    /// A decoded and validated crew invite (`crews::decode_invite`).
+    Crew(crate::crews::CrewInvite),
     PackFile(PathBuf),
     /// Our scheme, but unusable; the reason is shown to the user.
     Invalid(String),
@@ -46,6 +48,8 @@ pub enum OpenTarget {
 pub enum OpenIntent {
     Pack { pack: ModPack },
     Join { code: String, game_id: String },
+    /// Shown as "Add crew?"; adding it never connects or syncs.
+    Crew { invite: crate::crews::CrewInvite },
     Invalid { reason: String },
 }
 
@@ -149,6 +153,13 @@ pub fn classify(raw: &str, is_known_game: impl Fn(&str) -> bool) -> Option<OpenT
             }
             Some(OpenTarget::Join { code, game_id })
         }
+        "crew" => {
+            let payload = percent_decode(path.trim_end_matches('/'));
+            match crate::crews::decode_invite(&payload, is_known_game) {
+                Ok(invite) => Some(OpenTarget::Crew(invite)),
+                Err(e) => invalid(&e),
+            }
+        }
         _ => invalid("SyncCrate doesn't recognize this link — you may need a newer version."),
     }
 }
@@ -172,6 +183,7 @@ pub(crate) fn resolve(target: OpenTarget) -> OpenIntent {
             }
         }
         OpenTarget::Join { code, game_id } => OpenIntent::Join { code, game_id },
+        OpenTarget::Crew(invite) => OpenIntent::Crew { invite },
         OpenTarget::Invalid(reason) => invalid(reason),
     }
 }
@@ -300,6 +312,40 @@ mod tests {
         assert!(is_invalid(classify(&format!("synccrate://join/{c}"), known)));
         assert!(is_invalid(classify(&format!("synccrate://join/{c}?game="), known)));
         assert!(is_invalid(classify(&format!("synccrate://join/{}?game=sims4", "A".repeat(300)), known)));
+    }
+
+    #[test]
+    fn crew_link_valid_with_chat_junk_and_invalid_payloads() {
+        let from = crate::crews::node_id_hex(&iroh::SecretKey::from_bytes(&[4; 32]).public());
+        let crew = crate::crews::Crew {
+            id: crate::crews::new_crew_id(),
+            name: "Sunday Sims Crew".into(),
+            name_updated_at: 0,
+            games: vec!["sims4".into()],
+            members: vec![],
+            sets: Default::default(),
+            last_host: None,
+            created_at: 0,
+        };
+        let link = crate::crews::encode_invite(&crew, &from, "Host").unwrap();
+        for raw in [link.clone(), format!("{link})."), format!("<{link}>"), format!("{link}/"), link.replacen("crew", "CREW", 1)] {
+            match classify(&raw, known) {
+                Some(OpenTarget::Crew(inv)) => {
+                    assert_eq!(inv.id, crew.id);
+                    assert!(matches!(resolve(OpenTarget::Crew(inv)), OpenIntent::Crew { .. }));
+                }
+                other => panic!("{raw}: {other:?}"),
+            }
+        }
+        assert!(is_invalid(classify("synccrate://crew/", known)));
+        assert!(is_invalid(classify("synccrate://crew/!!!", known)));
+        // Unknown game: refused, with the game named.
+        let mut other = crew.clone();
+        other.games = vec!["notagame".into()];
+        let link = crate::crews::encode_invite(&other, &from, "Host").unwrap();
+        assert!(matches!(classify(&link, known), Some(OpenTarget::Invalid(r)) if r.contains("notagame")));
+        let huge = format!("synccrate://crew/{}", "A".repeat(crate::crews::MAX_INVITE_BYTES + 10));
+        assert!(is_invalid(classify(&huge, known)));
     }
 
     #[test]

@@ -107,11 +107,31 @@ export function useSession() {
     }
   };
 
+  /** Join a crew member's session by their node id (no code). PIN and
+   * wrong-game prompts work exactly like a code join. */
+  const connectCrew = async (crewId: string, nodeId: string | undefined, name: string, label: string, pin?: string) => {
+    setLastConnectAttempt({ kind: "crew", crewId, nodeId, name, label, pin });
+    setPinPrompt(null);
+    setIsLoading(true);
+    setIsConnecting(true);
+    addLog(`Connecting to ${label}...`, "info");
+    try {
+      await cmd.connectCrew(crewId, nodeId, name, pin);
+    } catch (e: any) {
+      addLog(`Failed to connect: ${e}`, "error");
+      toastError(`Failed to connect: ${e}`);
+      setIsConnecting(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   /** Retry the attempt the host rejected for a missing/wrong PIN, with `pin`. */
   /** Repeat a previous connect attempt, optionally with a (new) PIN. */
   const retryAttempt = async (a: ConnectAttempt, pin?: string) => {
     if (a.kind === "peer") await connectTo(a.peerId, pin);
     else if (a.kind === "ip") await connectByIp(a.ip, a.port, a.name, pin, a.label);
+    else if (a.kind === "crew") await connectCrew(a.crewId, a.nodeId, a.name, a.label, pin);
     else await connectByCode(a.code, a.name, pin);
   };
 
@@ -140,5 +160,5 @@ export function useSession() {
     }
   };
 
-  return { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading };
+  return { host, join, connectTo, connectByIp, connectByCode, connectCrew, retryWithPin, retryAttempt, leave, isLoading };
 }

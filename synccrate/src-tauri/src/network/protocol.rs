@@ -1,3 +1,4 @@
+use crate::crews::{CrewHello, CrewWelcome};
 use crate::state::{FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -27,6 +28,13 @@ pub enum Message {
         /// The client's selected game. `None` from clients older than 0.5.6.
         #[serde(default)]
         game_id: Option<String>,
+        /// Crew fields (0.6.0+). Omitted when empty, so a non-crew Hello is
+        /// byte-for-byte what 0.5.6 sent; older hosts ignore unknown fields.
+        /// Over TCP `node_id` is only a claim (see `crews` module docs).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        node_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        crews: Vec<CrewHello>,
     },
     Welcome {
         name: String,
@@ -36,6 +44,12 @@ pub enum Message {
         /// The game this host is sharing. `None` from hosts older than 0.5.6.
         #[serde(default)]
         game_id: Option<String>,
+        /// Crew fields (0.6.0+), same compatibility rules as in Hello. `crews`
+        /// only answers crews the client named in its Hello.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        node_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        crews: Vec<CrewWelcome>,
     },
     ManifestRequest,
     ManifestResponse { manifest: FileManifest },
@@ -154,6 +168,9 @@ pub fn configure_keepalive(stream: &TcpStream) {
     }
 }
 
+/// Leave room under `MAX_MESSAGE_SIZE` for the rest of the Welcome.
+pub const MAX_CREW_WELCOME_BYTES: usize = MAX_MESSAGE_SIZE - 64 * 1024;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,5 +201,30 @@ mod tests {
             Message::Hello { game_id, .. } => assert!(game_id.is_none()),
             _ => panic!("expected Hello"),
         }
+    }
+
+    #[test]
+    fn crew_fields_are_optional_both_ways() {
+        // A 0.5.6 Welcome (no crew fields) parses on a new client.
+        let json = r#"{"Welcome":{"name":"H","version":"0.5.6","supports_compression":true,"game_id":"sims4"}}"#;
+        match serde_json::from_str::<Message>(json).unwrap() {
+            Message::Welcome { node_id, crews, .. } => assert!(node_id.is_none() && crews.is_empty()),
+            _ => panic!("expected Welcome"),
+        }
+        // A new Hello without crews serialises exactly like a 0.5.6 one.
+        let hello = Message::Hello {
+            name: "A".into(),
+            version: "0.6.0".into(),
+            pin: None,
+            supports_compression: true,
+            game_id: Some("sims4".into()),
+            node_id: None,
+            crews: vec![],
+        };
+        let s = serde_json::to_string(&hello).unwrap();
+        assert!(!s.contains("node_id") && !s.contains("crews"), "{s}");
+        // Unknown extra fields (what an old peer sees from a new one) are ignored.
+        let json = r#"{"Hello":{"name":"A","version":"0.7.0","pin":null,"game_id":"sims4","node_id":"ab","crews":[{"id":"x"}],"future":1}}"#;
+        assert!(serde_json::from_str::<Message>(json).is_ok());
     }
 }

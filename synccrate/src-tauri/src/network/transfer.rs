@@ -221,8 +221,10 @@ async fn handle_client(
 
     let use_compression;
 
-    let (peer_name, peer_version, peer_pin, peer_game) = match msg {
-        Message::Hello { name, version, pin, supports_compression, game_id } => {
+    // Only an iroh peer's id is proven (QUIC handshake); over TCP it's a claim.
+    let authenticated_node = stream.lock().await.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
+    let (peer_name, peer_version, peer_pin, peer_game, peer_node, peer_crews) = match msg {
+        Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews } => {
             // Sanitize: truncate and strip control characters
             let sanitized = name.chars()
                 .filter(|c| !c.is_control())
@@ -230,7 +232,8 @@ async fn handle_client(
                 .collect::<String>();
             let peer_supports_compression = supports_compression;
             use_compression = peer_supports_compression;
-            (sanitized, version, pin, game_id)
+            let node = authenticated_node.or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
+            (sanitized, version, pin, game_id, node, crews)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
@@ -280,11 +283,23 @@ async fn handle_client(
         }
     }
 
-    // Send Welcome
+    // Send Welcome. Crew data only after the PIN and game checks above:
+    // being in a crew never gets anyone past them.
     {
-        let app_state = state.lock().await;
+        let mut app_state = state.lock().await;
+        let member = peer_node.clone().map(|n| (n, peer_name.clone()));
+        let crews = if peer_crews.is_empty() {
+            Vec::new()
+        } else {
+            crate::crews::host_handshake(&mut app_state, &peer_crews, member)
+        };
+        if !crews.is_empty() {
+            let _ = app.emit("crews-changed", serde_json::json!({}));
+        }
         let our_name = app_state.session_name.clone();
         let our_game = app_state.active_game.clone();
+        let our_node = app_state.local_node_id.clone();
+        drop(app_state);
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -293,6 +308,8 @@ async fn handle_client(
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 supports_compression: true,
                 game_id: Some(our_game),
+                node_id: our_node,
+                crews,
             },
         )
         .await?;
@@ -313,6 +330,7 @@ async fn handle_client(
             game_info: None,
             game_id: peer_game.clone(),
             addresses: Vec::new(),
+            node_id: peer_node.clone(),
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -877,6 +895,8 @@ pub(crate) async fn run_client_session(
         .unwrap_or_else(|| stream.kind().to_string());
     let ip = ip.as_str();
 
+    // Dialled over iroh, the host's id is proven by the connection itself.
+    let dialled_node = stream.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
     let stream = Arc::new(Mutex::new(stream));
 
     // Send Hello with our display name (not the session/peer name)
@@ -884,6 +904,9 @@ pub(crate) async fn run_client_session(
         let app_state = state.lock().await;
         let our_name = app_state.local_display_name.clone();
         let our_game = app_state.active_game.clone();
+        let our_node = app_state.local_node_id.clone();
+        let crews = crate::crews::hellos_for(&app_state);
+        drop(app_state);
         let mut s = stream.lock().await;
         protocol::send_message(
             &mut *s,
@@ -893,24 +916,41 @@ pub(crate) async fn run_client_session(
                 pin: pin.clone(),
                 supports_compression: true,
                 game_id: Some(our_game),
+                node_id: our_node,
+                crews,
             },
         )
         .await?;
     }
 
     // Wait for Welcome (or Error if PIN was rejected)
-    let (host_name, host_version, host_supports_compression, host_game) = {
+    let (host_name, host_version, host_supports_compression, host_game, host_node) = {
         let mut s = stream.lock().await;
         let msg = protocol::recv_message(&mut *s).await?;
         match msg {
-            Message::Welcome { name, version, supports_compression, game_id } => {
+            Message::Welcome { name, version, supports_compression, game_id, node_id, crews } => {
                 // Check on our side too, in case the host skipped it.
                 let ours = state.lock().await.active_game.clone();
                 if protocol::games_conflict(&ours, game_id.as_deref()) {
                     let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
                     return Err(protocol::wrong_game_error(game_id.as_deref().unwrap_or_default()));
                 }
-                (name, version, supports_compression, game_id)
+                let host_node = dialled_node.clone().or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
+                if !crews.is_empty() {
+                    let host = host_node.clone().map(|node_id| crate::crews::CrewHost {
+                        node_id,
+                        name: crate::crews::clean_name(&name).unwrap_or_else(|| "Host".into()),
+                        addresses: addresses.to_vec(),
+                        port,
+                        game_id: ours.clone(),
+                        at: crate::utils::timestamp_now(),
+                    });
+                    let mut app_state = state.lock().await;
+                    if crate::crews::client_handshake(&mut app_state, crews, host) {
+                        let _ = app.emit("crews-changed", serde_json::json!({}));
+                    }
+                }
+                (name, version, supports_compression, game_id, host_node)
             }
             Message::Error { message } => return Err(message),
             _ => return Err("Expected Welcome message".to_string()),
@@ -1003,6 +1043,7 @@ pub(crate) async fn run_client_session(
             game_info: host_game_info,
             game_id: host_game,
             addresses: addresses.to_vec(),
+            node_id: host_node,
         };
         app_state.connections.insert(
             peer_id.to_string(),

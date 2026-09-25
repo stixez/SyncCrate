@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  CrewInvite,
   BackupProgress,
   BackupInfo,
   FileManifest,
@@ -24,7 +25,8 @@ import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
 export type ConnectAttempt =
   | { kind: "peer"; peerId: string; label: string; pin?: string }
   | { kind: "ip"; ip: string; port: number; name: string; label: string; pin?: string }
-  | { kind: "code"; code: string; name: string; label: string; pin?: string };
+  | { kind: "code"; code: string; name: string; label: string; pin?: string }
+  | { kind: "crew"; crewId: string; nodeId?: string; name: string; label: string; pin?: string };
 
 interface AppState {
   page: Page;
@@ -123,6 +125,12 @@ interface AppState {
    * (`useOpenIntents`); ModpackList compares it and clears it. */
   pendingImportPack: ModPack | null;
   setPendingImportPack: (pack: ModPack | null) => void;
+  /** A validated crew invite from a clicked link; CrewList shows "Add crew?". */
+  pendingCrewInvite: CrewInvite | null;
+  setPendingCrewInvite: (invite: CrewInvite | null) => void;
+  /** Bumped on the backend's `crews-changed` event so CrewList reloads. */
+  crewsVersion: number;
+  bumpCrewsVersion: () => void;
   /** "Apply pack exactly" waiting on its download: the next clean
    * sync-complete runs the disable/re-enable step (`useTauriEvents`). */
   pendingPackApply: { pack: ModPack; preview: PackApplyPreview } | null;
@@ -271,6 +279,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),
   pendingImportPack: null,
   setPendingImportPack: (pendingImportPack) => set({ pendingImportPack }),
+  pendingCrewInvite: null,
+  setPendingCrewInvite: (pendingCrewInvite) => set({ pendingCrewInvite }),
+  crewsVersion: 0,
+  bumpCrewsVersion: () => set((s) => ({ crewsVersion: s.crewsVersion + 1 })),
   pendingPackApply: null,
   setPendingPackApply: (pendingPackApply) => set({ pendingPackApply }),
   pendingJoinCode: null,
