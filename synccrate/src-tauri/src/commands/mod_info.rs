@@ -45,3 +45,25 @@ pub async fn get_mod_icon(key: String) -> Result<Option<String>, String> {
     let Some((base, icon)) = found else { return Ok(None) };
     tokio::task::spawn_blocking(move || mod_meta::icon_data_url(&base, &key, &icon)).await.map_err(|e| e.to_string())
 }
+
+/// Ask Modrinth / Thunderstore / SMAPI which of the active game's mods have
+/// newer versions (`crate::mod_updates`). Only runs when the user clicks: it
+/// sends mod ids and jar hashes to those services.
+#[tauri::command]
+pub async fn check_mod_updates(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String) -> Result<crate::mod_updates::UpdateReport, String> {
+    let (base, files, game_version) = {
+        let s = state.lock().await;
+        if s.active_game != game {
+            return Err("Open this game's Content page first.".into());
+        }
+        let gv = s.game_info.get(&game).and_then(|g| g.game_version.clone());
+        (s.active_game_path()?, s.local_manifest.files.keys().cloned().collect::<Vec<_>>(), gv)
+    };
+    let b = base.clone();
+    let metas = tokio::task::spawn_blocking(move || mod_meta::extract(&b, &files)).await.map_err(|e| e.to_string())?;
+    if !crate::mod_updates::checkable(&metas) {
+        return Ok(crate::mod_updates::UpdateReport::default());
+    }
+    crate::mod_updates::check(&metas, &base, game_version.as_deref()).await
+}
+

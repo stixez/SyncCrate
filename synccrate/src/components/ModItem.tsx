@@ -1,6 +1,6 @@
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
-import type { FileInfo, ModCompatibility, ModMeta } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { useModIcon } from "../lib/modMeta";
 import { dirOf, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
@@ -32,6 +32,8 @@ interface ModItemProps {
   file: FileInfo;
   /** Metadata of the mod this file belongs to (its own for jars, its folder's otherwise). */
   meta?: ModMeta;
+  /** An available update for this file's own mod (jars). */
+  update?: ModUpdate;
   /** Fixed row height from the virtual list (density-dependent). */
   style?: CSSProperties;
   syncStatus?: "synced" | "pending" | "conflict" | "local";
@@ -56,6 +58,7 @@ interface ModItemProps {
 function ModItem({
   file,
   meta,
+  update,
   style,
   syncStatus = "local",
   tags = [],
@@ -130,6 +133,7 @@ function ModItem({
           {!ownMeta && meta && showDir && <span className="text-[11px] text-txt-muted font-normal ml-2">· {meta.name}</span>}
         </p>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
+        {update && <Badge tone="neon" className="shrink-0" title={`Update available: ${update.latest}`}>Update</Badge>}
         {isOutdated && (
           <Badge tone="amber" className="shrink-0" title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}>
             Outdated
