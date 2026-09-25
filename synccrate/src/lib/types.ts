@@ -185,6 +185,54 @@ export interface PackComparison {
   different: PackFileStatus[];
 }
 
+export interface PackApplyItem {
+  relative_path: string;
+  size: number;
+  mtime_ms: number;
+  hash: string;
+  content_type?: string | null;
+}
+
+export interface SkippedFile {
+  relative_path: string;
+  reason: string;
+}
+
+/** "Apply pack exactly" preview; passed back unchanged to `applyPackExact`. */
+export interface PackApplyPreview {
+  game_id: string;
+  base_path: string;
+  pack_name: string;
+  wrong_game: boolean;
+  /** False for games that can't disable single files, or packs without mods. */
+  available: boolean;
+  unavailable_reason?: string | null;
+  to_download: PackFileStatus[];
+  conflicts: PackFileStatus[];
+  to_enable: PackApplyItem[];
+  to_disable: PackApplyItem[];
+  /** Disabled pack files an enabled copy with other content blocks. Left alone. */
+  blocked: SkippedFile[];
+}
+
+export interface PackApplyResult {
+  enabled: number;
+  disabled: number;
+  skipped: SkippedFile[];
+}
+
+export interface PackApplyStatus {
+  created_at: number;
+  pack_name: string;
+  disabled: number;
+  enabled: number;
+}
+
+export interface PackRevertResult {
+  reverted: number;
+  skipped: SkippedFile[];
+}
+
 export type Resolution = "KeepMine" | "UseTheirs" | "KeepBoth";
 
 export interface ModProfile {

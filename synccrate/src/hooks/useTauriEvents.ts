@@ -6,6 +6,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { BackupProgress, PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
+import { runPackApply } from "../lib/packApply";
 import {
   isPermissionGranted,
   requestPermission,
@@ -296,6 +297,23 @@ export function useTauriEvents() {
           setSyncProgress(null);
           setSyncPlan(null);
           const { files_synced, errors, cancelled } = event.payload;
+
+          // "Apply pack exactly": disable/re-enable only after a clean
+          // download, so a failed one never leaves mods disabled without
+          // the pack's files in their place.
+          const pendingApply = useAppStore.getState().pendingPackApply;
+          if (pendingApply) {
+            useAppStore.getState().setPendingPackApply(null);
+            if (pendingApply.preview.game_id !== useAppStore.getState().activeGame) {
+              addLog("Apply pack exactly stopped: the active game changed. No mods were disabled.", "warning");
+            } else if (cancelled || (errors && errors.length > 0)) {
+              const why = cancelled ? "the sync was cancelled" : `the sync had ${errors.length} error(s)`;
+              addLog(`Apply pack exactly stopped: ${why}. No mods were disabled; import the pack again to retry.`, "warning");
+              toastError(`Pack not applied: ${why}. No mods were disabled.`);
+            } else {
+              runPackApply(pendingApply.pack, pendingApply.preview);
+            }
+          }
 
           // Undo applies to the client only; a host never has a record.
           if (useAppStore.getState().session?.session_type === "Client") {

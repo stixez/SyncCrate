@@ -20,7 +20,11 @@ import type {
   SessionStatus,
   ModPack,
   OpenIntent,
+  PackApplyPreview,
+  PackApplyResult,
+  PackApplyStatus,
   PackComparison,
+  PackRevertResult,
   SyncFolderPermissions,
   SyncHistoryEntry,
   SyncPlan,
@@ -415,6 +419,23 @@ export async function comparePack(pack: ModPack): Promise<PackComparison> {
 
 export async function computePackSyncPlan(pack: ModPack, peerId?: string): Promise<SyncPlan> {
   return invoke("compute_pack_sync_plan", { peerId: peerId ?? null, pack });
+}
+
+export async function previewPackApply(pack: ModPack): Promise<PackApplyPreview> {
+  return invoke("preview_pack_apply", { pack });
+}
+
+/** The disable/re-enable step; refused while pack files are still missing. */
+export async function applyPackExact(pack: ModPack, preview: PackApplyPreview): Promise<PackApplyResult> {
+  return invoke("apply_pack_exact", { pack, preview });
+}
+
+export async function getPackApplyStatus(game?: string): Promise<PackApplyStatus | null> {
+  return invoke("get_pack_apply_status", { game: game ?? null });
+}
+
+export async function revertPackApply(game?: string): Promise<PackRevertResult> {
+  return invoke("revert_pack_apply", { game: game ?? null });
 }
 
 // --- Auto-Backup Config ---
