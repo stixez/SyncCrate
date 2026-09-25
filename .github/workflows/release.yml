@@ -41,7 +41,7 @@ jobs:
         id: create
         env:
           INPUT_TAG: ${{ inputs.tag }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const workflowTag = (process.env.INPUT_TAG || '').trim();
@@ -116,7 +116,7 @@ jobs:
       # A manual run builds the tag it publishes, not whatever branch it was
       # started from.
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
@@ -130,9 +130,9 @@ jobs:
       # cache entry would run its code (build scripts) next to it.
 
       - name: Install Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       # Linux dependencies required by Tauri
       - name: Install Linux dependencies
