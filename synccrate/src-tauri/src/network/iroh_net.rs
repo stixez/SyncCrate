@@ -20,7 +20,7 @@ pub const ALPN: &[u8] = b"synccrate/1";
 static ENDPOINT: tokio::sync::OnceCell<Endpoint> = tokio::sync::OnceCell::const_new();
 
 fn key_path() -> std::path::PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let config = crate::utils::config_root();
     let dir = config.join("synccrate");
     std::fs::create_dir_all(&dir).ok();
     dir.join("iroh_secret_key")

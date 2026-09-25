@@ -34,9 +34,7 @@ const LINK_PREFIX: &str = "synccrate://pack/";
 /// A 100k-file pack is ~15 MB of JSON; anything far past that isn't a pack.
 const MAX_PACK_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
-fn is_valid_hash(h: &str) -> bool {
-    h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())
-}
+use crate::commands::backup::is_valid_hash;
 
 /// Same shape as `profiles::validate_profile_paths`: reject anything but
 /// plain relative segments. Duplicated rather than shared (see module doc).

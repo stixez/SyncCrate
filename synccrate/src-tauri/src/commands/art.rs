@@ -32,7 +32,8 @@ const CDNS: [&str; 2] = [
 const MAX_CUSTOM_BYTES: u64 = 8 * 1024 * 1024;
 
 fn art_dir() -> PathBuf {
-    let config = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    // config_root, like every other data path, so tests can redirect it.
+    let config = crate::utils::config_root();
     let dir = config.join("synccrate").join("art");
     std::fs::create_dir_all(&dir).ok();
     dir

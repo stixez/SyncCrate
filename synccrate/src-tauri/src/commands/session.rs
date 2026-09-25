@@ -97,7 +97,8 @@ pub async fn start_host(
 
     // Optionally generate a session PIN. Five digits (it has to fit the join
     // code's u16), with lockouts against guessing in `network::pin_guard`.
-    let pin = if use_pin.unwrap_or(false) {
+    // On by default (callers that don't say, e.g. older frontends, get one too).
+    let pin = if use_pin.unwrap_or(true) {
         Some(rand::thread_rng().gen_range(10000..=65535u16).to_string())
     } else {
         None
@@ -364,7 +365,7 @@ pub async fn connect_by_ip(
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
     ip.parse::<std::net::IpAddr>().map_err(|_| "Invalid IP address".to_string())?;
-    start_direct_connection(state.inner(), app, vec![ip.clone()], port, None, false, name, pin, ip).await
+    start_direct_connection(state.inner(), app, vec![ip.clone()], port, None, name, pin, ip).await
 }
 
 /// Join using a host's join code (addresses + port + optional PIN in one string).
@@ -396,7 +397,7 @@ pub async fn connect_by_code(
         None => None,
     };
     let label = if label.is_empty() { "Internet".to_string() } else { label };
-    start_direct_connection(state.inner(), app, ranked, info.port, internet_id, false, name, pin, label).await
+    start_direct_connection(state.inner(), app, ranked, info.port, internet_id, name, pin, label).await
 }
 
 /// The host's join code for the current session.
@@ -438,7 +439,6 @@ pub(crate) async fn start_direct_connection(
     addresses: Vec<String>,
     port: u16,
     internet_id: Option<iroh::EndpointId>,
-    prefer_internet: bool,
     name: String,
     pin: Option<String>,
     label: String,
@@ -464,8 +464,8 @@ pub(crate) async fn start_direct_connection(
     let app_handle = app.clone();
     let connect_peer_id = peer_id.clone();
     tokio::spawn(async move {
-        if let Err(e) = crate::network::transfer::connect_to_host_with(
-            &addresses, port, internet_id, prefer_internet, &connect_peer_id, state_clone.clone(), crate::event_sink::from_app(&app_handle), pin,
+        if let Err(e) = crate::network::transfer::connect_to_host(
+            &addresses, port, internet_id, &connect_peer_id, state_clone.clone(), crate::event_sink::from_app(&app_handle), pin,
         ).await {
             log::error!("Direct connection error: {}", e);
             let mut app_state = state_clone.lock().await;

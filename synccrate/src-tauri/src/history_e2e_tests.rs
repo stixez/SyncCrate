@@ -108,3 +108,40 @@ async fn history_off_keeps_nothing_tcp() {
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);
 }
+
+/// With "back up before sync" on, history indexes the presync backup's copy
+/// (no second copy of each file) and the version still restores.
+#[tokio::test]
+async fn history_reuses_the_presync_backup_and_still_restores_tcp() {
+    let _g = e2e_guard().await;
+    let tag = uuid::Uuid::new_v4().simple().to_string();
+    let path = format!("Mods/hist-presync-{tag}.package");
+    let host_dir = temp_dir("hist-presync-host");
+    let client_dir = temp_dir("hist-presync-client");
+    write_file(&host_dir, &path, b"NEW_FROM_HOST");
+    write_file(&client_dir, &path, b"MY_OLD_COPY");
+    crate::commands::sync::set_auto_backup_config(true, false, 4, 5).await.unwrap();
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Alex").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+    compute_plan(&client_state).await.expect("plan");
+    crate::commands::sync::resolve_conflict_inner(&client_state, path.clone(), Resolution::UseTheirs, None).await.expect("resolve");
+    let result = run_sync_now(&client_state).await;
+    crate::commands::sync::set_auto_backup_config(false, false, 4, 5).await.unwrap();
+    result.expect("sync");
+
+    let v = versions(&client_state, &path).await;
+    assert_eq!(v.len(), 1, "one version, taken from the presync backup");
+    assert_eq!(v[0].hash, sha256_hex(b"MY_OLD_COPY"));
+    assert_eq!(v[0].peer, "Alex");
+    history::restore_file_version_inner(&client_state, "sims4", &v[0].id).await.expect("restore");
+    assert_eq!(read_file(&client_dir, &path), b"MY_OLD_COPY");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}

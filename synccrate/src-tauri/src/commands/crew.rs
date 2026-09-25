@@ -259,26 +259,17 @@ pub(crate) fn crew_lan_hosts(crews: &[Crew], me: Option<&str>, peers: &[PeerInfo
 /// Where to dial a crew member: fresh LAN addresses from the last scan win,
 /// then the addresses the last session with them used; the node id is
 /// always dialled over the internet too (`connect_best` races both).
-pub(crate) fn connect_target(
-    crew: &Crew,
-    node_id: &str,
-    discovered: &[PeerInfo],
-) -> Result<(Vec<String>, u16, iroh::EndpointId, String), String> {
+/// The member to dial: their iroh id and display name. Crew connects are
+/// internet (iroh) only: it proves the host really has this node id, while a
+/// LAN address comes from an unauthenticated broadcast anyone can fake (on a
+/// LAN without internet, join with the host's code instead).
+pub(crate) fn connect_target(crew: &Crew, node_id: &str) -> Result<(iroh::EndpointId, String), String> {
     let member = crew.members.iter().find(|m| m.node_id == node_id).ok_or("That person isn't in this crew.")?;
     if member.removed {
         return Err(format!("{} was removed from this crew.", member.name));
     }
     let id = crews::parse_node_id(node_id).ok_or("That member has an invalid id.")?;
-    if let Some(p) = discovered.iter().find(|p| p.node_id.as_deref() == Some(node_id) && p.port >= 1024) {
-        let addrs = if p.addresses.is_empty() { vec![p.ip.clone()] } else { p.addresses.clone() };
-        return Ok((addrs, p.port, id, member.name.clone()));
-    }
-    if let Some(h) = crew.last_host.as_ref().filter(|h| h.node_id == node_id && h.port >= 1024) {
-        let addrs: Vec<String> = h.addresses.iter().filter(|a| a.parse::<std::net::IpAddr>().is_ok()).cloned().collect();
-        return Ok((addrs, h.port, id, member.name.clone()));
-    }
-    // Internet only; the port is unused without addresses.
-    Ok((Vec::new(), 9847, id, member.name.clone()))
+    Ok((id, member.name.clone()))
 }
 
 /// One-click reconnect: join a crew member's session without a code. The
@@ -293,7 +284,7 @@ pub async fn connect_crew(
     name: String,
     pin: Option<String>,
 ) -> Result<SessionInfo, String> {
-    let (addresses, port, id, label) = {
+    let (id, label) = {
         let s = state.lock().await;
         let crew = s.crews.get(&crew_id).ok_or("That crew no longer exists.")?;
         let node = node_id
@@ -302,15 +293,11 @@ pub async fn connect_crew(
         if s.local_node_id.as_deref() == Some(node.as_str()) {
             return Err("That's you. Host a session and the crew can join you.".to_string());
         }
-        connect_target(crew, &node, &s.discovered_peers)?
+        connect_target(crew, &node)?
     };
     let pin = pin.filter(|p| !p.trim().is_empty());
-    // Internet (iroh) only: it proves the host really has this node id. A LAN
-    // address comes from an unauthenticated broadcast anyone can fake, so it
-    // would let a stranger pose as a crew member. On a LAN without internet,
-    // join with the host's code instead.
-    let _ = addresses;
-    crate::commands::session::start_direct_connection(state.inner(), app, Vec::new(), port, Some(id), true, name, pin, label).await
+    // No addresses: iroh only (see connect_target). The port is unused then.
+    crate::commands::session::start_direct_connection(state.inner(), app, Vec::new(), 9847, Some(id), name, pin, label).await
 }
 
 #[cfg(test)]
@@ -359,23 +346,13 @@ mod tests {
     }
 
     #[test]
-    fn connect_target_prefers_fresh_lan_then_last_host_then_internet() {
+    fn connect_target_is_the_members_iroh_id_and_refuses_removed_or_unknown() {
         let c = crew();
-        let lan = [peer(Some(node(1)), "10.0.0.9", 9850)];
-        let (addrs, port, id, _) = connect_target(&c, &node(1), &lan).unwrap();
-        assert_eq!((addrs, port), (vec!["10.0.0.9".to_string()], 9850));
-        assert_eq!(crews::node_id_hex(&id), node(1));
-
-        let (addrs, port, _, _) = connect_target(&c, &node(1), &[]).unwrap();
-        assert_eq!((addrs, port), (vec!["192.168.1.5".to_string()], 9847), "junk addresses are dropped");
-
-        let (addrs, _, id, name) = connect_target(&c, &node(2), &[]).unwrap();
-        assert!(addrs.is_empty(), "no known address: internet only");
+        let (id, name) = connect_target(&c, &node(2)).unwrap();
         assert_eq!(crews::node_id_hex(&id), node(2));
         assert_eq!(name, "Ann");
-
-        assert!(connect_target(&c, &node(3), &[]).unwrap_err().contains("removed"));
-        assert!(connect_target(&c, &node(9), &[]).is_err());
+        assert!(connect_target(&c, &node(3)).unwrap_err().contains("removed"));
+        assert!(connect_target(&c, &node(9)).is_err());
     }
 
     #[test]

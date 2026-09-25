@@ -838,20 +838,6 @@ pub struct UndoResult {
     pub skipped: Vec<String>,
 }
 
-fn hash_file(path: &Path) -> Option<String> {
-    let mut f = std::fs::File::open(path).ok()?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1 << 20];
-    loop {
-        let n = f.read(&mut buf).ok()?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Some(hex::encode(hasher.finalize()))
-}
-
 /// Whether the file at `base`/`rel` is exactly what a sync wrote: same size,
 /// mtime and content. Used to refuse touching a file the user has since
 /// changed (or the sync never actually wrote, e.g. it failed mid-sync).
@@ -861,12 +847,29 @@ fn file_matches(base: &str, rel: &crate::commands::undo::RecordedFile) -> bool {
     meta.is_file()
         && meta.len() == rel.size
         && mtime_ms(&meta) == Some(rel.mtime_ms)
-        && hash_file(&abs).as_deref() == Some(rel.hash.as_str())
+        && crate::commands::files::compute_file_hash(&abs).ok().as_deref() == Some(rel.hash.as_str())
 }
 
 /// The game-folder-relative path a presync backup entry was collected from
 /// (the reverse of `content_type_for`/`collect_targeted`): `ct.folder` + `/` +
 /// `entry.relative_path`, or just the latter for a `.`-folder content type.
+/// Every file a backup holds, as (game-folder-relative path, object hash,
+/// size, mtime), so file history can index a presync backup's objects
+/// without copying the files again. The caller holds the store lock.
+pub(crate) fn backup_objects(root: &Path, backup_id: &str, cts: &[ContentType]) -> Result<Vec<(String, String, u64, Option<i64>)>, String> {
+    utils::sanitize_id(backup_id)?;
+    let manifest = read_manifest(&root.join(backup_id))?;
+    Ok(manifest
+        .files
+        .iter()
+        .filter_map(|e| {
+            let hash = e.hash.clone().filter(|h| is_valid_hash(h))?;
+            object_path(root, &hash).is_file().then_some(())?;
+            Some((entry_game_root_path(cts, e)?, hash, e.size, e.mtime_ms))
+        })
+        .collect())
+}
+
 fn entry_game_root_path(cts: &[ContentType], entry: &BackupFileEntry) -> Option<String> {
     let ct = resolve_ct(cts, &entry.category)?;
     let folder = ct.folder.replace('\\', "/");

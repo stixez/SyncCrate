@@ -43,7 +43,9 @@ export function saveStayInSync(on: boolean) {
 }
 
 export function loadUsePin(): boolean {
-  return read(USE_PIN_KEY) === "1";
+  // On unless the host turned it off: without a PIN, anyone who ever saw
+  // one of their join codes or crew invites could pull their files.
+  return read(USE_PIN_KEY) !== "0";
 }
 
 export function saveUsePin(usePin: boolean) {
