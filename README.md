@@ -76,6 +76,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 **Mods**
 - **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install (each file goes to the folder its type belongs in), pack/DLC detection and a duplicate finder for games where duplicate packages cause trouble (The Sims 2/3/4, Euro/American Truck Simulator, Farming Simulator). Handles 20,000+ files smoothly.
 - **Real mod names and icons.** The Content page reads the info mods ship with and shows each mod's name, version, author, description, website and icon instead of bare file names, and search finds mods by name. It works offline for Thunderstore/BepInEx packages (Valheim, Lethal Company, …), SMAPI mods (Stardew Valley), Minecraft Fabric, Quilt and Forge jars, Paradox mods and Bannerlord modules. Mods without that info keep their file names.
+- **Mod health check.** Catches what stops synced mods from loading: a missing mod loader (BepInEx, SMAPI), and for The Sims 4 mods or script mods switched off in the game's options (after most patches; one click turns them back on), script mods more than one folder deep, packages more than five folders deep, and `.zip` files that were never extracted. It shows on the Content page, with a note on the Dashboard.
 - **Game browser.** 100 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 

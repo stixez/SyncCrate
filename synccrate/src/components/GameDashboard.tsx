@@ -17,6 +17,7 @@ import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ChatPanel from "./ChatPanel";
+import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
@@ -837,6 +838,8 @@ export default function GameDashboard({ gameId }: Props) {
           ))}
         </div>
       )}
+
+      <CompatIssues gameId={gameId} summary />
 
       {mismatchedPeers.length > 0 && (
         <Banner tone="warn" icon={<AlertTriangle size={16} />} title="Version mismatch">

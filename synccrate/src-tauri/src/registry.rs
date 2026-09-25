@@ -31,6 +31,10 @@ pub struct GameDefinition {
     /// SyncCrate doesn't sync Workshop content.
     #[serde(default)]
     pub steam_workshop_app_id: Option<u32>,
+    /// The mod loader this game's mods need (BepInEx, SMAPI), so the
+    /// compatibility check can flag mods that can't load (`crate::compat`).
+    #[serde(default)]
+    pub mod_loader: Option<ModLoader>,
     /// Official publisher-hosted art for non-Steam games, by kind (`cover`,
     /// `header`, `hero`); missing kinds fall back to the others.
     #[serde(default)]
@@ -239,9 +243,35 @@ pub fn build_legacy_map(registry: &GameRegistry) -> HashMap<String, String> {
         .collect()
 }
 
+/// A mod loader: when `content_type` has files but none of `any_of`
+/// (relative to the game folder) exists, the mods won't load.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModLoader {
+    pub name: String,
+    pub content_type: String,
+    pub any_of: Vec<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mod_loaders_point_at_real_content_types_and_plain_paths() {
+        let games = load_registry().games;
+        assert!(games.iter().filter(|g| g.mod_loader.is_some()).count() >= 2);
+        for g in &games {
+            let Some(l) = &g.mod_loader else { continue };
+            assert!(g.content_types.iter().any(|c| c.id == l.content_type), "{}: mod_loader content type {}", g.id, l.content_type);
+            assert!(!l.any_of.is_empty(), "{}: mod_loader needs files", g.id);
+            for p in &l.any_of {
+                assert!(!p.contains("..") && !p.starts_with('/') && !p.contains(':'), "{}: {}", g.id, p);
+            }
+            assert!(l.url.as_deref().map_or(true, |u| u.starts_with("https://")), "{}", g.id);
+        }
+    }
 
     #[test]
     fn every_game_has_known_genres() {

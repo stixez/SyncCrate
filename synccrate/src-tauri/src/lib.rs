@@ -1,5 +1,6 @@
 mod chat;
 mod commands;
+mod compat;
 mod crews;
 mod event_sink;
 mod game_install;
@@ -413,6 +414,8 @@ pub fn run() {
             commands::pack_apply::get_pack_apply_status,
             commands::pack_apply::revert_pack_apply,
             commands::open_intent::take_open_intents,
+            commands::compat::check_compat,
+            commands::compat::fix_compat_issue,
             commands::files::get_hidden_games,
             commands::files::set_game_hidden,
             commands::files::get_workshop_mod_count,

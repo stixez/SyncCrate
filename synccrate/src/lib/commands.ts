@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  CompatIssue,
   ChatLog,
   Crew,
   CrewInvite,
@@ -531,6 +532,16 @@ export async function setGameHidden(gameId: string, hidden: boolean): Promise<st
 export async function getWorkshopModCount(game: string): Promise<number> {
   if (isDemoMode()) return 0;
   return invoke("get_workshop_mod_count", { game });
+}
+
+/** Problems that stop the active game's mods from loading (missing loader, Sims 4 settings/placement). */
+export async function checkCompat(game: string): Promise<CompatIssue[]> {
+  if (isDemoMode()) return [];
+  return invoke("check_compat", { game });
+}
+
+export async function fixCompatIssue(game: string, fix: string): Promise<void> {
+  return invoke("fix_compat_issue", { game, fix });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */
