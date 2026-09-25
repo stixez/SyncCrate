@@ -385,6 +385,11 @@ pub struct AppState {
     pub chat: crate::chat::ChatLog,
     /// Wrong-PIN attempts per source while hosting (`network::pin_guard`).
     pub pin_guard: crate::network::pin_guard::PinGuard,
+    /// Host side: file offers from connected friends, by peer id (`crate::offers`).
+    pub offers_in: HashMap<String, crate::offers::IncomingOffer>,
+    /// Client side: our offer to the host, and whether the host takes offers.
+    pub offer_out: Option<crate::offers::OutgoingOffer>,
+    pub offers_available: bool,
 }
 
 impl AppState {
@@ -492,6 +497,9 @@ impl Default for AppState {
             local_node_id: None,
             chat: crate::chat::ChatLog::default(),
             pin_guard: Default::default(),
+            offers_in: HashMap::new(),
+            offer_out: None,
+            offers_available: false,
         }
     }
 }

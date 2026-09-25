@@ -1,6 +1,6 @@
 use crate::chat::ChatMessage;
 use crate::crews::{CrewHello, CrewWelcome};
-use crate::state::{FileManifest, GameInfo};
+use crate::state::{FileInfo, FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use crate::network::stream::PeerStream;
@@ -83,6 +83,22 @@ pub enum Message {
         /// Files our last sync received; the host announces it.
         #[serde(default)]
         synced_files: Option<u64>,
+    },
+    /// Client → host (only if the host lists `offers::FEATURE`): our offer's
+    /// file list (the first time), or just a status poll.
+    OfferSync {
+        #[serde(default)]
+        files: Option<Vec<FileInfo>>,
+    },
+    /// Host → client, only as the reply to `OfferSync`.
+    OfferStatus { accepted: Vec<String>, declined: Vec<String> },
+    /// Host → client, only as the reply to an offered file's upload
+    /// (`FileHeader` + chunks + `FileComplete` from the client).
+    OfferResult {
+        path: String,
+        ok: bool,
+        #[serde(default)]
+        message: String,
     },
     /// Host → client, only ever as the reply to `ChatSync` (see `chat` docs).
     ChatBatch {

@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { isDemoMode } from "./demoData";
 import type {
+  IncomingOffer,
+  OutgoingOfferView,
   UpdateReport,
   CompatIssue,
   ChatLog,
@@ -548,6 +550,30 @@ export async function checkCompat(game: string): Promise<CompatIssue[]> {
 
 export async function fixCompatIssue(game: string, fix: string): Promise<void> {
   return invoke("fix_compat_issue", { game, fix });
+}
+
+// Offers: friends propose files, the host accepts (src-tauri/src/offers.rs)
+
+export async function offerFiles(paths: string[]): Promise<OutgoingOfferView["offer"]> {
+  return invoke("offer_files", { paths });
+}
+
+export async function cancelOffer(): Promise<void> {
+  return invoke("cancel_offer");
+}
+
+export async function getOutgoingOffer(): Promise<OutgoingOfferView> {
+  if (isDemoMode()) return { available: false, offer: null };
+  return invoke("get_outgoing_offer");
+}
+
+export async function getIncomingOffers(): Promise<IncomingOffer[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_incoming_offers");
+}
+
+export async function decideOffer(peerId: string, accept: string[], decline: string[]): Promise<IncomingOffer> {
+  return invoke("decide_offer", { peerId, accept, decline });
 }
 
 /** Drain links/files opened from outside the app (queued by the backend). */

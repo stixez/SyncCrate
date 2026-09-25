@@ -7,6 +7,7 @@ mod game_install;
 mod network;
 mod mod_meta;
 mod mod_updates;
+mod offers;
 mod packs;
 mod registry;
 mod state;
@@ -18,6 +19,8 @@ mod watcher;
 mod testutil;
 #[cfg(test)]
 mod e2e_tests;
+#[cfg(test)]
+mod offers_e2e_tests;
 #[cfg(test)]
 mod security_e2e_tests;
 #[cfg(test)]
@@ -440,6 +443,11 @@ pub fn run() {
             commands::mod_info::get_mod_metadata,
             commands::mod_info::get_mod_icon,
             commands::mod_info::check_mod_updates,
+            commands::offers::offer_files,
+            commands::offers::cancel_offer,
+            commands::offers::get_outgoing_offer,
+            commands::offers::get_incoming_offers,
+            commands::offers::decide_offer,
             commands::history::list_file_history,
             commands::history::restore_file_version,
             commands::sync::get_keep_file_history,
