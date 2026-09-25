@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
+import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SyncFolderPermissions, GameInfo, ContentTypeDefinition } from "../lib/types";
 import { useAppStore } from "../stores/useAppStore";
@@ -158,6 +158,14 @@ export default function GameDashboard({ gameId }: Props) {
   const [joinCode, setJoinCode] = useState("");
   const [hostJoinCode, setHostJoinCode] = useState<string | null>(null);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const pendingJoinCode = useAppStore((s) => s.pendingJoinCode);
+  // A clicked invite link only fills the box; joining is still a click.
+  useEffect(() => {
+    if (!pendingJoinCode) return;
+    setJoinCode(pendingJoinCode);
+    useAppStore.getState().setPendingJoinCode(null);
+  }, [pendingJoinCode]);
 
   // Fetch the join code whenever we start hosting (port/PIN are baked into it).
   const hostingKey = session?.session_type === "Host" ? `${session.port}:${session.pin ?? ""}` : null;
@@ -657,6 +665,16 @@ export default function GameDashboard({ gameId }: Props) {
   const sessionGameMismatch = activeGame !== gameId;
   const sessionGameLabel = getGameDef(activeGame)?.label ?? activeGame;
 
+  // The game the host is actually sharing (the session's), which the
+  // friend's app checks against the registry and its own active game.
+  const copyInviteLink = () => {
+    if (!hostJoinCode) return;
+    const game = useAppStore.getState().activeGame;
+    navigator.clipboard.writeText(`synccrate://join/${hostJoinCode}?game=${encodeURIComponent(game)}`);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 2000);
+  };
+
   const copyJoinCode = () => {
     if (!hostJoinCode) return;
     navigator.clipboard.writeText(hostJoinCode);
@@ -756,9 +774,20 @@ export default function GameDashboard({ gameId }: Props) {
                     {joinCodeCopied ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                <p className="text-xs text-txt-dim mt-3">
-                  Works on your network and over the internet{session.pin ? ", and includes your PIN" : ""}. No port forwarding needed.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+                  <p className="text-xs text-txt-dim">
+                    Works on your network and over the internet{session.pin ? ", and includes your PIN" : ""}. No port forwarding needed.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={copyInviteLink}
+                    icon={inviteCopied ? <Check size={12} /> : <Link2 size={12} />}
+                    title="A synccrate:// link that opens SyncCrate with this code filled in"
+                  >
+                    {inviteCopied ? "Copied" : "Copy invite link"}
+                  </Button>
+                </div>
               </div>
             )}
             {session.pin && (

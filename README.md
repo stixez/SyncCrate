@@ -68,7 +68,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done.
 
 **Connect**
-- **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click.
+- **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`synccrate://join/…`): clicking it opens SyncCrate with the code filled in for the right game (or offers to switch games). Nothing connects or syncs until the friend clicks Join and confirms the plan.
 - **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
 - **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
 
@@ -78,7 +78,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord.
 
 **Share your setup**
-- **Modpacks.** Export "my exact setup" as a tiny `.scpack` manifest — game, content types, and a file list (path, size, hash), no file contents, so it stays shareable-sized even for a big CC folder. A friend imports it (file, drag & drop, or a pasted link for small packs) and sees what they have, what's missing, and what differs, grouped like the Content page. Connect to whoever's sharing it and "Get missing files" pulls exactly the pack's files — differences become the normal conflict prompt, files the host doesn't have are reported rather than silently skipped, and nothing outside the pack is ever touched.
+- **Modpacks.** Export "my exact setup" as a tiny `.scpack` manifest — game, content types, and a file list (path, size, hash), no file contents, so it stays shareable-sized even for a big CC folder. A friend imports it (double-click the `.scpack` file, drag & drop, click a `synccrate://pack/…` link, or paste the link for small packs) and sees what they have, what's missing, and what differs, grouped like the Content page. Connect to whoever's sharing it and "Get missing files" pulls exactly the pack's files — differences become the normal conflict prompt, files the host doesn't have are reported rather than silently skipped, and nothing outside the pack is ever touched.
 
 **Safety**
 - **Backups.** Manual or automatic, stored incrementally: unchanged files are kept once and shared between backups, so extra backups cost almost nothing. Scheduled backups cover each game in your library on its own 1–24 h timer (even across restarts). "Back up before sync" saves just the files a sync is about to replace or delete, and the sync stops if that backup fails. Restores keep file dates, skip mods you have disabled since, can optionally be exact (also removing files added since the backup), and always take a safety backup first.

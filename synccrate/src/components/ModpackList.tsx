@@ -30,6 +30,8 @@ export default function ModpackList({ gameId }: Props) {
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
   const pendingImportPackPath = useAppStore((s) => s.pendingImportPackPath);
   const setPendingImportPackPath = useAppStore((s) => s.setPendingImportPackPath);
+  const pendingImportPack = useAppStore((s) => s.pendingImportPack);
+  const setPendingImportPack = useAppStore((s) => s.setPendingImportPack);
 
   const def = getGameDef(gameId);
   const contentTypes = def?.content_types ?? [];
@@ -81,6 +83,16 @@ export default function ModpackList({ gameId }: Props) {
       .catch((e) => toastError(`Couldn't open pack: ${e}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingImportPackPath]);
+
+  // A clicked pack link or double-clicked `.scpack` (already validated by
+  // the backend, see useOpenIntents). Comparing only reads the local folder.
+  useEffect(() => {
+    if (!pendingImportPack) return;
+    const pack = pendingImportPack;
+    setPendingImportPack(null);
+    runComparison(pack);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingImportPack]);
 
   const toggleType = (id: string) => {
     setSelectedTypes((prev) => {

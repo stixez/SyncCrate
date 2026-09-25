@@ -4,6 +4,7 @@ pub mod files;
 pub mod game_state;
 pub mod install;
 pub mod modpack;
+pub mod open_intent;
 pub mod packs;
 pub mod profiles;
 pub mod session;

@@ -148,13 +148,31 @@ pub fn run() {
     initial_state.user_library = user_library;
     let app_state = Arc::new(Mutex::new(initial_state));
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Must be the first plugin. A second launch (clicked link, double-clicked
+    // .scpack, or just the shortcut while hidden in the tray) hands its argv
+    // to this instance and exits.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            commands::open_intent::handle_args(app, argv.into_iter().skip(1).collect(), Some(cwd.into()));
+        }));
+    }
+
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .manage(app_state)
+        .manage(commands::open_intent::PendingIntents::default())
         .setup(|app| {
             // Set up tray icon
             let status = MenuItemBuilder::with_id("status", "Idle").enabled(false).build(app)?;
@@ -208,6 +226,25 @@ pub fn run() {
             let state_clone = state.inner().clone();
 
             app.manage(commands::tray::TrayHandles { tray, status, leave });
+
+            // Installers register the scheme; dev builds (and Linux AppImages,
+            // which have no installer) need it at runtime. Release Windows
+            // builds skip it so a portable copy can't steal the installed
+            // app's registration.
+            #[cfg(any(target_os = "linux", all(windows, debug_assertions)))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    log::warn!("Couldn't register the synccrate:// scheme: {e}");
+                }
+            }
+            // Cold start on Windows/Linux: the link or .scpack path that
+            // launched us is in argv. (macOS delivers it via RunEvent::Opened.)
+            commands::open_intent::handle_args(
+                app.handle(),
+                std::env::args().skip(1).collect(),
+                std::env::current_dir().ok(),
+            );
             commands::tray::start_tray_status_updates(&handle, state_clone.clone());
             // Scheduled auto-backups (per game, checked every minute)
             commands::backup::spawn_scheduler(handle.clone(), state_clone.clone());
@@ -343,6 +380,7 @@ pub fn run() {
             commands::modpack::load_pack_link,
             commands::modpack::compare_pack,
             commands::modpack::compute_pack_sync_plan,
+            commands::open_intent::take_open_intents,
             commands::sync::update_sync_selection,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
@@ -367,6 +405,24 @@ pub fn run() {
             commands::system::get_network_diagnostics,
             commands::system::test_connection,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, _event| {
+            // macOS delivers clicked links and opened files as Apple events,
+            // both cold (after launch) and warm.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let args = urls
+                    .into_iter()
+                    .filter_map(|u| {
+                        if u.scheme() == "file" {
+                            u.to_file_path().ok().map(|p| p.to_string_lossy().into_owned())
+                        } else {
+                            Some(u.to_string())
+                        }
+                    })
+                    .collect();
+                commands::open_intent::handle_args(_app, args, None);
+            }
+        });
 }

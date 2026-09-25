@@ -1207,3 +1207,68 @@ async fn undo_refused_during_a_sync_or_session_tcp() {
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);
 }
+
+/// A clicked invite link only classifies: the client stays idle and nothing
+/// is written. The code it carries then drives the ordinary connect path
+/// (what the Join button does), which still stops at a plan the user has to
+/// confirm. While a sync runs, links are refused outright.
+#[tokio::test]
+async fn join_link_leads_to_normal_connect_and_writes_nothing_tcp() {
+    use crate::commands::open_intent::{intent_from_raw, OpenIntent};
+    use crate::network::joincode;
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("link-host");
+    let client_dir = temp_dir("link-client");
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+    write_file(&client_dir, "Mods/mine.package", b"MINE");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let code = joincode::encode(&joincode::JoinInfo {
+        addresses: vec!["127.0.0.1".parse().unwrap()],
+        port,
+        pin: None,
+        internet_id: None,
+    })
+    .unwrap();
+
+    let client_state = make_state("sims4", &client_dir);
+    // Discord-style trailing punctuation included.
+    let link = format!("synccrate://join/{code}?game=sims4).");
+    let Some(OpenIntent::Join { code: got, game_id }) = intent_from_raw(&client_state, &link, None).await else {
+        panic!("join link not recognized");
+    };
+    assert_eq!(game_id, "sims4");
+    // A link for another game is surfaced as-is (the UI shows the switch
+    // prompt); the active game is not touched.
+    let other = format!("synccrate://join/{code}?game=valheim");
+    assert!(matches!(intent_from_raw(&client_state, &other, None).await, Some(OpenIntent::Join { ref game_id, .. }) if game_id == "valheim"));
+    {
+        let s = client_state.lock().await;
+        assert_eq!(s.session_type, crate::state::SessionType::None);
+        assert!(s.connections.is_empty());
+        assert_eq!(s.active_game, "sims4");
+    }
+    assert!(!file_exists(&client_dir, "Mods/a.package"));
+
+    let info = joincode::decode(&got).unwrap();
+    assert_eq!(info.port, port);
+    assert_eq!(info.addresses, vec![std::net::Ipv4Addr::LOCALHOST]);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), info.port, &peer_id).await.expect("connect");
+    {
+        let s = client_state.lock().await;
+        assert!(s.connections.get(&peer_id).is_some_and(|c| c.sync_plan.is_none() && !c.is_syncing));
+    }
+    assert!(!file_exists(&client_dir, "Mods/a.package"), "connecting must not sync on its own");
+    assert_eq!(read_file(&client_dir, "Mods/mine.package"), b"MINE");
+
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = true;
+    assert!(matches!(intent_from_raw(&client_state, &link, None).await, Some(OpenIntent::Invalid { .. })));
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = false;
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}

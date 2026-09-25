@@ -17,7 +17,7 @@
 use crate::commands::files::{get_game_def, missing_folder_error, resolve_game};
 use crate::state::{AppState, FileManifest, ModPack, PackFile, PackJoin};
 use crate::sync::diff::match_key;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD}, Engine as _};
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -29,8 +29,10 @@ const MAX_PACK_FILES: usize = 100_000;
 /// Encoded-size cap for the text/deep-link export. A `.scpack` file has no
 /// such limit; this only decides whether offering a pasteable link is
 /// worthwhile (a few dozen files fits a chat message, thousands don't).
-const MAX_LINK_BYTES: usize = 8 * 1024;
+pub(crate) const MAX_LINK_BYTES: usize = 8 * 1024;
 const LINK_PREFIX: &str = "synccrate://pack/";
+/// A 100k-file pack is ~15 MB of JSON; anything far past that isn't a pack.
+const MAX_PACK_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 fn is_valid_hash(h: &str) -> bool {
     h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())
@@ -192,7 +194,11 @@ pub async fn save_pack(pack: ModPack, dest: String) -> Result<(), String> {
 pub async fn pack_to_link(pack: ModPack) -> Result<String, String> {
     validate_pack(&pack)?;
     let data = serde_json::to_string(&pack).map_err(|e| e.to_string())?;
-    let encoded = BASE64.encode(data.as_bytes());
+    // URL-safe and unpadded: standard base64's `+`, `/` and `=` got
+    // percent-encoded or cut off by browsers and chat apps, and with this
+    // alphabet trailing punctuation (Discord's `)` or `.`) can be stripped
+    // without ambiguity. `decode_pack_payload` still reads the old alphabet.
+    let encoded = URL_SAFE_NO_PAD.encode(data.as_bytes());
     if encoded.len() > MAX_LINK_BYTES {
         return Err(format!(
             "This pack ({} files) is too big for a text link ({} KB, max {} KB) — share the .scpack file instead.",
@@ -206,7 +212,17 @@ pub async fn pack_to_link(pack: ModPack) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn load_pack_file(path: String) -> Result<ModPack, String> {
-    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    read_pack_file(std::path::Path::new(&path))
+}
+
+/// Shared with `commands::open_intent` (double-clicked `.scpack` files), so
+/// the file is size-capped before it is read: it may come from anywhere.
+pub(crate) fn read_pack_file(path: &std::path::Path) -> Result<ModPack, String> {
+    let len = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if len > MAX_PACK_FILE_BYTES {
+        return Err("That file is too big to be a SyncCrate pack.".to_string());
+    }
+    let data = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let pack: ModPack = serde_json::from_str(&data).map_err(|e| format!("Not a valid pack: {}", e))?;
     validate_pack(&pack)?;
     Ok(pack)
@@ -214,9 +230,25 @@ pub async fn load_pack_file(path: String) -> Result<ModPack, String> {
 
 #[tauri::command]
 pub async fn load_pack_link(text: String) -> Result<ModPack, String> {
+    // Same cleanup as a clicked link (scheme case, percent-encoding, trailing
+    // chat punctuation); a bare payload without the prefix is accepted too.
     let trimmed = text.trim();
-    let encoded = trimmed.strip_prefix(LINK_PREFIX).unwrap_or(trimmed);
-    let bytes = BASE64.decode(encoded).map_err(|_| "Not a valid pack link".to_string())?;
+    match crate::commands::open_intent::classify(trimmed, |_| true) {
+        Some(crate::commands::open_intent::OpenTarget::PackLink(payload)) => decode_pack_payload(&payload),
+        Some(crate::commands::open_intent::OpenTarget::Invalid(reason)) => Err(reason),
+        _ => decode_pack_payload(trimmed),
+    }
+}
+
+/// The base64 part of a pack link. Accepts the current URL-safe alphabet and
+/// the standard one that links from before deep-link support used.
+pub(crate) fn decode_pack_payload(encoded: &str) -> Result<ModPack, String> {
+    let encoded = encoded.trim().trim_end_matches('=');
+    if encoded.len() > MAX_LINK_BYTES * 2 {
+        return Err("That pack link is too long.".to_string());
+    }
+    let engine = if encoded.contains(['+', '/']) { &STANDARD_NO_PAD } else { &URL_SAFE_NO_PAD };
+    let bytes = engine.decode(encoded).map_err(|_| "Not a valid pack link".to_string())?;
     let pack: ModPack = serde_json::from_slice(&bytes).map_err(|e| format!("Not a valid pack: {}", e))?;
     validate_pack(&pack)?;
     Ok(pack)

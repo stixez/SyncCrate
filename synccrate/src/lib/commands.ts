@@ -19,6 +19,7 @@ import type {
   SessionInfo,
   SessionStatus,
   ModPack,
+  OpenIntent,
   PackComparison,
   SyncFolderPermissions,
   SyncHistoryEntry,
@@ -401,6 +402,11 @@ export async function loadPackFile(path: string): Promise<ModPack> {
 
 export async function loadPackLink(text: string): Promise<ModPack> {
   return invoke("load_pack_link", { text });
+}
+
+/** Drain links/files opened from outside the app (queued by the backend). */
+export async function takeOpenIntents(): Promise<OpenIntent[]> {
+  return invoke("take_open_intents");
 }
 
 export async function comparePack(pack: ModPack): Promise<PackComparison> {

@@ -162,6 +162,13 @@ export interface ModPack {
   files: PackFile[];
 }
 
+/** What a clicked `synccrate://` link or opened `.scpack` file asked for
+ * (validated by the backend; see `commands/open_intent.rs`). */
+export type OpenIntent =
+  | { kind: "pack"; pack: ModPack }
+  | { kind: "join"; code: string; game_id: string }
+  | { kind: "invalid"; reason: string };
+
 export interface PackFileStatus {
   relative_path: string;
   size: number;
