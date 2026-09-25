@@ -160,7 +160,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
           <Loader2 size={12} className="animate-spin text-neon" /> Hashing files to find identical copies…
         </p>
       ) : groups && groups.length === 0 ? (
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim">No duplicate files found.</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim">No duplicates. Every file is unique.</p>
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {(groups ?? []).map((g) => (

@@ -7,6 +7,7 @@ import { fileName, formatBytes, formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { toastError, toastSuccess } from "../lib/toast";
 import type { FileVersion } from "../lib/types";
+import { friendlyError } from "../lib/errors";
 
 function describe(v: FileVersion) {
   const from = v.peer ? ` from ${v.peer}` : "";
@@ -24,12 +25,13 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
   const [versions, setVersions] = useState<FileVersion[] | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = () =>
     cmd
       .listFileHistory(gameId, path)
-      .then(setVersions)
-      .catch(() => setVersions([]));
+      .then((v) => { setLoadError(null); setVersions(v); })
+      .catch((e) => { setLoadError(friendlyError(e)); setVersions([]); });
 
   useEffect(() => {
     setVersions(null);
@@ -60,6 +62,14 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
 
   if (versions === null) {
     return <p className={cx("text-xs text-txt-muted flex items-center gap-2", className)}><Loader2 size={12} className="animate-spin" /> Loading history…</p>;
+  }
+  if (loadError) {
+    return (
+      <p className={cx("text-xs text-status-red", className)}>
+        Couldn't load file history: {loadError}{" "}
+        <button className="underline hover:text-txt" onClick={() => { setVersions(null); load(); }}>Try again</button>
+      </p>
+    );
   }
   if (versions.length === 0) {
     return (

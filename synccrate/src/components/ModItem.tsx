@@ -102,6 +102,16 @@ function ModItem({
         if (bulkMode) onSelect?.(file.relative_path);
         else onShowDetails?.(file);
       }}
+      role="button"
+      tabIndex={0}
+      aria-label={bulkMode ? `Select ${name}` : `Details for ${name}`}
+      onKeyDown={(e) => {
+        // Only the row itself: keys typed into the tag editor or on the switch bubble here too.
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        if (bulkMode) onSelect?.(file.relative_path);
+        else onShowDetails?.(file);
+      }}
     >
       {bulkMode && (
         <input
@@ -184,7 +194,7 @@ function ModItem({
       {canToggle && (
         // The switch sits inside a clickable row: keep its clicks from opening details.
         <div className={COL.toggle} onClick={(e) => e.stopPropagation()} title={isDisabled ? "Disabled: click to enable" : "Enabled: click to disable"}>
-          <Toggle checked={!isDisabled} disabled={toggleBusy} onChange={(on) => onToggle?.(file.relative_path, on)} />
+          <Toggle checked={!isDisabled} disabled={toggleBusy} ariaLabel={isDisabled ? `Enable ${name}` : `Disable ${name}`} onChange={(on) => onToggle?.(file.relative_path, on)} />
         </div>
       )}
       {showTagEditor && onTagsChanged && (

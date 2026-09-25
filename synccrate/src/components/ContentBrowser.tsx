@@ -16,7 +16,7 @@ import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "
 import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
-import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath } from "../lib/utils";
+import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
@@ -220,9 +220,10 @@ export default function ContentBrowser({ gameId }: Props) {
   // Mod names/versions/icons from the mods' own metadata files. Only the
   // active game has a current manifest, so read-only pages get none.
   const [modMetas, setModMetas] = useState<ModMeta[]>([]);
+  // Icons only go stale with the game (the backend re-reads them by key).
+  useEffect(() => { clearModIconCache(); }, [gameId]);
   useEffect(() => {
     let cancelled = false;
-    clearModIconCache();
     if (readOnly || !manifest) { setModMetas([]); return; }
     cmd.getModMetadata(gameId).then((m) => { if (!cancelled) setModMetas(m); }).catch(() => {});
     return () => { cancelled = true; };
@@ -542,27 +543,27 @@ export default function ContentBrowser({ gameId }: Props) {
     setBusyPaths(new Set(targets));
     let ok = 0;
     const errors: string[] = [];
+    const moves: [string, string][] = [];
     try {
       for (const p of targets) {
         try {
-          await cmd.toggleMod(gameId, p, enable);
+          moves.push([p, await cmd.toggleMod(gameId, p, enable)]);
           ok++;
         } catch (e) {
           errors.push(`${fileName(p)}: ${e}`);
         }
       }
-      // Paths change on toggle (.disabled rename / _Disabled move): rescan once
-      // at the end and drop the now-stale selection.
-      setManifest(await cmd.scanFiles(gameId));
+      // Paths change on toggle (.disabled rename / _Disabled move); the
+      // backend returns the new ones, so patch the list in place.
+      const m = useAppStore.getState().manifest;
+      if (m) setManifest(renameInManifest(m, moves));
       cmd.getModTags(gameId).then(setModTags).catch(() => {});
-    } catch (e) {
-      errors.push(`Rescan failed: ${e}`);
     } finally {
       setBusyPaths(null);
       setSelected(new Set());
     }
     if (ok) toastSuccess(ok === targets.length ? `${verb} ${label}` : `${verb} ${ok} of ${targets.length} files`);
-    if (errors.length) toastError(errors.length === 1 ? errors[0] : `${errors.length} file(s) failed: ${errors[0]}`);
+    if (errors.length) toastError(errors.length === 1 ? errors[0] : `${plural(errors.length, "file")} couldn't be changed. First: ${errors[0]}`);
   }, [busyPaths, gameId, setManifest, setModTags]);
 
   const handleToggle = useCallback((path: string, enable: boolean) => { togglePaths([path], enable); }, [togglePaths]);
@@ -1011,12 +1012,17 @@ export default function ContentBrowser({ gameId }: Props) {
         <EmptyState
           icon={<Package size={18} />}
           label={<><b>//</b> 0 results</>}
-          title={`No ${activeCt?.label?.toLowerCase() ?? "files"} found`}
-          description="Make sure your game folder path is correct."
+          title={`No ${activeCt?.label?.toLowerCase() ?? "files"} yet`}
+          description="Drop mod files anywhere on this window to install them, or join a friend's session to get theirs. If you do have mods here, check that the game folder is right."
           action={
-            <Button size="sm" onClick={() => useAppStore.getState().navigateToGlobal("settings")}>
-              Go to Settings
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="primary" onClick={() => useAppStore.getState().navigateToGame(gameId, "dashboard")}>
+                Join a friend
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => useAppStore.getState().navigateToGlobal("settings")}>
+                Check folder
+              </Button>
+            </div>
           }
         />
       ) : visible.length === 0 ? (

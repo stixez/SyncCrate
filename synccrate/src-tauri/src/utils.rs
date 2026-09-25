@@ -600,6 +600,26 @@ pub fn windows_system_exe(name: &str) -> PathBuf {
     }
 }
 
+/// Plain-language text for the OS errors players actually hit during a sync
+/// ("Access is denied. (os error 5)" -> what to do about it). Anything else is
+/// returned unchanged. The frontend's `friendlyError` does the same for toasts.
+pub fn plain_io_error(msg: &str) -> String {
+    let code = msg
+        .rsplit_once("(os error ")
+        .and_then(|(_, rest)| rest.split(')').next())
+        .and_then(|n| n.trim().parse::<i32>().ok());
+    let plain = match code {
+        Some(5) | Some(13) => "SyncCrate isn't allowed to change this file (read-only or protected folder)",
+        Some(32) | Some(33) | Some(1224) => "the file is in use by another program, usually the game; close it and sync again",
+        Some(112) | Some(39) | Some(28) => "the drive is full",
+        Some(206) => "the path is too long for Windows; move the mod into a shorter folder",
+        Some(225) => "Windows Security blocked this file as a possible threat",
+        Some(2) | Some(3) => "the file or folder was moved or deleted during the sync",
+        _ => return msg.to_string(),
+    };
+    plain.to_string()
+}
+
 /// Migrate config from the old `simshare` directory to `synccrate`.
 /// Safe to call multiple times — does nothing if synccrate dir already exists.
 pub fn migrate_from_simshare() {
@@ -700,6 +720,14 @@ mod tests {
         assert!(!is_dangerous_extension("Mods/x.package"));
         assert!(!is_dangerous_extension("mods/sodium.jar"), "jar/dll stay allowed (real mod formats)");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn os_errors_get_plain_wording() {
+        assert!(plain_io_error("The process cannot access the file because it is being used by another process. (os error 32)").contains("in use"));
+        assert!(plain_io_error("Access is denied. (os error 5)").contains("allowed"));
+        assert!(plain_io_error("There is not enough space on the disk. (os error 112)").contains("full"));
+        assert_eq!(plain_io_error("Hash mismatch for x"), "Hash mismatch for x");
     }
 
     #[test]

@@ -273,7 +273,9 @@ fn scan_directory(
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| {
-            if entry.path_is_symlink() || !entry.path().is_file() {
+            // `file_type()` comes with the directory listing (free on
+            // Windows); `path().is_file()` was an extra syscall per file.
+            if entry.path_is_symlink() || !entry.file_type().is_file() {
                 return false;
             }
             // If extensions list is non-empty, filter by them
@@ -300,7 +302,9 @@ fn scan_directory(
                 .to_string()
                 .replace('\\', "/");
 
-            let metadata = std::fs::metadata(path).ok()?;
+            // WalkDir's metadata (cached from the listing on Windows) rather than
+            // a fresh stat per file.
+            let metadata = entry.metadata().ok()?;
             let file_size = metadata.len();
 
             let modified = metadata
@@ -775,6 +779,15 @@ pub async fn toggle_mod(
         Some(new_rel) => {
             // Tags are keyed by path; without this a toggle silently dropped them.
             crate::commands::tags::move_tags(&game_id, &relative_path.replace('\\', "/"), &new_rel);
+            // Keep the manifest current without a full rescan (the frontend
+            // patches its copy the same way; the watcher rescans afterwards).
+            let mut app_state = state.lock().await;
+            if app_state.active_game == game_id {
+                if let Some(mut info) = app_state.local_manifest.files.remove(&relative_path.replace('\\', "/")) {
+                    info.relative_path = new_rel.clone();
+                    app_state.local_manifest.files.insert(new_rel.clone(), info);
+                }
+            }
             Ok(new_rel)
         }
         // Already in the requested state; nothing to move.

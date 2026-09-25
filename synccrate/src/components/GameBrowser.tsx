@@ -4,7 +4,10 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
-import { toastSuccess } from "../lib/toast";
+import { toastError, toastSuccess } from "../lib/toast";
+import { open } from "@tauri-apps/plugin-shell";
+
+const REQUEST_GAME_URL = "https://github.com/stixez/synccrate/issues/new?template=game_request.md";
 import { genreLabel } from "../lib/games";
 import { isDemoMode } from "../lib/demoData";
 import type { GameDefinition } from "../lib/types";
@@ -153,6 +156,7 @@ export default function GameBrowser() {
       toastSuccess("Game added to library");
     } catch (e) {
       addLog(`Failed to add game: ${e}`, "error");
+      toastError(`Couldn't add the game: ${e}`);
     }
   };
 
@@ -163,6 +167,7 @@ export default function GameBrowser() {
       addLog(`Removed ${gameRegistry.find((g) => g.id === gameId)?.label} from library`, "info");
     } catch (e) {
       addLog(`Failed to remove game: ${e}`, "error");
+      toastError(`Couldn't remove the game: ${e}`);
     }
   };
 
@@ -296,7 +301,14 @@ export default function GameBrowser() {
               ? <>Nothing called "{search}". Try the series name, e.g. "sims" or "minecraft".</>
               : "Try another genre or status."
           }
-          action={<Button size="sm" onClick={clearFilters}>Clear filters</Button>}
+          action={
+            <div className="flex gap-2">
+              <Button size="sm" onClick={clearFilters}>Clear filters</Button>
+              <Button size="sm" variant="ghost" onClick={() => open(REQUEST_GAME_URL).catch(() => {})}>
+                Request this game
+              </Button>
+            </div>
+          }
         />
       )}
     </div>

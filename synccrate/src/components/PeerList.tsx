@@ -4,6 +4,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { formatBytes } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { useLogStore } from "../stores/useLogStore";
+import { toastError } from "../lib/toast";
 import { Badge, LiveDot, Panel, ProgressBar, cx } from "./ui";
 
 const PACK_TYPE_LABELS: Record<string, string> = {
@@ -25,18 +26,19 @@ export default function PeerList() {
   const handleKick = async (peerId: string, peerName: string) => {
     try {
       await cmd.disconnectPeer(peerId);
-      addLog(`Kicked peer: ${peerName}`, "info");
+      addLog(`Removed ${peerName} from the session`, "info");
     } catch (e) {
-      addLog(`Failed to kick peer: ${e}`, "error");
+      addLog(`Couldn't remove ${peerName}: ${e}`, "error");
+      toastError(`Couldn't remove ${peerName}: ${e}`);
     }
   };
 
   if (!session || session.peers.length === 0) {
     return (
-      <Panel label="// Crew" title="Connected peers" icon={<Users size={15} className="text-txt-muted" />}>
+      <Panel label="// Session" title="Who's connected" icon={<Users size={15} className="text-txt-muted" />}>
         <p className="font-mono text-[11px] text-txt-muted flex items-center gap-2">
           <LiveDot tone="idle" />
-          No peers connected yet
+          {isHost ? "Nobody has joined yet. Send your join code (above) to a friend and they'll show up here." : "Not connected yet."}
         </p>
       </Panel>
     );
@@ -48,8 +50,8 @@ export default function PeerList() {
 
   return (
     <Panel
-      label="// Crew"
-      title="Connected peers"
+      label="// Session"
+      title="Who's connected"
       icon={<Users size={15} className="text-neon" />}
       actions={<Badge tone="neon" dot>{session.peers.length} online</Badge>}
       bodyClassName="!px-0 !pb-0"
@@ -100,8 +102,8 @@ export default function PeerList() {
                 {isHost && (
                   <button
                     onClick={() => handleKick(peer.id, peer.name)}
-                    title="Kick peer"
-                    aria-label={`Kick ${peer.name}`}
+                    title="Remove from session"
+                    aria-label={`Remove ${peer.name} from the session`}
                     className="ml-1 w-7 h-7 grid place-items-center border border-transparent text-txt-muted hover:text-status-red hover:border-status-red/50 hover:bg-status-red/10 transition-colors"
                   >
                     <X size={14} />

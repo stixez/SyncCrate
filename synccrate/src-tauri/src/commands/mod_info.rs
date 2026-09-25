@@ -10,6 +10,18 @@ use tokio::sync::Mutex;
 /// only read when a row actually shows one. Keyed by mod key; cleared when
 /// the game folder changes.
 static ICONS: std::sync::Mutex<Option<(String, HashMap<String, IconRef>)>> = std::sync::Mutex::new(None);
+/// Last metadata result: (game folder, manifest signature, metas).
+static METAS: std::sync::Mutex<Option<(String, u64, Vec<ModMeta>)>> = std::sync::Mutex::new(None);
+
+/// Changes when any file is added, removed, resized or touched.
+fn manifest_signature(m: &crate::state::FileManifest) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut keys: Vec<(&String, u64, u64)> = m.files.iter().map(|(k, f)| (k, f.size, f.modified)).collect();
+    keys.sort();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    keys.hash(&mut h);
+    h.finish()
+}
 
 /// Metadata for the active game's scanned files. Other games return nothing:
 /// only the active game has a current manifest.
@@ -19,16 +31,24 @@ pub async fn get_mod_metadata(state: tauri::State<'_, Arc<Mutex<AppState>>>, gam
 }
 
 pub(crate) async fn get_mod_metadata_inner(state: &Arc<Mutex<AppState>>, game: &str) -> Result<Vec<ModMeta>, String> {
-    let (base, files) = {
+    let (base, files, signature) = {
         let s = state.lock().await;
         if s.active_game != game {
             return Ok(Vec::new());
         }
         let base = s.active_game_path()?;
-        (base, s.local_manifest.files.keys().cloned().collect::<Vec<_>>())
+        let signature = manifest_signature(&s.local_manifest);
+        (base, s.local_manifest.files.keys().cloned().collect::<Vec<_>>(), signature)
     };
+    // The Content page asks after every rescan; with an unchanged file list
+    // the answer is the same, and probing every folder (and opening every
+    // jar) again was the bulk of the work on big mod folders.
+    if let Some(cached) = METAS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|c| c.0 == base && c.1 == signature) {
+        return Ok(cached.2.clone());
+    }
     let b = base.clone();
     let metas = tokio::task::spawn_blocking(move || mod_meta::extract(&b, &files)).await.map_err(|e| e.to_string())?;
+    *METAS.lock().unwrap_or_else(|e| e.into_inner()) = Some((base.clone(), signature, metas.clone()));
     let icons = metas.iter().filter(|m| m.has_icon).map(|m| (m.key.clone(), m.icon.clone())).collect();
     *ICONS.lock().unwrap_or_else(|e| e.into_inner()) = Some((base, icons));
     Ok(metas)

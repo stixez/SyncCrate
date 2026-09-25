@@ -216,10 +216,12 @@ pub fn compute_diff(local: &FileManifest, remote: &FileManifest) -> SyncPlan {
     }
 
     // Files in local but not in remote → send
-    let mut local_only: Vec<&FileInfo> = local
-        .files
-        .values()
-        .filter(|l| !remote_by_key.contains_key(&match_key(&l.relative_path)))
+    // Reuse the keys computed above: match_key allocates per path segment,
+    // and running it a second time over 50k local files showed up.
+    let mut local_only: Vec<&FileInfo> = local_by_key
+        .iter()
+        .filter(|(key, _)| !remote_by_key.contains_key(*key))
+        .flat_map(|(_, infos)| infos.iter().copied())
         .collect();
     local_only.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     for local_info in local_only {
@@ -460,6 +462,30 @@ mod tests {
             must_contain: None,
             exclude_files: vec!["ReShade.ini".to_string()],
         }
+    }
+
+    /// Big Sims 4 folders reach 50k+ files; the diff runs on every Compare
+    /// and on each Stay-in-sync poll, so it must stay linear.
+    #[test]
+    fn test_diff_50k_files_is_fast_and_correct() {
+        let n = 50_000;
+        let local = make_manifest((0..n).map(|i| make_file(&format!("Mods/sub{}/m{i}.package", i % 97), &format!("h{i}"), 10)).collect());
+        // Remote: the same files, every 50th changed, plus 500 new ones.
+        let remote = make_manifest(
+            (0..n)
+                .map(|i| make_file(&format!("Mods/sub{}/m{i}.package", i % 97), &if i % 50 == 0 { format!("x{i}") } else { format!("h{i}") }, 10))
+                .chain((0..500).map(|i| make_file(&format!("Mods/new/n{i}.package"), &format!("n{i}"), 10)))
+                .collect(),
+        );
+        let started = std::time::Instant::now();
+        let plan = compute_diff(&local, &remote);
+        let elapsed = started.elapsed();
+        let receives = plan.actions.iter().filter(|a| matches!(a, SyncAction::ReceiveFromRemote(_))).count();
+        let changed = plan.actions.iter().filter(|a| !matches!(a, SyncAction::ReceiveFromRemote(_))).count();
+        assert_eq!(receives + changed, 500 + n / 50, "every new or changed file gets exactly one action");
+        assert!(receives >= 500);
+        // Generous for unoptimized test builds on slow CI; a quadratic pass takes minutes.
+        assert!(elapsed < std::time::Duration::from_secs(10), "diff took {elapsed:?}");
     }
 
     #[test]

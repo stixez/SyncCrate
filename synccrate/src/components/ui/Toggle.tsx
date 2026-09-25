@@ -11,9 +11,11 @@ export interface ToggleProps {
   /** "switch" (default) = sliding switch; "check" = square checkbox for dense lists. */
   kind?: "switch" | "check";
   className?: string;
+  /** Accessible name when there's no visible label. */
+  ariaLabel?: string;
 }
 
-export default function Toggle({ checked, onChange, label, description, disabled, kind = "switch", className }: ToggleProps) {
+export default function Toggle({ checked, onChange, label, description, disabled, kind = "switch", className, ariaLabel }: ToggleProps) {
   return (
     <label className={cx("flex items-start gap-2.5 select-none", disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer", className)}>
       {kind === "check" ? (
@@ -22,6 +24,7 @@ export default function Toggle({ checked, onChange, label, description, disabled
           className="check mt-[3px]"
           checked={checked}
           disabled={disabled}
+          aria-label={ariaLabel}
           onChange={(e) => onChange(e.target.checked)}
         />
       ) : (
@@ -32,6 +35,7 @@ export default function Toggle({ checked, onChange, label, description, disabled
             className="peer sr-only"
             checked={checked}
             disabled={disabled}
+            aria-label={ariaLabel}
             onChange={(e) => onChange(e.target.checked)}
           />
           <span

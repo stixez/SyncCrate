@@ -9,7 +9,7 @@ import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
 import { useStayInSync } from "../hooks/useStayInSync";
 import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadStayInSync, saveStayInSync } from "../lib/prefs";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, plural } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
@@ -282,7 +282,8 @@ export default function GameDashboard({ gameId }: Props) {
     return cards;
   }, [manifest, contentTypes]);
 
-  const handleScan = useCallback(async () => {
+  // `manual`: a button click (says how many files); automatic scans stay quiet.
+  const handleScan = useCallback(async (manual = true) => {
     setIsScanning(true);
     try {
       const m = await cmd.scanFiles(gameId);
@@ -290,7 +291,7 @@ export default function GameDashboard({ gameId }: Props) {
       if (useAppStore.getState().selectedGame !== gameId) return;
       setManifest(m);
       const count = Object.keys(m.files).length;
-      toastSuccess(`Scan complete \u2014 ${count} file(s) found`);
+      if (manual) toastSuccess(`Files refreshed: ${plural(count, "file")} found`);
     } catch (e) {
       addLog(`Scan failed: ${e}`, "error");
       toastError(`Scan failed: ${e}`);
@@ -300,7 +301,7 @@ export default function GameDashboard({ gameId }: Props) {
   }, [gameId, setIsScanning, setManifest, addLog]);
 
   useEffect(() => {
-    handleScan();
+    handleScan(false);
   }, [gameId]);
 
   const hasPacks = !!gameDef?.packs;
@@ -318,8 +319,8 @@ export default function GameDashboard({ gameId }: Props) {
               description="Host a session so friends can pull your files, or join a friend's. Join codes work on your network and over the internet."
               actions={
                 <>
-                  <Button size="sm" onClick={handleScan} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
-                    {isScanning ? "Scanning..." : "Scan Files"}
+                  <Button size="sm" onClick={() => handleScan()} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
+                    {isScanning ? "Refreshing..." : "Refresh files"}
                   </Button>
                   {gamePaths[gameId] && (
                     <Button size="sm" onClick={() => cmd.openFolder(gamePaths[gameId]!)} icon={<FolderOpen size={13} />}>
@@ -384,22 +385,22 @@ export default function GameDashboard({ gameId }: Props) {
         )}
 
         <Input
-          label="Your name"
+          label="Your name (friends see this)"
           value={hostName}
           onChange={(e) => setHostName(e.target.value.replace(/[^\w\s-]/g, "").slice(0, 32))}
           maxLength={32}
-          placeholder="Enter your name..."
+          placeholder="e.g. Alex"
           wrapperClassName="max-w-sm"
         />
 
         <div className="grid grid-cols-2 gap-4 items-start">
           <Panel label={<><b>01</b> &nbsp;Host</>} title="Host a session" icon={<Monitor size={16} className="text-neon" />}>
-            <p className="text-txt-dim text-sm mb-5">Friends pull your files. You decide which folders are shared.</p>
+            <p className="text-txt-dim text-sm mb-5">Friends download a copy of your files; yours are never changed. You decide which folders are shared.</p>
             <Toggle
               checked={usePin}
               onChange={setUsePin}
               label="Require PIN to join"
-              description={usePin ? "Friends need the PIN shown after you start hosting. Your join code and join link include it; crew invites never do." : "Anyone with your code, or an old invite, can join and pull your files."}
+              description={usePin ? "Friends who use your join code or join link get in automatically (it includes the PIN). Anyone who finds you by network scan or IP address has to type the 5-digit PIN shown after you start hosting." : "Anyone on your network, or anyone with your code, can join and download your files."}
               className="mb-5"
             />
             <div className="mb-5">
@@ -428,7 +429,7 @@ export default function GameDashboard({ gameId }: Props) {
           </Panel>
 
           <Panel label={<><b>02</b> &nbsp;Join</>} title="Join a session" icon={<Users size={16} className="text-neon" />}>
-            <p className="text-txt-dim text-sm mb-4">Paste your friend's join code, or scan your network.</p>
+            <p className="text-txt-dim text-sm mb-4">Paste the code your friend sees after clicking Start Hosting (it starts with SC-), or scan for hosts on your Wi-Fi.</p>
             <div className="flex items-stretch gap-2 mb-2">
               <input
                 type="text"
@@ -553,8 +554,8 @@ export default function GameDashboard({ gameId }: Props) {
                 <p className="hud-label mb-1"><b>PIN</b> &nbsp;required</p>
                 <p className={cx("text-xs mb-2.5", pinPrompt.wrongPin ? "text-status-red" : "text-txt-dim")}>
                   {pinPrompt.wrongPin
-                    ? "That PIN was rejected. Ask the host for the PIN shown on their dashboard."
-                    : `${pinPrompt.attempt.label === "host" ? "The host" : pinPrompt.attempt.label} requires a PIN to join.`}
+                    ? "That PIN was rejected. It's the 5-digit number on the host's SyncCrate screen, next to their join code."
+                    : `${pinPrompt.attempt.label === "host" ? "The host" : pinPrompt.attempt.label} uses a PIN. It's the 5-digit number on their SyncCrate screen, next to the join code.`}
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -704,8 +705,8 @@ export default function GameDashboard({ gameId }: Props) {
         title={gameLabel}
         actions={
           <>
-            <Button size="sm" onClick={handleScan} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
-              Scan Files
+            <Button size="sm" onClick={() => handleScan()} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
+              Refresh files
             </Button>
             {gamePaths[gameId] && (
               <Button size="sm" onClick={() => cmd.openFolder(gamePaths[gameId]!)} icon={<FolderOpen size={13} />}>
@@ -827,6 +828,7 @@ export default function GameDashboard({ gameId }: Props) {
               onClick={() => {
                 navigator.clipboard.writeText(`${ip}:${session.port}`);
                 addLog(`Copied ${ip}:${session.port} to clipboard`, "info");
+                toastSuccess(`Copied ${ip}:${session.port}`);
               }}
               className="group flex items-center gap-2 h-7 px-2.5 bg-bg-card border border-border hover:border-neon/60 font-mono text-xs transition-colors"
               title="Click to copy"
@@ -905,7 +907,7 @@ export default function GameDashboard({ gameId }: Props) {
             return gameDef.dangerous_script_extensions.includes(ext);
           }) && (
             <Banner tone="warn" icon={<AlertTriangle size={16} />}>
-              <span className="text-[13px] text-amber">This sync includes script files. Only sync from peers you trust.</span>
+              <span className="text-[13px] text-amber">This sync includes script files. Only sync with people you trust.</span>
             </Banner>
           )}
           {!!syncPlan.resumed_files && syncPlan.resumed_files > 0 && (
@@ -917,7 +919,9 @@ export default function GameDashboard({ gameId }: Props) {
         </section>
       )}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
-        <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync" />
+        <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
+          You have everything the host shares. Turn on Stay in sync to get their new mods automatically.
+        </Banner>
       )}
 
       {hasPacks && (
