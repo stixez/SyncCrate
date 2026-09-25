@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, ArrowUpDown, Copy, Link2, Loader2, Save as SaveIcon, Share2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, CheckCheck, Copy, Link2, Loader2, RotateCcw, Save as SaveIcon, Share2, Upload, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Banner, Button, EmptyState, Input, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { getGameDef, gameLabel } from "../lib/games";
 import { formatBytes, formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
-import { toastError, toastSuccess } from "../lib/toast";
-import type { ModPack, PackComparison, PackFileStatus } from "../lib/types";
+import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { runPackApply } from "../lib/packApply";
+import type { ModPack, PackApplyPreview, PackApplyStatus, PackComparison, PackFileStatus } from "../lib/types";
 
 interface Props {
   gameId: string;
@@ -51,9 +52,29 @@ export default function ModpackList({ gameId }: Props) {
   const [switching, setSwitching] = useState(false);
   const [gettingFiles, setGettingFiles] = useState(false);
 
+  // Apply pack exactly
+  const [applyPreview, setApplyPreview] = useState<PackApplyPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyStatus, setApplyStatus] = useState<PackApplyStatus | null>(null);
+  const [revertConfirm, setRevertConfirm] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const setPendingPackApply = useAppStore((s) => s.setPendingPackApply);
+
+  const refreshApplyStatus = () => {
+    cmd.getPackApplyStatus(gameId).then(setApplyStatus).catch(() => setApplyStatus(null));
+  };
+
+  useEffect(() => {
+    setRevertConfirm(false);
+    refreshApplyStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
+
   const runComparison = async (pack: ModPack) => {
     setImportedPack(pack);
     setComparison(null);
+    setApplyPreview(null);
     setComparing(true);
     try {
       const cmp = await cmd.comparePack(pack);
@@ -198,6 +219,7 @@ export default function ModpackList({ gameId }: Props) {
       return;
     }
     setGettingFiles(true);
+    setPendingPackApply(null);
     try {
       const plan = await cmd.computePackSyncPlan(importedPack);
       setSyncPlan(plan);
@@ -217,6 +239,74 @@ export default function ModpackList({ gameId }: Props) {
   const closeImport = () => {
     setImportedPack(null);
     setComparison(null);
+    setApplyPreview(null);
+  };
+
+  const handlePreviewApply = async () => {
+    if (!importedPack) return;
+    setPreviewing(true);
+    try {
+      setApplyPreview(await cmd.previewPackApply(importedPack));
+    } catch (e) {
+      toastError(`Couldn't preview: ${e}`);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  // Downloads and conflicts go through the normal pack sync first; the
+  // sync-complete handler then runs the rename step, only if it was clean.
+  const handleConfirmApply = async () => {
+    if (!importedPack || !applyPreview) return;
+    const needsHost = applyPreview.to_download.length + applyPreview.conflicts.length > 0;
+    if (needsHost && session?.session_type !== "Client") {
+      toastError("Some pack files need downloading. Connect to a host first (Dashboard → Join), then apply again.");
+      return;
+    }
+    setApplying(true);
+    try {
+      if (needsHost) {
+        const plan = await cmd.computePackSyncPlan(importedPack);
+        setSyncPlan(plan);
+        setPendingPackApply({ pack: importedPack, preview: applyPreview });
+        addLog(
+          `Applying pack "${importedPack.name}": step 1 gets ${plan.actions.length} file(s). Mods are disabled/re-enabled after the sync finishes without errors.`,
+          "info",
+        );
+        setApplyPreview(null);
+        setPage("dashboard");
+      } else if (await runPackApply(importedPack, applyPreview)) {
+        setApplyPreview(null);
+        refreshApplyStatus();
+        runComparison(importedPack);
+      }
+    } catch (e) {
+      toastError(`Couldn't prepare the sync: ${e}`);
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleRevert = async () => {
+    setRevertConfirm(false);
+    setReverting(true);
+    try {
+      const r = await cmd.revertPackApply(gameId);
+      const summary = `${r.reverted} file(s) put back${r.skipped.length ? `, ${r.skipped.length} skipped` : ""}`;
+      addLog(`Pack apply reverted: ${summary}`, r.skipped.length ? "warning" : "success");
+      for (const s of r.skipped) addLog(`  Skipped ${s.relative_path}: ${s.reason}`, "warning");
+      if (r.skipped.length) toastInfo(`Reverted: ${summary}. See the activity log.`);
+      else toastSuccess(`Reverted: ${summary}`);
+      try {
+        useAppStore.getState().setManifest(await cmd.scanFiles(gameId));
+      } catch {}
+      if (importedPack) runComparison(importedPack);
+    } catch (e) {
+      toastError(`Revert failed: ${e}`);
+    } finally {
+      setReverting(false);
+      refreshApplyStatus();
+    }
   };
 
   return (
@@ -352,6 +442,15 @@ export default function ModpackList({ gameId }: Props) {
                   {gettingFiles ? "Preparing..." : "Get Missing Files From a Host"}
                 </Button>
               )}
+              <Button
+                variant="secondary"
+                className={cx("mt-4", (comparison.missing.length > 0 || comparison.different.length > 0) && "ml-2")}
+                onClick={handlePreviewApply}
+                disabled={previewing || applying}
+                icon={previewing ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
+              >
+                {previewing ? "Checking..." : "Apply Pack Exactly"}
+              </Button>
               {session?.session_type !== "Client" && (
                 <p className="text-[11px] text-txt-muted mt-2">
                   Connect to whoever's sharing this pack first (Dashboard → Join), then come back here.
@@ -360,6 +459,94 @@ export default function ModpackList({ gameId }: Props) {
             </>
           )}
         </Panel>
+      )}
+
+      {importedPack && applyPreview && !applyPreview.wrong_game && (
+        <Panel
+          tone={applyPreview.available ? "accent" : "warn"}
+          brackets
+          label={<><b>// Preview</b> &nbsp;Apply pack exactly</>}
+          title={applyPreview.pack_name}
+          actions={
+            <Button size="sm" variant="ghost" onClick={() => setApplyPreview(null)} icon={<X size={13} />}>
+              Cancel
+            </Button>
+          }
+        >
+          {!applyPreview.available ? (
+            <Banner tone="warn" icon={<AlertTriangle size={14} />} title="Apply exactly isn't available here">
+              <p className="text-xs">{applyPreview.unavailable_reason}</p>
+              <p className="text-xs mt-1">Get Missing Files still works.</p>
+            </Banner>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatTile value={applyPreview.to_download.length} label="To download" />
+                <StatTile value={applyPreview.conflicts.length} label="Conflicts" className={applyPreview.conflicts.length ? "[&_p]:text-amber" : undefined} />
+                <StatTile value={applyPreview.to_enable.length} label="To re-enable" />
+                <StatTile value={applyPreview.to_disable.length} label="To disable" className={applyPreview.to_disable.length ? "[&_p]:text-amber" : undefined} />
+              </div>
+
+              {applyPreview.to_download.length + applyPreview.conflicts.length + applyPreview.to_enable.length + applyPreview.to_disable.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  {applyPreview.to_download.length > 0 && <FileGroupBox title="Download" tone="neutral" entries={applyPreview.to_download} />}
+                  {applyPreview.conflicts.length > 0 && <FileGroupBox title="Conflicts (you choose)" tone="amber" entries={applyPreview.conflicts} />}
+                  {applyPreview.to_enable.length > 0 && <FileGroupBox title="Re-enable" tone="green" entries={applyPreview.to_enable} />}
+                  {applyPreview.to_disable.length > 0 && <FileGroupBox title="Disable (not in the pack)" tone="amber" entries={applyPreview.to_disable} />}
+                </div>
+              )}
+
+              {applyPreview.blocked.length > 0 && (
+                <Banner tone="warn" icon={<AlertTriangle size={14} />} title={`${applyPreview.blocked.length} disabled pack file(s) can't be re-enabled`}>
+                  {applyPreview.blocked.slice(0, 5).map((b) => (
+                    <p key={b.relative_path} className="text-[11px] font-mono truncate">{b.relative_path.split("/").pop()}: {b.reason}</p>
+                  ))}
+                </Banner>
+              )}
+
+              <p className="text-[11px] text-txt-muted mt-3">
+                Nothing is deleted: mods that aren't in the pack are disabled, and saves and other content are never touched.
+                Downloads and conflicts run as a normal sync first; mods are disabled and re-enabled only if that sync finishes
+                without errors. <b>Revert Pack Apply</b> undoes the disabling and re-enabling; downloaded files are undone
+                with <b>Undo Last Sync</b> on the Backups page.
+              </p>
+              <Button
+                variant="primary"
+                className="mt-3"
+                onClick={handleConfirmApply}
+                disabled={applying}
+                icon={applying ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
+              >
+                {applying ? "Applying..." : applyPreview.to_download.length + applyPreview.conflicts.length > 0 ? "Confirm: Sync, Then Apply" : "Confirm & Apply"}
+              </Button>
+            </>
+          )}
+        </Panel>
+      )}
+
+      {applyStatus && (
+        <Banner
+          tone="info"
+          icon={<RotateCcw size={14} />}
+          title={`Last pack applied: ${applyStatus.pack_name} (${formatDate(applyStatus.created_at)})`}
+          actions={
+            revertConfirm ? (
+              <div className="flex gap-2">
+                <Button size="sm" variant="danger" onClick={handleRevert}>Revert Now</Button>
+                <Button size="sm" variant="ghost" onClick={() => setRevertConfirm(false)}>Keep</Button>
+              </div>
+            ) : (
+              <Button size="sm" onClick={() => setRevertConfirm(true)} disabled={reverting} icon={reverting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}>
+                {reverting ? "Reverting..." : "Revert Pack Apply"}
+              </Button>
+            )
+          }
+        >
+          <p className="text-xs">
+            {applyStatus.disabled} disabled, {applyStatus.enabled} re-enabled. Revert puts exactly those files back (anything you
+            moved since is skipped). Files the pack downloaded stay; use Undo Last Sync on the Backups page for those.
+          </p>
+        </Banner>
       )}
 
       {!importedPack && !exportedPack && (
@@ -374,11 +561,11 @@ export default function ModpackList({ gameId }: Props) {
   );
 }
 
-function FileGroupBox({ title, tone, entries }: { title: string; tone: "red" | "amber"; entries: PackFileStatus[] }) {
+function FileGroupBox({ title, tone, entries }: { title: string; tone: "red" | "amber" | "green" | "neutral"; entries: PackFileStatus[] }) {
   const groups = groupByContentType(entries);
   return (
     <div className="bg-bg border border-border">
-      <p className={cx("hud-label px-3 py-2 border-b border-border", tone === "red" ? "!text-status-red" : "!text-amber")}>{title}</p>
+      <p className={cx("hud-label px-3 py-2 border-b border-border", tone === "red" ? "!text-status-red" : tone === "amber" ? "!text-amber" : tone === "green" ? "!text-status-green" : "!text-txt-dim")}>{title}</p>
       <div className="max-h-40 overflow-y-auto px-3 py-2 space-y-1.5">
         {groups.map(([type, files]) => (
           <div key={type}>

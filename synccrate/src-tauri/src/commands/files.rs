@@ -342,7 +342,7 @@ fn scan_directory(
     files
 }
 
-fn compute_file_hash(path: &std::path::Path) -> Result<String, String> {
+pub(crate) fn compute_file_hash(path: &std::path::Path) -> Result<String, String> {
     use std::io::Read;
     let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let mut reader = std::io::BufReader::with_capacity(131072, file);
@@ -757,10 +757,7 @@ pub async fn toggle_mod(
         let def = get_game_def(&app_state.game_registry, &game_id);
         let method = def.and_then(|d| d.disable_method.as_deref());
         if method == Some("none") {
-            return Err(format!(
-                "{} loads every subfolder and its mods are folders, so single files can't be disabled safely. Move the mod's folder out of the game to disable it.",
-                app_state.game_label(&game_id)
-            ));
+            return Err(disable_unsupported_message(&app_state.game_label(&game_id)));
         }
         let folder = def
             .and_then(|d| d.content_types.first())
@@ -769,12 +766,44 @@ pub async fn toggle_mod(
         (game_id, base, folder, method == Some("rename"))
     };
 
-    let full_path = utils::safe_join(&base, &relative_path)?;
+    match toggle_file(&base, &first_content_folder, &relative_path, enabled, rename_method)? {
+        Some(new_rel) => {
+            // Tags are keyed by path; without this a toggle silently dropped them.
+            crate::commands::tags::move_tags(&game_id, &relative_path.replace('\\', "/"), &new_rel);
+            Ok(new_rel)
+        }
+        // Already in the requested state; nothing to move.
+        None => Ok(relative_path.replace('\\', "/")),
+    }
+}
+
+/// Why a `disable_method: "none"` game can't disable single files. Shared
+/// with "apply pack exactly" so both explain it the same way.
+pub(crate) fn disable_unsupported_message(game_label: &str) -> String {
+    format!(
+        "{} loads every subfolder and its mods are folders, so single files can't be disabled safely. Move the mod's folder out of the game to disable it.",
+        game_label
+    )
+}
+
+/// The file move behind `toggle_mod`, shared with "apply pack exactly"
+/// (`commands::pack_apply`) so both disable/enable the same way. Returns the
+/// new relative path, or `None` when the file is already in the requested
+/// state. Never overwrites: an existing target is an error. Tags are left to
+/// the caller.
+pub(crate) fn toggle_file(
+    base: &str,
+    first_content_folder: &str,
+    relative_path: &str,
+    enabled: bool,
+    rename_method: bool,
+) -> Result<Option<String>, String> {
+    let full_path = utils::safe_join(base, relative_path)?;
     if !full_path.exists() {
         return Err("File not found".into());
     }
 
-    let mods_dir = std::path::PathBuf::from(&base).join(&first_content_folder);
+    let mods_dir = std::path::PathBuf::from(base).join(first_content_folder);
     // Also validates the file is inside the mods folder, and handles files left
     // in a legacy `_Disabled/` folder.
     let folder_dest = toggle_destination(&mods_dir, &full_path, enabled)?;
@@ -783,13 +812,7 @@ pub async fn toggle_mod(
     } else {
         folder_dest
     };
-    let dest = match dest {
-        Some(d) => d,
-        None => {
-            // Already in the requested state; nothing to move.
-            return Ok(relative_path.replace('\\', "/"));
-        }
-    };
+    let Some(dest) = dest else { return Ok(None) };
 
     if dest.exists() {
         return Err(if enabled {
@@ -805,16 +828,14 @@ pub async fn toggle_mod(
     }
     std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
 
-    let base_canonical = utils::clean_path(std::fs::canonicalize(&base).map_err(|e| e.to_string())?);
+    let base_canonical = utils::clean_path(std::fs::canonicalize(base).map_err(|e| e.to_string())?);
     let dest_clean = utils::clean_path(dest.clone());
     let new_rel = dest_clean
         .strip_prefix(&base_canonical)
         .unwrap_or(&dest_clean)
         .to_string_lossy()
         .replace('\\', "/");
-    // Tags are keyed by path; without this a toggle silently dropped them.
-    crate::commands::tags::move_tags(&game_id, &relative_path.replace('\\', "/"), &new_rel);
-    Ok(new_rel)
+    Ok(Some(new_rel))
 }
 
 /// Destination for games that disable by renaming (`x.package` <->

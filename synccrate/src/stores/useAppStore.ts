@@ -15,6 +15,7 @@ import type {
   SyncProgress,
   UndoStatus,
   ModPack,
+  PackApplyPreview,
 } from "../lib/types";
 import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, type Appearance, type ThemeMode } from "../lib/prefs";
 import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
@@ -122,6 +123,10 @@ interface AppState {
    * (`useOpenIntents`); ModpackList compares it and clears it. */
   pendingImportPack: ModPack | null;
   setPendingImportPack: (pack: ModPack | null) => void;
+  /** "Apply pack exactly" waiting on its download: the next clean
+   * sync-complete runs the disable/re-enable step (`useTauriEvents`). */
+  pendingPackApply: { pack: ModPack; preview: PackApplyPreview } | null;
+  setPendingPackApply: (p: { pack: ModPack; preview: PackApplyPreview } | null) => void;
   /** Join code from a clicked invite link; the dashboard fills its join box. */
   pendingJoinCode: string | null;
   setPendingJoinCode: (code: string | null) => void;
@@ -266,6 +271,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),
   pendingImportPack: null,
   setPendingImportPack: (pendingImportPack) => set({ pendingImportPack }),
+  pendingPackApply: null,
+  setPendingPackApply: (pendingPackApply) => set({ pendingPackApply }),
   pendingJoinCode: null,
   setPendingJoinCode: (pendingJoinCode) => set({ pendingJoinCode }),
 

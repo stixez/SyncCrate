@@ -71,6 +71,18 @@ pub(crate) fn move_tags(game: &str, from: &str, to: &str) {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn set_tags_for_test(game: &str, path: &str, tags: &[&str]) {
+    let mut store = load_for(game);
+    store.games.entry(game.to_string()).or_default().insert(path.to_string(), tags.iter().map(|t| t.to_string()).collect());
+    write_store(&store).unwrap();
+}
+
+#[cfg(test)]
+pub(crate) fn tags_for_test(game: &str, path: &str) -> Vec<String> {
+    read_store().games.get(game).and_then(|m| m.get(path)).cloned().unwrap_or_default()
+}
+
 fn move_tags_in(store: &mut ModMetadataStore, game: &str, from: &str, to: &str) -> bool {
     let Some(map) = store.games.get_mut(game) else { return false };
     match map.remove(from) {

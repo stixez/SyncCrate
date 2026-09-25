@@ -1272,3 +1272,264 @@ async fn join_link_leads_to_normal_connect_and_writes_nothing_tcp() {
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);
 }
+
+// ---------------------------------------------------------------------------
+// Apply pack exactly
+
+use crate::commands::pack_apply;
+
+async fn preview_apply(state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>, pack: &crate::state::ModPack) -> pack_apply::PackApplyPreview {
+    pack_apply::preview_pack_apply_inner(state, pack.clone()).await.expect("preview")
+}
+
+fn rels(items: &[pack_apply::ApplyItem]) -> Vec<&str> {
+    items.iter().map(|i| i.relative_path.as_str()).collect()
+}
+
+fn mtime_of(base: &std::path::Path, rel: &str) -> std::time::SystemTime {
+    std::fs::metadata(base.join(rel)).unwrap().modified().unwrap()
+}
+
+/// Client folder with pack files, a missing pack file, an extra mod, an extra
+/// save and a disabled copy of a pack file. Returns (host, client, pack).
+fn exact_fixture(label: &str) -> (std::path::PathBuf, std::path::PathBuf, crate::state::ModPack) {
+    let host_dir = temp_dir(&format!("{label}-host"));
+    let client_dir = temp_dir(&format!("{label}-client"));
+    for (p, c) in [("Mods/a.package", &b"AAAA"[..]), ("Mods/b.package", b"BBBB"), ("Mods/CC/c.package", b"CCCC")] {
+        write_file(&host_dir, p, c);
+    }
+    write_file(&client_dir, "Mods/a.package", b"AAAA");
+    write_file(&client_dir, "Mods/cc/C.package.disabled", b"CCCC");
+    write_file(&client_dir, "Mods/extra.package", b"MINE");
+    write_file(&client_dir, "Saves/Slot_00000001.save", b"SAVE");
+    let pack = test_pack("sims4", &[("Mods/a.package", b"AAAA"), ("Mods/b.package", b"BBBB"), ("Mods/CC/c.package", b"CCCC")]);
+    (host_dir, client_dir, pack)
+}
+
+async fn apply_exact_flow(client_state: &std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>, client_dir: &std::path::Path, pack: crate::state::ModPack) {
+    crate::commands::tags::set_tags_for_test("sims4", "Mods/extra.package", &["mine"]);
+    let preview = preview_apply(client_state, &pack).await;
+    assert!(preview.available, "{:?}", preview.unavailable_reason);
+    assert_eq!(preview.to_download.len(), 1);
+    assert_eq!(preview.to_download[0].relative_path, "Mods/b.package");
+    assert!(preview.conflicts.is_empty());
+    assert_eq!(rels(&preview.to_enable), ["Mods/cc/C.package.disabled"]);
+    assert_eq!(rels(&preview.to_disable), ["Mods/extra.package"], "the save is out of scope");
+
+    // Download step not done yet: the rename step refuses and touches nothing.
+    let err = pack_apply::apply_pack_exact_inner(client_state, pack.clone(), preview.clone()).await.expect_err("missing files");
+    assert!(err.contains("still missing"), "unexpected error: {err}");
+    assert!(file_exists(client_dir, "Mods/extra.package"));
+
+    pack_plan(client_state, pack.clone()).await.expect("pack plan");
+    run_sync_now(client_state).await.expect("sync");
+    let result = pack_apply::apply_pack_exact_inner(client_state, pack, preview).await.expect("apply");
+    assert_eq!((result.enabled, result.disabled), (1, 1));
+    assert!(result.skipped.is_empty(), "{:?}", result.skipped);
+
+    assert_eq!(read_file(client_dir, "Mods/b.package"), b"BBBB", "missing file arrived");
+    assert_eq!(read_file(client_dir, "Mods/extra.package.disabled"), b"MINE", "extra disabled, not deleted");
+    assert!(!file_exists(client_dir, "Mods/extra.package"));
+    assert_eq!(read_file(client_dir, "Saves/Slot_00000001.save"), b"SAVE", "save untouched");
+    assert_eq!(read_file(client_dir, "Mods/cc/C.package"), b"CCCC", "pack file re-enabled");
+    assert_eq!(crate::commands::tags::tags_for_test("sims4", "Mods/extra.package.disabled"), ["mine"], "tags follow the file");
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_tcp() {
+    let _g = e2e_guard().await;
+    let (host_dir, client_dir, pack) = exact_fixture("exact");
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    apply_exact_flow(&client_state, &client_dir, pack).await;
+    pack_apply::delete_record("sims4");
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_iroh() {
+    let _g = e2e_guard().await;
+    let (host_dir, client_dir, pack) = exact_fixture("exact-iroh");
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let (host_ep, client_ep) = iroh_pair().await;
+    tokio::spawn(serve_one_iroh_connection(host_ep.clone(), host_state));
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_iroh(client_ep, &host_ep, client_state.clone(), &peer_id).await.expect("iroh connect");
+
+    apply_exact_flow(&client_state, &client_dir, pack).await;
+    pack_apply::delete_record("sims4");
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_conflict_is_never_silently_overwritten_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("exact-conflict-host");
+    let client_dir = temp_dir("exact-conflict-client");
+    write_file(&host_dir, "Mods/a.package", b"PACK_CONTENT");
+    write_file(&client_dir, "Mods/a.package", b"MY_OWN_CONTENT");
+    let pack = test_pack("sims4", &[("Mods/a.package", b"PACK_CONTENT")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    let preview = preview_apply(&client_state, &pack).await;
+    assert_eq!(preview.conflicts.len(), 1);
+    assert!(preview.to_disable.is_empty() && preview.to_enable.is_empty(), "a differing pack file is a conflict, not an extra");
+    let plan = pack_plan(&client_state, pack.clone()).await.expect("pack plan");
+    assert!(matches!(&plan.actions[0], SyncAction::Conflict { .. }));
+    run_sync_now(&client_state).await.expect_err("unresolved conflicts must refuse to sync");
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"MY_OWN_CONTENT");
+
+    // "Keep mine" leaves it different; the rename step still never touches it.
+    let result = pack_apply::apply_pack_exact_inner(&client_state, pack, preview).await.expect("apply");
+    assert_eq!((result.enabled, result.disabled), (0, 0));
+    assert_eq!(read_file(&client_dir, "Mods/a.package"), b"MY_OWN_CONTENT");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn revert_pack_apply_restores_renames_and_reports_moved_files() {
+    let _g = e2e_guard().await;
+    let dir = temp_dir("exact-revert");
+    write_file_mtime(&dir, "Mods/a.package", b"AAAA", 1_600_000_000);
+    write_file_mtime(&dir, "Mods/Sub/x.package", b"XXXX", 1_600_000_100);
+    write_file_mtime(&dir, "Mods/y.package", b"YYYY", 1_600_000_200);
+    write_file_mtime(&dir, "Mods/c.package.disabled", b"CCCC", 1_600_000_300);
+    let pack = test_pack("sims4", &[("Mods/a.package", b"AAAA"), ("Mods/c.package", b"CCCC")]);
+    let before: Vec<_> = ["Mods/Sub/x.package", "Mods/c.package.disabled"].iter().map(|p| mtime_of(&dir, p)).collect();
+
+    // Nothing to download, so no host is needed at all.
+    let state = make_state("sims4", &dir);
+    let preview = preview_apply(&state, &pack).await;
+    let result = pack_apply::apply_pack_exact_inner(&state, pack, preview).await.expect("apply");
+    assert_eq!((result.enabled, result.disabled), (1, 2));
+    let record = pack_apply::read_record("sims4").expect("apply record");
+    assert_eq!(record.moves.len(), 3);
+
+    // The user moves one disabled file elsewhere before reverting.
+    std::fs::rename(dir.join("Mods/y.package.disabled"), dir.join("Mods/y-moved.package.disabled")).unwrap();
+
+    let r = pack_apply::revert_pack_apply_inner(&state, None).await.expect("revert");
+    assert_eq!(r.reverted, 2);
+    assert_eq!(r.skipped.len(), 1);
+    assert_eq!(r.skipped[0].relative_path, "Mods/y.package.disabled");
+    assert_eq!(read_file(&dir, "Mods/Sub/x.package"), b"XXXX");
+    assert_eq!(read_file(&dir, "Mods/c.package.disabled"), b"CCCC");
+    assert!(!file_exists(&dir, "Mods/c.package"));
+    let after: Vec<_> = ["Mods/Sub/x.package", "Mods/c.package.disabled"].iter().map(|p| mtime_of(&dir, p)).collect();
+    assert_eq!(before, after, "renames keep mtimes");
+    assert!(file_exists(&dir, "Mods/y-moved.package.disabled"), "the moved file stays where the user put it");
+    assert!(pack_apply::read_record("sims4").is_none(), "one revert per apply");
+    pack_apply::revert_pack_apply_inner(&state, None).await.expect_err("nothing left to revert");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_is_refused_for_games_that_cannot_disable() {
+    let _g = e2e_guard().await;
+    let dir = temp_dir("exact-none");
+    write_file(&dir, "Mods/ModA/manifest.json", b"A");
+    write_file(&dir, "Mods/Extra/manifest.json", b"E");
+    let pack = test_pack("stardew_valley", &[("Mods/ModA/manifest.json", b"A")]);
+    let state = make_state("stardew_valley", &dir);
+
+    let preview = preview_apply(&state, &pack).await;
+    assert!(!preview.available);
+    assert!(preview.unavailable_reason.as_deref().unwrap_or("").contains("can't be disabled"));
+    assert!(preview.to_disable.is_empty());
+    let err = pack_apply::apply_pack_exact_inner(&state, pack, preview).await.expect_err("refused");
+    assert!(err.contains("can't be disabled"), "unexpected error: {err}");
+    assert!(file_exists(&dir, "Mods/Extra/manifest.json"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_skips_a_disable_whose_target_exists() {
+    let _g = e2e_guard().await;
+    let dir = temp_dir("exact-taken");
+    write_file(&dir, "Mods/a.package", b"AAAA");
+    write_file(&dir, "Mods/extra.package", b"NEW");
+    write_file(&dir, "Mods/extra.package.disabled", b"OLD");
+    let pack = test_pack("sims4", &[("Mods/a.package", b"AAAA")]);
+    let state = make_state("sims4", &dir);
+
+    let preview = preview_apply(&state, &pack).await;
+    assert_eq!(rels(&preview.to_disable), ["Mods/extra.package"]);
+    let result = pack_apply::apply_pack_exact_inner(&state, pack, preview).await.expect("apply");
+    assert_eq!(result.disabled, 0);
+    assert_eq!(result.skipped.len(), 1);
+    assert_eq!(read_file(&dir, "Mods/extra.package"), b"NEW");
+    assert_eq!(read_file(&dir, "Mods/extra.package.disabled"), b"OLD", "never overwritten");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn apply_pack_exactly_refused_during_sync_hosting_restore_or_changed_folder_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("exact-guard-host");
+    let client_dir = temp_dir("exact-guard-client");
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+    write_file(&client_dir, "Mods/a.package", b"AAAA");
+    write_file(&client_dir, "Mods/extra.package", b"MINE");
+    let pack = test_pack("sims4", &[("Mods/a.package", b"AAAA")]);
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+    let preview = preview_apply(&client_state, &pack).await;
+    let apply = || pack_apply::apply_pack_exact_inner(&client_state, pack.clone(), preview.clone());
+
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = true;
+    assert!(apply().await.expect_err("sync").contains("sync is in progress"));
+    assert!(pack_apply::revert_pack_apply_inner(&client_state, None).await.expect_err("sync").contains("sync is in progress"));
+    client_state.lock().await.connections.get_mut(&peer_id).unwrap().is_syncing = false;
+
+    client_state.lock().await.session_type = crate::state::SessionType::Host;
+    assert!(apply().await.expect_err("hosting").contains("Stop hosting"));
+    client_state.lock().await.session_type = crate::state::SessionType::Client;
+
+    {
+        let _restore = crate::commands::backup::try_begin_restoring().expect("no restore running");
+        assert!(apply().await.expect_err("restore").contains("restore"));
+    }
+
+    let mut moved = preview.clone();
+    moved.base_path = format!("{}-elsewhere", moved.base_path);
+    let err = pack_apply::apply_pack_exact_inner(&client_state, pack.clone(), moved).await.expect_err("changed folder");
+    assert!(err.contains("changed since the preview"), "unexpected error: {err}");
+    assert!(file_exists(&client_dir, "Mods/extra.package"), "nothing renamed by a refused apply");
+
+    // All guards clear: a client session is fine (the download step needs one).
+    let result = apply().await.expect("apply");
+    assert_eq!(result.disabled, 1);
+    pack_apply::delete_record("sims4");
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}

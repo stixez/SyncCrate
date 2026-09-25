@@ -254,7 +254,7 @@ pub(crate) fn decode_pack_payload(encoded: &str) -> Result<ModPack, String> {
     Ok(pack)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct PackFileStatus {
     pub relative_path: String,
     pub size: u64,

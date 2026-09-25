@@ -143,7 +143,7 @@ struct SourceFile {
     mtime_ms: Option<i64>,
 }
 
-fn mtime_ms(meta: &std::fs::Metadata) -> Option<i64> {
+pub(crate) fn mtime_ms(meta: &std::fs::Metadata) -> Option<i64> {
     let d = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
     i64::try_from(d.as_millis()).ok()
 }
