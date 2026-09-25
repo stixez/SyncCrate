@@ -210,7 +210,9 @@ pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[Stri
     });
     let pruned = prune(&mut h.entries, now);
     save(root, game, &h)?;
-    drop(_lock);
+    // GC must run under the store lock, like every other caller: unlocked,
+    // it would delete a concurrent backup's objects/tmp files and objects no
+    // manifest references yet.
     if pruned {
         backup::gc_logged(root);
     }

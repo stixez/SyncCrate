@@ -203,6 +203,10 @@ pub struct SyncPlan {
     /// pack's exact hash. Only set on a plan from `compute_pack_plan`.
     #[serde(default)]
     pub pack_unavailable: Vec<String>,
+    /// Built by stay-in-sync (`commands::stay_in_sync`): its downloads extend
+    /// the existing undo record instead of replacing it.
+    #[serde(default)]
+    pub auto_pull: bool,
 }
 
 /// One file in a modpack's manifest. No content — packs are shareable

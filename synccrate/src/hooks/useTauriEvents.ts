@@ -231,6 +231,7 @@ export function useTauriEvents() {
               // discarded it, so don't leave a stale plan or progress bar behind.
               setSyncPlan(null);
               setSyncProgress(null);
+              useAppStore.getState().setPendingPackApply(null);
             }
 
             // Auto-retry for clients that lost the host

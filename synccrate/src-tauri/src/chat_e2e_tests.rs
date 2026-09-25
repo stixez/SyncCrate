@@ -14,7 +14,11 @@ async fn texts(state: &Arc<Mutex<AppState>>) -> Vec<String> {
 
 /// Poll until every `want` line is in `state`'s chat log.
 async fn wait_for_lines(state: &Arc<Mutex<AppState>>, want: &[&str]) {
-    let ok = tokio::time::timeout(Duration::from_secs(10), async {
+    wait_for_lines_within(state, want, 10).await
+}
+
+async fn wait_for_lines_within(state: &Arc<Mutex<AppState>>, want: &[&str], secs: u64) {
+    let ok = tokio::time::timeout(Duration::from_secs(secs), async {
         loop {
             let have = texts(state).await;
             if want.iter().all(|w| have.iter().any(|h| h == w)) {
@@ -152,4 +156,32 @@ async fn chat_outside_a_session_is_refused() {
     let state = make_state("sims4", &dir);
     assert!(send_chat_inner(&state, "hello?").await.is_err());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Past the host's rate limit (10 lines per 10 s), the rest wait in the
+/// outbox and arrive in the next window instead of disappearing.
+#[tokio::test]
+async fn rate_limited_lines_arrive_later_instead_of_vanishing_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("chat-rate-host");
+    let client_dir = temp_dir("chat-rate-client");
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state.clone()).await;
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    for i in 0..12 {
+        send_chat_inner(&client_state, &format!("line {i}")).await.expect("queue");
+    }
+    wait_for_lines(&host_state, &["line 9"]).await;
+    assert!(!texts(&host_state).await.contains(&"line 10".to_string()), "held back by the rate limit");
+    assert!(!client_state.lock().await.chat.outbox.is_empty(), "still queued, not dropped");
+    wait_for_lines_within(&host_state, &["line 10", "line 11"], 20).await;
+    wait_for_lines_within(&client_state, &["line 11"], 10).await;
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
 }

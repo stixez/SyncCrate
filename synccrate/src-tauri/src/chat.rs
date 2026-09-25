@@ -149,7 +149,8 @@ impl RateLimiter {
 
 /// Host side of one `ChatSync`: post the client's lines (rate-limited) and a
 /// "finished syncing" line if reported, then answer with everything after
-/// `since`. Returns (reply, whether the log changed).
+/// `since`. Returns (reply, whether the log changed, how many of the
+/// client's lines were accepted; the client re-sends the rest later).
 pub fn host_sync(
     log: &mut ChatLog,
     limiter: &mut RateLimiter,
@@ -158,19 +159,21 @@ pub fn host_sync(
     outgoing: Vec<String>,
     synced_files: Option<u64>,
     now: u64,
-) -> (Vec<ChatMessage>, bool) {
+) -> (Vec<ChatMessage>, bool, usize) {
     let mut changed = false;
+    let mut accepted = 0;
     for text in outgoing.into_iter().take(MAX_OUTGOING) {
         if !limiter.allow(now) {
             break;
         }
+        accepted += 1;
         changed |= log.post(peer_name, &text, false, now).is_some();
     }
     if let Some(n) = synced_files.filter(|n| *n > 0) {
         let files = if n == 1 { "file".to_string() } else { "files".to_string() };
         changed |= log.post(peer_name, &format!("{} finished syncing {n} {files}", clean_name(peer_name)), true, now).is_some();
     }
-    (log.batch_after(since), changed)
+    (log.batch_after(since), changed, accepted)
 }
 
 pub fn supports(features: &[String]) -> bool {
@@ -238,20 +241,22 @@ mod tests {
         let mut log = ChatLog::default();
         let mut rl = RateLimiter::default();
         let flood: Vec<String> = (0..50).map(|i| format!("spam {i}")).collect();
-        let (reply, changed) = host_sync(&mut log, &mut rl, "Sam", 0, flood, None, 100);
+        let (reply, changed, accepted) = host_sync(&mut log, &mut rl, "Sam", 0, flood, None, 100);
         assert!(changed);
         assert_eq!(reply.len(), MAX_OUTGOING, "only MAX_OUTGOING per sync");
+        assert_eq!(accepted, MAX_OUTGOING);
         let since = log.last_seq();
-        let (reply, _) = host_sync(&mut log, &mut rl, "Sam", since, vec!["more".into()], None, 101);
+        let (reply, _, accepted) = host_sync(&mut log, &mut rl, "Sam", since, vec!["more".into()], None, 101);
         assert!(reply.is_empty(), "rate limit reached within the window");
+        assert_eq!(accepted, 0, "so the client keeps the line queued");
         let since = log.last_seq();
-        let (reply, _) = host_sync(&mut log, &mut rl, "Sam", since, vec!["later".into()], Some(42), 100 + RATE_WINDOW_SECS);
+        let (reply, _, _) = host_sync(&mut log, &mut rl, "Sam", since, vec!["later".into()], Some(42), 100 + RATE_WINDOW_SECS);
         assert_eq!(reply.len(), 2);
         assert_eq!(reply[0].text, "later");
         assert!(reply[1].system);
         assert_eq!(reply[1].text, "Sam finished syncing 42 files");
         let since = log.last_seq();
-        let (reply, _) = host_sync(&mut log, &mut rl, "Sam", since, vec![], Some(0), 200);
+        let (reply, _, _) = host_sync(&mut log, &mut rl, "Sam", since, vec![], Some(0), 200);
         assert!(reply.is_empty(), "a zero-file sync isn't announced");
     }
 }

@@ -14,6 +14,9 @@ export function useSync() {
 
   const computePlan = async () => {
     setIsLoading(true);
+    // A new compare replaces any pack plan, so a pending "apply pack exactly"
+    // must not fire on this (unrelated) sync's completion.
+    useAppStore.getState().setPendingPackApply(null);
     try {
       // Full scan with hashes needed for accurate sync comparison
       setLoadingPhase("Hashing files...");
