@@ -122,6 +122,22 @@ pub(crate) async fn compute_sync_plan_inner(
         crate::commands::files::scan_files_inner(state, None, true).await?;
     }
 
+    // The UI shows a peer as connected before the manifest exchange finishes;
+    // clicking Compare & Sync in that window failed with "No remote manifest".
+    // Wait briefly (lock released) for the message loop to store it.
+    for _ in 0..30 {
+        {
+            let app_state = state.lock().await;
+            let id = app_state.resolve_peer_id(peer_id.clone())?;
+            match app_state.connections.get(&id) {
+                Some(conn) if conn.remote_manifest.is_some() => break,
+                Some(_) => {}
+                None => return Err("Peer disconnected".to_string()),
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
     let mut app_state = state.lock().await;
     // A sync may have started while we were scanning; replacing its plan now
     // would desync the progress UI from what's actually running.

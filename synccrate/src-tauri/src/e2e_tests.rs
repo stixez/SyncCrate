@@ -50,6 +50,41 @@ async fn happy_path_tcp() {
     let _ = std::fs::remove_dir_all(&client_dir);
 }
 
+/// Compare & Sync clicked before the host's manifest has arrived: the plan
+/// waits for it instead of failing with "No remote manifest".
+#[tokio::test]
+async fn plan_waits_for_late_manifest_tcp() {
+    let _g = e2e_guard().await;
+    let host_dir = temp_dir("late-host");
+    let client_dir = temp_dir("late-client");
+    write_file(&host_dir, "Mods/a.package", b"AAAA");
+
+    let host_state = make_state("sims4", &host_dir);
+    set_host(&host_state, "Host").await;
+    let port = start_tcp_host(host_state).await;
+
+    let client_state = make_state("sims4", &client_dir);
+    let peer_id = new_peer_id();
+    mark_pending_client(&client_state, &peer_id).await;
+    connect_client_tcp(client_state.clone(), port, &peer_id).await.expect("connect");
+
+    // Simulate the window before the manifest lands, then deliver it late.
+    let manifest = client_state.lock().await.connections.get_mut(&peer_id).unwrap().remote_manifest.take();
+    assert!(manifest.is_some());
+    let late = client_state.clone();
+    let pid = peer_id.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        late.lock().await.connections.get_mut(&pid).unwrap().remote_manifest = manifest;
+    });
+
+    let plan = compute_plan(&client_state).await.expect("plan should wait for the manifest");
+    assert!(plan.actions.iter().any(|a| matches!(a, SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/a.package")));
+
+    let _ = std::fs::remove_dir_all(&host_dir);
+    let _ = std::fs::remove_dir_all(&client_dir);
+}
+
 #[tokio::test]
 async fn happy_path_iroh() {
     let _g = e2e_guard().await;
