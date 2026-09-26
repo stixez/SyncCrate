@@ -16,6 +16,7 @@ import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "
 import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
+import { friendlyError } from "../lib/errors";
 import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
@@ -149,14 +150,19 @@ export default function ContentBrowser({ gameId }: Props) {
   const readOnly = !isDemoMode() && refusedFor === gameId && activeGame !== gameId;
   const activeLabel = getGameDef(activeGame)?.label ?? activeGame;
 
-  // Re-scan when switching games or when manifest is missing
+  // Re-scan when switching games or when manifest is missing. `scanning` is
+  // this page's own flag: the global isScanning isn't set by this call, so
+  // the page showed "No mods yet" while a big folder was still being read.
+  const [scanning, setScanning] = useState(true);
   useEffect(() => {
     // Ignore results that land after switching to another game (stale manifest).
     let cancelled = false;
     setScanError(null);
+    setScanning(true);
     cmd.scanFiles(gameId)
       .then((m) => { if (!cancelled) setManifest(m); })
-      .catch((e) => { if (!cancelled) setScanError(String(e)); });
+      .catch((e) => { if (!cancelled) setScanError(friendlyError(e)); })
+      .finally(() => { if (!cancelled) setScanning(false); });
     return () => { cancelled = true; };
   }, [gameId, setManifest]);
 
@@ -1002,7 +1008,7 @@ export default function ContentBrowser({ gameId }: Props) {
         </div>
       )}
 
-      {isScanning && tabFiles.length === 0 ? (
+      {(isScanning || scanning) && tabFiles.length === 0 && !scanError ? (
         <div className="box divide-y divide-border">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 px-3 py-2.5">
@@ -1015,7 +1021,7 @@ export default function ContentBrowser({ gameId }: Props) {
             </div>
           ))}
         </div>
-      ) : tabFiles.length === 0 ? (
+      ) : tabFiles.length === 0 && scanError ? null : tabFiles.length === 0 ? (
         <EmptyState
           icon={<Package size={18} />}
           label={<><b>//</b> 0 results</>}

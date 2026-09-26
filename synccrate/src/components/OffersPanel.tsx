@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { friendlyError } from "../lib/errors";
 import { Check, Gift, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { Badge, Button, Panel, cx } from "./ui";
@@ -36,7 +37,10 @@ export default function OffersPanel() {
     else cmd.getOutgoingOffer().then(setOutgoing).catch(() => {});
   }, [isHost, version, session?.session_type]);
 
+  const [deciding, setDeciding] = useState(false);
   const decide = async (offer: IncomingOffer, acceptAll?: boolean) => {
+    if (deciding) return;
+    setDeciding(true);
     const pending = offer.files.filter((f) => f.state === "pending").map((f) => f.file.relative_path);
     const skip = unticked[offer.peer_id];
     const chosen = new Set(acceptAll === false ? [] : acceptAll ? pending : pending.filter((p) => !skip?.has(p)));
@@ -49,7 +53,9 @@ export default function OffersPanel() {
       });
       setIncoming(await cmd.getIncomingOffers());
     } catch (e) {
-      toastError(`${e}`);
+      toastError(friendlyError(e));
+    } finally {
+      setDeciding(false);
     }
   };
 
@@ -81,10 +87,10 @@ export default function OffersPanel() {
                   </p>
                   {pending.length > 0 && (
                     <>
-                      <Button size="sm" variant="primary" onClick={() => decide(o)} disabled={chosen.size === 0} icon={<Check size={12} />}>
+                      <Button size="sm" variant="primary" onClick={() => decide(o)} disabled={chosen.size === 0 || deciding} icon={<Check size={12} />}>
                         Accept selected ({chosen.size})
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => decide(o, false)} icon={<X size={12} />}>
+                      <Button size="sm" variant="ghost" onClick={() => decide(o, false)} disabled={deciding} icon={<X size={12} />}>
                         Decline all
                       </Button>
                     </>

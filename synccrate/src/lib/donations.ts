@@ -3,13 +3,23 @@ const DISMISSED_KEY = "synccrate-donation-dismissed";
 
 const MILESTONES = [10, 50, 100] as const;
 
+// Storage can throw (blocked or full). A finished sync must never report
+// "Sync failed" because a counter couldn't be saved.
 export function getSyncCount(): number {
-  return parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10);
+  try {
+    return parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 export function incrementSyncCount(): number {
   const count = getSyncCount() + 1;
-  localStorage.setItem(STORAGE_KEY, String(count));
+  try {
+    localStorage.setItem(STORAGE_KEY, String(count));
+  } catch {
+    // counter only
+  }
   return count;
 }
 
@@ -25,7 +35,11 @@ export function dismissMilestone(milestone: number) {
   const dismissed = getDismissedMilestones();
   if (!dismissed.includes(milestone)) {
     dismissed.push(milestone);
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed));
+    try {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed));
+    } catch {
+      // shown again next time; harmless
+    }
   }
 }
 

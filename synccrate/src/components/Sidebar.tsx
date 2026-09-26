@@ -45,6 +45,8 @@ import { resolveTheme, useMediaPreference } from "../lib/appearance";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
 import { GameArt, LiveDot, cx } from "./ui";
+import { toastAction, toastError } from "../lib/toast";
+import { friendlyError } from "../lib/errors";
 
 const ICON_MAP: Record<string, typeof Gamepad2> = {
   "gamepad-2": Gamepad2,
@@ -127,6 +129,7 @@ export default function Sidebar() {
   const shownTheme = resolveTheme(theme);
 
   const isConnected = session && session.session_type !== "None";
+  const activeGame = useAppStore((s) => s.activeGame);
 
   const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set());
   const setMyLibrary = useAppStore((s) => s.setMyLibrary);
@@ -156,16 +159,22 @@ export default function Sidebar() {
     });
   };
 
-  const handleRemoveGame = async (gameId: string) => {
+  // One click on a hover "X" removed a game with no way back; offer Undo.
+  const handleRemoveGame = async (gameId: string, label: string) => {
     try {
       await cmd.removeFromLibrary(gameId);
-      const updated = await cmd.getUserLibrary();
-      setMyLibrary(updated);
+      setMyLibrary(await cmd.getUserLibrary());
       if (selectedGame === gameId) {
         navigateToGlobal("game-browser");
       }
+      toastAction(`Removed ${label} from your library`, "Undo", () => {
+        cmd.addToLibrary(gameId)
+          .then(() => cmd.getUserLibrary())
+          .then(setMyLibrary)
+          .catch((e) => toastError(`Couldn't add ${label} back: ${friendlyError(e)}`));
+      });
     } catch (e) {
-      console.error("Failed to remove game:", e);
+      toastError(`Couldn't remove ${label}: ${friendlyError(e)}`);
     }
   };
 
@@ -262,14 +271,14 @@ export default function Sidebar() {
                       )}
                     </span>
                   </button>
-                  <button
-                    onClick={() => handleRemoveGame(game.id)}
+                  {!(isConnected && game.id === activeGame) && <button
+                    onClick={() => handleRemoveGame(game.id, game.label)}
                     className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 mr-2 text-txt-muted hover:text-status-red transition-opacity"
                     title={`Remove ${game.label}`}
                     aria-label={`Remove ${game.label}`}
                   >
                     <X size={12} />
-                  </button>
+                  </button>}
                 </div>
 
                 {isSelected && isExpanded && (

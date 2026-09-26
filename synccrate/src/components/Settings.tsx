@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { friendlyError } from "../lib/errors";
 import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
@@ -213,7 +214,7 @@ export default function Settings() {
       toastSuccess(`Port saved: ${p}`);
     } catch (e) {
       addLog(`Failed to set port: ${e}`, "error");
-      toastError(`Failed to set port`);
+      toastError(`Couldn't change the port: ${friendlyError(e)}`);
     }
   };
 
@@ -231,6 +232,7 @@ export default function Settings() {
       addLog(`Added sync exclusion: ${trimmed}`, "info");
     } catch (e) {
       addLog(`Failed to add pattern: ${e}`, "error");
+      toastError(`Couldn't add the pattern: ${friendlyError(e)}`);
     }
   };
 
@@ -242,6 +244,7 @@ export default function Settings() {
       addLog(`Removed sync exclusion: ${pattern}`, "info");
     } catch (e) {
       addLog(`Failed to remove pattern: ${e}`, "error");
+      toastError(`Couldn't remove the pattern: ${friendlyError(e)}`);
     }
   };
 
@@ -619,7 +622,17 @@ export default function Settings() {
                     if (yes) {
                       addLog(`Downloading update v${update.version}...`, "info");
                       try { await cmd.disconnect(); } catch {}
-                      await update.downloadAndInstall();
+                      try {
+                        await update.downloadAndInstall();
+                      } catch (e) {
+                        addLog(`Update download failed: ${e}`, "error");
+                        await message("The update couldn't be downloaded. You were disconnected first, so reconnect from the Dashboard, and try the update again later.", {
+                          title: "Update Error",
+                          kind: "error",
+                          okLabel: "OK",
+                        });
+                        return;
+                      }
                       await relaunch();
                     }
                   } else {

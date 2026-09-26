@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { friendlyError } from "../lib/errors";
 import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SyncFolderPermissions, GameInfo, ContentTypeDefinition } from "../lib/types";
@@ -237,7 +238,7 @@ export default function GameDashboard({ gameId }: Props) {
       toastSuccess(`Detected ${packCount} pack(s)`);
     } catch (e) {
       addLog(`Pack detection failed: ${e}`, "error");
-      toastError("Pack detection failed");
+      toastError(`Pack detection failed: ${friendlyError(e)}`);
     } finally {
       setDetectingPacks(false);
     }
@@ -448,7 +449,7 @@ export default function GameDashboard({ gameId }: Props) {
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && joinCode.trim()) connectByCode(joinCode, hostName.trim() || "Guest");
+                  if (e.key === "Enter" && joinCode.trim() && !isLoading && !isConnecting) connectByCode(joinCode, hostName.trim() || "Guest");
                 }}
                 placeholder="SC-XXXX-XXXX-…"
                 aria-label="Join code"
@@ -690,16 +691,18 @@ export default function GameDashboard({ gameId }: Props) {
   const copyInviteLink = () => {
     if (!hostJoinCode) return;
     const game = useAppStore.getState().activeGame;
-    navigator.clipboard.writeText(`synccrate://join/${hostJoinCode}?game=${encodeURIComponent(game)}`);
-    setInviteCopied(true);
-    setTimeout(() => setInviteCopied(false), 2000);
+    navigator.clipboard.writeText(`synccrate://join/${hostJoinCode}?game=${encodeURIComponent(game)}`).then(() => {
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    }, () => toastError("Couldn't copy to the clipboard. Select the code and copy it by hand."));
   };
 
   const copyJoinCode = () => {
     if (!hostJoinCode) return;
-    navigator.clipboard.writeText(hostJoinCode);
-    setJoinCodeCopied(true);
-    setTimeout(() => setJoinCodeCopied(false), 2000);
+    navigator.clipboard.writeText(hostJoinCode).then(() => {
+      setJoinCodeCopied(true);
+      setTimeout(() => setJoinCodeCopied(false), 2000);
+    }, () => toastError("Couldn't copy to the clipboard. Select the code and copy it by hand."));
   };
 
   return (
@@ -815,7 +818,7 @@ export default function GameDashboard({ gameId }: Props) {
                 <p className="hud-label flex items-center gap-1.5"><Lock size={11} /> Session PIN</p>
                 <p className="font-display font-bold text-[2.4rem] leading-none tracking-[0.18em] tabular">{session.pin}</p>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(session.pin!); setPinCopied(true); setTimeout(() => setPinCopied(false), 2000); }}
+                  onClick={() => { navigator.clipboard.writeText(session.pin!).then(() => { setPinCopied(true); setTimeout(() => setPinCopied(false), 2000); }, () => toastError("Couldn't copy to the clipboard.")); }}
                   className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
                 >
                   {pinCopied ? <Check size={12} className="text-neon" /> : <Copy size={12} />}
@@ -838,9 +841,10 @@ export default function GameDashboard({ gameId }: Props) {
             <button
               key={ip}
               onClick={() => {
-                navigator.clipboard.writeText(`${ip}:${session.port}`);
-                addLog(`Copied ${ip}:${session.port} to clipboard`, "info");
-                toastSuccess(`Copied ${ip}:${session.port}`);
+                navigator.clipboard.writeText(`${ip}:${session.port}`).then(
+                  () => toastSuccess(`Copied ${ip}:${session.port}`),
+                  () => toastError("Couldn't copy to the clipboard."),
+                );
               }}
               className="group flex items-center gap-2 h-7 px-2.5 bg-bg-card border border-border hover:border-neon/60 font-mono text-xs transition-colors"
               title="Click to copy"
@@ -858,7 +862,7 @@ export default function GameDashboard({ gameId }: Props) {
 
       {mismatchedPeers.length > 0 && (
         <Banner tone="warn" icon={<AlertTriangle size={16} />} title="Version mismatch">
-          {mismatchedPeers.map((p) => `${p.name} (v${p.version})`).join(", ")} — you have v{localVersion}.
+          {mismatchedPeers.map((p) => `${p.name} (v${p.version})`).join(", ")}, but you have v{localVersion}. Different versions can fail to sync, so everyone should update (Settings → Check for updates).
         </Banner>
       )}
 

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { toastError } from "../lib/toast";
+import { friendlyError } from "../lib/errors";
 import { X, Plus, Tag } from "lucide-react";
 import * as cmd from "../lib/commands";
 import { useAppStore } from "../stores/useAppStore";
@@ -31,16 +33,21 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose]);
 
-  const toggleTag = async (tag: string) => {
-    const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
+  // Shown right away; put back if saving fails, or the chips show tags that
+  // were never saved.
+  const saveTags = async (next: string[]) => {
+    const prev = tags;
     setTags(next);
     try {
       await cmd.setModTags(useAppStore.getState().selectedGame ?? "", filePath, next);
       onTagsChanged(filePath, next);
     } catch (e) {
-      console.error("Failed to set tags:", e);
+      setTags(prev);
+      toastError(`Couldn't save the tags: ${friendlyError(e)}`);
     }
   };
+
+  const toggleTag = (tag: string) => saveTags(tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]);
 
   const addCustom = async () => {
     const trimmed = customInput.trim().slice(0, 32);
@@ -48,15 +55,8 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
       setCustomInput("");
       return;
     }
-    const next = [...tags, trimmed];
-    setTags(next);
     setCustomInput("");
-    try {
-      await cmd.setModTags(useAppStore.getState().selectedGame ?? "", filePath, next);
-      onTagsChanged(filePath, next);
-    } catch (e) {
-      console.error("Failed to set tags:", e);
-    }
+    await saveTags([...tags, trimmed]);
   };
 
   return (

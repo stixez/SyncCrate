@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, ChevronDown, ChevronUp, Gamepad2, X } from "lucide-react";
+import { ArrowUpDown, ArrowDown, AlertTriangle, ChevronDown, ChevronUp, Gamepad2, Trash2, X } from "lucide-react";
 import type { SyncPlan } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
@@ -97,7 +97,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
 
   const excluded = useMemo(() => new Set(plan.excluded || []), [plan.excluded]);
 
-  const sendCount = plan.actions.filter((a) => a.SendToRemote).length;
+  const deleteCount = plan.actions.filter((a) => a.Delete).length;
   const receiveCount = plan.actions.filter((a) => a.ReceiveFromRemote).length;
   const conflictCount = plan.actions.filter((a) => a.Conflict).length;
 
@@ -202,6 +202,9 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
   );
 
   const excludedCount = excluded.size;
+  const nothingSelected = plan.actions.length > 0 && excludedCount >= plan.actions.length;
+  // The backend refuses selection changes while a sync runs.
+  const selectionLocked = !!syncProgress || !!busy;
 
   const pct = syncProgress && syncProgress.bytes_total > 0
     ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100
@@ -223,7 +226,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
         <div className="min-w-0">
           <p className="hud-label mb-1.5 flex items-center gap-2">
             {syncProgress ? <LiveDot /> : blocked ? <LiveDot tone="amber" /> : <ArrowUpDown size={12} className="text-neon" />}
-            <span>// Sync plan</span>
+            <span>// Sync</span>
             <span className={blocked && !syncProgress ? "text-amber" : "text-neon"}>{state}</span>
             {excludedCount > 0 && <span className="text-txt-muted">· {excludedCount} excluded</span>}
           </p>
@@ -257,10 +260,10 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
             variant="primary"
             size="lg"
             onClick={onSync}
-            disabled={!!syncProgress || busy}
+            disabled={!!syncProgress || busy || nothingSelected}
             icon={<ArrowUpDown size={15} />}
           >
-            {syncProgress ? "Syncing..." : busy ? "Preparing..." : "Sync Now"}
+            {syncProgress ? "Syncing..." : busy ? "Preparing..." : nothingSelected ? "Nothing selected" : "Sync Now"}
           </Button>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
@@ -281,7 +284,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
 
       {/* Telemetry strip */}
       <div className="grid grid-cols-4 border-y border-border bg-bg/60">
-        <Readout label="Upload" value={sendCount} unit="files" icon={<ArrowUp size={11} />} />
+        <Readout label="Remove" value={deleteCount} unit="files" icon={<Trash2 size={11} />} />
         <Readout label="Download" value={receiveCount} unit="files" icon={<ArrowDown size={11} />} />
         <Readout
           label="Conflicts"
@@ -385,7 +388,9 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                 <button
                   key={f.id}
                   onClick={() => applyQuickFilter(f.id)}
+                  disabled={selectionLocked}
                   className={cx(
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
                     "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
                     i > 0 && "-ml-px",
                     quickFilter === f.id
@@ -410,6 +415,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                     action={action}
                     excluded={excluded.has(path)}
                     onToggle={toggleExclusion}
+                    disabled={selectionLocked}
                   />
                 );
               })}

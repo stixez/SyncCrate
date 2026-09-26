@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { friendlyError } from "../lib/errors";
 import { Shield, ShieldCheck, ShieldAlert, Loader2, Network, PlugZap } from "lucide-react";
 import type { ConnectionTestResult, FirewallStatus, NetworkDiagnostics } from "../lib/types";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -101,7 +102,7 @@ export default function NetworkHealth() {
     try {
       setTestResult(await cmd.testConnection(testIp.trim(), port));
     } catch (e) {
-      setTestResult({ reachable: false, message: String(e), latency_ms: null });
+      setTestResult({ reachable: false, message: friendlyError(e), latency_ms: null });
     } finally {
       setTesting(false);
     }

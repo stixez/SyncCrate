@@ -56,8 +56,13 @@ function migrateLocalStorage() {
   }
 }
 
-// Run migration once at module load (before any render)
-migrateLocalStorage();
+// Run migration once at module load (before any render). Storage can throw
+// (blocked or full); that must not leave a blank window.
+try {
+  migrateLocalStorage();
+} catch {
+  // conveniences only
+}
 
 /** Rescan `gameId` and show it, unless the user has moved on to another game. */
 function refreshIfShown(gameId: string) {
