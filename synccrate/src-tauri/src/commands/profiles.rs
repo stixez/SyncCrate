@@ -115,6 +115,44 @@ pub async fn save_profile(
     Ok(profile)
 }
 
+/// A profile as a modpack, so "apply this loadout" reuses the pack flow
+/// (preview, Apply Pack Exactly, one-click revert). Comparing was a dead end
+/// before: it listed the differences but couldn't act on them.
+pub(crate) fn profile_to_pack(profile: &ModProfile) -> Result<crate::state::ModPack, String> {
+    let files: Vec<crate::state::PackFile> = profile
+        .mods
+        .iter()
+        // Older profiles can have files saved without a hash; a pack needs one.
+        .filter(|m| crate::commands::backup::is_valid_hash(&m.hash))
+        .map(|m| crate::state::PackFile { relative_path: m.relative_path.clone(), size: m.size, hash: m.hash.clone() })
+        .collect();
+    if files.is_empty() {
+        return Err("This profile has no files that can be compared exactly. Save it again to refresh it.".into());
+    }
+    let pack = crate::state::ModPack {
+        format_version: crate::commands::modpack::FORMAT_VERSION,
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        game_id: profile.game.clone(),
+        name: profile.name.chars().take(128).collect(),
+        description: profile.description.chars().take(1024).collect(),
+        author: profile.author.chars().take(128).collect(),
+        created_at: profile.created_at,
+        content_types: Vec::new(),
+        join: None,
+        files,
+    };
+    crate::commands::modpack::validate_pack(&pack)?;
+    Ok(pack)
+}
+
+#[tauri::command]
+pub async fn profile_as_pack(id: String) -> Result<crate::state::ModPack, String> {
+    sanitize_id(&id)?;
+    let data = std::fs::read_to_string(utils::profiles_dir().join(format!("{}.json", id))).map_err(|e| e.to_string())?;
+    let profile: ModProfile = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    profile_to_pack(&profile)
+}
+
 #[tauri::command]
 pub async fn load_profile(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -252,6 +290,20 @@ pub async fn delete_profile(id: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_profile_becomes_a_pack_of_its_hashed_files() {
+        let h = "a".repeat(64);
+        let m = |p: &str, hash: &str| ProfileMod { relative_path: p.into(), hash: hash.into(), size: 3, name: p.into() };
+        let profile = ModProfile {
+            id: "x".into(), name: "Build night".into(), description: String::new(), icon: String::new(), author: String::new(),
+            created_at: 1, mods: vec![m("Mods/a.package", &h), m("Mods/old.package", "")], game: "sims4".into(),
+        };
+        let pack = profile_to_pack(&profile).unwrap();
+        assert_eq!(pack.game_id, "sims4");
+        assert_eq!(pack.files.len(), 1, "a file saved without a hash can't be compared exactly");
+        assert!(profile_to_pack(&ModProfile { mods: vec![m("Mods/old.package", "")], ..profile }).is_err());
+    }
 
     fn profile(paths: &[&str]) -> ModProfile {
         serde_json::from_value(serde_json::json!({

@@ -396,6 +396,7 @@ pub fn run() {
             commands::profiles::list_profiles,
             commands::profiles::save_profile,
             commands::profiles::load_profile,
+            commands::profiles::profile_as_pack,
             commands::profiles::export_profile,
             commands::profiles::import_profile,
             commands::profiles::delete_profile,

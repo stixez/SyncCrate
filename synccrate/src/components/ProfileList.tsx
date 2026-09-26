@@ -86,11 +86,24 @@ export default function ProfileList({ gameId }: Props) {
     }
   };
 
+  const [comparedId, setComparedId] = useState<string | null>(null);
+  const applyLoadout = async () => {
+    if (!comparedId) return;
+    try {
+      const pack = await cmd.profileAsPack(comparedId);
+      useAppStore.getState().setPendingImportPack(pack);
+      useAppStore.getState().navigateToGame(gameId, "modpacks");
+    } catch (e) {
+      toastError(`Couldn't open the profile as a pack: ${friendlyError(e)}`);
+    }
+  };
+
   const handleLoad = async (id: string) => {
     if (readOnly) return;
     try {
       const result = await cmd.loadProfile(id);
       setComparison(result);
+      setComparedId(id);
       addLog(`Profile "${result.profile_name}" compared: ${result.matched} matched, ${result.missing.length} missing, ${result.modified.length} modified`, "success");
     } catch (e) {
       addLog(`Failed to load profile: ${e}`, "error");
@@ -162,9 +175,16 @@ export default function ProfileList({ gameId }: Props) {
           label={<><b>// Compare</b> &nbsp;Profile vs installed</>}
           title={comparison.profile_name}
           actions={
-            <Button size="sm" variant="ghost" onClick={() => setComparison(null)} icon={<X size={13} />}>
-              Close
-            </Button>
+            <>
+              {(comparison.missing.length > 0 || comparison.modified.length > 0 || comparison.extra.length > 0) && (
+                <Button size="sm" variant="primary" onClick={applyLoadout} title="Opens it on the Modpacks page: get missing files from a friend, or make the game load exactly these mods (with one-click revert)">
+                  Apply this loadout
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setComparison(null)} icon={<X size={13} />}>
+                Close
+              </Button>
+            </>
           }
         >
           <div className="grid grid-cols-4 gap-3">
