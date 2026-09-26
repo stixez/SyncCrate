@@ -190,6 +190,9 @@ pub(crate) struct ScanFilter<'a> {
     pub recursive: bool,
     pub must_contain: Option<&'a str>,
     pub exclude_files: &'a [String],
+    pub exclude_patterns: &'a [String],
+    /// The content type's folder, which anchors `exclude_patterns` with a `/`.
+    pub folder: &'a str,
 }
 
 impl ScanFilter<'_> {
@@ -198,12 +201,35 @@ impl ScanFilter<'_> {
             recursive: ct.recursive,
             must_contain: ct.must_contain.as_deref(),
             exclude_files: &ct.exclude_files,
+            exclude_patterns: &ct.exclude_patterns,
+            folder: &ct.folder,
         }
+    }
+
+    /// `exclude_patterns` for an absolute path. Callers only have the full
+    /// path, so the path inside the content folder is found by trying each
+    /// suffix that starts with the folder's own segments.
+    fn excluded_by_pattern(&self, path: &std::path::Path) -> bool {
+        if self.exclude_patterns.is_empty() {
+            return false;
+        }
+        let full = path.to_string_lossy().replace('\\', "/");
+        let segs: Vec<&str> = full.split('/').filter(|s| !s.is_empty()).collect();
+        let folder: Vec<&str> = self.folder.split(['/', '\\']).filter(|s| !s.is_empty() && *s != ".").collect();
+        if folder.is_empty() {
+            // "." types are non-recursive: the inner path is the file name.
+            let name = segs.last().copied().unwrap_or("");
+            return crate::sync::diff::excluded_by_patterns(self.exclude_patterns, name);
+        }
+        (0..segs.len().saturating_sub(folder.len())).any(|i| {
+            segs[i..i + folder.len()].iter().zip(&folder).all(|(a, b)| a.eq_ignore_ascii_case(b))
+                && crate::sync::diff::excluded_by_patterns(self.exclude_patterns, &segs[i + folder.len()..].join("/"))
+        })
     }
 
     fn accepts(&self, path: &std::path::Path) -> bool {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if self.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(name)) {
+        if self.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(name)) || self.excluded_by_pattern(path) {
             return false;
         }
         match self.must_contain {
@@ -1799,6 +1825,29 @@ mod tests {
         );
         let keys: Vec<&String> = files.keys().collect();
         assert_eq!(keys, vec!["Cozy.ini"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scans_skip_the_games_own_files_by_pattern() {
+        // KSP-style: paid DLC and stock parts live next to mods in GameData.
+        let dir = std::env::temp_dir().join(format!("synccrate-pat-{}", uuid::Uuid::new_v4()));
+        for f in ["GameData/SquadExpansion/MakingHistory/a.cfg", "GameData/Squad/Parts/b.cfg", "GameData/MechJeb2/c.cfg", "GameData/MyMod/Squad/d.cfg", "GameData/ccBGSSSE001-Fish.cfg"] {
+            let p = dir.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "x").unwrap();
+        }
+        let ct: crate::registry::ContentType = serde_json::from_value(serde_json::json!({
+            "id": "mods", "label": "x", "folder": "GameData", "file_type": "Mod",
+            "exclude_patterns": ["Squad/*", "SquadExpansion/*", "cc???sse*"]
+        }))
+        .unwrap();
+        let files = scan_directory(&dir.to_string_lossy(), "GameData", |_| "Mod".to_string(), &ct.extensions, &ScanFilter::from_ct(&ct), false, &HashMap::new());
+        let mut keys: Vec<&String> = files.keys().collect();
+        keys.sort();
+        assert_eq!(keys, vec!["GameData/MechJeb2/c.cfg", "GameData/MyMod/Squad/d.cfg"]);
+        assert!(!content_type_accepts(&ct, &dir.join("GameData/SquadExpansion/MakingHistory/a.cfg")));
+        assert!(content_type_accepts(&ct, &dir.join("GameData/MechJeb2/c.cfg")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

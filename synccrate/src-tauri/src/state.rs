@@ -533,6 +533,7 @@ mod tests {
             recursive: true,
             must_contain: None,
             exclude_files: Vec::new(),
+            exclude_patterns: Vec::new(),
         }
     }
 

@@ -51,9 +51,43 @@ pub fn is_disabled_path(path: &str) -> bool {
         || segments.iter().any(|s| *s == LEGACY_DISABLED_DIR)
 }
 
+/// `*` (any run, including `/`) and `?` (one character) wildcard match,
+/// ASCII case-insensitive, against the whole of `text`.
+pub fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let p: Vec<char> = pattern.chars().map(|c| c.to_ascii_lowercase()).collect();
+    let t: Vec<char> = text.chars().map(|c| c.to_ascii_lowercase()).collect();
+    let (mut pi, mut ti) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some((pi, ti));
+            pi += 1;
+        } else if let Some((sp, st)) = star {
+            pi = sp + 1;
+            ti = st + 1;
+            star = Some((sp, st + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|&c| c == '*')
+}
+
+/// Whether a content type's `exclude_patterns` rule out a file, given its
+/// path inside the content type's folder ('/'-separated). Patterns without a
+/// `/` match the file name, the others the whole inner path.
+pub fn excluded_by_patterns(patterns: &[String], inner: &str) -> bool {
+    let name = inner.rsplit('/').next().unwrap_or(inner);
+    patterns.iter().any(|p| wildcard_match(p, if p.contains('/') { inner } else { name }))
+}
+
 /// Whether some content type of the game accepts a (remote) relative path,
 /// using the same rules as a scan: folder (depth per `recursive`), extension
-/// list seen through `.disabled`, and `exclude_files`. `must_contain` can't be
+/// list seen through `.disabled`, `exclude_files` and `exclude_patterns`.
+/// `must_contain` can't be
 /// checked without the file's bytes, so it's ignored here.
 ///
 /// Clients use this to drop host files that don't belong to their game. Hosts
@@ -86,7 +120,7 @@ pub fn content_type_for<'a>(content_types: &'a [ContentType], rel: &str) -> Opti
         if rest.is_empty() || (!ct.recursive && rest.contains('/')) {
             return None;
         }
-        if ct.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(file_name)) {
+        if ct.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(file_name)) || excluded_by_patterns(&ct.exclude_patterns, rest) {
             return None;
         }
         if !ct.extensions.is_empty() {
@@ -442,7 +476,7 @@ mod tests {
         let cts = vec![crate::registry::ContentType {
             id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![],
         }];
         let mut m = FileManifest::default();
         let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
@@ -491,6 +525,7 @@ mod tests {
             recursive,
             must_contain: None,
             exclude_files: vec!["ReShade.ini".to_string()],
+            exclude_patterns: vec!["cc???sse*".to_string(), "Skyrim - *.bsa".to_string(), "SquadExpansion/*".to_string()],
         }
     }
 
@@ -689,9 +724,33 @@ mod tests {
         assert!(!path_accepted_by(&cts, "mod/x.package"), "wrong folder (ETS2)");
         assert!(!path_accepted_by(&cts, "ModsX/x.package"), "folder prefix must be a segment");
         assert!(!path_accepted_by(&cts, "ReShade.ini"), "exclude_files");
+        // exclude_patterns: names without '/', inner paths with one.
+        let data = vec![ct("Data", &["esm", "esp", "bsa"], true), ct("GameData", &[], true)];
+        assert!(!path_accepted_by(&data, "Data/ccBGSSSE001-Fish.esm"), "Creation Club");
+        assert!(!path_accepted_by(&data, "data/CCQDRSSE001-SurvivalMode.ESM"), "case-insensitive");
+        assert!(!path_accepted_by(&data, "Data/Skyrim - Textures0.bsa"));
+        assert!(path_accepted_by(&data, "Data/SkyUI_SE.esp"));
+        assert!(path_accepted_by(&data, "Data/ccmod.esp"), "not the CC naming scheme");
+        assert!(!path_accepted_by(&data, "GameData/SquadExpansion/MakingHistory/Parts/x.cfg"), "paid DLC folder");
+        assert!(path_accepted_by(&data, "GameData/MechJeb2/Parts/x.cfg"));
+        assert!(path_accepted_by(&data, "GameData/MyMod/SquadExpansion/x.cfg"), "anchored to the content folder");
         let any_ext = vec![ct("saves", &[], true)];
         assert!(path_accepted_by(&any_ext, "saves/slot1/game.sii"));
         assert!(!path_accepted_by(&any_ext, "saves"));
+    }
+
+    #[test]
+    fn wildcard_match_rules() {
+        assert!(wildcard_match("cc???sse*", "ccBGSSSE001-Fish.esm"));
+        assert!(!wildcard_match("cc???sse*", "ccBGSFO4001.esl"));
+        assert!(wildcard_match("DLC*.esm", "dlcrobot.ESM"));
+        assert!(!wildcard_match("DLC*.esm", "DLCRobot.esp"));
+        assert!(wildcard_match("Squad/*", "Squad/Parts/a/b.cfg"), "* crosses folders");
+        assert!(!wildcard_match("Squad/*", "SquadExpansion/x.cfg"));
+        assert!(wildcard_match("*", ""));
+        assert!(!wildcard_match("?", ""));
+        assert!(wildcard_match("a*b*c", "a-x-b-y-c"));
+        assert!(!wildcard_match("a*b*c", "a-x-c-y-b"));
     }
 
     #[test]
