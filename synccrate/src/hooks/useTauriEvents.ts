@@ -382,7 +382,15 @@ export function useTauriEvents() {
             setSyncProgress(event.payload);
           },
         ),
-        listen<{ files_synced: number; total_bytes: number; errors: string[]; warnings?: string[]; cancelled?: boolean }>("sync-complete", (event) => {
+        listen<{
+          files_synced: number;
+          total_bytes: number;
+          errors: string[];
+          warnings?: string[];
+          cancelled?: boolean;
+          peer_id?: string;
+          changes?: { added: string[]; updated: string[]; removed: string[]; added_count: number; updated_count: number; removed_count: number };
+        }>("sync-complete", (event) => {
           setSyncProgress(null);
           // Or the next sync's "Preparing" shows this one's backup counts. Only
           // the presync bar: a manual backup running alongside keeps its own.
@@ -394,6 +402,15 @@ export function useTauriEvents() {
           // Watcher events were skipped while the sync wrote files.
           refreshManifest();
           const { files_synced, errors, cancelled } = event.payload;
+          const changes = event.payload.changes;
+          if (changes && changes.added_count + changes.updated_count + changes.removed_count > 0) {
+            useAppStore.getState().setLastSyncChanges({
+              ...changes,
+              game: useAppStore.getState().activeGame,
+              at: Date.now(),
+              from: peerName(event.payload.peer_id),
+            });
+          }
           // Not failures: the files synced, something around them didn't
           // (e.g. file history couldn't keep an old copy).
           const warnings = event.payload.warnings ?? [];

@@ -916,6 +916,17 @@ async fn run_sync(
         }
     }
 
+    // For the "what's new" card: this sync's own changes (the record below
+    // may be merged with an earlier one). Capped; the counts are exact.
+    const LISTED: usize = 500;
+    let changes = serde_json::json!({
+        "added": undo_added.iter().take(LISTED).map(|f| &f.relative_path).collect::<Vec<_>>(),
+        "updated": undo_replaced.iter().take(LISTED).map(|f| &f.relative_path).collect::<Vec<_>>(),
+        "removed": undo_deleted.iter().take(LISTED).collect::<Vec<_>>(),
+        "added_count": undo_added.len(),
+        "updated_count": undo_replaced.len(),
+        "removed_count": undo_deleted.len(),
+    });
     let mut undo_record = SyncRecord {
         sync_id: uuid::Uuid::new_v4().to_string(),
         created_at: crate::utils::timestamp_now(),
@@ -968,6 +979,7 @@ async fn run_sync(
             "warnings": sync_warnings,
             "peer_id": peer_id,
             "cancelled": cancelled,
+            "changes": changes,
         }),
     );
 

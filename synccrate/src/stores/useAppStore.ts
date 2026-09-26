@@ -1,4 +1,16 @@
 import { create } from "zustand";
+
+export interface SyncChanges {
+  game: string;
+  at: number;
+  from: string | null;
+  added: string[];
+  updated: string[];
+  removed: string[];
+  added_count: number;
+  updated_count: number;
+  removed_count: number;
+}
 import type {
   UpdateReport,
   ChatLog,
@@ -136,6 +148,9 @@ interface AppState {
   /** The active game's last sync, if it can still be undone. Client only. */
   undoStatus: UndoStatus | null;
   setUndoStatus: (s: UndoStatus | null) => void;
+  /** What the last sync changed, for the Dashboard's "what's new" card. */
+  lastSyncChanges: SyncChanges | null;
+  setLastSyncChanges: (c: SyncChanges | null) => void;
 
   /** A `.scpack` file dropped anywhere in the app (see App.tsx's global drop
    * handler); ModpackList picks it up and clears it once loaded. */
@@ -317,6 +332,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   backupProgress: null,
   setBackupProgress: (backupProgress) => set({ backupProgress }),
   undoStatus: null,
+  lastSyncChanges: null,
+  setLastSyncChanges: (c) => set({ lastSyncChanges: c }),
   setUndoStatus: (undoStatus) => set({ undoStatus }),
   pendingImportPackPath: null,
   setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),
