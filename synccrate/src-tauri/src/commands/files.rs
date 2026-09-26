@@ -1105,10 +1105,24 @@ pub(crate) fn openable_folder(path: &str, allowed_roots: &[std::path::PathBuf]) 
     Ok(canonical)
 }
 
+/// Folders the user saved an export into this run (a pack or profile file,
+/// wherever they picked): "Show in folder" may open those too.
+static EXPORT_DIRS: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) fn allow_open_export_dir(file: &std::path::Path) {
+    if let Some(dir) = file.parent() {
+        let mut dirs = EXPORT_DIRS.lock().unwrap_or_else(|e| e.into_inner());
+        if !dirs.iter().any(|d| d == dir) {
+            dirs.push(dir.to_path_buf());
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn open_folder(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: String) -> Result<(), String> {
     let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
     roots.push(utils::config_root().join("synccrate"));
+    roots.extend(EXPORT_DIRS.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
     let dir = openable_folder(&path, &roots)?;
     let path = crate::utils::clean_path(dir).to_string_lossy().to_string();
 

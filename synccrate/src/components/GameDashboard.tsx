@@ -23,6 +23,7 @@ import OffersPanel from "./OffersPanel";
 import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
 import UndoLastSync from "./UndoLastSync";
+import PlayButton from "./PlayButton";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
 import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
@@ -336,6 +337,7 @@ export default function GameDashboard({ gameId }: Props) {
               description="Host a session so friends can pull your files, or join a friend's. Join codes work on your network and over the internet."
               actions={
                 <>
+                  <PlayButton gameId={gameId} label={gameLabel} />
                   <Button size="sm" onClick={() => handleScan()} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
                     {isScanning ? "Refreshing..." : "Refresh files"}
                   </Button>
@@ -739,6 +741,7 @@ export default function GameDashboard({ gameId }: Props) {
         title={gameLabel}
         actions={
           <>
+            {!syncProgress && <PlayButton gameId={gameId} label={gameLabel} />}
             <Button size="sm" onClick={() => handleScan()} disabled={isScanning} icon={<RefreshCw size={13} className={isScanning ? "animate-spin" : ""} />}>
               Refresh files
             </Button>

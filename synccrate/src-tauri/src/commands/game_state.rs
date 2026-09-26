@@ -2,6 +2,74 @@ use crate::state::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// How "Play" starts a game: through Steam when Steam has it installed, or
+/// the game's own exe where SyncCrate knows it (The Sims 4 on the EA app,
+/// which the exe hands over to).
+#[derive(Debug, PartialEq)]
+enum Launch {
+    SteamUrl(String),
+    Exe(std::path::PathBuf),
+}
+
+fn launch_for(game_id: &str, steam_app_id: Option<u32>, steam_ids: &std::collections::HashSet<u32>, sims4_dir: Option<std::path::PathBuf>) -> Option<Launch> {
+    if let Some(id) = steam_app_id.filter(|id| steam_ids.contains(id)) {
+        return Some(Launch::SteamUrl(format!("steam://rungameid/{id}")));
+    }
+    // sims4, sims4-reshade and sims4-gshade are all the same game.
+    if game_id.starts_with("sims4") {
+        let exe = sims4_dir?.join("Game").join("Bin").join("TS4_x64.exe");
+        return exe.is_file().then_some(Launch::Exe(exe));
+    }
+    None
+}
+
+async fn find_launch(state: &Arc<Mutex<AppState>>, game_id: &str) -> Result<Option<Launch>, String> {
+    let (id, steam_app_id) = {
+        let st = state.lock().await;
+        let id = crate::commands::files::resolve_game(&st, game_id)?;
+        let app = st.game_registry.games.iter().find(|g| g.id == id).and_then(|g| g.steam_app_id);
+        (id, app)
+    };
+    tokio::task::spawn_blocking(move || {
+        let steam_ids = crate::game_install::steam_installed_app_ids(&crate::utils::steam_steamapps_dirs());
+        let sims4 = id.starts_with("sims4").then(crate::packs::sims4_install_dir).flatten();
+        launch_for(&id, steam_app_id, &steam_ids, sims4)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Whether "Play" can start this game.
+#[tauri::command]
+pub async fn can_launch_game(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id: String) -> Result<bool, String> {
+    Ok(find_launch(state.inner(), &game_id).await?.is_some())
+}
+
+#[tauri::command]
+pub async fn launch_game(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id: String) -> Result<(), String> {
+    let launch = find_launch(state.inner(), &game_id).await?.ok_or("Start this game from its launcher.")?;
+    let mut cmd = match &launch {
+        Launch::Exe(exe) => {
+            let mut c = std::process::Command::new(exe);
+            if let Some(dir) = exe.parent() {
+                c.current_dir(dir);
+            }
+            c
+        }
+        Launch::SteamUrl(url) => {
+            #[cfg(target_os = "windows")]
+            let mut c = std::process::Command::new(crate::utils::windows_system_exe("explorer.exe"));
+            #[cfg(target_os = "macos")]
+            let mut c = std::process::Command::new("open");
+            #[cfg(target_os = "linux")]
+            let mut c = std::process::Command::new("xdg-open");
+            c.arg(url);
+            c
+        }
+    };
+    cmd.spawn().map(|_| ()).map_err(|e| format!("Couldn't start the game: {e}"))
+}
+
 /// Whether one of the game's executables (registry `process_names`) is running.
 /// Used to warn before syncing so files aren't locked or half-loaded.
 #[tauri::command]
@@ -86,6 +154,20 @@ fn parse_tasklist_csv(output: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn play_uses_steam_when_steam_has_it_else_the_sims_4_exe() {
+        let steam: std::collections::HashSet<u32> = [1222670].into_iter().collect();
+        assert_eq!(launch_for("sims4", Some(1222670), &steam, None), Some(Launch::SteamUrl("steam://rungameid/1222670".into())));
+        assert_eq!(launch_for("valheim", Some(892970), &steam, None), None, "not installed through Steam");
+        let dir = crate::testutil::temp_dir("launch");
+        std::fs::create_dir_all(dir.join("Game/Bin")).unwrap();
+        std::fs::write(dir.join("Game/Bin/TS4_x64.exe"), b"").unwrap();
+        let none = std::collections::HashSet::new();
+        assert_eq!(launch_for("sims4", Some(1222670), &none, Some(dir.clone())), Some(Launch::Exe(dir.join("Game").join("Bin").join("TS4_x64.exe"))));
+        assert_eq!(launch_for("sims4", None, &none, Some(dir.join("missing"))), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
