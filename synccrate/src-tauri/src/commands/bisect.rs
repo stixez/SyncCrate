@@ -146,6 +146,32 @@ impl Bisect {
     }
 }
 
+/// One step at a time: a double-clicked answer, or Answer and Stop at once,
+/// both loaded the same state; the second hit "File not found" on files the
+/// first had renamed, and whichever saved last lost them.
+static STEP_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Unit files still sitting under their disabled name that `disabled` lost
+/// track of (the app died mid-round, or the save after the renames failed):
+/// Stop turns them back on too.
+fn recover_orphans(b: &mut Bisect, folder: &str) {
+    let tracked: HashSet<String> = b.disabled.keys().cloned().collect();
+    let base = std::path::Path::new(&b.base_path);
+    let prefix = format!("{}/", folder.trim_end_matches('/'));
+    for unit in &b.units {
+        for on in &unit.files {
+            if tracked.contains(on) || base.join(on).exists() {
+                continue;
+            }
+            let renamed = format!("{on}.disabled");
+            let moved = on.get(prefix.len()..).filter(|_| on.len() > prefix.len()).map(|inner| format!("{prefix}_Disabled/{inner}"));
+            if let Some(now) = [Some(renamed), moved].into_iter().flatten().find(|p| base.join(p).is_file()) {
+                b.disabled.insert(on.clone(), now);
+            }
+        }
+    }
+}
+
 fn record_path(game: &str) -> std::path::PathBuf {
     let safe: String = game.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
     let dir = crate::utils::config_root().join("synccrate").join("bisect");
@@ -205,6 +231,7 @@ pub async fn bisect_status(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_i
 #[tauri::command]
 pub async fn bisect_start(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id: String) -> Result<BisectView, String> {
     crate::commands::backup::refuse_during_restore()?;
+    let _step = STEP_LOCK.lock().await;
     let (game, base, folder, rename) = toggle_context(state.inner(), &game_id).await?;
     if load(&game)?.is_some() {
         return Err("A search is already running for this game.".into());
@@ -245,6 +272,7 @@ pub async fn bisect_start(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id
 #[tauri::command]
 pub async fn bisect_answer(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id: String, still_broken: bool) -> Result<BisectView, String> {
     crate::commands::backup::refuse_during_restore()?;
+    let _step = STEP_LOCK.lock().await;
     let (game, base, folder, rename) = toggle_context(state.inner(), &game_id).await?;
     let mut b = load(&game)?.ok_or("No search is running for this game.")?;
     if b.base_path != base {
@@ -275,12 +303,14 @@ pub async fn bisect_answer(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_i
 #[tauri::command]
 pub async fn bisect_stop(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id: String, keep_culprit_off: bool) -> Result<BisectView, String> {
     crate::commands::backup::refuse_during_restore()?;
+    let _step = STEP_LOCK.lock().await;
     let (game, base, folder, rename) = toggle_context(state.inner(), &game_id).await?;
     let mut b = load(&game)?.ok_or("No search is running for this game.")?;
     if b.base_path != base {
         return Err("The game folder changed since the search started. Set it back to restore the mods.".into());
     }
     require_game_closed(state.inner(), &game).await?;
+    recover_orphans(&mut b, &folder);
     // Kept off: the user's choice from now on, not the search's to restore.
     if let (true, Some(c)) = (keep_culprit_off, b.culprit) {
         let files: HashSet<String> = b.units[c].files.iter().cloned().collect();
@@ -330,6 +360,24 @@ mod tests {
             std::fs::write(p, b"x").unwrap();
         }
         dir
+    }
+
+    #[test]
+    fn stop_recovers_mods_the_search_lost_track_of() {
+        let files = ["Mods/a.package", "Mods/b.package"];
+        let dir = temp_game("bisect-orphan", &files);
+        let units = units_from(&strs(&files), "Mods");
+        let mut b = Bisect {
+            game: "sims4".into(), base_path: dir.to_string_lossy().into(), started_at: 0,
+            suspects: vec![0, 1], units, round: 1, disabled: BTreeMap::new(), culprit: None, errors: Vec::new(),
+        };
+        // Renamed by a round whose state was never saved.
+        std::fs::rename(dir.join("Mods/b.package"), dir.join("Mods/b.package.disabled")).unwrap();
+        recover_orphans(&mut b, "Mods");
+        assert_eq!(b.disabled.get("Mods/b.package").map(String::as_str), Some("Mods/b.package.disabled"));
+        b.apply(&[], "Mods", true);
+        assert!(dir.join("Mods/b.package").exists(), "back on");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

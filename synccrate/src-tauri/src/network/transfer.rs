@@ -1421,12 +1421,12 @@ async fn client_message_loop(
             let due = last_chat.elapsed() >= CHAT_POLL || (!chat_held && !st.chat.outbox.is_empty()) || st.chat.pending_synced.is_some();
             due.then(|| {
                 let out: Vec<String> = st.chat.outbox.iter().take(crate::chat::MAX_OUTGOING).cloned().collect();
-                (st.chat.last_seq(), out, st.chat.pending_synced.map(|n| (n, st.chat.pending_failed)))
+                (st.chat.last_seq(), out, st.chat.pending_synced.map(|n| (n, st.chat.pending_failed)), st.chat.pending_seq)
             })
         } else {
             None
         };
-        let mut chat_reply: Option<((Vec<crate::chat::ChatMessage>, Option<usize>), usize, bool)> = None;
+        let mut chat_reply: Option<((Vec<crate::chat::ChatMessage>, Option<usize>), usize, Option<u64>)> = None;
         // Same pattern for an offer to the host (`crate::offers`).
         let mut offer_req = if offers { offer_poll_request(&state, last_offer.elapsed() >= OFFER_POLL).await } else { None };
         let mut offer_outcome: Option<OfferOutcome> = None;
@@ -1456,9 +1456,9 @@ async fn client_message_loop(
                 };
                 if let Some(early) = offer_early { early } else {
                 match chat_req.take() {
-                    Some((since, outgoing, synced)) => {
+                    Some((since, outgoing, synced, report_seq)) => {
                         last_chat = std::time::Instant::now();
-                        let (sent, reported) = (outgoing.len(), synced.is_some());
+                        let (sent, reported) = (outgoing.len(), synced.is_some().then_some(report_seq));
                         match chat_round_trip(&mut s, since, outgoing, synced).await {
                             Ok((batch, pending)) => {
                                 if let Some(batch) = batch {
@@ -1496,7 +1496,7 @@ async fn client_message_loop(
             let mut st = state.lock().await;
             let n = sent.min(st.chat.outbox.len());
             st.chat.outbox.drain(..n);
-            if reported {
+            if reported.is_some_and(|seq| seq == st.chat.pending_seq) {
                 st.chat.pending_synced = None;
             }
             if st.chat.merge_batch(batch) || n > 0 {

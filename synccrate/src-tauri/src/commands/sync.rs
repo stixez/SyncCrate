@@ -992,6 +992,7 @@ async fn run_sync(
             let mut st = state.lock().await;
             st.chat.pending_synced = Some(files_received as u64);
             st.chat.pending_failed = sync_errors.len() as u64;
+            st.chat.pending_seq += 1;
         }
     }
 
