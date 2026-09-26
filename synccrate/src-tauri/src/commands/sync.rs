@@ -200,7 +200,7 @@ pub(crate) async fn compute_sync_plan_inner(
     plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total);
     plan.notice = (!unreceivable.is_empty()).then(|| {
         format!(
-            "{} of the host's files can't be saved on this PC (blocked file types or names Windows can't use) and were skipped, e.g. {}.",
+            "{} of the host's files can't be saved on this PC (blocked file types, names Windows can't use, or files over 2 GB) and were skipped, e.g. {}.",
             unreceivable.len(),
             unreceivable[0]
         )
@@ -1116,22 +1116,13 @@ pub(crate) fn keep_newer_resolution(local: &FileInfo, remote: &FileInfo) -> Reso
 // --- Selective Sync helpers ---
 
 pub(crate) fn glob_matches(pattern: &str, path: &str) -> bool {
+    // `*` / `?` wildcards, case-insensitive (the host's spelling of a path
+    // often differs from what the user typed: "Mods/wickedwhims/..."). A
+    // pattern without a `/` also matches the file name in any folder.
     let pattern = pattern.replace('\\', "/");
     let path = path.replace('\\', "/");
-
-    if pattern == "*" {
-        return true;
-    }
-
-    if let Some(ext) = pattern.strip_prefix("*.") {
-        return path.ends_with(&format!(".{}", ext));
-    }
-
-    if let Some(prefix) = pattern.strip_suffix("/*") {
-        return path.starts_with(&format!("{}/", prefix));
-    }
-
-    pattern == path
+    let name = path.rsplit('/').next().unwrap_or(&path);
+    crate::sync::diff::wildcard_match(&pattern, &path) || (!pattern.contains('/') && crate::sync::diff::wildcard_match(&pattern, name))
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -1342,6 +1333,15 @@ mod tests {
     fn test_glob_matches_exact() {
         assert!(glob_matches("Mods/specific.package", "Mods/specific.package"));
         assert!(!glob_matches("Mods/specific.package", "Mods/other.package"));
+    }
+
+    #[test]
+    fn test_glob_matches_ignores_case_and_matches_names() {
+        assert!(glob_matches("Mods/WickedWhims/*", "Mods/wickedwhims/core.package"));
+        assert!(glob_matches("*.package", "Mods/X.PACKAGE"));
+        assert!(glob_matches("readme.txt", "Mods/SomeMod/ReadMe.txt"), "a bare name matches in any folder");
+        assert!(!glob_matches("Mods/readme.txt", "Mods/SomeMod/readme.txt"), "a path stays a path");
+        assert!(glob_matches("Mods/*/big_*.package", "Mods/Hair/big_bun.package"));
     }
 
     #[test]

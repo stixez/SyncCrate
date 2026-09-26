@@ -1649,17 +1649,17 @@ async fn host_receive_offered(
     let dest = match checked {
         Ok(d) if !d.exists() => d,
         Ok(_) => {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, "You already have a file with that name."));
         }
         Err(why) => {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, why));
         }
     };
     if let Some(parent) = dest.parent() {
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, &e.to_string()));
         }
     }
@@ -1688,7 +1688,7 @@ async fn host_receive_offered(
         Err((e, in_sync)) => {
             let _ = tokio::fs::remove_file(&tmp).await;
             if !in_sync {
-                drain_until_file_end(s).await;
+                drain_until_file_end(s, Some(size)).await;
             }
             Err(e)
         }
@@ -2000,6 +2000,7 @@ pub async fn receive_file(
     // (cancel-safe), and skip any stale file that still arrives first.
     let (expected_size, header_hash) = {
         let mut stale = 0;
+        let mut leftovers = 0u64;
         let started = std::time::Instant::now();
         loop {
             // In short slices: the stream stays locked while we wait, so
@@ -2019,26 +2020,32 @@ pub async fn receive_file(
                 continue;
             };
             match msg {
-                Message::FileHeader { path, .. } if path != req.remote_path && stale < 3 => {
+                Message::FileHeader { path, size, .. } if path != req.remote_path && stale < 3 => {
                     stale += 1;
                     log::warn!("Skipping a late file ({}) while waiting for {}", path, req.remote_path);
-                    drain_until_file_end(&mut s).await;
+                    drain_until_file_end(&mut s, Some(size)).await;
                 }
                 Message::FileHeader { size, hash, .. } => break (size, hash),
                 Message::Error { message } => return Err(clean_peer_text(&message, 300)),
+                // Leftovers of a file an earlier request gave up on. Failing
+                // here left them in the stream, so every later file in the
+                // sync failed too ("Expected FileHeader").
+                Message::FileChunk { .. } | Message::FileComplete { .. } if leftovers < MAX_LEFTOVER_MESSAGES => {
+                    leftovers += 1;
+                }
                 _ => return Err("Expected FileHeader".to_string()),
             }
         }
     };
 
     if req.expected_size.is_some_and(|want| want != expected_size) {
-        drain_until_file_end(&mut s).await;
+        drain_until_file_end(&mut s, Some(expected_size)).await;
         return Err(format!("Host sent {} bytes for {}, but its file list said {}", expected_size, req.remote_path, req.expected_size.unwrap_or(0)));
     }
     if !req.expected_hash.is_empty() && header_hash != req.expected_hash {
         // The host streams the body regardless; consume it so the next
         // request doesn't read stale chunks.
-        drain_until_file_end(&mut s).await;
+        drain_until_file_end(&mut s, Some(expected_size)).await;
         return Err(HOST_CHANGED.to_string());
     }
 
@@ -2048,7 +2055,7 @@ pub async fn receive_file(
     let result = receive_file_body(&mut s, &tmp_path, expected_size, &header_hash, req.remote_path).await;
     if let Err((e, stream_in_sync)) = result {
         if !stream_in_sync {
-            drain_until_file_end(&mut s).await;
+            drain_until_file_end(&mut s, Some(expected_size)).await;
         }
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(e);
@@ -2141,12 +2148,23 @@ async fn receive_file_body(
     Ok(())
 }
 
+/// Leftover chunks of an abandoned file skipped while waiting for the next
+/// header (a 64 GB file at 64 KB chunks is ~1M messages).
+const MAX_LEFTOVER_MESSAGES: u64 = 1_100_000;
+
+/// How many messages a drain may read for a file of `size` bytes: chunks are
+/// normally 64 KB, so this is generous, but it still ends on a host that
+/// never sends FileComplete. A fixed 40k (about 2.4 GB) stopped halfway
+/// through bigger files and left the rest in the stream.
+fn drain_budget(size: Option<u64>) -> u64 {
+    size.map_or(40_000, |s| s / 16_384 + 1_000)
+}
+
 /// Discard messages until the host finishes the current file. Gives up after
 /// a bounded number of messages / a read error (the connection is then
 /// unusable anyway and the loop will notice).
-async fn drain_until_file_end(s: &mut PeerStream) {
-    // A 2 GB file at 64 KB per chunk is ~32k chunks.
-    for _ in 0..40_000 {
+async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
+    for _ in 0..drain_budget(size) {
         match protocol::recv_message(s).await {
             Ok(Message::FileComplete { .. }) | Ok(Message::Error { .. }) => return,
             Ok(_) => continue,
@@ -2158,6 +2176,14 @@ async fn drain_until_file_end(s: &mut PeerStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drains_cover_files_bigger_than_the_old_fixed_budget() {
+        let three_gb = 3 * 1024 * 1024 * 1024u64;
+        assert!(drain_budget(Some(three_gb)) > three_gb / (64 * 1024), "every 64 KB chunk of a 3 GB file");
+        assert_eq!(drain_budget(None), 40_000);
+        assert!(drain_budget(Some(0)) > 0);
+    }
 
     #[test]
     fn a_handshake_from_an_ended_session_is_refused() {

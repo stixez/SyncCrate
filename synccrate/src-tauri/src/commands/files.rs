@@ -291,7 +291,10 @@ fn scan_directory(
         return files;
     }
 
-    let ext_refs: Vec<&str> = valid_extensions.iter().map(|s| s.as_str()).collect();
+    // Lower-cased like `effective_extension`: the registry's "autosaveBETA"
+    // (Slay the Spire) never matched, so those saves were never scanned.
+    let ext_lower: Vec<String> = valid_extensions.iter().map(|s| s.to_ascii_lowercase()).collect();
+    let ext_refs: Vec<&str> = ext_lower.iter().map(|s| s.as_str()).collect();
 
     // Collect eligible file entries first, then hash in parallel
     let mut walker = WalkDir::new(&dir).follow_links(false);
