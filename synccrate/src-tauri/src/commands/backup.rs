@@ -747,6 +747,7 @@ fn restore_file(source: &Path, dest: &Path, mtime: Option<i64>) -> std::io::Resu
         if let Some(ms) = mtime {
             set_mtime(&tmp, ms)?;
         }
+        utils::make_replaceable(dest);
         std::fs::rename(&tmp, dest)
     })();
     if r.is_err() {
