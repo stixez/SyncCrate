@@ -457,7 +457,13 @@ mod tests {
         }
         for id in ["sims4", "sims3", "sims2"] {
             assert!(get(id).duplicate_finder, "{id}");
+            // Each loads mods from subfolders, so a _Disabled folder would keep loading.
+            assert_eq!(get(id).disable_method.as_deref(), Some("rename"), "{id}");
         }
+        // The Sims 2 keeps CC in Downloads and saves in Neighborhoods (it had
+        // Sims 3/4-style Mods/Saves folders that don't exist for Sims 2).
+        let sims2: Vec<&str> = get("sims2").content_types.iter().map(|c| c.folder.as_str()).collect();
+        assert_eq!(sims2, ["Downloads", "Neighborhoods", "SavedSims"]);
         for id in ["wow_retail", "minecraft_java", "valheim", "skyrim_se"] {
             assert!(!get(id).duplicate_finder, "{id}");
         }

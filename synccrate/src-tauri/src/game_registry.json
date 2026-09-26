@@ -471,6 +471,7 @@
             "base": "EA Games",
             "folders": [
               "The Sims 2",
+              "The Sims 2 Legacy",
               "The Sims 2 Ultimate Collection"
             ]
           },
@@ -486,21 +487,19 @@
       "validation": {
         "check_dirs": [
           "Downloads",
-          "Mods",
-          "Saves"
+          "Neighborhoods"
         ],
         "auto_create_dirs": [
-          "Mods",
-          "Saves"
+          "Downloads"
         ]
       },
       "content_types": [
         {
           "id": "mods",
-          "label": "Mods & CC",
+          "label": "Downloads (CC)",
           "icon": "package",
           "color": "text-orange-400",
-          "folder": "Mods",
+          "folder": "Downloads",
           "extensions": [
             "package"
           ],
@@ -512,29 +511,19 @@
           "label": "Neighborhoods",
           "icon": "save",
           "color": "text-status-green",
-          "folder": "Saves",
+          "folder": "Neighborhoods",
           "extensions": [],
           "file_type": "Save",
           "syncable": true
         },
         {
           "id": "tray",
-          "label": "Tray Items",
+          "label": "Saved Sims",
           "icon": "layout-grid",
           "color": "text-purple-400",
-          "folder": "Tray",
+          "folder": "SavedSims",
           "extensions": [],
           "file_type": "Tray",
-          "syncable": true
-        },
-        {
-          "id": "screenshots",
-          "label": "Screenshots",
-          "icon": "camera",
-          "color": "text-sky-400",
-          "folder": "Screenshots",
-          "extensions": [],
-          "file_type": "Screenshot",
           "syncable": true
         }
       ],
@@ -543,18 +532,19 @@
       "legacy_id": "Sims2",
       "path_correction": {
         "known_subfolders": [
-          "Mods",
-          "Saves",
-          "Tray",
-          "Screenshots",
-          "Downloads"
+          "Downloads",
+          "Neighborhoods",
+          "SavedSims",
+          "Collections",
+          "Teleport"
         ]
       },
       "process_names": [
         "Sims2EP9.exe",
         "Sims2RPC.exe",
         "Sims2.exe"
-      ]
+      ],
+      "disable_method": "rename"
     },
     {
       "id": "wow_retail",
