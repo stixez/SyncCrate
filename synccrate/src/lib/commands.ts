@@ -209,6 +209,36 @@ export async function toggleMod(
   return invoke("toggle_mod", { gameId, relativePath, enabled });
 }
 
+export interface BisectUnit {
+  name: string;
+  files: string[];
+}
+
+export interface BisectView {
+  round: number;
+  rounds_left: number;
+  total: number;
+  suspects: number;
+  off: number;
+  culprit: BisectUnit | null;
+  started_at: number;
+  errors: string[];
+}
+
+/** The running "find a broken mod" search for a game, if any. */
+export async function bisectStatus(gameId: string): Promise<BisectView | null> {
+  return invoke("bisect_status", { gameId });
+}
+export async function bisectStart(gameId: string): Promise<BisectView> {
+  return invoke("bisect_start", { gameId });
+}
+export async function bisectAnswer(gameId: string, stillBroken: boolean): Promise<BisectView> {
+  return invoke("bisect_answer", { gameId, stillBroken });
+}
+export async function bisectStop(gameId: string, keepCulpritOff: boolean): Promise<BisectView> {
+  return invoke("bisect_stop", { gameId, keepCulpritOff });
+}
+
 export interface ToggleOutcome {
   path: string;
   /** Where the file is now (the same path if it was already in that state). */

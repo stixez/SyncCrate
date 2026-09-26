@@ -234,6 +234,20 @@ export const GUIDE: GuideGroup[] = [
         go: { label: "Open Content", page: "content" },
       },
       {
+        id: "fifty-fifty",
+        title: "Find a broken mod",
+        summary: "The 50/50 method, without moving folders by hand.",
+        steps: [
+          "On the Content page, click **Find a broken mod**, then **Start**. Half of your mods are turned off.",
+          "Start the game, check whether the problem is still there, close the game, and answer **Still broken** or **It's fixed now**.",
+          "SyncCrate halves again until one mod (or creator folder) is left. Even thousands of mods take about a dozen rounds.",
+          "Keep the broken one off, or turn everything back on. Only mods the search turned off are turned back on.",
+        ],
+        tip: "Your progress is saved, so you can close SyncCrate while you play.",
+        keywords: "50/50 fifty broken crash bug culprit bisect troubleshoot",
+        go: { label: "Open Content", page: "content" },
+      },
+      {
         id: "sims4",
         title: "The Sims 4 tips",
         summary: "What SyncCrate does differently for Sims 4.",
