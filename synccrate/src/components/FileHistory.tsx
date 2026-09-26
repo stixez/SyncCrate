@@ -17,6 +17,7 @@ function describe(v: FileVersion) {
   if (v.reason === "removed") return "Deleted by you";
   if (v.reason === "install-replaced") return "Replaced when you installed a file with the same name";
   if (v.reason === "path-fixed") return "Before the health check made its mod path portable";
+  if (v.reason === "interrupted") return "Kept from a sync that didn't finish";
   return `Replaced by a sync${from}`;
 }
 

@@ -312,7 +312,10 @@ pub(crate) fn store_object(root: &Path, src: &Path) -> Result<(String, u64, bool
         }
     };
     let dest = object_path(root, &hash);
-    if dest.exists() {
+    // An existing object is only reused at the right size: one cut short by a
+    // power loss (the name is written by rename, the data may not be) would
+    // otherwise back every later copy of this content.
+    if std::fs::metadata(&dest).is_ok_and(|m| m.len() == size) {
         let _ = std::fs::remove_file(&tmp);
         return Ok((hash, size, false));
     }
@@ -783,6 +786,7 @@ fn restore_inner(
     let mods_dir = cts.first().map(|ct| base.join(&ct.folder));
     let mut result = RestoreResult::default();
     let mut keep: HashSet<String> = HashSet::new();
+    let mut unsafe_skipped = 0usize;
     let total = manifest.files.len();
 
     for (i, entry) in manifest.files.iter().enumerate() {
@@ -808,13 +812,16 @@ fn restore_inner(
         // folder after the backup was made. (`dest` itself keeps the plain
         // spelling: exact restore compares it with scanned paths.)
         let under_base = if ct.folder == "." { entry.relative_path.clone() } else { format!("{}/{}", ct.folder, entry.relative_path) };
-        if utils::safe_join(&base.to_string_lossy(), &under_base).is_err() {
-            result.skipped.push(format!("{} (unsafe path)", entry.relative_path));
-            continue;
-        }
         let dest_base = base.join(&ct.folder);
         let dest = dest_base.join(&entry.relative_path);
+        // Kept even when it can't be written: an exact restore must never
+        // delete a file the backup has.
         keep.insert(norm_key(&dest));
+        if utils::safe_join(&base.to_string_lossy(), &under_base).is_err() {
+            result.skipped.push(format!("{} (unsafe path)", entry.relative_path));
+            unsafe_skipped += 1;
+            continue;
+        }
         for t in twin_paths(&dest, &dest_base, mods_dir.as_deref(), &entry.relative_path) {
             keep.insert(norm_key(&t));
         }
@@ -849,6 +856,17 @@ fn restore_inner(
         result.restored += 1;
     }
 
+    // A content folder that is a junction/symlink to another drive makes
+    // every path "unsafe" (it resolves outside the game folder). The exact
+    // cleanup then saw none of the backup's files and deleted every mod.
+    if exact && unsafe_skipped > 0 {
+        result.error = Some(format!(
+            "{} file{} couldn't be restored safely (is a mods folder a link to another drive?), so nothing was removed.",
+            unsafe_skipped,
+            if unsafe_skipped == 1 { "" } else { "s" }
+        ));
+        return result;
+    }
     if exact {
         let covered: HashSet<String> = if manifest.info.category_counts.is_empty() {
             manifest.files.iter().map(|f| f.category.clone()).collect()
