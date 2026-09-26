@@ -145,7 +145,7 @@ export default function CrewList() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Panel tone="accent" label={<b>// New</b>} title="Start a crew">
           <div className="flex gap-2">
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={64} placeholder="Crew name (e.g. Sunday Sims Crew)..." aria-label="Crew name" onKeyDown={(e) => e.key === "Enter" && handleCreate()} />
+            <Input wrapperClassName="flex-1 min-w-0" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={64} placeholder="Crew name (e.g. Sunday Sims Crew)..." aria-label="Crew name" onKeyDown={(e) => e.key === "Enter" && handleCreate()} />
             <Button variant="primary" onClick={handleCreate} disabled={!newName.trim()} icon={<Users size={14} />}>
               Create
             </Button>
@@ -154,7 +154,7 @@ export default function CrewList() {
         </Panel>
         <Panel tone="accent" label={<b>// Invite</b>} title="Join a crew">
           <div className="flex gap-2">
-            <Input value={inviteText} onChange={(e) => setInviteText(e.target.value)} placeholder="synccrate://crew/..." aria-label="Crew invite link" mono onKeyDown={(e) => e.key === "Enter" && handlePreviewInvite()} />
+            <Input wrapperClassName="flex-1 min-w-0" value={inviteText} onChange={(e) => setInviteText(e.target.value)} placeholder="synccrate://crew/..." aria-label="Crew invite link" mono onKeyDown={(e) => e.key === "Enter" && handlePreviewInvite()} />
             <Button onClick={handlePreviewInvite} disabled={!inviteText.trim()} icon={<Link2 size={12} />}>
               Open
             </Button>
