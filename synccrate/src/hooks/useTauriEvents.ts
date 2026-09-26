@@ -37,6 +37,8 @@ async function refreshManifest() {
 
 // Host: at most one toast about unreadable files per half minute.
 let lastSendErrorToast = 0;
+// Host: when each friend's "synced" was last announced (peer -> ms).
+const peerSyncedToast = new Map<string, number>();
 // Host: incoming offers already announced (peer -> file count).
 const announcedOffers = new Map<string, number>();
 
@@ -385,6 +387,7 @@ export function useTauriEvents() {
           cancelled?: boolean;
           peer_id?: string;
           changes?: { added: string[]; updated: string[]; removed: string[]; added_count: number; updated_count: number; removed_count: number };
+          auto_pull?: boolean;
         }>("sync-complete", (event) => {
           setSyncProgress(null);
           // Or the next sync's "Preparing" shows this one's backup counts. Only
@@ -398,10 +401,21 @@ export function useTauriEvents() {
           refreshManifest();
           const { files_synced, errors, cancelled } = event.payload;
           const changes = event.payload.changes;
+          // Stay in sync pulls every minute: no toasts or notifications, and
+          // their files join the "What's new" card instead of replacing it.
+          const auto = !!event.payload.auto_pull;
           if (changes && changes.added_count + changes.updated_count + changes.removed_count > 0) {
+            const game = useAppStore.getState().activeGame;
+            const prev = useAppStore.getState().lastSyncChanges;
+            const merge = auto && prev && prev.game === game;
             useAppStore.getState().setLastSyncChanges({
-              ...changes,
-              game: useAppStore.getState().activeGame,
+              added: [...(merge ? prev.added : []), ...changes.added].slice(0, 500),
+              updated: [...(merge ? prev.updated : []), ...changes.updated].slice(0, 500),
+              removed: [...(merge ? prev.removed : []), ...changes.removed].slice(0, 500),
+              added_count: (merge ? prev.added_count : 0) + changes.added_count,
+              updated_count: (merge ? prev.updated_count : 0) + changes.updated_count,
+              removed_count: (merge ? prev.removed_count : 0) + changes.removed_count,
+              game,
               at: Date.now(),
               from: peerName(event.payload.peer_id),
             });
@@ -436,6 +450,7 @@ export function useTauriEvents() {
             const game = useAppStore.getState().activeGame;
             cmd.getUndoStatus(game).then((status) => {
               useAppStore.getState().setUndoStatus(status);
+              if (auto && !event.payload.errors?.length) return;
               if (status && (status.added || status.replaced || status.deleted)) {
                 const problems = event.payload.errors?.length ?? 0;
                 toastAction(
@@ -484,8 +499,8 @@ export function useTauriEvents() {
             }
             sendNotification("SyncCrate", `Sync finished with ${errors.length} error(s) — see the activity log`);
           } else {
-            addLog(`Sync complete: ${files_synced} files synced`, "success");
-            sendNotification(
+            addLog(`${auto ? "Stay in sync: " : ""}Sync complete: ${files_synced} files synced`, "success");
+            if (!auto) sendNotification(
               "SyncCrate",
               `Sync complete — ${files_synced} file${files_synced !== 1 ? "s" : ""}${from ? ` from ${from}` : ""}`,
             );
@@ -515,8 +530,14 @@ export function useTauriEvents() {
             ? `${name} finished syncing: ${files} file${files !== 1 ? "s" : ""}, ${failed} failed.`
             : `${name} is synced (${files} file${files !== 1 ? "s" : ""}).`;
           addLog(msg, failed > 0 ? "warning" : "success");
-          toastInfo(msg);
-          sendNotification("SyncCrate", msg);
+          // A friend on Stay in sync reports every minute: tell the host once
+          // in a while (always for failures); the badge updates each time.
+          const last = peerSyncedToast.get(event.payload.peer_id) ?? 0;
+          if (failed > 0 || Date.now() - last > 10 * 60_000) {
+            peerSyncedToast.set(event.payload.peer_id, Date.now());
+            toastInfo(msg);
+            sendNotification("SyncCrate", msg);
+          }
           cmd.getSessionStatus().then(setSession).catch(() => {});
         }),
         listen("chat-updated", async () => {

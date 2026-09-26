@@ -12,6 +12,7 @@ export interface SyncChanges {
   removed_count: number;
 }
 import type {
+  AutoPullResult,
   UpdateReport,
   ChatLog,
   CrewInvite,
@@ -32,7 +33,7 @@ import type {
   ModPack,
   PackApplyPreview,
 } from "../lib/types";
-import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, type Appearance, type ThemeMode } from "../lib/prefs";
+import { loadAppearance, loadThemeMode, saveAppearance, saveThemeMode, loadStayInSync, saveStayInSync, type Appearance, type ThemeMode } from "../lib/prefs";
 import { applyAppearanceRoot, applyThemeClass } from "../lib/appearance";
 
 /** A join/connect attempt with the exact arguments used, for PIN retries. */
@@ -154,6 +155,11 @@ interface AppState {
   /** What the last sync changed, for the Dashboard's "what's new" card. */
   lastSyncChanges: SyncChanges | null;
   setLastSyncChanges: (c: SyncChanges | null) => void;
+  /** "Stay in sync" (prefs), and its latest result: it runs app-wide. */
+  stayInSync: boolean;
+  setStayInSync: (on: boolean) => void;
+  autoPull: AutoPullResult | null;
+  setAutoPull: (r: AutoPullResult | null) => void;
 
   /** A `.scpack` file dropped anywhere in the app (see App.tsx's global drop
    * handler); ModpackList picks it up and clears it once loaded. */
@@ -344,6 +350,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   undoStatus: null,
   lastSyncChanges: null,
   setLastSyncChanges: (c) => set({ lastSyncChanges: c }),
+  stayInSync: loadStayInSync(),
+  setStayInSync: (on) => {
+    saveStayInSync(on);
+    set({ stayInSync: on });
+  },
+  autoPull: null,
+  setAutoPull: (r) => set({ autoPull: r }),
   setUndoStatus: (undoStatus) => set({ undoStatus }),
   pendingImportPackPath: null,
   setPendingImportPackPath: (pendingImportPackPath) => set({ pendingImportPackPath }),

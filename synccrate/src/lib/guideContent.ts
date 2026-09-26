@@ -110,7 +110,7 @@ export const GUIDE: GuideGroup[] = [
         title: "Undo a sync",
         summary: "Put your files back exactly as they were.",
         steps: [
-          "Right after a sync, click **Undo** in the message that appears, or use **Undo last sync** on the Backups page.",
+          "Right after a sync, click **Undo** in the message that appears, or **Undo last sync** on the Dashboard (also on the Backups page).",
           "Replaced files come back identical, and files the sync added are removed.",
           "Anything you changed since the sync is left alone and reported.",
         ],
@@ -228,7 +228,7 @@ export const GUIDE: GuideGroup[] = [
           "The Content page shows your mods by folder or as one list, with real mod names and icons where mods include them.",
           "Filter by status, type or tag, and enable or disable one mod or a whole creator folder.",
           "Drag files onto the window to install them: each goes to the folder its type belongs in.",
-          "Use **Duplicates** to find identical copies, and **Check for updates** where the game supports it.",
+          "Use **Find duplicates** to find identical copies, and **Check for updates** where the game supports it.",
         ],
         tip: "Press `/` or `Ctrl+F` to search.",
         keywords: "content disable enable tag duplicate update install drag drop",
