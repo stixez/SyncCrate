@@ -284,6 +284,15 @@ pub struct PackComparison {
     pub different: Vec<PackFileStatus>,
 }
 
+/// Whether a pack entry is something the game's content types still sync.
+/// Packs exported by older versions can list files that are excluded now
+/// (a Bethesda game's own `Data` files); those would otherwise show as
+/// missing forever and be requested from hosts that never send them. An
+/// empty `cts` (tests, crew sets before the game is known) keeps everything.
+pub(crate) fn pack_file_in_scope(pf: &PackFile, cts: &[crate::registry::ContentType]) -> bool {
+    cts.is_empty() || crate::sync::diff::path_accepted_by(cts, &pf.relative_path)
+}
+
 /// Have/missing/different against the local folder — no host involved yet.
 /// Case- and `.disabled`-aware via `match_key`, same as a real sync compare.
 pub(crate) fn compare_pack_to_local(pack: &ModPack, local: &FileManifest, cts: &[crate::registry::ContentType]) -> PackComparison {
@@ -296,7 +305,7 @@ pub(crate) fn compare_pack_to_local(pack: &ModPack, local: &FileManifest, cts: &
     let mut have_bytes = 0u64;
     let mut missing = Vec::new();
     let mut different = Vec::new();
-    for pf in &pack.files {
+    for pf in pack.files.iter().filter(|pf| pack_file_in_scope(pf, cts)) {
         let key = match_key(&pf.relative_path);
         let content_type = crate::sync::diff::content_type_for(cts, &pf.relative_path).map(|(ct, _)| ct.id.clone());
         match local_by_key.get(&key) {
@@ -396,7 +405,9 @@ pub(crate) async fn compute_pack_sync_plan_inner(
     let conn = app_state.connections.get(&resolved_id).ok_or("Peer not found")?;
     let remote = conn.remote_manifest.clone().ok_or("No remote manifest available. Connect to a peer first.")?;
 
-    let (mut plan, unavailable) = crate::sync::diff::compute_pack_plan(&app_state.local_manifest, &remote, &pack.files);
+    let cts = get_game_def(&app_state.game_registry, &active_game).map(|d| d.content_types.clone()).unwrap_or_default();
+    let in_scope: Vec<PackFile> = pack.files.iter().filter(|pf| pack_file_in_scope(pf, &cts)).cloned().collect();
+    let (mut plan, unavailable) = crate::sync::diff::compute_pack_plan(&app_state.local_manifest, &remote, &in_scope);
     plan.game_id = active_game;
     plan.base_path = base_path;
     plan.pack_unavailable = unavailable;
@@ -522,6 +533,20 @@ mod tests {
         assert_eq!(cmp.missing[0].relative_path, "Mods/missing.package");
         assert_eq!(cmp.different.len(), 1);
         assert_eq!(cmp.different[0].relative_path, "Mods/different.package");
+    }
+
+    #[test]
+    fn compare_ignores_entries_the_game_no_longer_syncs() {
+        // A Skyrim pack from 0.6.0 listed the game's own Data files.
+        let cts: Vec<crate::registry::ContentType> = vec![serde_json::from_value(serde_json::json!({
+            "id": "mods", "label": "x", "folder": "Data", "file_type": "Mod",
+            "extensions": ["esm", "esp"], "exclude_patterns": ["Skyrim.esm", "cc???sse*"]
+        }))
+        .unwrap()];
+        let p = pack(&[("Data/Skyrim.esm", H), ("Data/ccBGSSSE001-Fish.esm", H), ("Data/SkyUI_SE.esp", H)]);
+        let cmp = compare_pack_to_local(&p, &FileManifest::default(), &cts);
+        let missing: Vec<&str> = cmp.missing.iter().map(|m| m.relative_path.as_str()).collect();
+        assert_eq!(missing, ["Data/SkyUI_SE.esp"]);
     }
 
     #[test]
