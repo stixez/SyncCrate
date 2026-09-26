@@ -23,7 +23,7 @@ async function refreshManifest() {
   try {
     const gameId = useAppStore.getState().selectedGame ?? undefined;
     const manifest = await cmd.scanFiles(gameId);
-    if ((useAppStore.getState().selectedGame ?? undefined) === gameId) useAppStore.getState().setManifest(manifest);
+    if ((useAppStore.getState().selectedGame ?? undefined) === gameId) useAppStore.getState().setManifest(manifest, gameId);
   } catch {
     // Ignore scan failures from the file watcher
   } finally {
@@ -272,6 +272,8 @@ export function useTauriEvents() {
           // A host's own friend-dropped events (e.g. right after Stop hosting)
           // made the host "reconnect" to its old join code.
           const wasClient = useAppStore.getState().session?.session_type === "Client";
+          // Before the progress is cleared below.
+          const midDownload = peer_id ? !!useAppStore.getState().peerDownloadProgress[peer_id]?.file : false;
           setIsScanning(false);
           if (peer_id) {
             setPeerDownloadProgress(peer_id, null);
@@ -285,8 +287,7 @@ export function useTauriEvents() {
             addLog(`Peer lost: ${name}${reason ? ` (${reason})` : ""}`, "warning");
             // Only a log line before, even mid-download.
             if (!wasClient && name && name !== "all") {
-              const mid = peer_id ? !!useAppStore.getState().peerDownloadProgress[peer_id]?.file : false;
-              const msg = `${name} lost the connection${mid ? " while downloading" : ""}.`;
+              const msg = `${name} lost the connection${midDownload ? " while downloading" : ""}.`;
               toastInfo(msg);
               sendNotification("SyncCrate", msg);
             }
@@ -445,6 +446,7 @@ export function useTauriEvents() {
                   () => {
                   cmd.undoLastSync(game).then((r) => {
                     useAppStore.getState().setUndoStatus(null);
+                    useAppStore.getState().setLastSyncChanges(null);
                     const parts = [`${r.restored} restored`, `${r.removed} removed`];
                     if (r.skipped.length) parts.push(`${r.skipped.length} skipped`);
                     toastInfo(`Undo: ${parts.join(", ")}`);
@@ -540,9 +542,12 @@ export function useTauriEvents() {
           // Host: say when a friend offers files (it only refreshed a panel far down the page).
           if (useAppStore.getState().session?.session_type !== "Host") return;
           cmd.getIncomingOffers().then((offers) => {
+            const live = new Set(offers.map((o) => o.peer_id));
+            for (const id of [...announcedOffers.keys()]) if (!live.has(id)) announcedOffers.delete(id);
             for (const o of offers) {
               const pending = o.files.filter((f) => f.state === "pending").length;
-              if (pending > 0 && pending !== announcedOffers.get(o.peer_id)) {
+              // Only when more arrived: each accept/decline also fires this.
+              if (pending > (announcedOffers.get(o.peer_id) ?? 0)) {
                 const msg = `${o.peer_name} wants to give you ${pending} file${pending !== 1 ? "s" : ""}. See "Files friends want to give you" on the Dashboard.`;
                 toastInfo(msg);
                 sendNotification("SyncCrate", msg);

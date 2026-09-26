@@ -392,9 +392,11 @@ function App() {
     }
     switch (page) {
       case "dashboard":
-        return <GameDashboard gameId={selectedGame} />;
+        // Keyed: open confirms, panels and in-flight results belonged to the
+        // previous game (an open "Undo it" undid the next game's sync).
+        return <GameDashboard key={selectedGame} gameId={selectedGame} />;
       case "content":
-        return <ContentBrowser gameId={selectedGame} />;
+        return <ContentBrowser key={selectedGame} gameId={selectedGame} />;
       case "profiles":
         return <ProfileList gameId={selectedGame} />;
       case "backups":
@@ -402,7 +404,7 @@ function App() {
       case "modpacks":
         return <ModpackList gameId={selectedGame} />;
       default:
-        return <GameDashboard gameId={selectedGame} />;
+        return <GameDashboard key={selectedGame} gameId={selectedGame} />;
     }
   };
 

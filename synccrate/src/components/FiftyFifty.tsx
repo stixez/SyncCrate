@@ -42,11 +42,11 @@ export default function FiftyFifty({ gameId, gameLabel, onClose, onActive }: Pro
       const v = await what();
       setView(v);
       if (v?.errors.length) toastError(`${v.errors.length} file(s) couldn't be moved: ${v.errors[0]}`);
-      if (done) {
+      if (done && !v?.errors.length) {
         toastSuccess(done);
         addLog(done, "success");
       }
-      cmd.scanFiles(gameId).then((m) => useAppStore.getState().setManifest(m)).catch(() => {});
+      cmd.scanFiles(gameId).then((m) => useAppStore.getState().setManifest(m, gameId)).catch(() => {});
     } catch (e) {
       toastError(`${e}`);
     } finally {

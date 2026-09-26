@@ -17,7 +17,7 @@ export async function runPackApply(pack: ModPack, preview: PackApplyPreview): Pr
     if (r.skipped.length) toastInfo(`Pack applied: ${summary}. See the activity log for skipped files.`);
     else toastSuccess(`Pack applied: ${summary}`);
     try {
-      useAppStore.getState().setManifest(await cmd.scanFiles(preview.game_id));
+      useAppStore.getState().setManifest(await cmd.scanFiles(preview.game_id), preview.game_id);
     } catch {}
     return true;
   } catch (e) {
