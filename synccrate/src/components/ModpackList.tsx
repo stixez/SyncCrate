@@ -384,7 +384,7 @@ export default function ModpackList({ gameId }: Props) {
             </Button>
             <p className="text-center font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted">— or drop one anywhere, or paste a link —</p>
             <div className="flex gap-2">
-              <Input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
+              <Input wrapperClassName="flex-1 min-w-0" value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
               <Button onClick={handleImportLink} disabled={!linkInput.trim()} icon={<Link2 size={12} />}>
                 Load
               </Button>

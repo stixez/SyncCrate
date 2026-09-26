@@ -217,7 +217,7 @@ export default function WelcomeScreen() {
           <Input
             value={name}
             onChange={(e) => setName(e.target.value.replace(/[^\p{L}\p{N}\s_-]/gu, "").slice(0, 32))}
-            label="// Your name (friends see it when you host or join)"
+            label="// What friends call you"
             placeholder="e.g. Alex"
             aria-label="Your name"
             wrapperClassName="mt-8 max-w-[320px]"
