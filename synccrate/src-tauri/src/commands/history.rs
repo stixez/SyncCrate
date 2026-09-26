@@ -275,7 +275,8 @@ pub(crate) fn begin_capture_from_backup(
 
 /// After the sync: keep the pending versions of files it really replaced or
 /// deleted (marking deletions as such), drop the rest, apply retention.
-pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[String], deleted: &[String], now: u64) -> Result<(), String> {
+/// Returns the versions it kept, for the sync's undo record.
+pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[String], deleted: &[String], now: u64) -> Result<Vec<crate::commands::undo::KeptVersion>, String> {
     let mut reasons: HashMap<String, &str> = replaced.iter().map(|p| (p.to_lowercase(), REASON_REPLACED)).collect();
     reasons.extend(deleted.iter().map(|p| (p.to_lowercase(), REASON_DELETED)));
     settle(root, game, capture_id, &reasons, now)
@@ -285,12 +286,12 @@ pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[Stri
 /// overwrite): each changed path with its reason.
 pub(crate) fn finish_local(root: &Path, game: &str, capture_id: &str, changed: &[(String, &str)], now: u64) -> Result<(), String> {
     let reasons: HashMap<String, &str> = changed.iter().map(|(p, r)| (p.to_lowercase(), *r)).collect();
-    settle(root, game, capture_id, &reasons, now)
+    settle(root, game, capture_id, &reasons, now).map(|_| ())
 }
 
 /// Keep the pending versions whose (lowercased) path is in `reasons`, with
 /// that reason; drop the rest; apply retention.
-fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &str>, now: u64) -> Result<(), String> {
+fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &str>, now: u64) -> Result<Vec<crate::commands::undo::KeptVersion>, String> {
     let _lock = backup::store_lock();
     let mut h = load(root, game)?;
     let before = h.entries.len();
@@ -310,6 +311,12 @@ fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &
     // leaked for anyone without backups (the only other GC trigger).
     let dropped = h.entries.len() < before;
     let pruned = prune(&mut h.entries, now, &settled);
+    let kept = h
+        .entries
+        .iter()
+        .filter(|e| settled.contains(&e.id))
+        .map(|e| crate::commands::undo::KeptVersion { path: e.path.clone(), hash: e.hash.clone(), mtime_ms: e.mtime_ms })
+        .collect();
     save(root, game, &h)?;
     // GC must run under the store lock, like every other caller: unlocked,
     // it would delete a concurrent backup's objects/tmp files and objects no
@@ -317,7 +324,7 @@ fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &
     if pruned || dropped {
         backup::gc_logged(root);
     }
-    Ok(())
+    Ok(kept)
 }
 
 /// Versions for a game (optionally one path, case-insensitive), newest first.
