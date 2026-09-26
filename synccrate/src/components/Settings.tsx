@@ -703,13 +703,14 @@ function AppearanceSection() {
               <p className="text-xs text-txt-dim mt-0.5">
                 {appearance.matchGame ? "Used when no game is selected." : "Highlights, buttons and progress bars."}
               </p>
-              <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap gap-2 mt-3">
+              <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap gap-2 mt-3" onKeyDown={radioArrows}>
                 {ACCENT_PRESETS.map((p) => (
                   <button
                     key={p.hex}
                     type="button"
                     role="radio"
                     aria-checked={p.hex === accent}
+                    tabIndex={p.hex === accent || (!preset && p === ACCENT_PRESETS[0]) ? 0 : -1}
                     aria-label={p.name}
                     title={p.name}
                     className="swatch"
@@ -818,15 +819,29 @@ function Segmented<T extends string | number>({
   options: { value: T; label: string; icon?: ReactNode }[];
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="seg">
+    <div role="radiogroup" aria-label={label} className="seg" onKeyDown={radioArrows}>
       {options.map((o) => (
-        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} onClick={() => onChange(o.value)}>
+        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} tabIndex={o.value === value ? 0 : -1} onClick={() => onChange(o.value)}>
           {o.icon}
           {o.label}
         </button>
       ))}
     </div>
   );
+}
+
+/** Arrow keys move between (and pick) the radios of a group, as screen
+ *  readers announce them: only Tab worked, one stop per option. */
+function radioArrows(e: React.KeyboardEvent<HTMLElement>) {
+  const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (!step) return;
+  const radios = [...e.currentTarget.querySelectorAll<HTMLElement>('button[role="radio"]')];
+  const i = radios.indexOf(document.activeElement as HTMLElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const next = radios[(i + step + radios.length) % radios.length];
+  next.focus();
+  next.click();
 }
 
 /** Two-column settings block: numbered caption + blurb on the left, controls on the right. */

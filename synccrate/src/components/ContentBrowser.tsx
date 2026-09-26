@@ -1312,13 +1312,9 @@ function FolderHeader({
   return (
     <div
       style={style}
-      role="button"
-      tabIndex={0}
-      aria-expanded={open}
+      // Mouse: the whole header toggles. Keyboard: the arrow button below
+      // (a role="button" header nested Enable/Disable all inside a button).
       onClick={onToggleOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggleOpen(); }
-      }}
       className={cx(
         "group absolute inset-x-0 flex items-center gap-3 pl-3 pr-3 border-b border-border bg-bg-2 cursor-pointer select-none transition-colors hover:bg-bg-card-hover",
         "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
@@ -1336,9 +1332,15 @@ function FolderHeader({
           aria-label={`Select all in ${group.dir || "top level"}`}
         />
       )}
-      <span className="w-6 shrink-0 flex items-center justify-center text-txt-muted">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onToggleOpen(); }}
+        aria-expanded={open}
+        aria-label={`${open ? "Collapse" : "Expand"} ${group.dir || "top level"}`}
+        className="w-6 h-6 shrink-0 flex items-center justify-center text-txt-muted hover:text-txt"
+      >
         <ChevronRight size={13} className={cx("transition-transform", open && "rotate-90")} />
-      </span>
+      </button>
       {folderMeta ? (
         <>
           <ModIcon meta={folderMeta} size={18} className="-ml-2" fallback={<Folder size={13} className={open ? "text-accent-light" : "text-txt-muted"} />} />
