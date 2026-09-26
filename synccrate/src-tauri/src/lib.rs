@@ -41,6 +41,7 @@ use tokio::sync::Mutex;
 
 pub fn run() {
     env_logger::init();
+    commands::system::wait_for_previous_instance();
 
     // Migrate config from old simshare dir if needed (before any config loads)
     utils::migrate_from_simshare();
@@ -298,17 +299,25 @@ pub fn run() {
                     watcher::file_watcher::start_watching(watcher::file_watcher::watch_spec(base_path, cts), handle)
                 });
 
-                // Auto-detect packs for all detected games
-                let mut game_info_map = std::collections::HashMap::new();
-                for (game_id, path) in &game_paths {
-                    let info = packs::detect_game_info(game_id, path);
-                    game_info_map.insert(game_id.clone(), info);
-                }
+                // Auto-detect packs for all detected games (disk reads: off
+                // the async workers).
+                let paths_for_packs = game_paths.clone();
+                let game_info_map = tauri::async_runtime::spawn_blocking(move || {
+                    paths_for_packs
+                        .iter()
+                        .map(|(game_id, path)| (game_id.clone(), packs::detect_game_info(game_id, path)))
+                        .collect::<std::collections::HashMap<_, _>>()
+                })
+                .await
+                .unwrap_or_default();
 
                 // Acquire lock only to update state
                 let mut app_state = state_clone.lock().await;
                 app_state.game_info = game_info_map;
-                if let Some(Ok(w)) = watcher_result {
+                // Switching game (or its path) meanwhile started the right
+                // watcher already; this one watches the old game's folders.
+                let unchanged = app_state.active_game == active_game && app_state.game_paths.get(&active_game) == game_paths.get(&active_game);
+                if let (Some(Ok(w)), true, true) = (watcher_result, unchanged, app_state.file_watcher.is_none()) {
                     app_state.file_watcher = Some(w);
                 }
             });
@@ -465,6 +474,25 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|_app, _event| {
+            // Quitting (tray Quit, closing the window, restart as admin) used
+            // to drop every peer without a Disconnect: LAN friends got
+            // "connection lost" and a reconnect loop, internet friends stayed
+            // "connected" until the idle timeout. Say goodbye first (at most
+            // a few seconds), then exit for real.
+            if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
+                static SAID_GOODBYE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                let state = _app.state::<Arc<Mutex<AppState>>>().inner().clone();
+                let in_session = state.try_lock().map_or(true, |s| s.session_type != state::SessionType::None);
+                if in_session && !SAID_GOODBYE.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_exit();
+                    let app = _app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), commands::session::disconnect_inner(&state, &app)).await;
+                        app.exit(0);
+                    });
+                    return;
+                }
+            }
             // macOS delivers clicked links and opened files as Apple events,
             // both cold (after launch) and warm.
             #[cfg(target_os = "macos")]

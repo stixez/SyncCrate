@@ -213,6 +213,11 @@ pub(crate) async fn intent_from_raw(state: &Arc<Mutex<AppState>>, raw: &str, cwd
 /// the frontend and bring the window forward. Called from setup (cold start),
 /// the single-instance callback and `RunEvent::Opened`.
 pub fn handle_args(app: &tauri::AppHandle, args: Vec<String>, cwd: Option<PathBuf>) {
+    // Not a file or link: `restart_as_admin`'s hand-over (`--wait-pid N`).
+    let mut args = args;
+    if let Some(i) = args.iter().position(|a| a == "--wait-pid") {
+        args.drain(i..(i + 2).min(args.len()));
+    }
     if args.is_empty() {
         return;
     }

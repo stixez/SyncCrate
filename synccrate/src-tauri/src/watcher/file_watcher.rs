@@ -67,25 +67,57 @@ impl WatchSpec {
     }
 }
 
-/// Watch `folders`; those that don't exist yet are picked up once they do.
-/// Before, a Saves or Mods folder created later (often by the first sync)
-/// wasn't watched until the game or its path changed.
-fn watch_existing(watcher: &mut RecommendedWatcher, folders: &[(String, bool)]) -> Vec<(String, bool)> {
+/// A watched folder and what it was when the watch started (its creation
+/// time; a move keeps it, a new folder gets a new one).
+struct Watched {
+    path: String,
+    recursive: bool,
+    created: Option<std::time::SystemTime>,
+}
+
+fn folder_identity(path: &Path) -> Option<Option<std::time::SystemTime>> {
+    let meta = std::fs::metadata(path).ok().filter(|m| m.is_dir())?;
+    Some(meta.created().ok())
+}
+
+/// Watch `folders`; those that don't exist yet are returned, to be picked up
+/// once they do. Before, a Saves or Mods folder created later (often by the
+/// first sync) wasn't watched until the game or its path changed.
+fn watch_existing(watcher: &mut RecommendedWatcher, folders: &[(String, bool)], watched: &mut Vec<Watched>) -> Vec<(String, bool)> {
     let mut missing = Vec::new();
     for (path_str, recursive) in folders {
         let p = Path::new(path_str);
-        if !p.is_dir() {
+        let Some(created) = folder_identity(p) else {
             missing.push((path_str.clone(), *recursive));
             continue;
-        }
+        };
         let mode = if *recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
         // One unwatchable folder (permissions, network drive, ...) shouldn't
         // disable change detection for all the others.
-        if let Err(e) = watcher.watch(p, mode) {
-            log::warn!("Cannot watch {}: {}", path_str, e);
+        match watcher.watch(p, mode) {
+            Ok(()) => watched.push(Watched { path: path_str.clone(), recursive: *recursive, created }),
+            Err(e) => log::warn!("Cannot watch {}: {}", path_str, e),
         }
     }
     missing
+}
+
+/// Watched folders that aren't there any more, or are a different folder
+/// now: on Windows a watch follows the folder when it's moved (deleting to
+/// the Recycle Bin is a move too), so after the Sims 4 "50/50" routine (move
+/// Mods to the Desktop, make a new Mods) changes in the real one went
+/// unseen. Unwatched and returned, to be watched again.
+fn stale_watches(watcher: &mut RecommendedWatcher, watched: &mut Vec<Watched>) -> Vec<(String, bool)> {
+    let mut stale = Vec::new();
+    watched.retain(|w| {
+        if folder_identity(Path::new(&w.path)) == Some(w.created) {
+            return true;
+        }
+        let _ = watcher.unwatch(Path::new(&w.path));
+        stale.push((w.path.clone(), w.recursive));
+        false
+    });
+    stale
 }
 
 /// Start watching a dynamic list of content type directories.
@@ -97,7 +129,8 @@ pub fn start_watching(
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2)))
         .map_err(|e| e.to_string())?;
-    let mut missing = watch_existing(&mut watcher, &spec.folders);
+    let mut watched = Vec::new();
+    let mut missing = watch_existing(&mut watcher, &spec.folders, &mut watched);
     let inner = Arc::new(Mutex::new(watcher));
     let weak = Arc::downgrade(&inner);
 
@@ -152,13 +185,21 @@ pub fn start_watching(
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
 
-            if !missing.is_empty() && last_recheck.elapsed() >= MISSING_RECHECK {
+            if last_recheck.elapsed() >= MISSING_RECHECK {
                 last_recheck = std::time::Instant::now();
-                if missing.iter().any(|(p, _)| Path::new(p).is_dir()) {
+                let moved = watched.iter().any(|w| folder_identity(Path::new(&w.path)) != Some(w.created));
+                if moved || missing.iter().any(|(p, _)| Path::new(p).is_dir()) {
                     let Some(w) = weak.upgrade() else { break };
                     let Ok(mut w) = w.lock() else { break };
+                    let stale = stale_watches(&mut w, &mut watched);
+                    if !stale.is_empty() {
+                        // Gone or replaced: what the scan shows changed too
+                        // (the rescan is scheduled just below).
+                        pending_kind.get_or_insert_with(|| "FolderMoved".to_string());
+                    }
+                    missing.extend(stale);
                     let appeared: Vec<String> = missing.iter().filter(|(p, _)| Path::new(p).is_dir()).map(|(p, _)| p.clone()).collect();
-                    missing = watch_existing(&mut w, &missing);
+                    missing = watch_existing(&mut w, &missing, &mut watched);
                     // Files may have landed before the watch started: rescan once.
                     pending_paths.extend(appeared);
                     pending_kind.get_or_insert_with(|| "FolderCreated".to_string());
@@ -213,9 +254,16 @@ mod tests {
         let mut w = RecommendedWatcher::new(tx, Config::default()).unwrap();
         let mods = (dir.join("Mods").to_string_lossy().to_string(), true);
         let saves = (dir.join("Saves").to_string_lossy().to_string(), true);
-        assert_eq!(watch_existing(&mut w, &[mods.clone(), saves.clone()]), vec![saves.clone()]);
+        let mut watched = Vec::new();
+        assert_eq!(watch_existing(&mut w, &[mods.clone(), saves.clone()], &mut watched), vec![saves.clone()]);
         std::fs::create_dir_all(dir.join("Saves")).unwrap();
-        assert!(watch_existing(&mut w, &[saves]).is_empty(), "watched once it exists");
+        assert!(watch_existing(&mut w, &[saves.clone()], &mut watched).is_empty(), "watched once it exists");
+        assert!(stale_watches(&mut w, &mut watched).is_empty());
+
+        // Moved away (50/50 troubleshooting): unwatched, to be watched again.
+        std::fs::rename(dir.join("Mods"), dir.join("Mods-moved")).unwrap();
+        assert_eq!(stale_watches(&mut w, &mut watched), vec![mods.clone()]);
+        assert_eq!(watched.len(), 1, "Saves is still watched");
         drop(w);
         let _ = std::fs::remove_dir_all(&dir);
     }

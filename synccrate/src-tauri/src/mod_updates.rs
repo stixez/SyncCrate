@@ -24,6 +24,10 @@ const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_MODS_PER_SOURCE: usize = 300;
 const MAX_JAR_BYTES: u64 = 256 * 1024 * 1024;
 const THUNDERSTORE_PARALLEL: usize = 6;
+/// Thunderstore is asked once per mod: 300 mods against a slow server (20 s
+/// per request) kept the check spinning for ~17 minutes. Past this it stops
+/// and reports how far it got.
+const THUNDERSTORE_BUDGET: std::time::Duration = std::time::Duration::from_secs(90);
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ModUpdate {
@@ -316,7 +320,13 @@ async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], 
 async fn check_thunderstore(http: &reqwest::Client, metas: &[&ModMeta], report: &mut UpdateReport) -> Result<(), String> {
     let targets: Vec<(&ModMeta, String, String)> = metas.iter().filter_map(|m| thunderstore_target(m).map(|(ns, n)| (*m, ns, n))).take(MAX_MODS_PER_SOURCE).collect();
     let mut failures = 0;
-    for chunk in targets.chunks(THUNDERSTORE_PARALLEL) {
+    let started = std::time::Instant::now();
+    for (n, chunk) in targets.chunks(THUNDERSTORE_PARALLEL).enumerate() {
+        if started.elapsed() >= THUNDERSTORE_BUDGET {
+            let asked = n * THUNDERSTORE_PARALLEL;
+            report.errors.push(format!("Thunderstore: too slow right now, checked {asked} of {} mods", targets.len()));
+            return Ok(());
+        }
         let mut set = tokio::task::JoinSet::new();
         for (i, (_, ns, name)) in chunk.iter().enumerate() {
             let (http, url) = (http.clone(), format!("https://thunderstore.io/api/experimental/package/{ns}/{name}/"));
