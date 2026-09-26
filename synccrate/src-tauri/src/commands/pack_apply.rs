@@ -259,31 +259,41 @@ pub struct RevertResult {
 /// Undo the recorded moves, newest first. Each file must still sit at its
 /// new path unchanged, and its old path must be free; otherwise it's
 /// skipped (the user moved, edited or replaced it since).
-pub(crate) fn revert_moves(base: &str, moves: &[MoveRecord]) -> (RevertResult, Vec<MoveRecord>) {
+/// Also returns the moves worth retrying (the rename itself failed, e.g. a
+/// file held by OneDrive or antivirus), in record order.
+pub(crate) fn revert_moves(base: &str, moves: &[MoveRecord]) -> (RevertResult, Vec<MoveRecord>, Vec<MoveRecord>) {
     let mut result = RevertResult::default();
     let mut done = Vec::new();
+    let mut retry = Vec::new();
     for m in moves.iter().rev() {
-        let attempt = (|| -> Result<(), String> {
-            let from = utils::safe_join(base, &m.new_path)?;
-            let to = utils::safe_join(base, &m.old_path)?;
-            file_matches(&from, m.size, m.mtime_ms).map_err(|e| e.replace("since the preview", "since the apply"))?;
+        // (reason, can be retried)
+        let attempt = (|| -> Result<(), (String, bool)> {
+            let from = utils::safe_join(base, &m.new_path).map_err(|e| (e, false))?;
+            let to = utils::safe_join(base, &m.old_path).map_err(|e| (e, false))?;
+            file_matches(&from, m.size, m.mtime_ms).map_err(|e| (e.replace("since the preview", "since the apply"), false))?;
             if std::fs::symlink_metadata(&to).is_ok() {
-                return Err(format!("{} exists again, so it wasn't overwritten", m.old_path));
+                return Err((format!("{} exists again, so it wasn't overwritten", m.old_path), false));
             }
             if let Some(parent) = to.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                std::fs::create_dir_all(parent).map_err(|e| (e.to_string(), true))?;
             }
-            std::fs::rename(&from, &to).map_err(|e| e.to_string())
+            std::fs::rename(&from, &to).map_err(|e| (e.to_string(), true))
         })();
         match attempt {
             Ok(()) => {
                 result.reverted += 1;
                 done.push(m.clone());
             }
-            Err(reason) => result.skipped.push(SkippedFile { relative_path: m.new_path.clone(), reason }),
+            Err((reason, retryable)) => {
+                if retryable {
+                    retry.push(m.clone());
+                }
+                result.skipped.push(SkippedFile { relative_path: m.new_path.clone(), reason });
+            }
         }
     }
-    (result, done)
+    retry.reverse();
+    (result, done, retry)
 }
 
 // --- Apply record ---
@@ -304,13 +314,15 @@ pub(crate) fn read_record(game: &str) -> Option<ApplyRecord> {
     serde_json::from_str(&std::fs::read_to_string(record_path(game)).ok()?).ok()
 }
 
-pub(crate) fn write_record(record: &ApplyRecord) {
+pub(crate) fn write_record(record: &ApplyRecord) -> Result<(), String> {
     let path = record_path(&record.game);
-    let Ok(data) = serde_json::to_string_pretty(record) else { return };
+    let data = serde_json::to_string_pretty(record).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    if std::fs::write(&tmp, data).is_ok() {
-        let _ = std::fs::rename(&tmp, &path);
-    }
+    std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
 }
 
 pub(crate) fn delete_record(game: &str) {
@@ -507,9 +519,8 @@ pub(crate) async fn apply_pack_exact_inner(
         .await
         .map_err(|e| e.to_string())?;
 
-    for m in &moves {
-        crate::commands::tags::move_tags(&ctx.game_id, &m.old_path, &m.new_path);
-    }
+    let renamed: Vec<(String, String)> = moves.iter().map(|m| (m.old_path.clone(), m.new_path.clone())).collect();
+    crate::commands::tags::move_tags_batch(&ctx.game_id, &renamed);
     let result = PackApplyResult {
         enabled: moves.iter().filter(|m| m.kind == MoveKind::Enabled).count(),
         disabled: moves.iter().filter(|m| m.kind == MoveKind::Disabled).count(),
@@ -517,13 +528,16 @@ pub(crate) async fn apply_pack_exact_inner(
     };
     // An apply that moved nothing leaves the previous record revertable.
     if !moves.is_empty() {
-        write_record(&ApplyRecord {
+        let record = ApplyRecord {
             game: ctx.game_id,
             base_path: ctx.base_path,
             created_at: utils::timestamp_now(),
             pack_name: pack.name,
             moves,
-        });
+        };
+        if let Err(e) = write_record(&record) {
+            log::warn!("Couldn't save the pack apply record, so it can't be reverted: {e}");
+        }
     }
     Ok(result)
 }
@@ -594,13 +608,18 @@ pub(crate) async fn revert_pack_apply_inner(state: &Arc<Mutex<AppState>>, game: 
 
     let base = ctx.base_path.clone();
     let moves = record.moves.clone();
-    let (result, done) = tokio::task::spawn_blocking(move || revert_moves(&base, &moves))
+    let (result, done, retry) = tokio::task::spawn_blocking(move || revert_moves(&base, &moves))
         .await
         .map_err(|e| e.to_string())?;
-    for m in &done {
-        crate::commands::tags::move_tags(&ctx.game_id, &m.new_path, &m.old_path);
+    let renamed: Vec<(String, String)> = done.iter().map(|m| (m.new_path.clone(), m.old_path.clone())).collect();
+    crate::commands::tags::move_tags_batch(&ctx.game_id, &renamed);
+    // Files a rename failed on (held by OneDrive, antivirus) stay revertable;
+    // deleting the whole record left them disabled for good.
+    if retry.is_empty() {
+        delete_record(&ctx.game_id);
+    } else if let Err(e) = write_record(&ApplyRecord { moves: retry, ..record }) {
+        log::warn!("Couldn't keep the unfinished revert: {e}");
     }
-    delete_record(&ctx.game_id);
     Ok(result)
 }
 
@@ -793,7 +812,8 @@ mod tests {
         assert_eq!(moves.len(), 2);
         std::fs::rename(base.join("Mods/b.package.disabled"), base.join("Mods/moved.package.disabled")).unwrap();
 
-        let (result, done) = revert_moves(&b, &moves);
+        let (result, done, retry) = revert_moves(&b, &moves);
+        assert!(retry.is_empty(), "a file moved since is skipped for good, not retried");
         assert_eq!(result.reverted, 1);
         assert_eq!(done[0].old_path, "Mods/a.package");
         assert_eq!(result.skipped.len(), 1);
@@ -809,7 +829,8 @@ mod tests {
         let b = base.to_string_lossy().to_string();
         let (moves, _) = apply_moves(&b, "Mods", true, &[], &[item(&base, "Mods/a.package")]);
         write(&base, "Mods/a.package", b"NEW");
-        let (result, _) = revert_moves(&b, &moves);
+        let (result, _, retry) = revert_moves(&b, &moves);
+        assert!(retry.is_empty());
         assert_eq!(result.reverted, 0);
         assert_eq!(std::fs::read(base.join("Mods/a.package")).unwrap(), b"NEW");
         assert!(base.join("Mods/a.package.disabled").exists());
@@ -839,8 +860,8 @@ mod tests {
             pack_name: name.into(),
             moves: vec![MoveRecord { kind: MoveKind::Disabled, old_path: "Mods/a.package".into(), new_path: "Mods/a.package.disabled".into(), size: 1, mtime_ms: 2 }],
         };
-        write_record(&rec("first"));
-        write_record(&rec("second"));
+        write_record(&rec("first")).unwrap();
+        write_record(&rec("second")).unwrap();
         let read = read_record("sims4").expect("record");
         assert_eq!(read.pack_name, "second");
         assert_eq!(read.moves, rec("second").moves);

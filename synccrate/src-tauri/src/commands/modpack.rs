@@ -107,10 +107,12 @@ pub(crate) async fn create_pack_inner(
     include_join_code: bool,
 ) -> Result<ModPack, String> {
     let name = name.trim().to_string();
-    if name.is_empty() || name.len() > 128 {
+    // Characters, not bytes: a crew set is named after its crew (up to 64
+    // characters), and 43 CJK characters failed this.
+    if name.is_empty() || name.chars().count() > 128 {
         return Err("Pack name must be 1-128 characters".to_string());
     }
-    if description.len() > 1024 {
+    if description.chars().count() > 1024 {
         return Err("Description must be under 1024 characters".to_string());
     }
 

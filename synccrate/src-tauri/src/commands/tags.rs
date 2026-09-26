@@ -18,22 +18,46 @@ struct ModMetadataStore {
     games: HashMap<String, TagMap>,
 }
 
-fn read_store() -> ModMetadataStore {
-    let path = utils::metadata_path();
-    if path.exists() {
-        if let Ok(data) = std::fs::read_to_string(&path) {
-            if let Ok(store) = serde_json::from_str(&data) {
-                return store;
-            }
-        }
-    }
-    ModMetadataStore::default()
+/// One load-change-save at a time: tag edits and file toggles run
+/// concurrently, and the later save dropped the earlier one's change.
+static STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn store_lock() -> std::sync::MutexGuard<'static, ()> {
+    STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// An unreadable store used to load as empty, and the next save then wrote
+/// that over every tag of every game. Now a read error fails the change, and
+/// a damaged file is set aside (kept for recovery) before starting over.
+fn read_store() -> Result<ModMetadataStore, String> {
+    let path = utils::metadata_path();
+    let data = match std::fs::read_to_string(&path) {
+        Ok(d) => d,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ModMetadataStore::default()),
+        Err(e) => return Err(format!("Couldn't read the tags: {e}")),
+    };
+    match serde_json::from_str(&data) {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            let aside = path.with_extension("json.damaged");
+            log::warn!("The tags file is damaged ({e}); kept it as {}", aside.display());
+            std::fs::rename(&path, &aside).map_err(|e| format!("Couldn't set the damaged tags file aside: {e}"))?;
+            Ok(ModMetadataStore::default())
+        }
+    }
+}
+
+/// Write-then-rename: a crash mid-write left a half file (then read as
+/// damaged).
 fn write_store(store: &ModMetadataStore) -> Result<(), String> {
     let path = utils::metadata_path();
     let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
 }
 
 /// Move legacy path-only tags to `game` (the active game when first seen; the
@@ -51,36 +75,54 @@ fn migrate_legacy(store: &mut ModMetadataStore, game: &str) -> bool {
 }
 
 /// Load the store, migrating legacy tags into `active_game` (persisted once).
-fn load_for(active_game: &str) -> ModMetadataStore {
-    let mut store = read_store();
+/// Callers hold `store_lock()`.
+fn load_for(active_game: &str) -> Result<ModMetadataStore, String> {
+    let mut store = read_store()?;
     if migrate_legacy(&mut store, active_game) {
         let _ = write_store(&store);
     }
-    store
+    Ok(store)
 }
 
 /// Re-key tags after `toggle_mod` renamed/moved a file (`x.package` ->
 /// `x.package.disabled` or into `_Disabled/`), which used to drop them.
 pub(crate) fn move_tags(game: &str, from: &str, to: &str) {
-    if from == to {
+    move_tags_batch(game, &[(from.to_string(), to.to_string())]);
+}
+
+/// `move_tags` for many files with one load and save: a pack apply moving
+/// 2,000 mods rewrote the whole file 2,000 times.
+pub(crate) fn move_tags_batch(game: &str, moves: &[(String, String)]) {
+    if moves.iter().all(|(from, to)| from == to) {
         return;
     }
-    let mut store = load_for(game);
-    if move_tags_in(&mut store, game, from, to) {
-        let _ = write_store(&store);
+    let _lock = store_lock();
+    let Ok(mut store) = load_for(game) else { return };
+    let mut changed = false;
+    for (from, to) in moves {
+        if from != to {
+            changed |= move_tags_in(&mut store, game, from, to);
+        }
+    }
+    if changed {
+        if let Err(e) = write_store(&store) {
+            log::warn!("Couldn't save the moved tags: {e}");
+        }
     }
 }
 
 #[cfg(test)]
 pub(crate) fn set_tags_for_test(game: &str, path: &str, tags: &[&str]) {
-    let mut store = load_for(game);
+    let _lock = store_lock();
+    let mut store = load_for(game).unwrap();
     store.games.entry(game.to_string()).or_default().insert(path.to_string(), tags.iter().map(|t| t.to_string()).collect());
     write_store(&store).unwrap();
 }
 
 #[cfg(test)]
 pub(crate) fn tags_for_test(game: &str, path: &str) -> Vec<String> {
-    read_store().games.get(game).and_then(|m| m.get(path)).cloned().unwrap_or_default()
+    let _lock = store_lock();
+    read_store().unwrap_or_default().games.get(game).and_then(|m| m.get(path)).cloned().unwrap_or_default()
 }
 
 fn move_tags_in(store: &mut ModMetadataStore, game: &str, from: &str, to: &str) -> bool {
@@ -124,7 +166,8 @@ pub async fn get_mod_tags(
     game_id: String,
 ) -> Result<TagMap, String> {
     let (game, active) = target_game(&state, &game_id).await?;
-    Ok(load_for(&active).games.remove(&game).unwrap_or_default())
+    let _lock = store_lock();
+    Ok(load_for(&active)?.games.remove(&game).unwrap_or_default())
 }
 
 #[tauri::command]
@@ -135,7 +178,8 @@ pub async fn set_mod_tags(
     tags: Vec<String>,
 ) -> Result<(), String> {
     let (game, active) = target_game(&state, &game_id).await?;
-    let mut store = load_for(&active);
+    let _lock = store_lock();
+    let mut store = load_for(&active)?;
     let map = store.games.entry(game).or_default();
     if tags.is_empty() {
         map.remove(&path);
@@ -153,7 +197,8 @@ pub async fn bulk_set_tags(
     tags: Vec<String>,
 ) -> Result<(), String> {
     let (game, active) = target_game(&state, &game_id).await?;
-    let mut store = load_for(&active);
+    let _lock = store_lock();
+    let mut store = load_for(&active)?;
     let map = store.games.entry(game).or_default();
     for path in paths {
         if tags.is_empty() {

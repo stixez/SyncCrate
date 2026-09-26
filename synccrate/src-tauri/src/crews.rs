@@ -434,7 +434,7 @@ pub fn host_handshake(state: &mut crate::state::AppState, hellos: &[CrewHello], 
         }
     }
     if changed {
-        persist(state);
+        persist_in_background(state);
     }
     out
 }
@@ -461,7 +461,7 @@ pub fn client_handshake(state: &mut crate::state::AppState, welcomes: Vec<CrewWe
         }
     }
     if changed {
-        persist(state);
+        persist_in_background(state);
     }
     changed
 }
@@ -599,9 +599,42 @@ pub fn save_store(path: &Path, store: &CrewStore) -> Result<(), String> {
 /// and a store that failed to load run without one).
 pub fn persist(state: &crate::state::AppState) {
     if let Some(path) = &state.crews_path {
-        if let Err(e) = save_store(path, &state.crews) {
-            log::warn!("{e}");
+        save_snapshot(path, &state.crews, next_save_seq());
+    }
+}
+
+/// Numbered while the AppState lock is held (both callers borrow it), so the
+/// number orders the snapshots: a background save of an older one must not
+/// land after a newer save.
+static SAVE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static LAST_SAVED: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+
+fn next_save_seq() -> u64 {
+    SAVE_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+}
+
+fn save_snapshot(path: &Path, store: &CrewStore, seq: u64) {
+    let mut last = LAST_SAVED.lock().unwrap_or_else(|e| e.into_inner());
+    if *last > seq {
+        return;
+    }
+    match save_store(path, store) {
+        Ok(()) => *last = seq,
+        Err(e) => log::warn!("{e}"),
+    }
+}
+
+/// For the connection handshakes, which run with the AppState lock held and
+/// change the store on every connection (last seen): writing the whole store
+/// there (crew sets of up to 150k files) stalled every other command.
+fn persist_in_background(state: &crate::state::AppState) {
+    let Some(path) = state.crews_path.clone() else { return };
+    let (store, seq) = (state.crews.clone(), next_save_seq());
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            rt.spawn_blocking(move || save_snapshot(&path, &store, seq));
         }
+        Err(_) => save_snapshot(&path, &store, seq),
     }
 }
 

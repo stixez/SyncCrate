@@ -56,10 +56,11 @@ pub async fn save_profile(
     icon: String,
     game: Option<String>,
 ) -> Result<ModProfile, String> {
-    if name.trim().is_empty() || name.len() > 128 {
+    // Characters, not bytes (the UI counts characters).
+    if name.trim().is_empty() || name.chars().count() > 128 {
         return Err("Profile name must be 1-128 characters".to_string());
     }
-    if desc.len() > 1024 {
+    if desc.chars().count() > 1024 {
         return Err("Description must be under 1024 characters".to_string());
     }
 

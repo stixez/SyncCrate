@@ -284,24 +284,36 @@ pub fn detect_game_info(game_id: &str, game_path: &str) -> GameInfo {
     }
 }
 
+fn words(s: &str) -> Vec<String> {
+    s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect()
+}
+
 /// Guess which packs a mod might require based on filename heuristics.
-pub fn guess_mod_required_packs(mod_path: &str, packs_key: &str) -> Vec<PackId> {
-    let registry = get_pack_registry(packs_key);
-    let filename_lower = mod_path.to_lowercase();
-    let mut required = Vec::new();
-
-    for pack in &registry {
-        if filename_lower.contains(&pack.id.code.to_lowercase()) {
-            required.push(pack.id.clone());
-            continue;
-        }
-        let name_lower = pack.name.to_lowercase();
-        if name_lower.len() > 3 && filename_lower.contains(&name_lower) {
-            required.push(pack.id.clone());
-        }
-    }
-
-    required
+/// Whole words only: substring matches flagged "deep01" as EP01 and any
+/// "Toddler" folder as Toddler Stuff. Codes count anywhere in the path;
+/// names only in the file name, and only multi-word ones ("Get to Work",
+/// also run together as "GetToWork"): "Seasons" or "Pets" are everyday words
+/// in mod names.
+pub fn guess_mod_required_packs(mod_path: &str, registry: &[PackInfo]) -> Vec<PackId> {
+    let path_words = words(mod_path);
+    let file = mod_path.rsplit(['/', '\\']).next().unwrap_or(mod_path);
+    let file_words = words(file);
+    registry
+        .iter()
+        .filter(|pack| {
+            let code = pack.id.code.to_lowercase();
+            if path_words.iter().any(|w| *w == code) {
+                return true;
+            }
+            let name = words(&pack.name);
+            if name.len() < 2 {
+                return false;
+            }
+            let joined = name.concat();
+            file_words.iter().any(|w| *w == joined) || file_words.windows(name.len()).any(|w| w == name.as_slice())
+        })
+        .map(|p| p.id.clone())
+        .collect()
 }
 
 /// Check mod compatibility against installed packs.
@@ -310,11 +322,18 @@ pub fn check_mod_compatibility(
     game_info: &GameInfo,
     packs_key: &str,
 ) -> Vec<ModCompatibility> {
+    // Nothing detected means we don't know what's installed (the Sims 4
+    // Documents folder often has no pack list), not that nothing is: every
+    // guessed mod was flagged "missing packs" on a PC that owns them all.
+    if game_info.installed_packs.is_empty() {
+        return Vec::new();
+    }
     let installed_codes: std::collections::HashSet<&str> = game_info
         .installed_packs
         .iter()
         .map(|p| p.id.code.as_str())
         .collect();
+    let registry = get_pack_registry(packs_key);
 
     manifest
         .files
@@ -323,7 +342,7 @@ pub fn check_mod_compatibility(
             info.file_type == "Mod" || info.file_type == "CustomContent"
         })
         .filter_map(|(path, _)| {
-            let required = guess_mod_required_packs(path, packs_key);
+            let required = guess_mod_required_packs(path, &registry);
             if required.is_empty() {
                 return None;
             }
@@ -345,4 +364,38 @@ pub fn check_mod_compatibility(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn guessed(path: &str) -> Vec<String> {
+        guess_mod_required_packs(path, &get_pack_registry("sims4")).into_iter().map(|p| p.code).collect()
+    }
+
+    #[test]
+    fn pack_guesses_match_whole_words_only() {
+        assert_eq!(guessed("Mods/EP01_career.package"), ["EP01"]);
+        assert_eq!(guessed("Mods/GetToWork_Retail.package"), ["EP01"]);
+        assert_eq!(guessed("Mods/get to work - retail.package"), ["EP01"]);
+        assert!(guessed("Mods/deep01_sofa.package").is_empty(), "code inside another word");
+        assert!(guessed("Mods/Toddler CC/hair.package").is_empty(), "single-word name in a folder");
+        assert!(guessed("Mods/toddler_hair.package").is_empty(), "single-word name in the file");
+    }
+
+    #[test]
+    fn no_detected_packs_means_no_missing_pack_warnings() {
+        let mut manifest = FileManifest::default();
+        manifest.files.insert(
+            "Mods/EP01_career.package".into(),
+            crate::state::FileInfo { relative_path: "Mods/EP01_career.package".into(), size: 1, hash: String::new(), modified: 0, file_type: "Mod".into() },
+        );
+        assert!(check_mod_compatibility(&manifest, &GameInfo::default(), "sims4").is_empty());
+        let ep02 = get_pack_registry("sims4").into_iter().find(|p| p.id.code == "EP02").unwrap();
+        let info = GameInfo { game_version: None, installed_packs: vec![ep02] };
+        let r = check_mod_compatibility(&manifest, &info, "sims4");
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].missing_packs[0].code, "EP01");
+    }
 }
