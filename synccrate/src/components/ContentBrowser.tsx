@@ -20,6 +20,7 @@ import { friendlyError } from "../lib/errors";
 import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
+import { manifestIsFresh } from "../lib/manifestFresh";
 import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { clearModIconCache, metaLookup } from "../lib/modMeta";
 
@@ -153,8 +154,12 @@ export default function ContentBrowser({ gameId }: Props) {
   // Re-scan when switching games or when manifest is missing. `scanning` is
   // this page's own flag: the global isScanning isn't set by this call, so
   // the page showed "No mods yet" while a big folder was still being read.
-  const [scanning, setScanning] = useState(true);
+  const [scanning, setScanning] = useState(() => !manifestIsFresh(gameId));
   useEffect(() => {
+    if (manifestIsFresh(gameId)) {
+      setScanning(false);
+      return;
+    }
     // Ignore results that land after switching to another game (stale manifest).
     let cancelled = false;
     setScanError(null);
@@ -337,6 +342,7 @@ export default function ContentBrowser({ gameId }: Props) {
     [syncPlan, statusMap],
   );
 
+  const [conflictLimit, setConflictLimit] = useState(25);
   const conflicts = useMemo(() => {
     if (!syncPlan || !activeCt) return [];
     return syncPlan.actions
@@ -406,12 +412,33 @@ export default function ContentBrowser({ gameId }: Props) {
   const deferredSearch = useDeferredValue(search);
   const lowerPaths = useMemo(() => new Map(tabFiles.map((f) => [f.relative_path, f.relative_path.toLowerCase()])), [tabFiles]);
   const names = useMemo(() => new Map(tabFiles.map((f) => [f.relative_path, fileName(f.relative_path)])), [tabFiles]);
+  const lowerMetaNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of tabFiles) {
+      const name = metaFor(f.relative_path)?.name;
+      if (name) m.set(f.relative_path, name.toLowerCase());
+    }
+    return m;
+  }, [tabFiles, metaFor]);
+  // Sorted once per list/sort change; filtering keeps the order. Sorting the
+  // filtered set instead re-sorted 30k files on every keystroke.
+  const sortedTab = useMemo(() => {
+    return [...tabFiles].sort((a, b) => {
+      switch (sortBy) {
+        case "size": return b.size - a.size;
+        case "date": return b.modified - a.modified;
+        case "status": return getSyncStatus(a.relative_path).localeCompare(getSyncStatus(b.relative_path)) || a.relative_path.localeCompare(b.relative_path);
+        // By file name (not path) so the flat view isn't just folder order again.
+        default: return collator.compare(names.get(a.relative_path) ?? "", names.get(b.relative_path) ?? "") || a.relative_path.localeCompare(b.relative_path);
+      }
+    });
+  }, [tabFiles, sortBy, getSyncStatus, names]);
   const searched = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     return q
-      ? tabFiles.filter((f) => (lowerPaths.get(f.relative_path) ?? "").includes(q) || !!metaFor(f.relative_path)?.name.toLowerCase().includes(q))
-      : tabFiles;
-  }, [tabFiles, deferredSearch, metaFor, lowerPaths]);
+      ? sortedTab.filter((f) => (lowerPaths.get(f.relative_path) ?? "").includes(q) || !!lowerMetaNames.get(f.relative_path)?.includes(q))
+      : sortedTab;
+  }, [sortedTab, deferredSearch, lowerMetaNames, lowerPaths]);
 
   // OR within a chip group, AND across groups.
   const matchStatus = useCallback(
@@ -448,19 +475,10 @@ export default function ContentBrowser({ gameId }: Props) {
     return { status, statusAll, tags, kinds };
   }, [searched, matchStatus, matchTags, matchKind, statusKeys, hasStatus, modTags]);
 
-  const visible = useMemo(() => {
-    return searched
-      .filter((f) => matchStatus(f) && matchTags(f) && matchKind(f))
-      .sort((a, b) => {
-        switch (sortBy) {
-          case "size": return b.size - a.size;
-          case "date": return b.modified - a.modified;
-          case "status": return getSyncStatus(a.relative_path).localeCompare(getSyncStatus(b.relative_path)) || a.relative_path.localeCompare(b.relative_path);
-          // By file name (not path) so the flat view isn't just folder order again.
-          default: return collator.compare(names.get(a.relative_path) ?? "", names.get(b.relative_path) ?? "") || a.relative_path.localeCompare(b.relative_path);
-        }
-      });
-  }, [searched, matchStatus, matchTags, matchKind, sortBy, getSyncStatus, names]);
+  const visible = useMemo(
+    () => (statusFilter.size === 0 && tagFilter.size === 0 && kindFilter.size === 0 ? searched : searched.filter((f) => matchStatus(f) && matchTags(f) && matchKind(f))),
+    [searched, matchStatus, matchTags, matchKind, statusFilter, tagFilter, kindFilter],
+  );
 
   const filtersActive = search.trim() !== "" || statusFilter.size > 0 || tagFilter.size > 0 || kindFilter.size > 0;
   const clearFilters = () => {
@@ -564,13 +582,19 @@ export default function ContentBrowser({ gameId }: Props) {
     const errors: string[] = [];
     const moves: [string, string][] = [];
     try {
-      for (const p of targets) {
-        try {
-          moves.push([p, await cmd.toggleMod(gameId, p, enable)]);
-          ok++;
-        } catch (e) {
-          errors.push(`${fileName(p)}: ${e}`);
+      // One call for all of them: one request per file made "disable all"
+      // on a big folder take minutes.
+      try {
+        for (const o of await cmd.toggleMods(gameId, targets, enable)) {
+          if (o.new_path != null) {
+            moves.push([o.path, o.new_path]);
+            ok++;
+          } else {
+            errors.push(`${fileName(o.path)}: ${o.error}`);
+          }
         }
+      } catch (e) {
+        errors.push(friendlyError(e));
       }
       // Paths change on toggle (.disabled rename / _Disabled move); the
       // backend returns the new ones, so patch the list in place.
@@ -1008,9 +1032,15 @@ export default function ContentBrowser({ gameId }: Props) {
               </Button>
             </div>
           )}
-          {conflicts.map((c) => (
+          {/* Capped: thousands of panels (each re-rendered per keystroke) froze the page. */}
+          {conflicts.slice(0, conflictLimit).map((c) => (
             <ConflictResolver key={c.local.relative_path} localFile={c.local} remoteFile={c.remote} onResolve={(resolution) => resolve(c.local.relative_path, resolution)} />
           ))}
+          {conflicts.length > conflictLimit && (
+            <Button size="sm" variant="ghost" block onClick={() => setConflictLimit((n) => n + 25)}>
+              Show more conflicts ({conflicts.length - conflictLimit} more)
+            </Button>
+          )}
         </div>
       )}
 

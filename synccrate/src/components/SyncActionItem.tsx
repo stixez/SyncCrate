@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ArrowUp, ArrowDown, AlertTriangle, Trash2, Puzzle, Save, Palette } from "lucide-react";
 import type { SyncAction } from "../lib/types";
 import { formatBytes } from "../lib/utils";
@@ -46,7 +47,8 @@ function getActionInfo(action: SyncAction) {
   return null;
 }
 
-export default function SyncActionItem({ action, excluded, onToggle, disabled }: SyncActionItemProps) {
+// Memoized: the plan list re-rendered every row on each progress event.
+export default memo(function SyncActionItem({ action, excluded, onToggle, disabled }: SyncActionItemProps) {
   const info = getActionInfo(action);
   if (!info) return null;
 
@@ -81,4 +83,4 @@ export default function SyncActionItem({ action, excluded, onToggle, disabled }:
       <span className="font-mono text-[10.5px] text-txt-dim tabular shrink-0">{formatBytes(info.size)}</span>
     </label>
   );
-}
+});

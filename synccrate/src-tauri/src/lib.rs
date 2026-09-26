@@ -362,6 +362,7 @@ pub fn run() {
             commands::files::get_all_game_paths,
             commands::files::get_unavailable_game_paths,
             commands::files::toggle_mod,
+            commands::files::toggle_mods,
             commands::files::count_legacy_disabled,
             commands::files::migrate_legacy_disabled,
             commands::files::find_duplicates,

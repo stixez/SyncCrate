@@ -847,6 +847,27 @@ pub async fn set_active_game(
     Ok(())
 }
 
+/// (game id, base path, first content folder, rename method) for toggling.
+async fn toggle_context(state: &Arc<Mutex<AppState>>, game_id: &str) -> Result<(String, String, String, bool), String> {
+    let app_state = state.lock().await;
+    let game_id = require_active(&app_state, &game_id)?;
+    let base = app_state
+        .game_paths
+        .get(&game_id)
+        .cloned()
+        .ok_or("Game path not set")?;
+    let def = get_game_def(&app_state.game_registry, &game_id);
+    let method = def.and_then(|d| d.disable_method.as_deref());
+    if method == Some("none") {
+        return Err(disable_unsupported_message(&app_state.game_label(&game_id)));
+    }
+    let folder = def
+        .and_then(|d| d.content_types.first())
+        .map(|ct| ct.folder.clone())
+        .unwrap_or_else(|| "Mods".to_string());
+    Ok((game_id, base, folder, method == Some("rename")))
+}
+
 #[tauri::command]
 pub async fn toggle_mod(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -855,25 +876,7 @@ pub async fn toggle_mod(
     enabled: bool,
 ) -> Result<String, String> {
     crate::commands::backup::refuse_during_restore()?;
-    let (game_id, base, first_content_folder, rename_method) = {
-        let app_state = state.lock().await;
-        let game_id = require_active(&app_state, &game_id)?;
-        let base = app_state
-            .game_paths
-            .get(&game_id)
-            .cloned()
-            .ok_or("Game path not set")?;
-        let def = get_game_def(&app_state.game_registry, &game_id);
-        let method = def.and_then(|d| d.disable_method.as_deref());
-        if method == Some("none") {
-            return Err(disable_unsupported_message(&app_state.game_label(&game_id)));
-        }
-        let folder = def
-            .and_then(|d| d.content_types.first())
-            .map(|ct| ct.folder.clone())
-            .unwrap_or_else(|| "Mods".to_string());
-        (game_id, base, folder, method == Some("rename"))
-    };
+    let (game_id, base, first_content_folder, rename_method) = toggle_context(state.inner(), &game_id).await?;
 
     match toggle_file(&base, &first_content_folder, &relative_path, enabled, rename_method)? {
         Some(new_rel) => {
@@ -893,6 +896,59 @@ pub async fn toggle_mod(
         // Already in the requested state; nothing to move.
         None => Ok(relative_path.replace('\\', "/")),
     }
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ToggleOutcome {
+    pub path: String,
+    /// Where the file is now (the same path when it was already in that state).
+    pub new_path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// `toggle_file` for each path, in order.
+pub(crate) fn toggle_files(base: &str, first_content_folder: &str, paths: &[String], enabled: bool, rename_method: bool) -> Vec<ToggleOutcome> {
+    paths
+        .iter()
+        .map(|p| {
+            let path = p.replace('\\', "/");
+            match toggle_file(base, first_content_folder, p, enabled, rename_method) {
+                Ok(moved) => ToggleOutcome { new_path: Some(moved.unwrap_or_else(|| path.clone())), path, error: None },
+                Err(e) => ToggleOutcome { path, new_path: None, error: Some(e) },
+            }
+        })
+        .collect()
+}
+
+/// Many files in one call: "disable all" on a big folder made one request
+/// per file (each reloading and saving the tag store).
+#[tauri::command]
+pub async fn toggle_mods(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
+    paths: Vec<String>,
+    enabled: bool,
+) -> Result<Vec<ToggleOutcome>, String> {
+    crate::commands::backup::refuse_during_restore()?;
+    let (game_id, base, folder, rename_method) = toggle_context(state.inner(), &game_id).await?;
+    let outcomes = tokio::task::spawn_blocking(move || toggle_files(&base, &folder, &paths, enabled, rename_method))
+        .await
+        .map_err(|e| e.to_string())?;
+    let moved: Vec<(String, String)> = outcomes
+        .iter()
+        .filter_map(|o| o.new_path.as_ref().filter(|n| **n != o.path).map(|n| (o.path.clone(), n.clone())))
+        .collect();
+    crate::commands::tags::move_tags_batch(&game_id, &moved);
+    let mut app_state = state.lock().await;
+    if app_state.active_game == game_id {
+        for (from, to) in &moved {
+            if let Some(mut info) = app_state.local_manifest.files.remove(from) {
+                info.relative_path = to.clone();
+                app_state.local_manifest.files.insert(to.clone(), info);
+            }
+        }
+    }
+    Ok(outcomes)
 }
 
 /// Why a `disable_method: "none"` game can't disable single files. Shared
@@ -1975,6 +2031,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("Mods").join("Creator")).unwrap();
         dir
+    }
+
+    #[test]
+    fn toggling_many_files_reports_each_one() {
+        let base = temp_mods_dir("batch");
+        std::fs::write(base.join("Mods/a.package"), b"a").unwrap();
+        std::fs::write(base.join("Mods/b.package.disabled"), b"b").unwrap();
+        let b = base.to_string_lossy().to_string();
+        let paths = vec!["Mods/a.package".to_string(), "Mods/b.package.disabled".to_string(), "Mods/gone.package".to_string()];
+        let r = toggle_files(&b, "Mods", &paths, false, true);
+        assert_eq!(r[0].new_path.as_deref(), Some("Mods/a.package.disabled"));
+        assert_eq!(r[1].new_path.as_deref(), Some("Mods/b.package.disabled"), "already disabled: unchanged");
+        assert!(r[2].new_path.is_none() && r[2].error.is_some());
+        assert!(base.join("Mods/a.package.disabled").exists());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
