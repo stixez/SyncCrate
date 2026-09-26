@@ -3,12 +3,6 @@ const c = (v) => `rgb(var(--color-${v}) / <alpha-value>)`;
 
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
-  safelist: [
-    "bg-accent-light",
-    "bg-status-green",
-    "bg-status-yellow",
-    "bg-status-red",
-  ],
   theme: {
     extend: {
       colors: {

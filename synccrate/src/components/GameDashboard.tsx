@@ -333,7 +333,7 @@ export default function GameDashboard({ gameId }: Props) {
     return (
       <div className="max-w-[1040px] mx-auto space-y-5">
         <div className="hud-grid -mx-6 -mt-6 px-6 pt-7 pb-2">
-          <div className="relative z-[1]">
+          <div className="relative z-1">
             <SectionHeader
               size="lg"
               label={<><b>// Session</b> &nbsp;Not connected</>}
@@ -478,7 +478,7 @@ export default function GameDashboard({ gameId }: Props) {
                 }}
                 placeholder="SC-XXXX-XXXX-…"
                 aria-label="Join code"
-                className="input input-mono flex-1 min-w-0 !h-11 text-[15px]"
+                className="input input-mono flex-1 min-w-0 h-11! text-[15px]"
               />
               <Button
                 variant="primary"
@@ -572,7 +572,7 @@ export default function GameDashboard({ gameId }: Props) {
 
             {gameSwitchPrompt && (
               <div className="mt-4 bg-bg border border-amber/60 p-3">
-                <p className="hud-label mb-1"><b className="!text-amber">Different game</b></p>
+                <p className="hud-label mb-1"><b className="text-amber!">Different game</b></p>
                 <p className="text-xs text-txt-dim mb-2.5">
                   This host is sharing <span className="text-txt font-medium">{getGameDef(gameSwitchPrompt.hostGame)?.label ?? gameSwitchPrompt.hostGame}</span>,
                   but you have <span className="text-txt font-medium">{gameLabel}</span> selected. Nothing was synced.
@@ -605,7 +605,7 @@ export default function GameDashboard({ gameId }: Props) {
                     placeholder="0000"
                     aria-label="Session PIN"
                     aria-describedby="pin-help"
-                    className="input input-mono flex-1 !h-11 text-center text-xl !tracking-[0.5em]"
+                    className="input input-mono flex-1 h-11! text-center text-xl tracking-[0.5em]!"
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && pinInput.length === 5 && !isLoading && !isConnecting) retryWithPin(pinInput);
@@ -624,7 +624,7 @@ export default function GameDashboard({ gameId }: Props) {
               <button
                 onClick={() => setShowManualIp(!showManualIp)}
                 aria-expanded={showManualIp}
-                className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-txt transition-colors"
+                className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-txt transition-colors"
               >
                 <Globe size={12} />
                 {showManualIp ? "Hide" : "Connect by IP address"}
@@ -838,7 +838,7 @@ export default function GameDashboard({ gameId }: Props) {
                   <Button
                     variant="primary"
                     size="lg"
-                    className="!h-auto min-w-[110px]"
+                    className="h-auto! min-w-[110px]"
                     onClick={copyJoinCode}
                     icon={joinCodeCopied ? <Check size={16} /> : <Copy size={16} />}
                   >
@@ -867,7 +867,7 @@ export default function GameDashboard({ gameId }: Props) {
                 <p className="font-display font-bold text-[2.4rem] leading-none tracking-[0.18em] tabular">{session.pin}</p>
                 <button
                   onClick={() => { navigator.clipboard.writeText(session.pin!).then(() => { setPinCopied(true); setTimeout(() => setPinCopied(false), 2000); }, () => toastError("Couldn't copy to the clipboard.")); }}
-                  className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
+                  className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-neon transition-colors"
                 >
                   {pinCopied ? <Check size={12} className="text-neon" /> : <Copy size={12} />}
                   {pinCopied ? "Copied" : "Copy PIN"}
@@ -884,7 +884,7 @@ export default function GameDashboard({ gameId }: Props) {
                     }
                   }}
                   title="Friends' saved join codes stop working. Use it if the code got shared too widely."
-                  className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
+                  className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-neon transition-colors"
                 >
                   <RefreshCw size={12} />
                   New PIN
@@ -935,7 +935,7 @@ export default function GameDashboard({ gameId }: Props) {
       )}
 
       {isClient && (
-        <Panel padded className="!py-3">
+        <Panel padded className="py-3!">
           <Toggle
             checked={stayInSync}
             onChange={(on) => {
@@ -1115,7 +1115,7 @@ function GameInfoCard({ gameInfo, gameLabel, packsExpanded, setPacksExpanded, de
               <button
                 onClick={() => setPacksExpanded(!packsExpanded)}
                 aria-expanded={packsExpanded}
-                className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-txt transition-colors"
+                className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-txt transition-colors"
               >
                 {packsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 {packsExpanded ? "Hide packs" : "Show installed packs"}

@@ -21,7 +21,7 @@ export default function StatTile({ value, label, hint, icon, highlight, compact,
       className={cx(
         "relative bg-bg-card border border-border pl-4 pr-3 min-w-0",
         compact ? "py-2" : "py-3",
-        "before:absolute before:left-[-1px] before:top-[-1px] before:bottom-[-1px] before:w-[2px]",
+        "before:absolute before:-left-px before:-top-px before:-bottom-px before:w-[2px]",
         highlight ? "before:bg-neon" : "before:bg-line-hi",
         className,
       )}

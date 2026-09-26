@@ -80,7 +80,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             )}
             <button
               onClick={() => setShowDonate(true)}
-              className="btn btn-ghost btn-sm hover:!text-pink-400"
+              className="btn btn-ghost btn-sm hover:text-pink-400!"
             >
               <Heart size={13} />
               Donate
@@ -95,14 +95,14 @@ export default function Layout({ children }: { children: ReactNode }) {
               key={selectedGame}
               gameId={selectedGame}
               kind="hero"
-              className="absolute inset-x-0 top-0 h-[320px] pointer-events-none opacity-[0.42] [mask-image:linear-gradient(to_bottom,black_20%,transparent_100%)]"
+              className="absolute inset-x-0 top-0 h-[320px] pointer-events-none opacity-[0.42] mask-[linear-gradient(to_bottom,black_20%,transparent_100%)]"
               imgClassName="object-[50%_28%] saturate-[0.8]"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/55 to-bg/10" />
+              <div className="absolute inset-0 bg-linear-to-r from-bg via-bg/55 to-bg/10" />
               <div className="fx-deco absolute inset-0 opacity-40 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.4)_2px_3px)]" />
             </GameArt>
           )}
-          <div className="relative z-[1]">{children}</div>
+          <div className="relative z-1">{children}</div>
         </main>
       </div>
       {showDonate && <DonateModal />}

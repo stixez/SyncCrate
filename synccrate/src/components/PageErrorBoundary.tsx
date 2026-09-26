@@ -25,14 +25,14 @@ export default class PageErrorBoundary extends Component<{ resetKey: string; chi
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="max-w-[640px] mx-auto mt-16 border border-status-red/50 bg-status-red/[0.06] p-6 space-y-3">
+      <div className="max-w-[640px] mx-auto mt-16 border border-status-red/50 bg-status-red/6 p-6 space-y-3">
         <p className="flex items-center gap-2 font-display font-semibold uppercase tracking-[0.06em] text-status-red">
           <AlertTriangle size={16} /> This page ran into a problem
         </p>
         <p className="text-sm text-txt-dim">
           Nothing was changed on your PC. Try again, or reload SyncCrate. If it keeps happening, please report it on GitHub with the text below.
         </p>
-        <pre className="font-mono text-[11px] text-txt-muted whitespace-pre-wrap break-words max-h-40 overflow-y-auto">{String(this.state.error?.message ?? this.state.error)}</pre>
+        <pre className="font-mono text-[11px] text-txt-muted whitespace-pre-wrap wrap-break-word max-h-40 overflow-y-auto">{String(this.state.error?.message ?? this.state.error)}</pre>
         <div className="flex gap-2">
           <Button size="sm" variant="primary" onClick={() => this.setState({ error: null })}>Try again</Button>
           <Button size="sm" onClick={() => window.location.reload()}>Reload SyncCrate</Button>

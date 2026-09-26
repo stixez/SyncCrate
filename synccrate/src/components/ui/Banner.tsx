@@ -15,10 +15,10 @@ export interface BannerProps {
 }
 
 const LINE: Record<BannerTone, string> = {
-  info: "border-l-neon bg-neon/[0.06]",
+  info: "border-l-neon bg-neon/6",
   warn: "border-l-amber bg-amber/[0.07]",
   danger: "border-l-status-red bg-status-red/[0.07]",
-  success: "border-l-status-green bg-status-green/[0.06]",
+  success: "border-l-status-green bg-status-green/6",
 };
 const ICON: Record<BannerTone, string> = {
   info: "text-neon",

@@ -150,11 +150,11 @@ export default function WelcomeScreen() {
         className={cx(
           "group relative flex items-center gap-3 pl-3 pr-3 py-2.5 border text-sm transition-colors text-left min-w-0",
           isSelected
-            ? "bg-neon/[0.08] border-neon/60 text-txt"
+            ? "bg-neon/8 border-neon/60 text-txt"
             : "bg-bg border-border text-txt-dim hover:border-line-hi hover:text-txt",
         )}
       >
-        <span className={cx("check pointer-events-none", isSelected && "!bg-neon !border-neon")} aria-hidden="true">
+        <span className={cx("check pointer-events-none", isSelected && "bg-neon! border-neon!")} aria-hidden="true">
           {isSelected && <Check size={10} strokeWidth={3.5} className="text-neon-ink" />}
         </span>
         {/* Art only for detected games: the full list would download ~100 images on first run */}
@@ -185,7 +185,7 @@ export default function WelcomeScreen() {
 
   return (
     <div className="relative h-[calc(100%+3rem)] min-h-[560px] -mx-6 -my-6 px-10 py-10 hud-grid overflow-hidden">
-      <div className="relative z-[1] h-full grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-10 items-center max-w-6xl mx-auto">
+      <div className="relative z-1 h-full grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-10 items-center max-w-6xl mx-auto">
         {/* Hero */}
         <div className="min-w-0">
           <div className="flex items-center gap-3 mb-8">
@@ -247,7 +247,7 @@ export default function WelcomeScreen() {
               </Button>
             )}
           </div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted mt-4 h-4">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-txt-muted mt-4 h-4">
             {selected.size > 0 && (
               <>
                 <span className="text-neon tabular">{String(selected.size).padStart(2, "0")}</span> game{selected.size !== 1 ? "s" : ""} selected
@@ -308,7 +308,7 @@ export default function WelcomeScreen() {
 
               {/* No games at all (registry not loaded yet) */}
               {gameRegistry.length === 0 && (
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-dim py-6">
+                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-txt-dim py-6">
                   <RefreshCw size={13} className="animate-spin text-neon" />
                   Loading game registry...
                 </div>

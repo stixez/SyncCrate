@@ -94,7 +94,7 @@ function ModItem({
         // State rule on the left edge: amber = may be outdated, neon on hover / selected.
         "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
         isOutdated ? "before:bg-amber" : selected ? "before:bg-neon" : "before:bg-transparent hover:before:bg-neon",
-        selected && "bg-neon/[0.06]",
+        selected && "bg-neon/6",
         // Lift the row with an open tag editor above the rows positioned after it.
         showTagEditor && "z-20",
       )}

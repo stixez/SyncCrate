@@ -230,13 +230,13 @@ export default function GameBrowser() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <label className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-txt-muted">
+            <label className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-widest text-txt-muted">
               <ArrowUpDown size={12} />
               <span className="sr-only sm:not-sr-only">Sort</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
-                className="input input-sm !w-auto !py-1 font-mono text-[11px] uppercase tracking-[0.08em]"
+                className="input input-sm w-auto! py-1! font-mono text-[11px] uppercase tracking-[0.08em]"
                 aria-label="Sort games"
               >
                 <option value="name">Name A–Z</option>
@@ -265,8 +265,8 @@ export default function GameBrowser() {
                 aria-pressed={on}
                 disabled={n === 0 && !on}
                 className={cx(
-                  "tag !py-1 !px-2 transition-colors disabled:opacity-35 disabled:cursor-default",
-                  on ? "!text-neon-ink bg-neon !border-neon" : "text-txt-dim hover:text-txt hover:!border-line-hi",
+                  "tag py-1! px-2! transition-colors disabled:opacity-35 disabled:cursor-default",
+                  on ? "text-neon-ink! bg-neon border-neon!" : "text-txt-dim hover:text-txt hover:border-line-hi!",
                 )}
               >
                 {genreLabel(g)}
@@ -275,7 +275,7 @@ export default function GameBrowser() {
             );
           })}
           {filtersActive && (
-            <button onClick={clearFilters} className="ml-auto btn btn-ghost btn-sm !text-txt-dim hover:!text-txt">
+            <button onClick={clearFilters} className="ml-auto btn btn-ghost btn-sm text-txt-dim! hover:text-txt!">
               <X size={12} />
               Clear filters
             </button>
@@ -383,11 +383,11 @@ function genreLine(game: GameDefinition): string {
 function StatusTags({ inLibrary, detected, folderFound }: { inLibrary: boolean; detected: boolean; folderFound: boolean }) {
   return (
     <>
-      {inLibrary && <span className="tag text-neon bg-bg/85 backdrop-blur-sm"><Check size={9} />Library</span>}
-      {detected && <span className="tag text-status-green bg-bg/85 backdrop-blur-sm"><Radar size={9} />Detected</span>}
+      {inLibrary && <span className="tag text-neon bg-bg/85 backdrop-blur-xs"><Check size={9} />Library</span>}
+      {detected && <span className="tag text-status-green bg-bg/85 backdrop-blur-xs"><Radar size={9} />Detected</span>}
       {folderFound && !inLibrary && (
         <span
-          className="tag text-txt-muted bg-bg/85 backdrop-blur-sm"
+          className="tag text-txt-muted bg-bg/85 backdrop-blur-xs"
           title="Its mods/saves folder exists, but the game itself doesn't look installed (it may be left over from an uninstall)."
         >
           <Folder size={9} />Folder found
@@ -404,7 +404,7 @@ function ItemActions({ inLibrary, onOpen, onAdd, onRemove, compact }: Omit<ItemP
         <Button size="sm" className={compact ? undefined : "flex-1"} onClick={onOpen} icon={<ArrowRight size={12} />}>
           Open
         </Button>
-        <Button variant="ghost" size="sm" className="hover:!text-status-red" onClick={onRemove}>
+        <Button variant="ghost" size="sm" className="hover:text-status-red!" onClick={onRemove}>
           Remove
         </Button>
       </div>
@@ -432,19 +432,19 @@ function GameTile({ game, inLibrary, detected, folderFound, ...actions }: ItemPr
     >
       {/* Art strip: the game's banner (Steam or publisher art, or a custom cover);
           games without art get the generated poster. */}
-      <div className="relative aspect-[460/215] overflow-hidden mx-px mt-px border-b border-border bg-bg [clip-path:polygon(calc(var(--cut)-1px)_0,100%_0,100%_100%,0_100%,0_calc(var(--cut)-1px))]">
+      <div className="relative aspect-460/215 overflow-hidden mx-px mt-px border-b border-border bg-bg [clip-path:polygon(calc(var(--cut)-1px)_0,100%_0,100%_100%,0_100%,0_calc(var(--cut)-1px))]">
         <GameArt
           gameId={game.id}
           kind="header"
           className="absolute inset-0"
-          imgClassName="saturate-[0.85] group-hover:saturate-100 group-hover:scale-[1.04] !transition-[opacity,transform,filter] !duration-500"
+          imgClassName="saturate-[0.85] group-hover:saturate-100 group-hover:scale-[1.04] transition-[opacity,transform,filter]! duration-500!"
           fallback={<GeneratedCover game={game} />}
         >
           {/* Fade into the card and add faint scanlines so photos sit inside the HUD */}
-          <div className="absolute inset-0 bg-gradient-to-t from-bg-card via-bg-card/10 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-bg-card via-bg-card/10 to-transparent" />
           <div className="absolute inset-0 opacity-30 bg-[repeating-linear-gradient(0deg,transparent_0_2px,rgb(0_0_0/0.35)_2px_3px)]" />
         </GameArt>
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--tile)]" />
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-(--tile)" />
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
           <StatusTags inLibrary={inLibrary} detected={detected} folderFound={folderFound} />
         </div>
@@ -470,8 +470,8 @@ function GameRow({ game, inLibrary, detected, folderFound, ...actions }: ItemPro
   const style = { "--tile": game.primary_color || "rgb(var(--color-accent))" } as CSSProperties;
   return (
     <div style={style} className="group relative flex items-center gap-4 pl-4 pr-3 py-2 hover:bg-bg-card-hover transition-colors">
-      <span className={cx("absolute left-0 top-0 bottom-0 w-[2px]", inLibrary ? "bg-neon" : "bg-[var(--tile)] opacity-60")} />
-      <div className="relative w-[104px] shrink-0 aspect-[460/215] overflow-hidden border border-border bg-bg">
+      <span className={cx("absolute left-0 top-0 bottom-0 w-[2px]", inLibrary ? "bg-neon" : "bg-(--tile) opacity-60")} />
+      <div className="relative w-[104px] shrink-0 aspect-460/215 overflow-hidden border border-border bg-bg">
         <GameArt
           gameId={game.id}
           kind="header"
@@ -508,7 +508,7 @@ function GeneratedCover({ game }: { game: GameDefinition }) {
   return (
     <div className="absolute inset-0">
       <div className="absolute inset-0 opacity-[0.35] bg-[radial-gradient(110%_120%_at_100%_0%,var(--tile),transparent_65%)] group-hover:opacity-50 transition-opacity" />
-      <div className="absolute inset-0 opacity-60 bg-[linear-gradient(rgb(var(--color-border)/0.55)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--color-border)/0.55)_1px,transparent_1px)] bg-[size:18px_18px]" />
+      <div className="absolute inset-0 opacity-60 bg-[linear-gradient(rgb(var(--color-border)/0.55)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--color-border)/0.55)_1px,transparent_1px)] bg-size-[18px_18px]" />
       <GameIcon iconName={game.icon} size={96} className={cx("absolute -right-3 -bottom-5 opacity-20 group-hover:opacity-30 transition-opacity", game.color)} />
       <div className="absolute left-4 right-10 bottom-3">
         <GameIcon iconName={game.icon} size={16} className={cx("mb-1.5", game.color)} />

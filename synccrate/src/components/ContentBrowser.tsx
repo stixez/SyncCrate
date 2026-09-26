@@ -930,7 +930,7 @@ export default function ContentBrowser({ gameId }: Props) {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
-            className="bg-bg border border-line-hi h-7 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-txt focus:outline-none focus:border-neon cursor-pointer"
+            className="bg-bg border border-line-hi h-7 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-txt focus:outline-hidden focus:border-neon cursor-pointer"
           >
             <option value="name">Name</option>
             <option value="size">Size</option>
@@ -1055,7 +1055,7 @@ export default function ContentBrowser({ gameId }: Props) {
             <span className="font-mono text-[11px] text-txt-muted tabular">
               <span className="text-txt">{visible.length.toLocaleString()}</span> of {tabFiles.length.toLocaleString()} match
             </span>
-            <button onClick={clearFilters} className="btn btn-ghost btn-sm !text-txt-dim hover:!text-txt">
+            <button onClick={clearFilters} className="btn btn-ghost btn-sm text-txt-dim! hover:text-txt!">
               <X size={12} />
               Clear filters
             </button>
@@ -1064,7 +1064,7 @@ export default function ContentBrowser({ gameId }: Props) {
       </div>
 
       {bulkMode && isModLike && (
-        <div className="flex items-center gap-3 flex-wrap border-l-2 border-l-neon bg-neon/[0.06] px-3 py-2">
+        <div className="flex items-center gap-3 flex-wrap border-l-2 border-l-neon bg-neon/6 px-3 py-2">
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-neon tabular">{selected.size} selected</span>
           <Button size="sm" variant="ghost" onClick={() => selectPaths(visiblePaths(), !allVisibleSelected)} disabled={visible.length === 0}>
             {allVisibleSelected ? "Deselect all" : `Select all ${visible.length.toLocaleString()}`}
@@ -1191,7 +1191,7 @@ export default function ContentBrowser({ gameId }: Props) {
         // hangs out of its row and clip-path would cut it off.
         <div className="box">
           {/* -top-6 cancels <main>'s py-6 so the header pins flush to its top edge. */}
-          <div className="sticky -top-6 z-30 flex items-center gap-3 pl-3 pr-3 h-8 border-b border-border bg-bg-2 hud-label !text-[10px]">
+          <div className="sticky -top-6 z-30 flex items-center gap-3 pl-3 pr-3 h-8 border-b border-border bg-bg-2 hud-label text-[10px]!">
             {bulkMode && isModLike && <span className="w-[14px] shrink-0" />}
             <span className="w-6 shrink-0" />
             <span className="flex-1 flex items-center gap-3 min-w-0">
@@ -1210,8 +1210,8 @@ export default function ContentBrowser({ gameId }: Props) {
             <span className={COL.size}>Size</span>
             <span className={COL.modified}>Modified</span>
             {isModLike && <span className={cx(COL.tags, "text-right")}>Tags</span>}
-            <span className={cx(COL.status, "!block text-right")}>Status</span>
-            {canToggle && <span className={cx(COL.toggle, "!block text-right")}>On</span>}
+            <span className={cx(COL.status, "block! text-right")}>Status</span>
+            {canToggle && <span className={cx(COL.toggle, "block! text-right")}>On</span>}
           </div>
           <VirtualList items={items} heights={heights} renderItem={renderItem} />
         </div>
@@ -1386,12 +1386,12 @@ function FolderHeader({
       {canToggle && !working && (
         <span className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {group.disabled > 0 && (
-            <button onClick={onEnableAll} disabled={busy} className="btn btn-ghost btn-sm !h-6 !px-2 !text-[10.5px] !text-txt-dim hover:!text-neon disabled:opacity-40" title={`Enable ${group.disabled} disabled file${group.disabled !== 1 ? "s" : ""}`}>
+            <button onClick={onEnableAll} disabled={busy} className="btn btn-ghost btn-sm h-6! px-2! text-[10.5px]! text-txt-dim! hover:text-neon! disabled:opacity-40" title={`Enable ${group.disabled} disabled file${group.disabled !== 1 ? "s" : ""}`}>
               <Power size={11} /> Enable all
             </button>
           )}
           {enabled > 0 && (
-            <button onClick={onDisableAll} disabled={busy} className="btn btn-ghost btn-sm !h-6 !px-2 !text-[10.5px] !text-txt-dim hover:!text-txt disabled:opacity-40" title={`Disable ${enabled} file${enabled !== 1 ? "s" : ""}`}>
+            <button onClick={onDisableAll} disabled={busy} className="btn btn-ghost btn-sm h-6! px-2! text-[10.5px]! text-txt-dim! hover:text-txt! disabled:opacity-40" title={`Disable ${enabled} file${enabled !== 1 ? "s" : ""}`}>
               <PowerOff size={11} /> Disable all
             </button>
           )}
@@ -1409,8 +1409,8 @@ function Chip({ on, count, onClick, title, children }: { on: boolean; count: num
       title={title}
       disabled={count === 0 && !on}
       className={cx(
-        "tag !py-1 !px-2 transition-colors disabled:opacity-35 disabled:cursor-default",
-        on ? "!text-neon-ink bg-neon !border-neon" : "text-txt-dim hover:text-txt hover:!border-line-hi",
+        "tag py-1! px-2! transition-colors disabled:opacity-35 disabled:cursor-default",
+        on ? "text-neon-ink! bg-neon border-neon!" : "text-txt-dim hover:text-txt hover:border-line-hi!",
       )}
     >
       {children}

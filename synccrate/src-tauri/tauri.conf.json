@@ -35,6 +35,9 @@
         "installerHooks": "windows/hooks.nsh"
       }
     },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
     "fileAssociations": [
       {
         "ext": ["scpack"],

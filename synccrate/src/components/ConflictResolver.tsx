@@ -12,7 +12,7 @@ interface ConflictResolverProps {
 function VersionCard({ who, file, newer }: { who: string; file: FileInfo; newer: boolean }) {
   return (
     <div className={cx("relative bg-bg border px-3.5 py-3", newer ? "border-neon/50" : "border-border")}>
-      {newer && <span className="absolute left-[-1px] top-[-1px] bottom-[-1px] w-[2px] bg-neon" />}
+      {newer && <span className="absolute -left-px -top-px -bottom-px w-[2px] bg-neon" />}
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="hud-label">{who}</p>
         {newer && <span className="tag text-neon">Newer</span>}

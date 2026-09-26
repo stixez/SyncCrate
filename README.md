@@ -59,7 +59,7 @@ New to it? The **Guide** page in the app's sidebar walks through every feature.
 > [!NOTE]
 > **macOS:** the app isn't notarized yet, so macOS may call it "damaged". Run `xattr -cr /Applications/SyncCrate.app` once, then open it normally.
 
-Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · Linux `.AppImage` / `.deb` / `.rpm`. The app updates itself.
+Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, macOS 11 Big Sur or newer) · Linux `.AppImage` / `.deb` / `.rpm`. The app updates itself.
 
 <details>
 <summary><strong>All features</strong></summary>

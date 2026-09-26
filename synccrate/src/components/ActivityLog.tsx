@@ -256,7 +256,7 @@ export default function ActivityLog() {
                       <div className="group flex items-start gap-3 px-4 py-[3px] hover:bg-bg-card-hover">
                         <span className="text-txt-muted shrink-0 tabular">{time(log.timestamp)}</span>
                         <span className={cx("shrink-0 whitespace-pre", LEVEL_COLOR[log.level])}>[{LEVEL_TAG[log.level]}]</span>
-                        <span className={cx("min-w-0 flex-1 break-words select-text", log.level === "info" ? "text-txt" : LEVEL_COLOR[log.level])}>{log.message}</span>
+                        <span className={cx("min-w-0 flex-1 wrap-break-word select-text", log.level === "info" ? "text-txt" : LEVEL_COLOR[log.level])}>{log.message}</span>
                         <button
                           onClick={() => navigator.clipboard.writeText(logLine(log)).then(() => toastSuccess("Line copied"), () => {})}
                           className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 shrink-0 text-txt-muted hover:text-neon"
@@ -365,7 +365,7 @@ export default function ActivityLog() {
                         {open && (
                           <div className="px-4 pb-3 pl-16">
                             <ul className="font-mono text-[11px] text-status-red space-y-0.5 max-h-48 overflow-y-auto select-text">
-                              {entry.errors.map((e, j) => <li key={j} className="break-words">{e}</li>)}
+                              {entry.errors.map((e, j) => <li key={j} className="wrap-break-word">{e}</li>)}
                             </ul>
                             <Button
                               size="sm"

@@ -46,7 +46,7 @@ function SectionCard({ section }: { section: GuideSection }) {
         ))}
       </ol>
       {section.tip && (
-        <p className="flex gap-2 text-[11.5px] text-txt-dim leading-relaxed border-l-2 border-l-amber bg-amber/[0.05] px-3 py-2">
+        <p className="flex gap-2 text-[11.5px] text-txt-dim leading-relaxed border-l-2 border-l-amber bg-amber/5 px-3 py-2">
           <Lightbulb size={13} className="text-amber shrink-0 mt-0.5" />
           <span>{inline(section.tip)}</span>
         </p>

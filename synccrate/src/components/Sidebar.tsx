@@ -210,7 +210,7 @@ export default function Sidebar() {
       <button
         onClick={() => navigateToGlobal(p)}
         className={cx(
-          "row-h relative w-full flex items-center gap-3 px-4 h-9 font-display font-semibold text-[12px] uppercase tracking-[0.1em] transition-colors",
+          "row-h relative w-full flex items-center gap-3 px-4 h-9 font-display font-semibold text-[12px] uppercase tracking-widest transition-colors",
           active ? "text-txt bg-bg-card" : "text-txt-dim hover:text-txt hover:bg-bg-card/60",
         )}
       >
@@ -307,7 +307,7 @@ export default function Sidebar() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium leading-tight">{game.label}</span>
                       {isSelected && isConnected && (
-                        <span className="block font-mono text-[10px] text-neon uppercase tracking-[0.1em] mt-0.5">{statusLabel}</span>
+                        <span className="block font-mono text-[10px] text-neon uppercase tracking-widest mt-0.5">{statusLabel}</span>
                       )}
                     </span>
                   </button>
@@ -344,11 +344,11 @@ export default function Sidebar() {
                             onClick={() => navigateToGame(game.id, p)}
                             aria-current={active ? "page" : undefined}
                             className={cx(
-                              "row-h-sm relative w-full flex items-center gap-2.5 pl-4 pr-3 h-8 font-display font-semibold text-[11.5px] uppercase tracking-[0.1em] transition-colors",
+                              "row-h-sm relative w-full flex items-center gap-2.5 pl-4 pr-3 h-8 font-display font-semibold text-[11.5px] uppercase tracking-widest transition-colors",
                               active ? "text-neon" : "text-txt-muted hover:text-txt",
                             )}
                           >
-                            {active && <span className="absolute left-[-1px] top-1.5 bottom-1.5 w-[2px] bg-neon" />}
+                            {active && <span className="absolute -left-px top-1.5 bottom-1.5 w-[2px] bg-neon" />}
                             <Icon size={13} />
                             {label}
                           </button>
@@ -382,7 +382,7 @@ export default function Sidebar() {
           <span className="w-8 h-8 shrink-0 grid place-items-center border border-dashed border-line-hi group-hover:border-neon transition-colors">
             <Plus size={14} />
           </span>
-          <span className="font-display font-semibold text-[12px] uppercase tracking-[0.1em]">Add Game</span>
+          <span className="font-display font-semibold text-[12px] uppercase tracking-widest">Add Game</span>
         </button>
 
         <div className="mt-4 pt-3 border-t border-border">

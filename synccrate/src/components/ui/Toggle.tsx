@@ -28,7 +28,7 @@ export default function Toggle({ checked, onChange, label, description, disabled
           onChange={(e) => onChange(e.target.checked)}
         />
       ) : (
-        <span className="relative inline-block w-8 h-[18px] mt-[1px] shrink-0">
+        <span className="relative inline-block w-8 h-[18px] mt-px shrink-0">
           <input
             type="checkbox"
             role="switch"
@@ -40,7 +40,7 @@ export default function Toggle({ checked, onChange, label, description, disabled
           />
           <span
             className={cx(
-              "block w-8 h-[18px] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-neon peer-focus-visible:outline-offset-2",
+              "block w-8 h-[18px] border transition-colors peer-focus-visible:outline-solid peer-focus-visible:outline-2 peer-focus-visible:outline-neon peer-focus-visible:outline-offset-2",
               checked ? "bg-neon/15 border-neon" : "bg-bg border-line-hi",
             )}
           />
