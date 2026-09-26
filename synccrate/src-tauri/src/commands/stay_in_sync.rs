@@ -25,6 +25,15 @@ const MAX_AUTO_ATTEMPTS: u32 = 2;
 static ATTEMPTS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, (String, u32)>>> =
     std::sync::LazyLock::new(Default::default);
 
+/// Take back the try `drop_repeated` counted for `paths` (the pull didn't run).
+pub(crate) fn uncount_tries(paths: &[String], attempts: &mut std::collections::HashMap<String, (String, u32)>) {
+    for p in paths {
+        if let Some(e) = attempts.get_mut(p) {
+            e.1 = e.1.saturating_sub(1);
+        }
+    }
+}
+
 /// Drop files already tried `MAX_AUTO_ATTEMPTS` times unchanged, and count
 /// this try for the rest. Entries for files no longer planned (pulled, or
 /// gone from the host) are forgotten. Returns how many were held back. Pure
@@ -180,18 +189,32 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
     let (mut subset, scripts_held, needs_review, too_large) = safe_subset(&plan, &script_exts);
     let kept_failing = drop_repeated(&mut subset, &mut ATTEMPTS.lock().unwrap_or_else(|e| e.into_inner()));
     let pulled = subset.actions.len();
+    // Counted above as a try; these returns never download anything, and
+    // after two of them a healthy file waited for a manual sync as "kept failing".
+    let counted: Vec<String> = subset
+        .actions
+        .iter()
+        .filter_map(|a| if let SyncAction::ReceiveFromRemote(f) = a { Some(f.relative_path.clone()) } else { None })
+        .collect();
+    let uncount = || uncount_tries(&counted, &mut ATTEMPTS.lock().unwrap_or_else(|e| e.into_inner()));
     {
         let mut s = state.lock().await;
         if s.is_any_syncing() {
+            uncount();
             return skip("A sync or restore is running.");
         }
-        let Some(conn) = s.connections.get_mut(&peer_id) else { return skip("Disconnected.") };
+        let Some(conn) = s.connections.get_mut(&peer_id) else {
+            uncount();
+            return skip("Disconnected.");
+        };
         if conn.sync_plan.as_ref().is_some_and(|p| !p.actions.is_empty()) {
+            uncount();
             return skip("A sync plan is open.");
         }
         if plan.warning.is_some() {
             // e.g. an old host that seems to share another game: never unattended.
             conn.sync_plan = None;
+            uncount();
             return Ok(AutoPullResult { needs_review: needs_review + pulled, scripts_held, too_large, kept_failing, skipped: plan.warning.clone(), pulled: 0 });
         }
         conn.sync_plan = (pulled > 0).then_some(subset);
@@ -206,6 +229,16 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pull_that_never_ran_gives_its_try_back() {
+        let mut attempts = std::collections::HashMap::from([("Mods/a.package".to_string(), ("h".to_string(), 2u32))]);
+        uncount_tries(&["Mods/a.package".to_string(), "Mods/unknown.package".to_string()], &mut attempts);
+        assert_eq!(attempts["Mods/a.package"].1, 1);
+        uncount_tries(&["Mods/a.package".to_string()], &mut attempts);
+        uncount_tries(&["Mods/a.package".to_string()], &mut attempts);
+        assert_eq!(attempts["Mods/a.package"].1, 0, "never below zero");
+    }
     use crate::state::{FileInfo, ReplaceTarget};
 
     fn f(path: &str) -> FileInfo {

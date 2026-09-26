@@ -646,11 +646,21 @@ pub fn windows_system_exe(name: &str) -> PathBuf {
 pub fn write_json_atomic<T: serde::Serialize>(path: &std::path::Path, value: &T) -> Result<(), String> {
     let data = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
     let tmp = path.with_extension(format!("{}.tmp", path.extension().and_then(|e| e.to_str()).unwrap_or("json")));
-    std::fs::write(&tmp, data).map_err(|e| format!("Couldn't save {}: {e}", file_label(path)))?;
+    write_synced(&tmp, &data).map_err(|e| format!("Couldn't save {}: {e}", file_label(path)))?;
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("Couldn't save {}: {e}", file_label(path))
     })
+}
+
+/// Write and flush to disk before the caller renames it into place: after a
+/// power cut the rename could survive without the data, leaving a damaged
+/// file where the old good one was.
+pub fn write_synced(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(path)?;
+    f.write_all(data)?;
+    f.sync_all()
 }
 
 /// Load a JSON state file. Missing: `Ok(None)`. Damaged: set aside as

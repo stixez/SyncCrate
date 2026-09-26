@@ -978,6 +978,7 @@ async fn run_sync(
             "peer_id": peer_id,
             "cancelled": cancelled,
             "changes": changes,
+            "auto_pull": plan.auto_pull,
         }),
     );
 

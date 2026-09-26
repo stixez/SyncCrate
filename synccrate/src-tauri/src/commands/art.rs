@@ -121,8 +121,10 @@ fn data_url(path: &Path) -> Option<String> {
 
 /// Download the first of `urls` that returns a real image into `dest`. Writes
 /// to a temp file first so a half-finished download never looks cached.
-async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
-    let _permit = DOWNLOADS.acquire().await.map_err(|e| e.to_string())?;
+/// `Err((why, gone))`: `gone` when every source answered that the art
+/// doesn't exist (404/410, or not an image), as opposed to being offline.
+async fn download(urls: &[String], dest: &Path) -> Result<(), (String, bool)> {
+    let _permit = DOWNLOADS.acquire().await.map_err(|e| (e.to_string(), false))?;
     if dest.is_file() {
         return Ok(()); // another request finished it while we waited
     }
@@ -141,9 +143,10 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
             if a.url().scheme() == "https" && a.previous().len() < 5 { a.follow() } else { a.stop() }
         }))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| (e.to_string(), false))?;
 
     let mut last_err = String::from("no source reachable");
+    let mut gone = true;
     for url in urls {
         match client.get(url).send().await {
             Ok(resp) if resp.status().is_success() => {
@@ -151,6 +154,7 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
                     Ok(b) => b,
                     Err(e) => {
                         last_err = format!("{url}: {e}");
+                        gone = false;
                         continue;
                     }
                 };
@@ -160,15 +164,21 @@ async fn download(urls: &[String], dest: &Path) -> Result<(), String> {
                     continue;
                 }
                 let tmp = dest.with_extension("part");
-                std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
-                std::fs::rename(&tmp, dest).map_err(|e| e.to_string())?;
+                std::fs::write(&tmp, &bytes).map_err(|e| (e.to_string(), false))?;
+                std::fs::rename(&tmp, dest).map_err(|e| (e.to_string(), false))?;
                 return Ok(());
             }
-            Ok(resp) => last_err = format!("{url}: HTTP {}", resp.status()),
-            Err(e) => last_err = format!("{url}: {e}"),
+            Ok(resp) => {
+                gone &= matches!(resp.status().as_u16(), 404 | 410);
+                last_err = format!("{url}: HTTP {}", resp.status());
+            }
+            Err(e) => {
+                gone = false;
+                last_err = format!("{url}: {e}");
+            }
         }
     }
-    Err(last_err)
+    Err((last_err, gone))
 }
 
 /// Artwork for a game as a `data:` URL, or `None` when there is none (not on
@@ -218,9 +228,13 @@ pub async fn get_game_art(
         if recent_miss {
             return Ok(None);
         }
-        if let Err(e) = download(&urls, &dest).await {
+        if let Err((e, gone)) = download(&urls, &dest).await {
             log::debug!("Game art for {game_id} ({kind}) unavailable: {e}");
-            let _ = std::fs::write(&miss, b"");
+            // Only a real "not there": one launch while offline blanked every
+            // game's art for a day.
+            if gone {
+                let _ = std::fs::write(&miss, b"");
+            }
             return Ok(None);
         }
         let _ = std::fs::remove_file(&miss);

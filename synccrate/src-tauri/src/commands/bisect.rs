@@ -74,22 +74,48 @@ fn narrow(suspects: &[usize], still_broken: bool) -> Vec<usize> {
     if still_broken { suspects[..mid].to_vec() } else { suspects[mid..].to_vec() }
 }
 
-/// Units from the enabled mod files in `folder`.
-fn units_from(paths: &[String], folder: &str) -> Vec<Unit> {
-    let prefix = format!("{}/", folder.trim_end_matches('/'));
-    let mut by_name: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
+/// Units one level below `prefix`: each with its own inner prefix when
+/// it's a folder (`Mods/Packages/`), as spelled on disk.
+fn group(paths: &[String], prefix: &str, label: &str) -> Vec<(Unit, Option<String>)> {
+    let mut by_name: BTreeMap<String, (String, Option<String>, Vec<String>)> = BTreeMap::new();
     for p in paths {
-        let Some(inner) = p.get(..prefix.len()).filter(|h| h.eq_ignore_ascii_case(&prefix)).map(|_| &p[prefix.len()..]) else { continue };
-        let name = inner.split_once('/').map_or(inner, |(dir, _)| dir);
-        by_name.entry(name.to_lowercase()).or_insert_with(|| (name.to_string(), Vec::new())).1.push(p.clone());
+        let Some(inner) = p.get(..prefix.len()).filter(|h| h.eq_ignore_ascii_case(prefix)).map(|_| &p[prefix.len()..]) else { continue };
+        let (name, sub) = match inner.split_once('/') {
+            Some((dir, _)) => (dir, Some(format!("{}{}/", &p[..prefix.len()], dir))),
+            None => (inner, None),
+        };
+        let e = by_name.entry(name.to_lowercase()).or_insert_with(|| (name.to_string(), None, Vec::new()));
+        if e.1.is_none() {
+            e.1 = sub;
+        }
+        e.2.push(p.clone());
     }
     by_name
         .into_values()
-        .map(|(name, mut files)| {
+        .map(|(name, sub, mut files)| {
             files.sort();
-            Unit { name, files }
+            (Unit { name: format!("{label}{name}"), files }, sub)
         })
         .collect()
+}
+
+/// Units from the enabled mod files in `folder`. A folder holding nearly
+/// everything (The Sims 3's `Mods/Packages`, one big `Mods/CC`) is split
+/// into what's inside: as one unit, the search had nothing to halve.
+fn units_from(paths: &[String], folder: &str) -> Vec<Unit> {
+    let prefix = format!("{}/", folder.trim_end_matches('/'));
+    let mut units = group(paths, &prefix, "");
+    loop {
+        let total: usize = units.iter().map(|(u, _)| u.files.len()).sum();
+        let Some(i) = units.iter().position(|(u, sub)| sub.is_some() && u.files.len() * 5 >= total * 4) else { break };
+        let (big, sub_prefix) = &units[i];
+        let split = group(&big.files, sub_prefix.as_deref().unwrap_or_default(), &format!("{}/", big.name));
+        if split.len() < 2 {
+            break;
+        }
+        units.splice(i..=i, split);
+    }
+    units.into_iter().map(|(u, _)| u).collect()
 }
 
 impl Bisect {
@@ -203,8 +229,9 @@ async fn require_game_closed(state: &Arc<Mutex<AppState>>, game: &str) -> Result
 
 /// Run `apply` off the async workers, save, and update tags and the manifest.
 async fn step(state: &Arc<Mutex<AppState>>, mut b: Bisect, off: Vec<usize>, folder: String, rename: bool, done: bool) -> Result<BisectView, String> {
+    let apply_folder = folder.clone();
     let (b, moved) = tokio::task::spawn_blocking(move || {
-        let moved = b.apply(&off, &folder, rename);
+        let moved = b.apply(&off, &apply_folder, rename);
         (b, moved)
     })
     .await
@@ -213,8 +240,20 @@ async fn step(state: &Arc<Mutex<AppState>>, mut b: Bisect, off: Vec<usize>, fold
     let finished = done && b.errors.is_empty();
     if finished {
         let _ = std::fs::remove_file(record_path(&b.game));
-    } else {
-        save(&b)?;
+    } else if let Err(e) = save(&b) {
+        // Without a record nothing would know which mods are off (a failed
+        // first save made Stop say "no search is running"): put every mod
+        // back on and end the search.
+        let (b, back) = tokio::task::spawn_blocking(move || {
+            let mut b = b;
+            let back = b.apply(&[], &folder, rename);
+            (b, back)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        record_toggles(state, &b.game, &back).await;
+        let _ = std::fs::remove_file(record_path(&b.game));
+        return Err(format!("Couldn't save the search ({e}), so it stopped and turned the mods back on."));
     }
     Ok(b.view())
 }
@@ -325,6 +364,18 @@ mod tests {
 
     fn strs(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_folder_holding_almost_everything_is_split() {
+        // The Sims 3: every package lives in Mods/Packages.
+        let u = units_from(&strs(&["Mods/Packages/a.package", "Mods/Packages/b.package", "Mods/Packages/Creator/c.package", "Mods/Packages/Creator/d.package"]), "Mods");
+        let names: Vec<&str> = u.iter().map(|x| x.name.as_str()).collect();
+        assert_eq!(names, ["Packages/a.package", "Packages/b.package", "Packages/Creator"]);
+        assert_eq!(u[2].files.len(), 2, "creator folders inside stay one unit");
+        // A normal layout isn't split further.
+        let u = units_from(&strs(&["Mods/A/x.package", "Mods/B/y.package", "Mods/z.package"]), "Mods");
+        assert_eq!(u.len(), 3);
     }
 
     #[test]

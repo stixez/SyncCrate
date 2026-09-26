@@ -403,6 +403,16 @@ export default function ContentBrowser({ gameId }: Props) {
     setCameForConflicts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusConflicts]);
+  // All resolved: the conflict filter alone would now show "0 results".
+  useEffect(() => {
+    if (!cameForConflicts || !syncPlan || totalConflicts > 0) return;
+    setStatusFilter((s) => {
+      if (!s.has("conflict")) return s;
+      const n = new Set(s);
+      n.delete("conflict");
+      return n;
+    });
+  }, [cameForConflicts, syncPlan, totalConflicts]);
   const conflicts = useMemo(() => {
     if (!syncPlan || !activeCt) return [];
     return syncPlan.actions

@@ -16,6 +16,8 @@ const Guide = lazy(() => import("./components/Guide"));
 import WelcomeScreen, { isOnboardingComplete } from "./components/WelcomeScreen";
 import DropZoneOverlay from "./components/DropZoneOverlay";
 import InstallResultsModal from "./components/InstallResultsModal";
+import PageErrorBoundary from "./components/PageErrorBoundary";
+import StayInSyncRunner from "./components/StayInSyncRunner";
 import { useAppStore } from "./stores/useAppStore";
 import { useLogStore } from "./stores/useLogStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
@@ -401,9 +403,9 @@ function App() {
       case "content":
         return <ContentBrowser key={selectedGame} gameId={selectedGame} />;
       case "profiles":
-        return <ProfileList gameId={selectedGame} />;
+        return <ProfileList key={selectedGame} gameId={selectedGame} />;
       case "backups":
-        return <BackupList gameId={selectedGame} />;
+        return <BackupList key={selectedGame} gameId={selectedGame} />;
       case "modpacks":
         return <ModpackList gameId={selectedGame} />;
       default:
@@ -413,7 +415,10 @@ function App() {
 
   return (
     <Layout>
-      <Suspense fallback={null}>{renderPage()}</Suspense>
+      <PageErrorBoundary resetKey={`${selectedGame}:${page}`}>
+        <Suspense fallback={null}>{renderPage()}</Suspense>
+      </PageErrorBoundary>
+      <StayInSyncRunner />
       {isDragging && <DropZoneOverlay />}
       {installResults && (
         <InstallResultsModal

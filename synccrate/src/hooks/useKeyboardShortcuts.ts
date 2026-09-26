@@ -33,9 +33,10 @@ export function useKeyboardShortcuts() {
 
       // "/" → focus search on current page (only if not in an input)
       if (e.key === "/" && !isInput) {
-        const searchInput = document.querySelector<HTMLInputElement>(
-          'input[type="search"], input[aria-label^="Search" i], input[placeholder*="Search"], input[placeholder*="Find"]'
-        );
+        // The page's own search first (the sidebar's "Find a game" comes
+        // earlier in the document).
+        const sel = 'input[type="search"], input[aria-label^="Search" i], input[placeholder*="Search"], input[placeholder*="Find"]';
+        const searchInput = document.querySelector<HTMLInputElement>(`main ${sel.split(", ").join(", main ")}`) ?? document.querySelector<HTMLInputElement>(sel);
         // Otherwise leave the key alone (it was swallowed on pages without one).
         if (searchInput) {
           e.preventDefault();

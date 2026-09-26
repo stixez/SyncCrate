@@ -8,8 +8,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
-import { useStayInSync } from "../hooks/useStayInSync";
-import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadStayInSync, saveStayInSync } from "../lib/prefs";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
 import { formatBytes, plural } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
@@ -75,10 +74,12 @@ export default function GameDashboard({ gameId }: Props) {
     !syncProgress &&
     !isSyncLoading &&
     !(syncPlan && syncPlan.actions.length > 0);
-  const [stayInSync, setStayInSync] = useState(loadStayInSync);
+  // App-wide (StayInSyncRunner): here only shown and switched.
+  const stayInSync = useAppStore((s) => s.stayInSync);
+  const setStayInSync = useAppStore((s) => s.setStayInSync);
+  const autoPull = useAppStore((s) => s.autoPull);
   // With "stay in sync" on, the auto-pull replaces the "host added files" check.
   const { updates: hostUpdates, dismiss: dismissHostUpdates } = useHostUpdates(hostUpdatesEnabled && !stayInSync);
-  const { last: autoPull } = useStayInSync(hostUpdatesEnabled && stayInSync);
 
   const gameDef = getGameDef(gameId);
   const gameLabel = gameDef?.label ?? gameId;
@@ -939,7 +940,6 @@ export default function GameDashboard({ gameId }: Props) {
             checked={stayInSync}
             onChange={(on) => {
               setStayInSync(on);
-              saveStayInSync(on);
             }}
             label="Stay in sync"
             description="Pull the host's new mods automatically, every minute. Only adds files: anything that would replace or delete one of yours, and script mods, still wait for you. Paused while the game runs."
@@ -1014,7 +1014,7 @@ export default function GameDashboard({ gameId }: Props) {
         </section>
       )}
       {isClient && !syncProgress && <WhatsNew gameId={gameId} />}
-      {isClient && !syncPlan && !syncProgress && <UndoLastSync gameId={gameId} />}
+      {isClient && !(syncPlan && syncPlan.actions.length > 0) && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
           You have everything the host shares. Turn on Stay in sync to get their new mods automatically.

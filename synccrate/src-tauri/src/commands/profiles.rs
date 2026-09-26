@@ -119,16 +119,17 @@ pub async fn save_profile(
 /// (preview, Apply Pack Exactly, one-click revert). Comparing was a dead end
 /// before: it listed the differences but couldn't act on them.
 pub(crate) fn profile_to_pack(profile: &ModProfile) -> Result<crate::state::ModPack, String> {
+    // Older profiles can have files saved without a hash. Leaving those out
+    // made "Apply Pack Exactly" treat them as extras and turn them off, so
+    // such a profile can't be applied until it's saved again.
+    if profile.mods.is_empty() || profile.mods.iter().any(|m| !crate::commands::backup::is_valid_hash(&m.hash)) {
+        return Err("This profile was saved without file fingerprints, so it can't be applied exactly. Save it again (same mods) and try once more.".into());
+    }
     let files: Vec<crate::state::PackFile> = profile
         .mods
         .iter()
-        // Older profiles can have files saved without a hash; a pack needs one.
-        .filter(|m| crate::commands::backup::is_valid_hash(&m.hash))
         .map(|m| crate::state::PackFile { relative_path: m.relative_path.clone(), size: m.size, hash: m.hash.clone() })
         .collect();
-    if files.is_empty() {
-        return Err("This profile has no files that can be compared exactly. Save it again to refresh it.".into());
-    }
     let pack = crate::state::ModPack {
         format_version: crate::commands::modpack::FORMAT_VERSION,
         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -299,10 +300,11 @@ mod tests {
             id: "x".into(), name: "Build night".into(), description: String::new(), icon: String::new(), author: String::new(),
             created_at: 1, mods: vec![m("Mods/a.package", &h), m("Mods/old.package", "")], game: "sims4".into(),
         };
-        let pack = profile_to_pack(&profile).unwrap();
+        assert!(profile_to_pack(&profile).is_err(), "one file without a hash: it'd be turned off as an extra");
+        let ok = ModProfile { mods: vec![m("Mods/a.package", &h)], ..profile };
+        let pack = profile_to_pack(&ok).unwrap();
         assert_eq!(pack.game_id, "sims4");
-        assert_eq!(pack.files.len(), 1, "a file saved without a hash can't be compared exactly");
-        assert!(profile_to_pack(&ModProfile { mods: vec![m("Mods/old.package", "")], ..profile }).is_err());
+        assert_eq!(pack.files.len(), 1);
     }
 
     fn profile(paths: &[&str]) -> ModProfile {

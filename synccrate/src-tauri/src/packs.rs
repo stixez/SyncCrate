@@ -217,8 +217,14 @@ pub fn detect_game_version(game_id: &str, game_path: &str) -> Option<String> {
 /// pack was ever detected. Found the way the ReShade entry finds Game\Bin.
 pub(crate) fn sims4_install_dir() -> Option<std::path::PathBuf> {
     let reg = crate::registry::load_registry();
-    let def = reg.games.iter().find(|g| g.id == "sims4-reshade")?;
-    let bin = crate::utils::detect_game_path_from_def(def)?;
+    let mut def = reg.games.iter().find(|g| g.id == "sims4-reshade")?.clone();
+    // The ReShade entry only accepts a Game\Bin that has ReShade in it; the
+    // install folder itself is wanted here, ReShade or not (without this,
+    // packs and Play worked only for ReShade users).
+    if let Some(d) = def.detection.as_mut() {
+        d.require_any.clear();
+    }
+    let bin = crate::utils::detect_game_path_from_def(&def)?;
     std::path::Path::new(&bin).parent()?.parent().map(std::path::Path::to_path_buf)
 }
 

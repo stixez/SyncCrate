@@ -1999,7 +1999,10 @@ pub struct ReceiveRequest<'a> {
 /// Date `path` like the host's copy. Skipped for missing or implausible
 /// times (0, or more than a day ahead of this PC's clock).
 fn keep_host_date(path: &std::path::Path, secs: Option<u64>) {
-    let Some(secs) = secs.filter(|s| *s > 0 && *s <= crate::utils::timestamp_now() + 86_400) else { return };
+    let now = crate::utils::timestamp_now();
+    // Far ahead: a wrong clock, ignore. A little ahead: now (a future date
+    // made every scan rehash the file until the clock caught up).
+    let Some(secs) = secs.filter(|s| *s > 0 && *s <= now + 86_400).map(|s| s.min(now)) else { return };
     let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
     if let Err(e) = std::fs::File::options().write(true).open(path).and_then(|f| f.set_modified(when)) {
         log::warn!("Couldn't keep the host's date on {}: {}", path.display(), e);
