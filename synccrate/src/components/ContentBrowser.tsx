@@ -164,9 +164,14 @@ export default function ContentBrowser({ gameId }: Props) {
     cmd.checkCompatibility(gameId).then(setModCompatibility).catch(() => {});
   }, [manifest, gameId, setModCompatibility]);
 
-  // Workshop-installed mods (tModLoader) live outside the game folder; say so,
-  // or an empty Mods list looks like a detection bug (GitHub issue #2).
+  // Workshop-installed mods (tModLoader, RimWorld, Paradox, ...) live outside
+  // the game folder; say so, or an empty Mods list looks like a detection bug
+  // (GitHub issue #2).
   const [workshopMods, setWorkshopMods] = useState(0);
+  const syncedFolders = useMemo(() => {
+    const labels = (gameDef?.content_types ?? []).filter((c) => c.syncable !== false).map((c) => c.label);
+    return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels[0] ?? "";
+  }, [gameDef]);
   useEffect(() => {
     let cancelled = false;
     if (!gameDef?.steam_workshop_app_id) { setWorkshopMods(0); return; }
@@ -734,8 +739,8 @@ export default function ContentBrowser({ gameId }: Props) {
       {workshopMods > 0 && (
         <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>
           Steam keeps Workshop mods in its own folder, outside the game folder, so SyncCrate can't list, sync or back them up.
-          Friends can subscribe to the same mods on the Workshop. SyncCrate still syncs your worlds, players,{" "}
-          <span className="font-mono text-[11px]">enabled.json</span> (which mods are turned on) and any mod files in the Mods folder.
+          Friends can subscribe to the same mods on the Workshop.
+          {syncedFolders && <> SyncCrate still syncs {syncedFolders}.</>}
         </Banner>
       )}
 

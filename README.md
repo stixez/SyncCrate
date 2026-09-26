@@ -361,6 +361,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 **Bethesda games, KSP and Mount & Blade:** only mods sync. The game's own files in `Data`, `GameData` or `Modules` (the base game, DLC and Creation Club content) are skipped, so a sync never copies paid content to someone who doesn't own it or replaces base files across game versions. Paid Creations that don't follow Bethesda's `cc…` naming can't be told apart from mods yet. The load order (`plugins.txt`) is outside the game folder and isn't synced either.
 
+**Steam Workshop mods** (RimWorld, Cities: Skylines, Project Zomboid, Paradox games, Arma 3, tModLoader and others) are kept by Steam in its own folder, outside the game folder, so SyncCrate can't sync them; the Content page says how many you have. Friends subscribe to the same Workshop items, and SyncCrate still syncs everything in the game's own folders.
+
 **LAN party tips:** run the host on wired Ethernet, click **Fix Windows Firewall** on the host before people arrive, and let friends sync in waves (everyone shares the host's upload). Friends can also sync at home the night before using the join code.
 
 ## FAQ
