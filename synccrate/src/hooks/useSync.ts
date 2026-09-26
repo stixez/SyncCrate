@@ -17,15 +17,17 @@ export function useSync() {
 
   const computePlan = async () => {
     setIsLoading(true);
-    // A new compare replaces any pack plan, so a pending "apply pack exactly"
-    // must not fire on this (unrelated) sync's completion.
-    useAppStore.getState().setPendingPackApply(null);
     try {
       // Full scan with hashes needed for accurate sync comparison
       setLoadingPhase("Hashing files...");
       await cmd.scanFiles(undefined, false);
       setLoadingPhase("Comparing with the host...");
       const plan = await cmd.computeSyncPlan();
+      // A new compare replaces any pack plan, so a pending "apply pack
+      // exactly" must not fire on this (unrelated) sync's completion. Only
+      // once the plan exists: clearing it first let a refused compare (a
+      // sync already running) silently drop the pack's disable step.
+      useAppStore.getState().setPendingPackApply(null);
       setSyncPlan(plan);
       const count = plan.actions.length;
       if (plan.warning) {

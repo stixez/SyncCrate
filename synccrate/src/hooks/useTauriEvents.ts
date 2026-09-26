@@ -95,6 +95,13 @@ export function useTauriEvents() {
       }
     }
 
+    // The user's own name. The session's name is the host's label on a
+    // client (and already cleared), so reconnects joined as "Guest".
+    const reconnectName = () => {
+      const attempt = useAppStore.getState().lastConnectAttempt;
+      return loadDisplayName().trim() || (attempt && "name" in attempt ? attempt.name : "") || "Guest";
+    };
+
     async function attemptReconnect(hostName: string, localName: string) {
       cancelRetry();
       retryRef.current.active = true;
@@ -242,6 +249,10 @@ export function useTauriEvents() {
               const isIp = /^[0-9a-f.:]+$/i.test(host.ip);
               if (isIp || code) {
                 useAppStore.getState().setLastHost(isIp ? host.ip : null, isIp ? host.port : null, host.name, code);
+              } else {
+                // A crew join (internet only, no code): the stored host is an
+                // older one, and reconnecting would reach them instead.
+                useAppStore.getState().clearLastHost();
               }
             }
           } catch {
@@ -250,6 +261,10 @@ export function useTauriEvents() {
         }),
         listen<{ name: string; clean?: boolean; reason?: string; peer_id?: string }>("peer-disconnected", async (event) => {
           const { name, clean, reason, peer_id } = event.payload;
+          // Read before awaiting: only a client that lost its host reconnects.
+          // A host's own friend-dropped events (e.g. right after Stop hosting)
+          // made the host "reconnect" to its old join code.
+          const wasClient = useAppStore.getState().session?.session_type === "Client";
           setIsScanning(false);
           if (peer_id) {
             setPeerDownloadProgress(peer_id, null);
@@ -271,17 +286,28 @@ export function useTauriEvents() {
               // discarded it, so don't leave a stale plan or progress bar behind.
               setSyncPlan(null);
               setSyncProgress(null);
-              useAppStore.getState().setPendingPackApply(null);
+              const st = useAppStore.getState();
+              st.setPendingPackApply(null);
+              // A tray Disconnect mid-connect never sends connection-failed.
+              st.setIsConnecting(false);
+              st.setPinPrompt(null);
+              // The next session's chat numbers from 1 again.
+              st.setChat(null);
+              st.clearPeerDownloadProgress();
+              for (const id of Object.keys(peerIdleTimers.current)) {
+                clearTimeout(peerIdleTimers.current[id]);
+                delete peerIdleTimers.current[id];
+              }
             }
 
             // Auto-retry for clients that lost the host
-            if (!clean && status.session_type === "None") {
-              attemptReconnect(name, status.name || "Guest");
+            if (!clean && wasClient && status.session_type === "None") {
+              attemptReconnect(name, reconnectName());
             }
           } catch {
             // Session gone — try to reconnect
-            if (!clean) {
-              attemptReconnect(name, "Guest");
+            if (!clean && wasClient) {
+              attemptReconnect(name, reconnectName());
             }
           }
         }),
@@ -338,6 +364,8 @@ export function useTauriEvents() {
         ),
         listen<{ files_synced: number; total_bytes: number; errors: string[]; cancelled?: boolean }>("sync-complete", (event) => {
           setSyncProgress(null);
+          // Or the next sync's "Preparing" shows this one's backup counts.
+          useAppStore.getState().setBackupProgress(null);
           setSyncPlan(null);
           // Watcher events were skipped while the sync wrote files.
           refreshManifest();
@@ -427,6 +455,9 @@ export function useTauriEvents() {
           if (timers[p.peer_id]) clearTimeout(timers[p.peer_id]);
           timers[p.peer_id] = setTimeout(() => {
             delete timers[p.peer_id];
+            // The last event may have been mid-file (a read error ends a
+            // file without the "done" event): don't leave "Sending x 40%".
+            if (p.file) setPeerDownloadProgress(p.peer_id, { ...p, file: null, file_bytes_sent: 0, file_bytes_total: 0 });
             if (p.files_sent > 0) {
               sendNotification("SyncCrate", `${p.peer_name} finished downloading`);
             }
