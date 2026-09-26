@@ -129,6 +129,30 @@ pub(crate) async fn compute_sync_plan_inner(
     state: &Arc<Mutex<AppState>>,
     peer_id: Option<String>,
 ) -> Result<SyncPlan, String> {
+    let (resolved_id, plan) = plan_for_peer(state, peer_id).await?;
+    let mut app_state = state.lock().await;
+    if app_state.is_any_syncing() {
+        return Err(SYNC_RUNNING.to_string());
+    }
+    if app_state.active_game != plan.game_id {
+        return Err("The active game changed while comparing. Compare again.".to_string());
+    }
+    // Store plan on the peer connection
+    let conn = app_state
+        .connections
+        .get_mut(&resolved_id)
+        .ok_or("Peer disconnected")?;
+    conn.sync_plan = Some(plan.clone());
+    Ok(plan)
+}
+
+/// A fresh plan against the peer, without storing it: stay-in-sync decides
+/// afterwards whether it may (the user can open their own plan meanwhile).
+/// Returns the resolved peer id with the plan.
+pub(crate) async fn plan_for_peer(
+    state: &Arc<Mutex<AppState>>,
+    peer_id: Option<String>,
+) -> Result<(String, SyncPlan), String> {
     // Diffing needs real hashes: a local manifest from a quick scan has empty
     // hashes, which would turn every file both sides have into a "conflict".
     // An empty manifest may simply never have been scanned (or was dropped on
@@ -195,21 +219,7 @@ pub(crate) async fn compute_sync_plan_inner(
     };
     let resolved_id = snapshot.resolved_id.clone();
     let plan = tokio::task::spawn_blocking(move || build_plan(snapshot)).await.map_err(|e| e.to_string())?;
-
-    let mut app_state = state.lock().await;
-    if app_state.is_any_syncing() {
-        return Err(SYNC_RUNNING.to_string());
-    }
-    if app_state.active_game != plan.game_id {
-        return Err("The active game changed while comparing. Compare again.".to_string());
-    }
-    // Store plan on the peer connection
-    let conn = app_state
-        .connections
-        .get_mut(&resolved_id)
-        .ok_or("Peer disconnected")?;
-    conn.sync_plan = Some(plan.clone());
-    Ok(plan)
+    Ok((resolved_id, plan))
 }
 
 /// What `build_plan` needs, copied out of AppState.

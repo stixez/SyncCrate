@@ -34,15 +34,18 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
   }, [onClose]);
 
   // Shown right away; put back if saving fails, or the chips show tags that
-  // were never saved.
+  // were never saved. Only the latest save may roll back: an older failure
+  // must not undo a newer save that went through.
+  const saveSeq = useRef(0);
   const saveTags = async (next: string[]) => {
     const prev = tags;
+    const seq = ++saveSeq.current;
     setTags(next);
     try {
       await cmd.setModTags(useAppStore.getState().selectedGame ?? "", filePath, next);
       onTagsChanged(filePath, next);
     } catch (e) {
-      setTags(prev);
+      if (seq === saveSeq.current) setTags(prev);
       toastError(`Couldn't save the tags: ${friendlyError(e)}`);
     }
   };

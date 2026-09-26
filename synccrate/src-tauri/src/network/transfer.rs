@@ -730,8 +730,17 @@ async fn handle_client(
                         // 64 KB chunk was thousands a second at LAN speed.
                         let mut last_progress = tokio::time::Instant::now();
                         let mut read_failed = false;
+                        let mut chunks = 0u32;
 
                         loop {
+                            // Kicked, or hosting stopped: stop sending this file
+                            // (a throttled 2 GB file kept uploading for minutes).
+                            chunks = chunks.wrapping_add(1);
+                            if chunks % 64 == 0 && !state.lock().await.connections.contains_key(&peer_id) {
+                                let _ = protocol::send_message(&mut *s, &Message::Error { message: "The host stopped sharing.".to_string() }).await;
+                                read_failed = true;
+                                break;
+                            }
                             let n = match file.read(&mut buf).await {
                                 Ok(n) => n,
                                 Err(e) => {
@@ -1604,10 +1613,13 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
     let mut rejected = Vec::new();
     if let Some(files) = files {
         let cts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
-        let paths: Vec<String> = files.iter().map(|f| f.relative_path.clone()).collect();
+        let script_exts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.dangerous_script_extensions.clone()).unwrap_or_default();
+        // Capped before anything else: a 64 MB list (~200k entries) was
+        // collected in full and compared O(n^2) with the AppState lock held.
+        let files: Vec<_> = files.into_iter().take(crate::offers::MAX_OFFER_FILES * 2).collect();
+        let paths: Vec<String> = files.iter().map(|f| clean_peer_text(&f.relative_path, 512)).collect();
         let files: Vec<_> = files
             .into_iter()
-            .take(crate::offers::MAX_OFFER_FILES * 2)
             .map(|mut f| {
                 f.relative_path = clean_peer_text(&f.relative_path, 512);
                 f.file_type = clean_peer_text(&f.file_type, 32);
@@ -1615,7 +1627,8 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
             })
             .collect();
         let valid = crate::offers::valid_offer(files, &cts, &st.local_manifest);
-        rejected = paths.into_iter().filter(|p| !valid.iter().any(|v| &v.relative_path == p)).collect();
+        let valid_paths: std::collections::HashSet<&str> = valid.iter().map(|v| v.relative_path.as_str()).collect();
+        rejected = paths.into_iter().filter(|p| !valid_paths.contains(p.as_str())).collect();
         let count = valid.len();
         // The same offer again (a retry, or a modified client repeating it)
         // keeps the host's decisions and doesn't post another chat line:
@@ -1634,7 +1647,13 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
                 IncomingOffer {
                     peer_id: peer_id.to_string(),
                     peer_name: peer_name.to_string(),
-                    files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
+                    files: valid
+                        .into_iter()
+                        .map(|file| {
+                            let script = crate::commands::stay_in_sync::is_script_path(&file.relative_path, &script_exts);
+                            OfferedFile { file, state: OfferState::Pending, message: None, script }
+                        })
+                        .collect(),
                 },
             );
         }

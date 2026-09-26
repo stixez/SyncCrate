@@ -37,6 +37,10 @@ pub struct OfferedFile {
     pub state: OfferState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// Runs code (`.dll`, `.ts4script`, ...): the host's list shows it and
+    /// leaves it unticked, like a manual sync warns about scripts.
+    #[serde(default)]
+    pub script: bool,
 }
 
 /// Host side: what one connected friend offered.

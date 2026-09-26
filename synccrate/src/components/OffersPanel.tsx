@@ -6,7 +6,7 @@ import { Badge, Button, Panel, cx } from "./ui";
 import { fileName, formatBytes } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { toastError } from "../lib/toast";
-import type { IncomingOffer, OfferState, OutgoingOfferView } from "../lib/types";
+import type { IncomingOffer, OfferedFile, OfferState, OutgoingOfferView } from "../lib/types";
 
 const STATE_LABEL: Record<OfferState, string> = {
   pending: "Waiting",
@@ -23,6 +23,12 @@ function StateBadge({ state }: { state: OfferState }) {
 
 /** Offers between friends and the host (backend `crate::offers`): the host
  * picks what to take from each friend; a friend sees how their offer went. */
+/** Ticked paths: everything except what the host unticked, and scripts only
+ * when the host ticked them (`toggled` flips each file's default). */
+function chosenPaths(pending: OfferedFile[], toggled?: Set<string>): string[] {
+  return pending.filter((f) => (f.script ? !!toggled?.has(f.file.relative_path) : !toggled?.has(f.file.relative_path))).map((f) => f.file.relative_path);
+}
+
 export default function OffersPanel() {
   const session = useAppStore((s) => s.session);
   const version = useAppStore((s) => s.offersVersion);
@@ -41,9 +47,9 @@ export default function OffersPanel() {
   const decide = async (offer: IncomingOffer, acceptAll?: boolean) => {
     if (deciding) return;
     setDeciding(true);
-    const pending = offer.files.filter((f) => f.state === "pending").map((f) => f.file.relative_path);
-    const skip = unticked[offer.peer_id];
-    const chosen = new Set(acceptAll === false ? [] : acceptAll ? pending : pending.filter((p) => !skip?.has(p)));
+    const pendingFiles = offer.files.filter((f) => f.state === "pending");
+    const pending = pendingFiles.map((f) => f.file.relative_path);
+    const chosen = new Set(acceptAll === false ? [] : acceptAll ? pending : chosenPaths(pendingFiles, unticked[offer.peer_id]));
     try {
       await cmd.decideOffer(offer.peer_id, pending.filter((p) => chosen.has(p)), pending.filter((p) => !chosen.has(p)));
       setUnticked((prev) => {
@@ -70,8 +76,8 @@ export default function OffersPanel() {
         <div className="space-y-4">
           {open.map((o) => {
             const pending = o.files.filter((f) => f.state === "pending");
-            const skip = unticked[o.peer_id];
-            const chosen = new Set(pending.map((f) => f.file.relative_path).filter((p) => !skip?.has(p)));
+            const chosen = new Set(chosenPaths(pending, unticked[o.peer_id]));
+            const scripts = pending.filter((f) => f.script).length;
             const toggle = (p: string) =>
               setUnticked((prev) => {
                 const next = new Set(prev[o.peer_id] ?? []);
@@ -96,6 +102,11 @@ export default function OffersPanel() {
                     </>
                   )}
                 </div>
+                {scripts > 0 && (
+                  <p className="text-xs text-amber mb-2">
+                    {scripts} of these file{scripts !== 1 ? "s run" : " runs"} code on your PC (scripts or plugins), so {scripts !== 1 ? "they aren't" : "it isn't"} ticked. Only accept scripts from friends you trust.
+                  </p>
+                )}
                 <ul className="border border-border divide-y divide-border max-h-56 overflow-y-auto">
                   {o.files.map((f) => (
                     <li key={f.file.relative_path} className="row-y px-3 py-1.5 flex items-center gap-3">
@@ -111,6 +122,7 @@ export default function OffersPanel() {
                         <span className="w-[14px] shrink-0" />
                       )}
                       <span className="flex-1 min-w-0 truncate text-[12.5px] text-txt" title={f.file.relative_path}>{f.file.relative_path}</span>
+                      {f.script && <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-amber shrink-0">Runs code</span>}
                       <span className="font-mono text-[10.5px] text-txt-muted tabular">{formatBytes(f.file.size)}</span>
                       <StateBadge state={f.state} />
                     </li>

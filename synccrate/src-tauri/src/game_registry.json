@@ -3450,7 +3450,7 @@
           "icon": "package",
           "color": "text-amber-500",
           "folder": "Data",
-          "exclude_patterns": ["FalloutNV.esm", "Fallout - *.bsa", "Update.bsa", "DeadMoney*", "HonestHearts*", "OldWorldBlues*", "LonesomeRoad*", "GunRunnersArsenal*", "CaravanPack*", "ClassicPack*", "MercenaryPack*", "TribalPack*"],
+          "exclude_patterns": ["FalloutNV.esm", "Fallout - *.bsa", "Update.bsa", "DeadMoney.esm", "DeadMoney - *.bsa", "HonestHearts.esm", "HonestHearts - *.bsa", "OldWorldBlues.esm", "OldWorldBlues - *.bsa", "LonesomeRoad.esm", "LonesomeRoad - *.bsa", "GunRunnersArsenal.esm", "GunRunnersArsenal - *.bsa", "CaravanPack.esm", "CaravanPack - *.bsa", "ClassicPack.esm", "ClassicPack - *.bsa", "MercenaryPack.esm", "MercenaryPack - *.bsa", "TribalPack.esm", "TribalPack - *.bsa"],
           "extensions": [
             "esm",
             "esp",
@@ -3597,7 +3597,7 @@
           "icon": "package",
           "color": "text-amber-300",
           "folder": "Data",
-          "exclude_patterns": ["Oblivion.esm", "Oblivion - *.bsa", "DLC*.esp", "DLC*.bsa", "Knights.*"],
+          "exclude_patterns": ["Oblivion.esm", "Oblivion - *.bsa", "DLCBattlehornCastle.*", "DLCFrostcrag.*", "DLCHorseArmor.*", "DLCMehrunesRazor.*", "DLCOrrery.*", "DLCShiveringIsles.*", "DLCShiveringIsles - *.bsa", "DLCSpellTomes.*", "DLCThievesDen.*", "DLCVileLair.*", "Knights.*"],
           "extensions": [
             "esm",
             "esp",
@@ -3944,7 +3944,7 @@
           "icon": "package",
           "color": "text-indigo-400",
           "folder": "Data",
-          "exclude_patterns": ["Starfield.esm", "Starfield - *.ba2", "Constellation*", "OldMars*", "BlueprintShips-Starfield*", "ShatteredSpace*", "SFBGS*"],
+          "exclude_patterns": ["Starfield.esm", "Starfield - *.ba2", "Constellation.esm", "Constellation - *.ba2", "OldMars.esm", "OldMars - *.ba2", "BlueprintShips-Starfield.esm", "BlueprintShips-Starfield - *.ba2", "ShatteredSpace.esm", "ShatteredSpace - *.ba2", "SFBGS*.esm", "SFBGS* - *.ba2"],
           "extensions": [
             "esm",
             "esp",

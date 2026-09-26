@@ -288,14 +288,22 @@ pub async fn disconnect_inner(state: &Arc<Mutex<AppState>>, app: &tauri::AppHand
         app_state.connections.values().map(|c| c.stream.clone()).collect()
     };
 
+    // All peers at once: each can take a few seconds.
+    let mut goodbyes = tokio::task::JoinSet::new();
     for stream in streams {
-        // A stream busy with a long transfer (a friend's offered upload can
-        // be GBs) used to block "stop hosting" / "leave" until it finished.
-        // Skip the courtesy Disconnect then; clearing the connection below
-        // ends that loop.
-        let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await else { continue };
-        let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+        goodbyes.spawn(async move {
+            // A stream busy with a long transfer (a friend's offered upload
+            // can be GBs) used to block "stop hosting" / "leave" until it
+            // finished. Skip the courtesy Disconnect then; clearing the
+            // connection below ends that loop.
+            let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await else { return };
+            let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+            // Dropping an iroh stream discards unsent data, so internet
+            // friends never saw the Disconnect and auto-reconnected.
+            s.close_gracefully().await;
+        });
     }
+    while goodbyes.join_next().await.is_some() {}
 
     crate::network::transfer::reset_cancellation_token().await;
 
@@ -333,6 +341,9 @@ pub async fn disconnect_peer(
     // already removed, which ends that loop.
     if let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), conn.stream.lock()).await {
         let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+        // Without this an internet friend never gets the Disconnect (iroh
+        // drops unsent data) and auto-reconnects seconds after the kick.
+        s.close_gracefully().await;
     }
 
     let _ = app.emit(
@@ -522,6 +533,7 @@ pub(crate) fn count_new_host_files(
         let key = match_key(path);
         if local_keys.contains(&key)
             || !path_accepted_by(content_types, path)
+            || !crate::sync::diff::receivable(path, info)
             || !allowed(info)
             || !seen.insert(key)
         {

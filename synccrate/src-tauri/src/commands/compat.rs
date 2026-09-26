@@ -45,7 +45,11 @@ pub(crate) async fn check_compat_inner(state: &Arc<Mutex<AppState>>, game: &str)
 /// Whether an absolute descriptor path is this game's own `mod/<folder>`
 /// (same folder once resolved), missing here, or some other folder.
 fn descriptor_target(base: &str, path: &str, folder: &str) -> compat::DescriptorTarget {
-    let Ok(target) = std::fs::canonicalize(path) else { return compat::DescriptorTarget::Missing };
+    let expanded = match path.strip_prefix("~/") {
+        Some(rest) => dirs::home_dir().map(|h| h.join(rest)).unwrap_or_else(|| Path::new(path).to_path_buf()),
+        None => Path::new(path).to_path_buf(),
+    };
+    let Ok(target) = std::fs::canonicalize(&expanded) else { return compat::DescriptorTarget::Missing };
     let ours = std::fs::canonicalize(Path::new(base).join("mod").join(folder));
     if ours.is_ok_and(|o| o == target) { compat::DescriptorTarget::ThisModFolder } else { compat::DescriptorTarget::Elsewhere }
 }
@@ -128,6 +132,7 @@ async fn fix_paradox_paths(state: &Arc<Mutex<AppState>>, game: &str) -> Result<(
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 let tmp = path.with_file_name(format!(".{name}.synccrate-restore.tmp"));
                 std::fs::write(&tmp, compat::relative_descriptor(&text, folder)).map_err(|e| e.to_string())?;
+                crate::utils::make_replaceable(&path);
                 std::fs::rename(&tmp, &path).map_err(|e| {
                     let _ = std::fs::remove_file(&tmp);
                     e.to_string()

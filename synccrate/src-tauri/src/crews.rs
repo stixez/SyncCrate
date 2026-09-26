@@ -221,8 +221,11 @@ pub fn validate_welcome(mut w: CrewWelcome, session_game: &str, is_known_game: i
         m.updated_at = m.updated_at.min(latest);
         m.last_seen = m.last_seen.min(latest);
     }
+    // Only the set is dropped: rejecting the whole entry let one member who
+    // pushed version 1,000,000 break crew sync (members, name, removals) for
+    // everyone once the next honest publish went past the cap.
     if w.set.as_ref().is_some_and(|s| s.version > MAX_SET_VERSION) {
-        return Err("crew set version is out of range".into());
+        w.set = None;
     }
     if let Some(set) = &mut w.set {
         set.published_at = set.published_at.min(latest);
@@ -368,7 +371,7 @@ pub fn client_apply(crew: &mut Crew, w: CrewWelcome, host: Option<CrewHost>) -> 
 /// Local "publish as crew set": bump past whatever we've seen.
 pub fn publish_set<'a>(crew: &'a mut Crew, pack: ModPack, publisher: &str, now: u64) -> &'a CrewSet {
     let game = pack.game_id.clone();
-    let version = crew.sets.get(&game).map_or(0, |s| s.version).saturating_add(1);
+    let version = crew.sets.get(&game).map_or(0, |s| s.version).saturating_add(1).min(MAX_SET_VERSION);
     add_game(&mut crew.games, &game);
     crew.sets.insert(game.clone(), CrewSet { pack, version, published_at: now, publisher: publisher.to_string() });
     &crew.sets[&game]
@@ -625,11 +628,14 @@ mod tests {
         let mut p = crate::testutil::test_pack("sims4", &[("Mods/a.package", b"A")]);
         p.name = "S".into();
         w.set = Some(CrewSet { pack: p, version: far, published_at: 1, publisher: "H".into() });
-        assert!(validate_welcome(w, "sims4", known).is_err());
-        // And publishing past a huge local version saturates instead of wrapping to 0.
+        // Only the set is dropped; the rest of the crew entry still syncs.
+        let v = validate_welcome(w, "sims4", known).unwrap();
+        assert!(v.set.is_none() && v.members.len() == 1);
+        // And publishing past a huge local version stays inside the accepted
+        // range instead of wrapping to 0 or leaving it.
         let mut c = crew();
         c.sets.insert("sims4".into(), CrewSet { pack: pack("sims4", 1), version: u64::MAX, published_at: 1, publisher: "X".into() });
-        assert_eq!(publish_set(&mut c, pack("sims4", 1), "Me", 2).version, u64::MAX);
+        assert_eq!(publish_set(&mut c, pack("sims4", 1), "Me", 2).version, MAX_SET_VERSION);
     }
 
     #[test]

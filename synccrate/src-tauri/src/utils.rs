@@ -619,9 +619,6 @@ pub fn windows_system_exe(name: &str) -> PathBuf {
     }
 }
 
-/// Plain-language text for the OS errors players actually hit during a sync
-/// ("Access is denied. (os error 5)" -> what to do about it). Anything else is
-/// returned unchanged. The frontend's `friendlyError` does the same for toasts.
 /// Clear the read-only flag of an existing file that's about to be replaced
 /// (after every "did it change?" check). Windows refuses to rename onto a
 /// read-only file, so a read-only save failed "use theirs" on every sync and
@@ -639,6 +636,9 @@ pub fn make_replaceable(path: &std::path::Path) {
     }
 }
 
+/// Plain-language text for the OS errors players actually hit during a sync
+/// ("Access is denied. (os error 5)" -> what to do about it). Anything else is
+/// returned unchanged. The frontend's `friendlyError` does the same for toasts.
 pub fn plain_io_error(msg: &str) -> String {
     let code = msg
         .rsplit_once("(os error ")

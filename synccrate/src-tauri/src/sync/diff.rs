@@ -78,10 +78,13 @@ pub fn wildcard_match(pattern: &str, text: &str) -> bool {
 
 /// Whether a content type's `exclude_patterns` rule out a file, given its
 /// path inside the content type's folder ('/'-separated). Patterns without a
-/// `/` match the file name, the others the whole inner path.
+/// `/` match files directly in the folder (a legacy `_Disabled/` prefix
+/// aside), the others the whole inner path. Name patterns at any depth hit
+/// real mods: Oblivion's `DLC*.esp` matched the unofficial DLC patches'
+/// files, and base-game names matched loose files deep in mod folders.
 pub fn excluded_by_patterns(patterns: &[String], inner: &str) -> bool {
-    let name = inner.rsplit('/').next().unwrap_or(inner);
-    patterns.iter().any(|p| wildcard_match(p, if p.contains('/') { inner } else { name }))
+    let top = inner.strip_prefix("_Disabled/").unwrap_or(inner);
+    patterns.iter().any(|p| if p.contains('/') { wildcard_match(p, inner) } else { !top.contains('/') && wildcard_match(p, top) })
 }
 
 /// Whether some content type of the game accepts a (remote) relative path,
@@ -149,14 +152,19 @@ pub fn drop_foreign(remote: &mut FileManifest, content_types: &[ContentType]) ->
 /// (`receive_file` refuses them) and names this OS can't use (`CON.package`,
 /// a trailing dot, a backslash on Mac/Linux). Planned anyway, they failed on
 /// every sync, and stay-in-sync retried them every minute. Returns their paths.
+/// Whether this PC can receive a host file at all: no blocked types, names
+/// Windows can use, within the transfer limit (files over it are refused on
+/// arrival anyway, and requesting one used to wreck every later file).
+pub fn receivable(path: &str, info: &FileInfo) -> bool {
+    !crate::utils::is_dangerous_extension(path)
+        && crate::utils::validate_relative(path).is_ok()
+        && info.size <= crate::network::transfer::MAX_FILE_SIZE
+}
+
 pub fn drop_unreceivable(remote: &mut FileManifest) -> Vec<String> {
     let mut dropped = Vec::new();
     remote.files.retain(|path, info| {
-        // Files over the transfer limit are refused on arrival anyway, and
-        // requesting one used to wreck every later file in the sync.
-        let ok = !crate::utils::is_dangerous_extension(path)
-            && crate::utils::validate_relative(path).is_ok()
-            && info.size <= crate::network::transfer::MAX_FILE_SIZE;
+        let ok = receivable(path, info);
         if !ok {
             dropped.push(path.clone());
         }
@@ -739,6 +747,7 @@ mod tests {
         assert!(!path_accepted_by(&data, "GameData/SquadExpansion/MakingHistory/Parts/x.cfg"), "paid DLC folder");
         assert!(path_accepted_by(&data, "GameData/MechJeb2/Parts/x.cfg"));
         assert!(path_accepted_by(&data, "GameData/MyMod/SquadExpansion/x.cfg"), "anchored to the content folder");
+        assert!(path_accepted_by(&data, "Data/SomeMod/Skyrim - Textures0.bsa"), "name patterns only match directly in the folder");
         let any_ext = vec![ct("saves", &[], true)];
         assert!(path_accepted_by(&any_ext, "saves/slot1/game.sii"));
         assert!(!path_accepted_by(&any_ext, "saves"));
