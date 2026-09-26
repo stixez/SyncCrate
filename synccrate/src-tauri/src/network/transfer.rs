@@ -285,6 +285,16 @@ impl Drop for PeerCleanup {
     }
 }
 
+/// `name`, or `name (2)`, `name (3)`, ... if the host or a connected friend
+/// already uses it (case-insensitive).
+fn distinct_peer_name<'a>(name: &str, host: &'a str, peers: impl Iterator<Item = &'a str>) -> String {
+    let taken: Vec<String> = std::iter::once(host).chain(peers).map(|n| n.trim().to_lowercase()).collect();
+    if !taken.contains(&name.trim().to_lowercase()) {
+        return name.to_string();
+    }
+    (2..).map(|i| format!("{name} ({i})")).find(|c| !taken.contains(&c.to_lowercase())).unwrap_or_else(|| name.to_string())
+}
+
 /// Strip control and bidi-override characters and cap the length of a
 /// string a peer sent that we store or show.
 fn clean_peer_text(s: &str, max: usize) -> String {
@@ -465,6 +475,13 @@ async fn handle_client(
         .await?;
     }
 
+    // A friend named like the host (or another friend) looked exactly like
+    // them in chat and the peer list; give them a distinct name.
+    let peer_name = {
+        let st = state.lock().await;
+        distinct_peer_name(&peer_name, &st.session_name, st.connections.values().map(|c| c.info.name.as_str()))
+    };
+
     // Add peer to state
     let peer_id = uuid::Uuid::new_v4().to_string();
     {
@@ -475,6 +492,12 @@ async fn handle_client(
         // Checked before the handshake too, but concurrent joins all passed
         // that check and could overshoot the limit.
         if app_state.connections.len() >= MAX_PEERS {
+            drop(app_state);
+            // It already got a Welcome; without a reason it only saw the
+            // connection close.
+            let mut s = stream.lock().await;
+            let _ = protocol::send_message(&mut *s, &Message::Error { message: format!("This host already has {MAX_PEERS} friends connected. Try again when someone leaves.") }).await;
+            s.close_gracefully().await;
             return Err(format!("Rejecting {}: max peers ({}) reached", peer_label, MAX_PEERS));
         }
         let peer = crate::state::PeerInfo {
@@ -2297,6 +2320,13 @@ async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn friends_named_like_the_host_get_a_distinct_name() {
+        assert_eq!(distinct_peer_name("Sam", "Alex", ["Jo"].into_iter()), "Sam");
+        assert_eq!(distinct_peer_name("alex", "Alex", ["Jo"].into_iter()), "alex (2)");
+        assert_eq!(distinct_peer_name("Jo", "Alex", ["Jo", "Jo (2)"].into_iter()), "Jo (3)");
+    }
 
     #[test]
     fn connections_are_limited_per_source() {
