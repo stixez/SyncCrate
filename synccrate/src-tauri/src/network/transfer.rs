@@ -1989,6 +1989,21 @@ pub struct ReceiveRequest<'a> {
     /// could fill the disk with files the plan showed as tiny.
     pub expected_size: Option<u64>,
     pub policy: ReplacePolicy,
+    /// The host's modified time (unix seconds), given to the written file.
+    /// Games that order mods by file date (Oblivion, New Vegas, Morrowind
+    /// plugins) got a reshuffled load order when every synced file was dated
+    /// "now".
+    pub modified_secs: Option<u64>,
+}
+
+/// Date `path` like the host's copy. Skipped for missing or implausible
+/// times (0, or more than a day ahead of this PC's clock).
+fn keep_host_date(path: &std::path::Path, secs: Option<u64>) {
+    let Some(secs) = secs.filter(|s| *s > 0 && *s <= crate::utils::timestamp_now() + 86_400) else { return };
+    let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+    if let Err(e) = std::fs::File::options().write(true).open(path).and_then(|f| f.set_modified(when)) {
+        log::warn!("Couldn't keep the host's date on {}: {}", path.display(), e);
+    }
 }
 
 pub const LOCAL_COPY_DIFFERS: &str =
@@ -2257,6 +2272,8 @@ pub async fn receive_file(
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(e.to_string());
     }
+    let (d, secs) = (dest_path.clone(), req.modified_secs);
+    let _ = tokio::task::spawn_blocking(move || keep_host_date(&d, secs)).await;
     Ok(true)
 }
 
@@ -2351,6 +2368,22 @@ async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn received_files_keep_the_hosts_date_when_it_is_plausible() {
+        let dir = crate::testutil::temp_dir("host-date");
+        let f = dir.join("a.esp");
+        std::fs::write(&f, b"x").unwrap();
+        let secs = |p: &std::path::Path| std::fs::metadata(p).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        keep_host_date(&f, Some(1_600_000_000));
+        assert_eq!(secs(&f), 1_600_000_000);
+        let before = secs(&f);
+        keep_host_date(&f, Some(0));
+        keep_host_date(&f, Some(crate::utils::timestamp_now() + 10 * 86_400));
+        keep_host_date(&f, None);
+        assert_eq!(secs(&f), before, "no date, or one far in the future, is left alone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn friends_named_like_the_host_get_a_distinct_name() {
