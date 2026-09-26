@@ -346,6 +346,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::session::start_host,
+            commands::session::new_host_pin,
             commands::session::start_join,
             commands::session::connect_to_peer,
             commands::session::connect_by_ip,

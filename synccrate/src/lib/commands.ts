@@ -80,6 +80,11 @@ export async function connectByCode(code: string, name: string, pin?: string): P
 }
 
 /** The host's join code for the current session. */
+/** A fresh host PIN (kept for later sessions too); a running session uses it for new joins. */
+export async function newHostPin(): Promise<string> {
+  return invoke("new_host_pin");
+}
+
 export async function getJoinCode(): Promise<string> {
   return invoke("get_join_code");
 }
