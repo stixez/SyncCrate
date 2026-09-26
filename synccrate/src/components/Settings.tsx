@@ -88,6 +88,7 @@ export default function Settings() {
   }, []);
 
   const updateAutoBackupConfig = (updates: Partial<AutoBackupConfig>) => {
+    const previous = autoBackupConfig;
     const newConfig = { ...autoBackupConfig, ...updates };
     setAutoBackupConfigState(newConfig);
     cmd.setAutoBackupConfig(
@@ -95,7 +96,19 @@ export default function Settings() {
       newConfig.auto_backup_scheduled,
       newConfig.auto_backup_interval_hours,
       newConfig.auto_backup_max_count,
-    ).catch(console.error);
+    ).catch((e) => {
+      setAutoBackupConfigState(previous);
+      toastError(`Couldn't save the backup settings: ${e}`);
+    });
+  };
+
+  /** Show the change right away; undo it if the backend refuses. */
+  const saveSetting = <T,>(value: T, previous: T, apply: (v: T) => void, save: (v: T) => Promise<unknown>) => {
+    apply(value);
+    save(value).catch((e) => {
+      apply(previous);
+      toastError(`Couldn't save the setting: ${e}`);
+    });
   };
 
   useEffect(() => {
@@ -499,9 +512,7 @@ export default function Settings() {
               <select
                 value={speedLimit}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setSpeedLimit(val);
-                  cmd.setTransferSpeedLimit(val).catch(console.error);
+                  saveSetting(Number(e.target.value), speedLimit, setSpeedLimit, cmd.setTransferSpeedLimit);
                 }}
                 aria-label="Transfer speed limit"
                 className={selectClass}
@@ -519,10 +530,7 @@ export default function Settings() {
             <SettingRow>
               <Toggle
                 checked={clearCache}
-                onChange={(v) => {
-                  setClearCache(v);
-                  cmd.setClearCacheAfterSync(v).catch(console.error);
-                }}
+                onChange={(v) => saveSetting(v, clearCache, setClearCache, cmd.setClearCacheAfterSync)}
                 label="Clear game caches after sync"
                 description="For example the Sims 4 localthumbcache, so new CC shows up correctly."
               />
@@ -530,10 +538,7 @@ export default function Settings() {
             <SettingRow>
               <Toggle
                 checked={keepHistory}
-                onChange={(v) => {
-                  setKeepHistory(v);
-                  cmd.setKeepFileHistory(v).catch(console.error);
-                }}
+                onChange={(v) => saveSetting(v, keepHistory, setKeepHistory, cmd.setKeepFileHistory)}
                 label="Keep earlier versions of synced files"
                 description="When a sync replaces or deletes a file, keep the old one so you can put just that file back (Backups → File history)."
               />
@@ -549,10 +554,7 @@ export default function Settings() {
             <SettingRow>
               <Toggle
                 checked={closeToTray}
-                onChange={(v) => {
-                  setCloseToTrayState(v);
-                  cmd.setCloseToTray(v).catch(console.error);
-                }}
+                onChange={(v) => saveSetting(v, closeToTray, setCloseToTrayState, cmd.setCloseToTray)}
                 label="Keep running in the tray when the window is closed"
                 description="Closing the window hides SyncCrate so hosting and syncing continue. Use Quit in the tray menu to exit."
               />

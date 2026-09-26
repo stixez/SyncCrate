@@ -194,10 +194,31 @@ pub fn parse_modrinth(json: &Value) -> HashMap<String, MrVersion> {
 
 /// Hashes grouped by the (loaders, game versions) filter their update
 /// request needs: one request per group, usually just one for a modpack.
-pub fn modrinth_groups(current: &HashMap<String, MrVersion>) -> Vec<((Vec<String>, Vec<String>), Vec<String>)> {
+///
+/// A jar usually supports several game versions; filtering by all of them
+/// offered e.g. a 1.20.4-only update to someone playing 1.20.1. So narrow
+/// to the version being played: `game_version` when known, else the one the
+/// most installed jars support (a modpack's jars all share its version).
+pub fn modrinth_groups(current: &HashMap<String, MrVersion>, game_version: Option<&str>) -> Vec<((Vec<String>, Vec<String>), Vec<String>)> {
+    // A detected version no jar lists (e.g. a launcher's) says nothing about mods.
+    let known = game_version.filter(|g| current.values().any(|v| v.game_versions.iter().any(|x| x == g)));
+    let played: Option<String> = known.map(str::to_string).or_else(|| {
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for v in current.values() {
+            for gv in &v.game_versions {
+                *counts.entry(gv.as_str()).or_default() += 1;
+            }
+        }
+        // Ties: the lexically smallest, so the choice is stable between runs.
+        counts.into_iter().max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(a.0))).map(|(gv, _)| gv.to_string())
+    });
     let mut groups: HashMap<(Vec<String>, Vec<String>), Vec<String>> = HashMap::new();
     for (hash, v) in current {
-        groups.entry((v.loaders.clone(), v.game_versions.clone())).or_default().push(hash.clone());
+        let versions = match &played {
+            Some(p) if v.game_versions.contains(p) => vec![p.clone()],
+            _ => v.game_versions.clone(),
+        };
+        groups.entry((v.loaders.clone(), versions)).or_default().push(hash.clone());
     }
     let mut out: Vec<_> = groups.into_iter().collect();
     out.sort();
@@ -248,7 +269,7 @@ async fn json_of(resp: Result<reqwest::Response, reqwest::Error>) -> Result<Valu
     serde_json::from_slice(&bytes).map_err(|_| "unexpected response".to_string())
 }
 
-async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], report: &mut UpdateReport) -> Result<(), String> {
+async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], game_version: Option<&str>, report: &mut UpdateReport) -> Result<(), String> {
     let jars: Vec<(String, String)> = {
         let base = base.to_string();
         let keys: Vec<String> = metas.iter().filter(|m| m.is_file).take(MAX_MODS_PER_SOURCE).map(|m| m.key.clone()).collect();
@@ -272,7 +293,7 @@ async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], 
         &json_of(http.post("https://api.modrinth.com/v2/version_files").json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha512" })).send().await).await?,
     );
     report.checked += current.len();
-    for ((loaders, game_versions), group) in modrinth_groups(&current) {
+    for ((loaders, game_versions), group) in modrinth_groups(&current, game_version) {
         let body = serde_json::json!({ "hashes": group, "algorithm": "sha512", "loaders": loaders, "game_versions": game_versions });
         let latest = parse_modrinth(&json_of(http.post("https://api.modrinth.com/v2/version_files/update").json(&body).send().await).await?);
         for hash in &group {
@@ -354,7 +375,7 @@ pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>) ->
     let ts: Vec<&ModMeta> = metas.iter().filter(|m| m.source == "thunderstore").collect();
     let sm: Vec<&ModMeta> = metas.iter().filter(|m| m.source == "smapi").collect();
     if !mr.is_empty() {
-        if let Err(e) = check_modrinth(&http, base, &mr, &mut report).await {
+        if let Err(e) = check_modrinth(&http, base, &mr, game_version, &mut report).await {
             report.errors.push(format!("Modrinth: {e}"));
         }
     }
@@ -439,9 +460,27 @@ mod tests {
         let v = parse_modrinth(&json);
         assert_eq!(v.len(), 3, "a bad id is dropped");
         assert_eq!(v["aaa"].loaders, vec!["fabric".to_string(), "quilt".to_string()], "sorted, so equal filters group together");
-        let groups = modrinth_groups(&v);
+        let groups = modrinth_groups(&v, None);
         assert_eq!(groups.len(), 2);
         assert!(groups.iter().any(|(_, hashes)| hashes.len() == 2));
+    }
+
+    #[test]
+    fn modrinth_updates_target_the_played_version() {
+        let json = serde_json::json!({
+            "aaa": {"id":"A1","project_id":"PA","version_number":"1","loaders":["fabric"],"game_versions":["1.20.1","1.20.4"]},
+            "bbb": {"id":"B1","project_id":"PB","version_number":"1","loaders":["fabric"],"game_versions":["1.20.1"]},
+            "ccc": {"id":"C1","project_id":"PC","version_number":"1","loaders":["fabric"],"game_versions":["1.20.1","1.20.2"]}
+        });
+        let v = parse_modrinth(&json);
+        // Unknown game version: the one every jar supports wins.
+        let groups = modrinth_groups(&v, None);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].0 .1, vec!["1.20.1".to_string()]);
+        // Known: jars supporting it are narrowed to it; others keep their own list.
+        let groups = modrinth_groups(&v, Some("1.20.4"));
+        let narrowed = groups.iter().find(|(_, h)| h.contains(&"aaa".to_string())).unwrap();
+        assert_eq!(narrowed.0 .1, vec!["1.20.4".to_string()]);
     }
 
     #[test]

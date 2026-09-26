@@ -390,6 +390,8 @@ pub struct AppState {
     /// Client side: our offer to the host, and whether the host takes offers.
     pub offer_out: Option<crate::offers::OutgoingOffer>,
     pub offers_available: bool,
+    /// Bumped whenever a session ends; see `transfer::still_hosting`.
+    pub host_epoch: u64,
 }
 
 impl AppState {
@@ -500,6 +502,7 @@ impl Default for AppState {
             offers_in: HashMap::new(),
             offer_out: None,
             offers_available: false,
+            host_epoch: 0,
         }
     }
 }

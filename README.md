@@ -130,7 +130,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 | Game | What syncs |
 |------|------------|
-| **7 Days to Die** | Mods, Save Files, Server Configs |
+| **7 Days to Die** | Mods, Server Configs |
 | **ARK: Survival Evolved** | Mods, Save Files |
 | **Barotrauma** | Local Mods |
 | **Conan Exiles** | Mods |

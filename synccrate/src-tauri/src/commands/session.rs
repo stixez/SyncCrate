@@ -280,12 +280,19 @@ pub async fn disconnect(
 /// name "all" so the frontend resets its session view.
 pub async fn disconnect_inner(state: &Arc<Mutex<AppState>>, app: &tauri::AppHandle) {
     let streams: Vec<_> = {
-        let app_state = state.lock().await;
+        let mut app_state = state.lock().await;
+        // Before anything else: refuse handshakes still in flight
+        // (`transfer::still_hosting`).
+        app_state.host_epoch = app_state.host_epoch.wrapping_add(1);
         app_state.connections.values().map(|c| c.stream.clone()).collect()
     };
 
     for stream in streams {
-        let mut s = stream.lock().await;
+        // A stream busy with a long transfer (a friend's offered upload can
+        // be GBs) used to block "stop hosting" / "leave" until it finished.
+        // Skip the courtesy Disconnect then; clearing the connection below
+        // ends that loop.
+        let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await else { continue };
         let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
     }
 

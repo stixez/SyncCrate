@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { toastAction, toastError, toastInfo } from "../lib/toast";
+import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
@@ -173,12 +173,18 @@ export function useTauriEvents() {
             const pin = useAppStore.getState().lastConnectAttempt?.pin;
             useAppStore.getState().setLastConnectAttempt({ kind: "peer", peerId: match.id, label: hostName, pin });
             await cmd.connectToPeer(match.id, pin);
+            await new Promise((r) => setTimeout(r, 2000));
             const status = await cmd.getSessionStatus();
-            setSession(status);
-            addLog(`Reconnected to ${hostName}`, "success");
-            sendNotification("SyncCrate", `Reconnected to ${hostName}`);
-            retryRef.current.active = false;
-            return;
+            if (status.session_type === "Client" && status.peers.length > 0) {
+              setSession(status);
+              addLog(`Reconnected to ${hostName}`, "success");
+              sendNotification("SyncCrate", `Reconnected to ${hostName}`);
+              retryRef.current.active = false;
+              return;
+            }
+            // Still handshaking or failed: peer-connected / the next attempt decide.
+            if (!retryRef.current.active) return;
+            continue;
           }
           addLog(`Host "${hostName}" not found on network`, "warning");
         } catch {
@@ -301,7 +307,8 @@ export function useTauriEvents() {
           addLog(`Connection failed: ${msg}`, "error");
           // The backend now explains the likely cause (firewall timeout vs refused
           // vs unreachable), so surface it directly instead of only in the log.
-          toastError(msg);
+          // Not during auto-reconnect: that retries quietly and reports once.
+          if (!retryRef.current.active) toastError(msg);
           if (/forcibly closed|connection reset|10054/i.test(msg)) {
             addLog("The host dropped the connection. Ask the host to click \"Fix Windows Firewall\" in SyncCrate and try again.", "warning");
           }
@@ -347,7 +354,9 @@ export function useTauriEvents() {
               if (status && (status.added || status.replaced || status.deleted)) {
                 const problems = event.payload.errors?.length ?? 0;
                 toastAction(
-                  problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see Activity).` : "Sync complete.",
+                  cancelled
+                    ? `Sync cancelled after ${files_synced} file${files_synced !== 1 ? "s" : ""}.`
+                    : problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see Activity).` : "Sync complete.",
                   "Undo",
                   () => {
                   cmd.undoLastSync(game).then((r) => {
@@ -362,6 +371,9 @@ export function useTauriEvents() {
                 // Nothing arrived, so no Undo toast: say what happened instead.
                 const n = event.payload.errors.length;
                 toastError(`${n} file${n !== 1 ? "s" : ""} couldn't be synced. The Activity log has the details.`);
+              } else if (!cancelled) {
+                // useSync no longer toasts on its own (it doubled this one).
+                toastSuccess("Sync complete.");
               }
             }).catch(() => {});
           }

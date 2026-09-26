@@ -4,6 +4,7 @@ use crate::network::transfer;
 use crate::state::{AppState, ConflictPair, FileInfo, ReplaceTarget, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use crate::utils;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -64,26 +65,43 @@ fn write_checkpoint(checkpoint: &SyncCheckpoint) {
 /// list after every file made a 50k-file sync quadratic (~50k writes of up
 /// to a few MB); losing the last few entries on a crash only means those
 /// files are found already present on resume.
+///
+/// Auto-pulls (`enabled: false`) keep no checkpoint: they re-diff on the next
+/// poll anyway, and writing one clobbered a cancelled manual sync's.
 struct CheckpointWriter {
     last: std::time::Instant,
     pending: usize,
+    enabled: bool,
+    /// Paths already listed (carried over from a resumed attempt): without
+    /// this every cancel/resume appended them again.
+    seen: HashSet<String>,
 }
 
 impl CheckpointWriter {
     const EVERY_FILES: usize = 100;
     const EVERY: std::time::Duration = std::time::Duration::from_secs(2);
 
-    fn new() -> Self {
-        Self { last: std::time::Instant::now(), pending: 0 }
+    fn new(checkpoint: &SyncCheckpoint, enabled: bool) -> Self {
+        let seen = checkpoint.completed_files.iter().cloned().collect();
+        Self { last: std::time::Instant::now(), pending: 0, enabled, seen }
     }
 
-    fn file_done(&mut self, checkpoint: &SyncCheckpoint) {
+    fn file_done(&mut self, checkpoint: &mut SyncCheckpoint, path: &str) {
+        if self.seen.insert(path.to_string()) {
+            checkpoint.completed_files.push(path.to_string());
+        }
         self.pending += 1;
         if self.pending >= Self::EVERY_FILES || self.last.elapsed() >= Self::EVERY {
-            write_checkpoint(checkpoint);
-            self.pending = 0;
-            self.last = std::time::Instant::now();
+            self.flush(checkpoint);
         }
+    }
+
+    fn flush(&mut self, checkpoint: &SyncCheckpoint) {
+        if self.enabled {
+            write_checkpoint(checkpoint);
+        }
+        self.pending = 0;
+        self.last = std::time::Instant::now();
     }
 }
 
@@ -167,12 +185,24 @@ pub(crate) async fn compute_sync_plan_inner(
     // host sends (hosts older than 0.5.6 don't say which game they share).
     let remote_total = remote.files.len();
     let skipped_foreign = diff::drop_foreign(&mut remote, &content_types);
+    let unreceivable = diff::drop_unreceivable(&mut remote);
 
     let mut plan = diff::compute_diff(&app_state.local_manifest, &remote);
     plan.game_id = active_game;
     plan.base_path = base_path;
     plan.skipped_foreign = skipped_foreign;
-    plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total);
+    plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total).or_else(|| {
+        (!unreceivable.is_empty()).then(|| {
+            format!(
+                "{} of the host's files can't be saved on this PC (blocked file types or names Windows can't use) and were skipped, e.g. {}.",
+                unreceivable.len(),
+                unreceivable[0]
+            )
+        })
+    });
+    if !unreceivable.is_empty() {
+        log::warn!("Skipped {} host file(s) this PC can't write: {:?}", unreceivable.len(), &unreceivable[..unreceivable.len().min(10)]);
+    }
     plan.host_game = host_game;
     if skipped_foreign > 0 {
         log::warn!("Skipped {} host file(s) outside this game's content folders", skipped_foreign);
@@ -221,6 +251,7 @@ pub(crate) async fn compute_sync_plan_inner(
         plan.excluded = excluded;
 
         // Recalculate total_bytes to exclude excluded files
+        let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
         plan.total_bytes = plan.actions.iter()
             .filter(|action| {
                 let path = match action {
@@ -229,7 +260,7 @@ pub(crate) async fn compute_sync_plan_inner(
                     SyncAction::Conflict { local, .. } => &local.relative_path,
                     SyncAction::Delete(p) => p,
                 };
-                !plan.excluded.contains(path)
+                !excluded.contains(path.as_str())
             })
             .map(|action| match action {
                 SyncAction::SendToRemote(f) => f.size,
@@ -453,7 +484,20 @@ fn recover_keep_temps(base: &str, content_types: &[crate::registry::ContentType]
             if entry.path_is_symlink() || !entry.file_type().is_file() {
                 continue;
             }
-            let Some(original) = entry.file_name().to_str().and_then(diff::keep_tmp_original) else {
+            let name = entry.file_name().to_str().unwrap_or("");
+            let Some(original) = diff::keep_tmp_original(name) else {
+                // Download / restore temps from a crash: nothing to recover
+                // (the real file was never replaced). Old ones only, in case
+                // a restore is writing one right now.
+                let stale = entry
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.elapsed().ok())
+                    .is_some_and(|age| age > std::time::Duration::from_secs(600));
+                if diff::is_synccrate_temp(name) && stale {
+                    let _ = std::fs::remove_file(entry.path());
+                }
                 continue;
             };
             let target = entry.path().with_file_name(original);
@@ -533,6 +577,8 @@ async fn run_sync(
     presync_backup_id: Option<String>,
     history_capture: Option<String>,
 ) -> Result<(), String> {
+    // A set: `Vec::contains` per action was quadratic with big selections.
+    let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
     let total_files = plan.actions.iter()
         .filter(|action| {
             let path = match action {
@@ -541,7 +587,7 @@ async fn run_sync(
                 SyncAction::Conflict { local, .. } => Some(&local.relative_path),
                 SyncAction::Delete(p) => Some(p),
             };
-            path.map_or(true, |p| !plan.excluded.contains(p))
+            path.map_or(true, |p| !excluded.contains(p.as_str()))
         })
         .count() as u64;
     let mut files_done = 0u64;
@@ -577,8 +623,8 @@ async fn run_sync(
         total_bytes: plan.total_bytes,
         started_at: crate::utils::timestamp_now(),
     };
-    write_checkpoint(&checkpoint);
-    let mut checkpoint_writer = CheckpointWriter::new();
+    let mut checkpoint_writer = CheckpointWriter::new(&checkpoint, !plan.auto_pull);
+    checkpoint_writer.flush(&checkpoint);
     let mut cancelled = false;
 
     // What this sync actually wrote, for "undo last sync" — only files an
@@ -602,7 +648,7 @@ async fn run_sync(
             SyncAction::Delete(p) => Some(p),
         };
         if let Some(path) = action_path {
-            if plan.excluded.contains(path) {
+            if excluded.contains(path.as_str()) {
                 continue;
             }
         }
@@ -645,15 +691,13 @@ async fn run_sync(
                     Ok(false) => {
                         files_done += 1;
                         bytes_done += file_info.size;
-                        checkpoint.completed_files.push(file_info.relative_path.clone());
-                        checkpoint_writer.file_done(&checkpoint);
+                        checkpoint_writer.file_done(&mut checkpoint, &file_info.relative_path);
                     }
                     Ok(true) => {
                         files_done += 1;
                         files_received += 1;
                         bytes_done += file_info.size;
-                        checkpoint.completed_files.push(file_info.relative_path.clone());
-                        checkpoint_writer.file_done(&checkpoint);
+                        checkpoint_writer.file_done(&mut checkpoint, &file_info.relative_path);
                         let mtime_ms = crate::utils::safe_join(base_path, &local_path)
                             .map(|p| mtime_ms_of(&p))
                             .unwrap_or(0);
@@ -715,8 +759,7 @@ async fn run_sync(
                         if let Err(e) = tokio::fs::remove_file(&full_path).await {
                             sync_errors.push(format!("Delete {}: {}", path, crate::utils::plain_io_error(&e.to_string())));
                         } else {
-                            checkpoint.completed_files.push(path.clone());
-                            checkpoint_writer.file_done(&checkpoint);
+                            checkpoint_writer.file_done(&mut checkpoint, path);
                             undo_deleted.push(path.clone());
                         }
                     }
@@ -730,7 +773,7 @@ async fn run_sync(
         }
     }
     // Whatever the throttled writer hasn't saved yet (a cancelled sync resumes from this).
-    write_checkpoint(&checkpoint);
+    checkpoint_writer.flush(&checkpoint);
 
     // Only overwrite the last-sync record if this sync actually changed a
     // file — a no-op sync (e.g. everything failed, or there was nothing to
@@ -789,7 +832,9 @@ async fn run_sync(
 
     // A cancelled sync keeps its checkpoint so the next plan resumes.
     if !cancelled {
-        delete_checkpoint();
+        if !plan.auto_pull {
+            delete_checkpoint();
+        }
         if files_received > 0 {
             // Announced in the session chat on the next poll.
             state.lock().await.chat.pending_synced = Some(files_received as u64);
@@ -1172,7 +1217,7 @@ pub async fn update_sync_selection(
     if let Some(ref mut plan) = conn.sync_plan {
         plan.excluded = excluded_paths;
 
-        let excluded = plan.excluded.clone();
+        let excluded: HashSet<String> = plan.excluded.iter().cloned().collect();
         let total: u64 = plan
             .actions
             .iter()
@@ -1229,6 +1274,25 @@ pub async fn get_exclude_patterns() -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_writer_lists_each_file_once() {
+        let mut cp = SyncCheckpoint {
+            game: "g".into(),
+            peer_id: "p".into(),
+            plan_hash: "h".into(),
+            completed_files: vec!["Mods/a.package".into()],
+            total_files: 3,
+            total_bytes: 3,
+            started_at: 0,
+        };
+        // Disabled (an auto-pull): never touches the real checkpoint file.
+        let mut w = CheckpointWriter::new(&cp, false);
+        w.file_done(&mut cp, "Mods/a.package");
+        w.file_done(&mut cp, "Mods/b.package");
+        w.file_done(&mut cp, "Mods/b.package");
+        assert_eq!(cp.completed_files, vec!["Mods/a.package".to_string(), "Mods/b.package".to_string()]);
+    }
 
     #[test]
     fn auto_pull_record_merges_into_the_same_folder_only() {

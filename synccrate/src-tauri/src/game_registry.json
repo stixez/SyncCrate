@@ -3271,20 +3271,6 @@
           "syncable": true
         },
         {
-          "id": "saves",
-          "label": "Save Files",
-          "icon": "save",
-          "color": "text-status-green",
-          "folder": "%APPDATA%/7DaysToDie/Saves",
-          "extensions": [
-            "ttp",
-            "map",
-            "xml"
-          ],
-          "file_type": "Save",
-          "syncable": true
-        },
-        {
           "id": "configs",
           "label": "Server Configs",
           "icon": "settings",

@@ -12,6 +12,8 @@ import { Banner, Button, LiveDot, ProgressBar, cx } from "./ui";
 interface SyncBannerProps {
   plan: SyncPlan;
   onSync: () => void;
+  /** A sync was started (progress may not have arrived yet). */
+  busy?: boolean;
   onResolveAll?: (strategy: string) => void;
 }
 
@@ -31,7 +33,7 @@ function formatEstimate(seconds: number): string {
   return `about ${h < 10 ? h.toFixed(1).replace(/\.0$/, "") : Math.round(h)} h`;
 }
 
-export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerProps) {
+export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBannerProps) {
   const syncProgress = useAppStore((s) => s.syncProgress);
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
   const session = useAppStore((s) => s.session);
@@ -244,10 +246,10 @@ export default function SyncBanner({ plan, onSync, onResolveAll }: SyncBannerPro
             variant="primary"
             size="lg"
             onClick={onSync}
-            disabled={!!syncProgress}
+            disabled={!!syncProgress || busy}
             icon={<ArrowUpDown size={15} />}
           >
-            {syncProgress ? "Syncing..." : "Sync Now"}
+            {syncProgress ? "Syncing..." : busy ? "Preparing..." : "Sync Now"}
           </Button>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">

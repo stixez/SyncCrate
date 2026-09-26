@@ -23,7 +23,7 @@ export function useStayInSync(enabled: boolean) {
     const s = useAppStore.getState();
     // Never while the user is mid-flow: a plan on screen, a sync running, or
     // "apply pack exactly" waiting for its download.
-    if (!enabledRef.current || inFlight.current || s.syncProgress || s.syncPlan || s.pendingPackApply) return;
+    if (!enabledRef.current || inFlight.current || s.syncProgress || (s.syncPlan && s.syncPlan.actions.length > 0) || s.pendingPackApply) return;
     inFlight.current = true;
     try {
       const r = await cmd.autoPull();

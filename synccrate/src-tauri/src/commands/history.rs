@@ -252,6 +252,7 @@ pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[Stri
     let mut h = load(root, game)?;
     let replaced: HashSet<String> = replaced.iter().map(|p| p.to_lowercase()).collect();
     let deleted: HashSet<String> = deleted.iter().map(|p| p.to_lowercase()).collect();
+    let before = h.entries.len();
     h.entries.retain_mut(|e| {
         if e.pending.as_deref() != Some(capture_id) {
             return true;
@@ -265,12 +266,16 @@ pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[Stri
         e.pending = None;
         true
     });
+    // Versions the sync didn't replace after all (cancelled, or refused as
+    // changed locally) were dropped above; their objects need GC too, or they
+    // leaked for anyone without backups (the only other GC trigger).
+    let dropped = h.entries.len() < before;
     let pruned = prune(&mut h.entries, now);
     save(root, game, &h)?;
     // GC must run under the store lock, like every other caller: unlocked,
     // it would delete a concurrent backup's objects/tmp files and objects no
     // manifest references yet.
-    if pruned {
+    if pruned || dropped {
         backup::gc_logged(root);
     }
     Ok(())
@@ -340,8 +345,11 @@ fn restore(root: &Path, game: &str, base: &str, id: &str, now: u64) -> Result<Fi
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("Couldn't restore {}: {}", v.path, e));
     }
-    prune(&mut h.entries, now);
+    let pruned = prune(&mut h.entries, now);
     save(root, game, &h)?;
+    if pruned {
+        backup::gc_logged(root);
+    }
     Ok(v)
 }
 

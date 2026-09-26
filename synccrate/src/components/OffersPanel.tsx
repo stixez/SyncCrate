@@ -28,7 +28,8 @@ export default function OffersPanel() {
   const isHost = session?.session_type === "Host";
   const [incoming, setIncoming] = useState<IncomingOffer[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingOfferView | null>(null);
-  const [picked, setPicked] = useState<Record<string, Set<string>>>({});
+  // Per friend: files the host unticked. New files start ticked.
+  const [unticked, setUnticked] = useState<Record<string, Set<string>>>({});
 
   useEffect(() => {
     if (isHost) cmd.getIncomingOffers().then(setIncoming).catch(() => {});
@@ -37,9 +38,15 @@ export default function OffersPanel() {
 
   const decide = async (offer: IncomingOffer, acceptAll?: boolean) => {
     const pending = offer.files.filter((f) => f.state === "pending").map((f) => f.file.relative_path);
-    const chosen = acceptAll === undefined ? picked[offer.peer_id] ?? new Set(pending) : acceptAll ? new Set(pending) : new Set<string>();
+    const skip = unticked[offer.peer_id];
+    const chosen = new Set(acceptAll === false ? [] : acceptAll ? pending : pending.filter((p) => !skip?.has(p)));
     try {
       await cmd.decideOffer(offer.peer_id, pending.filter((p) => chosen.has(p)), pending.filter((p) => !chosen.has(p)));
+      setUnticked((prev) => {
+        const next = { ...prev };
+        delete next[offer.peer_id];
+        return next;
+      });
       setIncoming(await cmd.getIncomingOffers());
     } catch (e) {
       toastError(`${e}`);
@@ -57,10 +64,11 @@ export default function OffersPanel() {
         <div className="space-y-4">
           {open.map((o) => {
             const pending = o.files.filter((f) => f.state === "pending");
-            const chosen = picked[o.peer_id] ?? new Set(pending.map((f) => f.file.relative_path));
+            const skip = unticked[o.peer_id];
+            const chosen = new Set(pending.map((f) => f.file.relative_path).filter((p) => !skip?.has(p)));
             const toggle = (p: string) =>
-              setPicked((prev) => {
-                const next = new Set(prev[o.peer_id] ?? pending.map((f) => f.file.relative_path));
+              setUnticked((prev) => {
+                const next = new Set(prev[o.peer_id] ?? []);
                 if (next.has(p)) next.delete(p);
                 else next.add(p);
                 return { ...prev, [o.peer_id]: next };
@@ -73,8 +81,8 @@ export default function OffersPanel() {
                   </p>
                   {pending.length > 0 && (
                     <>
-                      <Button size="sm" variant="primary" onClick={() => decide(o)} icon={<Check size={12} />}>
-                        Accept selected ({pending.filter((f) => chosen.has(f.file.relative_path)).length})
+                      <Button size="sm" variant="primary" onClick={() => decide(o)} disabled={chosen.size === 0} icon={<Check size={12} />}>
+                        Accept selected ({chosen.size})
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => decide(o, false)} icon={<X size={12} />}>
                         Decline all

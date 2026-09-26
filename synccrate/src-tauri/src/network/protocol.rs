@@ -6,16 +6,20 @@ use std::time::Duration;
 use crate::network::stream::PeerStream;
 use tokio::net::TcpStream;
 
-/// Maximum message size: 10 MB (sufficient for large manifests)
-const MAX_MESSAGE_SIZE: usize = 10_000_000;
+/// Maximum message size. A manifest entry is ~280 bytes of JSON (the path
+/// appears twice, plus a 64-char hash), so the old 10 MB cap failed at ~35k
+/// files: a big Sims 4 CC folder couldn't host, and a client that size was
+/// dropped right after joining. 0.5.6 peers still refuse more than 10 MB.
+const MAX_MESSAGE_SIZE: usize = 64_000_000;
 
-/// Maximum number of files allowed in a received manifest
-pub const MAX_MANIFEST_FILES: usize = 50_000;
+/// Maximum number of files allowed in a received manifest (~45 MB of JSON).
+pub const MAX_MANIFEST_FILES: usize = 150_000;
 
-/// Timeout for network read operations
+/// How long a read may make no progress. Per step, not per message: a
+/// multi-MB manifest over a slow relay legitimately takes longer than this.
 const RECV_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Timeout for network write operations
+/// Same for writes (the peer has stopped reading).
 const SEND_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,15 +138,36 @@ pub fn games_conflict(ours: &str, theirs: Option<&str>) -> bool {
 
 pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), String> {
     let json = serde_json::to_vec(msg).map_err(|e| e.to_string())?;
-    let len: u32 = json.len().try_into().map_err(|_| "Message too large to send")?;
-    tokio::time::timeout(SEND_TIMEOUT, async {
-        stream.write_all(&len.to_be_bytes()).await.map_err(|e| e.to_string())?;
-        stream.write_all(&json).await.map_err(|e| e.to_string())?;
-        stream.flush().await.map_err(|e| e.to_string())?;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|_| "Connection timed out writing message".to_string())?
+    if json.len() > MAX_MESSAGE_SIZE {
+        return Err(too_large_to_send(msg, json.len()));
+    }
+    let len = json.len() as u32;
+    let timed_out = || "Connection timed out writing message".to_string();
+    tokio::time::timeout(SEND_TIMEOUT, stream.write_all(&len.to_be_bytes()))
+        .await
+        .map_err(|_| timed_out())?
+        .map_err(|e| e.to_string())?;
+    for chunk in json.chunks(READ_STEP) {
+        tokio::time::timeout(SEND_TIMEOUT, stream.write_all(chunk))
+            .await
+            .map_err(|_| timed_out())?
+            .map_err(|e| e.to_string())?;
+    }
+    tokio::time::timeout(SEND_TIMEOUT, stream.flush())
+        .await
+        .map_err(|_| timed_out())?
+        .map_err(|e| e.to_string())
+}
+
+fn too_large_to_send(msg: &Message, bytes: usize) -> String {
+    match msg {
+        Message::ManifestResponse { manifest } => format!(
+            "Too many files to share in one session ({} files, {} MB of file list). Exclude some folders and try again.",
+            manifest.files.len(),
+            bytes / 1_000_000
+        ),
+        _ => format!("Message too large to send: {bytes} bytes (max {MAX_MESSAGE_SIZE})"),
+    }
 }
 
 /// A Hello is a few hundred bytes (a name, a PIN, up to 32 crew ids); an
@@ -153,10 +178,21 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// prefix alone can't make us allocate 10 MB.
 const READ_STEP: usize = 64 * 1024;
 
-/// Internal: reads one length-prefixed JSON message without a timeout wrapper.
-async fn recv_message_raw(stream: &mut PeerStream, max: usize) -> Result<Message, String> {
+/// Internal: reads one length-prefixed JSON message. `step_timeout` bounds
+/// each read (no progress for that long = timed out); `None` leaves timing
+/// to the caller.
+async fn recv_message_raw(stream: &mut PeerStream, max: usize, step_timeout: Option<Duration>) -> Result<Message, String> {
+    async fn step<F: std::future::Future<Output = std::io::Result<T>>, T>(t: Option<Duration>, f: F) -> Result<T, String> {
+        match t {
+            Some(t) => tokio::time::timeout(t, f)
+                .await
+                .map_err(|_| "Connection timed out reading message".to_string())?
+                .map_err(|e| e.to_string()),
+            None => f.await.map_err(|e| e.to_string()),
+        }
+    }
     let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await.map_err(|e| e.to_string())?;
+    step(step_timeout, stream.read_exact(&mut len_buf)).await?;
     let len = u32::from_be_bytes(len_buf) as usize;
 
     if len > max {
@@ -164,11 +200,11 @@ async fn recv_message_raw(stream: &mut PeerStream, max: usize) -> Result<Message
     }
 
     let mut buf = Vec::with_capacity(len.min(READ_STEP));
-    let mut step = vec![0u8; len.clamp(1, READ_STEP)];
+    let mut chunk = vec![0u8; len.clamp(1, READ_STEP)];
     while buf.len() < len {
         let n = (len - buf.len()).min(READ_STEP);
-        stream.read_exact(&mut step[..n]).await.map_err(|e| e.to_string())?;
-        buf.extend_from_slice(&step[..n]);
+        step(step_timeout, stream.read_exact(&mut chunk[..n])).await?;
+        buf.extend_from_slice(&chunk[..n]);
     }
 
     let msg: Message = serde_json::from_slice(&buf).map_err(|e| e.to_string())?;
@@ -188,14 +224,12 @@ async fn recv_message_raw(stream: &mut PeerStream, max: usize) -> Result<Message
 }
 
 pub async fn recv_message(stream: &mut PeerStream) -> Result<Message, String> {
-    tokio::time::timeout(RECV_TIMEOUT, recv_message_raw(stream, MAX_MESSAGE_SIZE))
-        .await
-        .map_err(|_| "Connection timed out reading message".to_string())?
+    recv_message_raw(stream, MAX_MESSAGE_SIZE, Some(RECV_TIMEOUT)).await
 }
 
 /// The host's first read from a new, unauthenticated peer: small and quick.
 pub async fn recv_hello(stream: &mut PeerStream) -> Result<Message, String> {
-    tokio::time::timeout(HELLO_TIMEOUT, recv_message_raw(stream, MAX_HELLO_SIZE))
+    tokio::time::timeout(HELLO_TIMEOUT, recv_message_raw(stream, MAX_HELLO_SIZE, None))
         .await
         .map_err(|_| "Timed out waiting for Hello".to_string())?
 }

@@ -86,7 +86,7 @@ interface Props {
 export default function ContentBrowser({ gameId }: Props) {
   const manifest = useAppStore((s) => s.manifest);
   const setManifest = useAppStore((s) => s.setManifest);
-  const syncPlan = useAppStore((s) => s.syncPlan);
+  const syncPlan = useAppStore((s) => (s.activeGame === gameId ? s.syncPlan : null));
   const modTags = useAppStore((s) => s.modTags);
   const setModTags = useAppStore((s) => s.setModTags);
   const isScanning = useAppStore((s) => s.isScanning);
@@ -273,6 +273,8 @@ export default function ContentBrowser({ gameId }: Props) {
   // SMAPI / KSP load every subfolder and mods are folders: no safe per-file toggle.
   const toggleUnsupported = isFirstCt && gameDef?.disable_method === "none";
   const canToggle = isFirstCt && !toggleUnsupported && !readOnly;
+
+  const closeDetails = useCallback(() => setDetailFile(null), []);
 
   const handleTagsChanged = useCallback((path: string, tags: string[]) => {
     const current = useAppStore.getState().modTags;
@@ -1097,7 +1099,7 @@ export default function ContentBrowser({ gameId }: Props) {
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
-          onClose={() => setDetailFile(null)}
+          onClose={closeDetails}
         />
       )}
     </div>
