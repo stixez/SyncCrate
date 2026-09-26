@@ -376,6 +376,24 @@ mod tests {
     }
 
     #[test]
+    fn content_folders_are_relative_to_the_game_folder() {
+        // Scans, backups and the watcher join `folder` onto the game path, so
+        // 7 Days to Die's "%APPDATA%/7DaysToDie/Saves" never existed and its
+        // saves silently never synced.
+        for g in load_registry().games {
+            for ct in &g.content_types {
+                let f = &ct.folder;
+                assert!(
+                    !f.contains('%') && !f.contains(':') && !f.starts_with('/') && !f.starts_with('~') && !f.split(['/', '\\']).any(|s| s == ".."),
+                    "{}: content folder {:?} must be relative to the game folder",
+                    g.id,
+                    f
+                );
+            }
+        }
+    }
+
+    #[test]
     fn folder_cover_rules() {
         let ct = |folder: &str, recursive: bool| -> ContentType {
             serde_json::from_value(serde_json::json!({

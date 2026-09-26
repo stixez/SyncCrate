@@ -382,7 +382,11 @@ async fn scan_udp() -> Result<Vec<Sighting>, String> {
         match tokio::time::timeout(Duration::from_millis(250), socket.recv_from(&mut buf)).await {
             Ok(Ok((n, from))) => {
                 if let Ok(a) = serde_json::from_slice::<UdpAnnouncement>(&buf[..n]) {
-                    let name: String = a.name.chars().filter(|c| !c.is_control()).take(64).collect();
+                    // Anyone on the LAN can send these: same cleaning as a Hello.
+                    let clean = |s: &str, max: usize| -> String {
+                        s.chars().filter(|c| !c.is_control() && !crate::chat::is_bidi_control(*c)).take(max).collect::<String>().trim().to_string()
+                    };
+                    let name = clean(&a.name, 64);
                     if name.is_empty() || a.port == 0 {
                         continue;
                     }
@@ -391,10 +395,10 @@ async fn scan_udp() -> Result<Vec<Sighting>, String> {
                         name,
                         port: a.port,
                         mod_count: a.mods,
-                        version: a.version.chars().take(32).collect(),
+                        version: clean(&a.version, 32),
                         pin_required: a.pin_required,
-                        game_version: Some(a.game_version).filter(|v| !v.is_empty()),
-                        game_id: Some(a.game).filter(|v| !v.is_empty()),
+                        game_version: Some(clean(&a.game_version, 32)).filter(|v| !v.is_empty()),
+                        game_id: Some(clean(&a.game, 64)).filter(|v| !v.is_empty()),
                         node_id: Some(a.node).filter(|v| crate::crews::is_valid_node_id(v)),
                         // The reply's source address is by definition reachable from us.
                         addrs: vec![from.ip()],

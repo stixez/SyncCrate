@@ -111,6 +111,23 @@ pub fn drop_foreign(remote: &mut FileManifest, content_types: &[ContentType]) ->
     before - remote.files.len()
 }
 
+/// Remove host files this PC could never write: blocked file types
+/// (`receive_file` refuses them) and names this OS can't use (`CON.package`,
+/// a trailing dot, a backslash on Mac/Linux). Planned anyway, they failed on
+/// every sync, and stay-in-sync retried them every minute. Returns their paths.
+pub fn drop_unreceivable(remote: &mut FileManifest) -> Vec<String> {
+    let mut dropped = Vec::new();
+    remote.files.retain(|path, _| {
+        let ok = !crate::utils::is_dangerous_extension(path) && crate::utils::validate_relative(path).is_ok();
+        if !ok {
+            dropped.push(path.clone());
+        }
+        ok
+    });
+    dropped.sort();
+    dropped
+}
+
 /// Warning for the plan when an older host (no game id) seems to share a
 /// different game: most of its files don't fit this game's folders.
 pub fn foreign_warning(host_game: Option<&str>, skipped_foreign: usize, remote_total: usize) -> Option<String> {
@@ -355,6 +372,19 @@ pub fn keep_tmp_original(file_name: &str) -> Option<&str> {
     Some(&rest[..i])
 }
 
+/// A temp file SyncCrate itself writes: a download in progress
+/// (`x.package.<nanos>.tmp`), a restore (`*.synccrate-restore.tmp`) or a
+/// keep-both copy. A crash leaves them behind, and in accept-any content
+/// types they were then scanned, backed up, served to friends and auto-pulled.
+pub fn is_synccrate_temp(file_name: &str) -> bool {
+    let Some(rest) = file_name.strip_suffix(".tmp") else { return false };
+    if rest.ends_with(".synccrate-restore") || keep_tmp_original(file_name).is_some() {
+        return true;
+    }
+    // Download temps: a nanosecond timestamp (19 digits today) before ".tmp".
+    matches!(rest.rsplit_once('.'), Some((_, ts)) if ts.len() >= 15 && ts.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Remove actions that cannot execute in the pull-only transfer model and
 /// recompute `total_bytes`.
 ///
@@ -486,6 +516,32 @@ mod tests {
         assert!(receives >= 500);
         // Generous for unoptimized test builds on slow CI; a quadratic pass takes minutes.
         assert!(elapsed < std::time::Duration::from_secs(10), "diff took {elapsed:?}");
+    }
+
+    #[test]
+    fn unreceivable_host_files_are_dropped_from_the_plan() {
+        let mut m = make_manifest(vec![
+            make_file("Mods/ok.package", "h", 1),
+            make_file("Mods/desktop.ini", "h", 1),
+            make_file("Mods/run.vbs", "h", 1),
+            make_file("Mods/CON.package", "h", 1),
+            make_file("Mods/trailing.", "h", 1),
+        ]);
+        let dropped = drop_unreceivable(&mut m);
+        assert_eq!(m.files.keys().collect::<Vec<_>>(), vec!["Mods/ok.package"]);
+        assert_eq!(dropped.len(), 4);
+    }
+
+    #[test]
+    fn synccrate_temp_files_are_recognised() {
+        assert!(is_synccrate_temp("a.package.1727000000123456789.tmp"));
+        assert!(is_synccrate_temp("x..1727000000123456789.tmp"), "extensionless download");
+        assert!(is_synccrate_temp("a.package.synccrate-restore.tmp"));
+        assert!(is_synccrate_temp(".3f2a-uuid.synccrate-restore.tmp"));
+        assert!(is_synccrate_temp("a.package.synccrate-keep-123.tmp"));
+        assert!(!is_synccrate_temp("a.package"));
+        assert!(!is_synccrate_temp("notes.2024.tmp"), "a user's own .tmp file");
+        assert!(!is_synccrate_temp("save.tmp"));
     }
 
     #[test]

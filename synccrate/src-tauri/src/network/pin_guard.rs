@@ -25,11 +25,16 @@ pub struct PinGuard {
 
 impl PinGuard {
     /// `Err(wait)` while `source` (or everyone) is locked out.
-    pub fn check(&mut self, source: &str, now: Instant) -> Result<(), Duration> {
+    ///
+    /// `trusted`: a proven crew member (iroh id), exempt from the global
+    /// limit, or anyone who knows the host's id could keep real friends
+    /// locked out indefinitely by guessing 20 times a minute. Its own
+    /// per-source lockout still applies.
+    pub fn check(&mut self, source: &str, trusted: bool, now: Instant) -> Result<(), Duration> {
         while self.recent.front().is_some_and(|t| now.duration_since(*t) >= GLOBAL_WINDOW) {
             self.recent.pop_front();
         }
-        if self.recent.len() >= GLOBAL_MAX_FAILURES {
+        if !trusted && self.recent.len() >= GLOBAL_MAX_FAILURES {
             let oldest = *self.recent.front().expect("non-empty");
             return Err(GLOBAL_WINDOW.saturating_sub(now.duration_since(oldest)));
         }
@@ -44,8 +49,14 @@ impl PinGuard {
     pub fn record_failure(&mut self, source: &str, now: Instant) {
         self.recent.push_back(now);
         if self.per_source.len() >= MAX_SOURCES && !self.per_source.contains_key(source) {
-            // Bounded memory under a flood of fresh sources; the global limit still applies.
-            self.per_source.clear();
+            // Bounded memory under a flood of fresh sources. Keep active
+            // lockouts (clearing everything freed a locked-out guesser too);
+            // only if they alone fill the table, drop them (the global limit
+            // still applies).
+            self.per_source.retain(|_, (_, until)| until.is_some_and(|u| u > now));
+            if self.per_source.len() >= MAX_SOURCES {
+                self.per_source.clear();
+            }
         }
         let entry = self.per_source.entry(source.to_string()).or_insert((0, None));
         entry.0 += 1;
@@ -80,20 +91,20 @@ mod tests {
         let mut g = PinGuard::default();
         let t0 = Instant::now();
         for _ in 0..2 {
-            assert!(g.check("1.2.3.4", t0).is_ok());
+            assert!(g.check("1.2.3.4", false, t0).is_ok());
             g.record_failure("1.2.3.4", t0);
         }
-        assert!(g.check("1.2.3.4", t0).is_ok(), "two misses are free");
+        assert!(g.check("1.2.3.4", false, t0).is_ok(), "two misses are free");
         g.record_failure("1.2.3.4", t0);
-        let wait = g.check("1.2.3.4", t0).unwrap_err();
+        let wait = g.check("1.2.3.4", false, t0).unwrap_err();
         assert_eq!(wait, FIRST_LOCKOUT);
-        assert!(g.check("5.6.7.8", t0).is_ok(), "other sources aren't affected");
+        assert!(g.check("5.6.7.8", false, t0).is_ok(), "other sources aren't affected");
         let t1 = t0 + FIRST_LOCKOUT;
-        assert!(g.check("1.2.3.4", t1).is_ok(), "lockout expires");
+        assert!(g.check("1.2.3.4", false, t1).is_ok(), "lockout expires");
         g.record_failure("1.2.3.4", t1);
-        assert_eq!(g.check("1.2.3.4", t1).unwrap_err(), FIRST_LOCKOUT * 2, "then doubles");
+        assert_eq!(g.check("1.2.3.4", false, t1).unwrap_err(), FIRST_LOCKOUT * 2, "then doubles");
         g.record_success("1.2.3.4");
-        assert!(g.check("1.2.3.4", t1).is_ok());
+        assert!(g.check("1.2.3.4", false, t1).is_ok());
     }
 
     #[test]
@@ -103,15 +114,31 @@ mod tests {
         for _ in 0..40 {
             g.record_failure("a", t0);
         }
-        assert!(g.check("a", t0).unwrap_err() <= MAX_LOCKOUT);
+        assert!(g.check("a", false, t0).unwrap_err() <= MAX_LOCKOUT);
 
         let mut g = PinGuard::default();
         for i in 0..GLOBAL_MAX_FAILURES {
-            assert!(g.check(&format!("id{i}"), t0).is_ok());
+            assert!(g.check(&format!("id{i}"), false, t0).is_ok());
             g.record_failure(&format!("id{i}"), t0);
         }
-        assert!(g.check("fresh-id", t0).is_err(), "a distributed guesser is stopped too");
-        assert!(g.check("fresh-id", t0 + GLOBAL_WINDOW).is_ok(), "for one minute");
+        assert!(g.check("fresh-id", false, t0).is_err(), "a distributed guesser is stopped too");
+        assert!(g.check("fresh-id", false, t0 + GLOBAL_WINDOW).is_ok(), "for one minute");
+        assert!(g.check("crew-member", true, t0).is_ok(), "proven crew members aren't locked out by strangers");
+    }
+
+    #[test]
+    fn a_full_table_keeps_active_lockouts() {
+        let mut g = PinGuard::default();
+        let t0 = Instant::now();
+        for _ in 0..FREE_TRIES {
+            g.record_failure("guesser", t0);
+        }
+        assert!(g.check("guesser", true, t0).is_err());
+        for i in 0..MAX_SOURCES {
+            g.record_failure(&format!("one-miss-{i}"), t0);
+        }
+        assert!(g.check("guesser", true, t0).is_err(), "flooding fresh sources must not clear a lockout");
+        assert!(g.per_source.len() < MAX_SOURCES);
     }
 
     #[test]

@@ -217,6 +217,9 @@ impl ScanFilter<'_> {
 /// (extension list incl. `.disabled` files, exclusions, content sniffing).
 /// Depth is enforced by the caller's walker (`ct.recursive`).
 pub(crate) fn content_type_accepts(ct: &crate::registry::ContentType, path: &std::path::Path) -> bool {
+    if path.file_name().and_then(|n| n.to_str()).is_some_and(crate::sync::diff::is_synccrate_temp) {
+        return false;
+    }
     if !ct.extensions.is_empty() {
         let ext = effective_extension(path);
         if !ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {

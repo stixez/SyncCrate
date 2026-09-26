@@ -433,6 +433,15 @@ pub fn timestamp_now() -> u64 {
 /// Rejects absolute paths, ".." components, and returns a canonical path
 /// to prevent TOCTOU symlink attacks.
 pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
+    validate_relative(relative)?;
+    let rel = std::path::Path::new(relative);
+    safe_join_checked(base, rel, relative)
+}
+
+/// The lexical half of `safe_join`: whether `relative` could be joined at
+/// all. The planner uses it to skip host files this PC can never write
+/// (they used to fail on every sync, and stay-in-sync retried them forever).
+pub fn validate_relative(relative: &str) -> Result<(), String> {
     let rel = std::path::Path::new(relative);
     if rel.is_absolute() {
         return Err(format!("Absolute path rejected: {}", relative));
@@ -463,7 +472,17 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
     if relative.contains(':') {
         return Err(format!("Invalid character in path: {}", relative));
     }
+    // Elsewhere `\` is an ordinary file-name character: a host's
+    // "Mods\x.package" passed the content-folder check (which normalises
+    // slashes) and was then written into the game root as one file name.
+    #[cfg(not(target_os = "windows"))]
+    if relative.contains('\\') {
+        return Err(format!("Invalid character in path: {}", relative));
+    }
+    Ok(())
+}
 
+fn safe_join_checked(base: &str, rel: &std::path::Path, relative: &str) -> Result<PathBuf, String> {
     // Rebuild from the normal components only (drops "." segments so the
     // ancestor walk below sees a clean path).
     let mut joined = PathBuf::from(base);

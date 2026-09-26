@@ -196,12 +196,8 @@ pub fn check_sims4(manifest: &FileManifest, options_ini: Option<&str>, zip_has_p
 
 /// Whether the archive at `path` has a `.package` entry. Unreadable → false.
 pub fn zip_contains_package(path: &Path) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else { return false };
-    if !meta.file_type().is_file() {
-        return false;
-    }
-    let Ok(file) = std::fs::File::open(path) else { return false };
-    let Ok(zip) = zip::ZipArchive::new(file) else { return false };
+    // Same bounds as mod metadata: the archive may come from a friend.
+    let Some(zip) = crate::mod_meta::open_bounded_zip(path, 4 * 1024 * 1024 * 1024) else { return false };
     let found = zip.file_names().any(|n| n.to_ascii_lowercase().ends_with(".package"));
     found
 }

@@ -40,13 +40,15 @@ pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan,
     };
     let mut subset = SyncPlan { game_id: plan.game_id.clone(), base_path: plan.base_path.clone(), host_game: plan.host_game.clone(), auto_pull: true, ..Default::default() };
     let (mut scripts, mut review) = (0, 0);
+    let excluded: std::collections::HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
+    let kept_both: std::collections::HashSet<&str> = plan.keep_both.values().map(String::as_str).collect();
     for action in &plan.actions {
         match action {
             // The user excluded these; they stay out either way.
-            SyncAction::ReceiveFromRemote(f) if plan.excluded.contains(&f.relative_path) => {}
-            SyncAction::Delete(p) if plan.excluded.contains(p) => {}
+            SyncAction::ReceiveFromRemote(f) if excluded.contains(f.relative_path.as_str()) => {}
+            SyncAction::Delete(p) if excluded.contains(p.as_str()) => {}
             SyncAction::ReceiveFromRemote(f)
-                if !plan.use_theirs.contains_key(&f.relative_path) && !plan.keep_both.values().any(|r| r == &f.relative_path) =>
+                if !plan.use_theirs.contains_key(&f.relative_path) && !kept_both.contains(f.relative_path.as_str()) =>
             {
                 if is_script(&f.relative_path) {
                     scripts += 1;
@@ -84,7 +86,7 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
             return skip("A sync or restore is running.");
         }
         let Some(id) = s.connections.keys().next().cloned() else { return skip("Not connected to a host.") };
-        if s.connections.get(&id).is_some_and(|c| c.sync_plan.is_some()) {
+        if s.connections.get(&id).is_some_and(|c| c.sync_plan.as_ref().is_some_and(|p| !p.actions.is_empty())) {
             // The user is looking at a plan; don't replace it under them.
             return skip("A sync plan is open.");
         }

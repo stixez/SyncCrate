@@ -445,12 +445,56 @@ fn zip_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str, max: u64)
     Some(buf)
 }
 
-fn read_jar(path: &Path) -> Option<(ModMeta, Option<String>)> {
-    if !small_regular_file(path, MAX_JAR_BYTES) {
+/// Entries we accept in an archive from a friend. `ZipArchive::new` loads the
+/// whole central directory into memory, so a crafted zip64 with millions of
+/// entries could exhaust RAM just by opening the Content page.
+const MAX_ZIP_ENTRIES: u64 = 100_000;
+
+/// Entry count from the end-of-central-directory record (zip64 aware), read
+/// without parsing the directory. None = not a readable zip.
+pub(crate) fn zip_entry_count(file: &mut std::fs::File) -> Option<u64> {
+    use std::io::{Seek, SeekFrom};
+    let len = file.seek(SeekFrom::End(0)).ok()?;
+    let tail_len = len.min(22 + 65_535 + 20);
+    file.seek(SeekFrom::Start(len - tail_len)).ok()?;
+    let mut tail = vec![0u8; tail_len as usize];
+    file.read_exact(&mut tail).ok()?;
+    let eocd = (0..tail.len().saturating_sub(21)).rev().find(|&i| tail[i..i + 4] == [0x50, 0x4b, 0x05, 0x06])?;
+    let entries = u16::from_le_bytes([tail[eocd + 10], tail[eocd + 11]]) as u64;
+    if entries != 0xFFFF {
+        return Some(entries);
+    }
+    // Zip64: the locator sits right before the EOCD and points at the record.
+    let loc = eocd.checked_sub(20)?;
+    if tail[loc..loc + 4] != [0x50, 0x4b, 0x06, 0x07] {
         return None;
     }
-    let file = std::fs::File::open(path).ok()?;
-    let mut zip = zip::ZipArchive::new(file).ok()?;
+    let rec = u64::from_le_bytes(tail[loc + 8..loc + 16].try_into().ok()?);
+    file.seek(SeekFrom::Start(rec)).ok()?;
+    let mut hdr = [0u8; 40];
+    file.read_exact(&mut hdr).ok()?;
+    if hdr[..4] != [0x50, 0x4b, 0x06, 0x06] {
+        return None;
+    }
+    Some(u64::from_le_bytes(hdr[32..40].try_into().ok()?))
+}
+
+/// Open an archive only if its directory is a sane size.
+pub(crate) fn open_bounded_zip(path: &Path, max_bytes: u64) -> Option<zip::ZipArchive<std::fs::File>> {
+    if !small_regular_file(path, max_bytes) {
+        return None;
+    }
+    let mut file = std::fs::File::open(path).ok()?;
+    if zip_entry_count(&mut file)? > MAX_ZIP_ENTRIES {
+        return None;
+    }
+    use std::io::{Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0)).ok()?;
+    zip::ZipArchive::new(file).ok()
+}
+
+fn read_jar(path: &Path) -> Option<(ModMeta, Option<String>)> {
+    let mut zip = open_bounded_zip(path, MAX_JAR_BYTES)?;
     let text = |zip: &mut zip::ZipArchive<std::fs::File>, name: &str| zip_entry(zip, name, MAX_META_BYTES).map(|b| String::from_utf8_lossy(&b).into_owned());
     if let Some(t) = text(&mut zip, "fabric.mod.json") {
         if let Some(r) = parse_fabric(&t) {
@@ -570,7 +614,7 @@ pub fn icon_data_url(base: &str, key: &str, icon: &IconRef) -> Option<String> {
         }
         IconRef::JarEntry(entry) => {
             let path = crate::utils::safe_join(base, key).ok()?;
-            let mut zip = zip::ZipArchive::new(std::fs::File::open(path).ok()?).ok()?;
+            let mut zip = open_bounded_zip(&path, MAX_JAR_BYTES)?;
             zip_entry(&mut zip, entry, MAX_ICON_BYTES)?
         }
     };
@@ -696,6 +740,28 @@ mod tests {
             z.write_all(data).unwrap();
         }
         z.finish().unwrap();
+    }
+
+    #[test]
+    fn zip_entry_count_reads_the_directory_size_without_parsing_it() {
+        let base = crate::testutil::temp_dir("zip-count");
+        jar(&base, "a.jar", &[("x.txt", b"1"), ("y.txt", b"2"), ("fabric.mod.json", b"{}")]);
+        let mut f = std::fs::File::open(base.join("a.jar")).unwrap();
+        assert_eq!(zip_entry_count(&mut f), Some(3));
+        assert!(open_bounded_zip(&base.join("a.jar"), MAX_JAR_BYTES).is_some());
+
+        // A forged directory size (as a zip bomb would claim) is refused before opening.
+        let mut bytes = std::fs::read(base.join("a.jar")).unwrap();
+        let eocd = bytes.windows(4).rposition(|w| w == [0x50, 0x4b, 0x05, 0x06]).unwrap();
+        bytes[eocd + 10..eocd + 12].copy_from_slice(&0xFFFEu16.to_le_bytes());
+        bytes[eocd + 8..eocd + 10].copy_from_slice(&0xFFFEu16.to_le_bytes());
+        std::fs::write(base.join("b.jar"), &bytes).unwrap();
+        let mut f = std::fs::File::open(base.join("b.jar")).unwrap();
+        assert_eq!(zip_entry_count(&mut f), Some(0xFFFE));
+
+        std::fs::write(base.join("c.jar"), b"not a zip at all").unwrap();
+        assert!(open_bounded_zip(&base.join("c.jar"), MAX_JAR_BYTES).is_none());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

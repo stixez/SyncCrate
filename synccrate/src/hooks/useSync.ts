@@ -49,7 +49,6 @@ export function useSync() {
     setLoadingPhase("Syncing files...");
     try {
       await cmd.executeSync();
-      toastSuccess("Sync complete");
       const count = incrementSyncCount();
       const milestone = checkMilestone(count);
       if (milestone) {

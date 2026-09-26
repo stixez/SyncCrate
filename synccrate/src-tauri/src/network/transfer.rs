@@ -227,7 +227,12 @@ impl Drop for PeerCleanup {
         }
         let (state, app, peer_id, name) = (self.state.clone(), self.app.clone(), self.peer_id.clone(), self.name.clone());
         tokio::spawn(async move {
-            if state.lock().await.connections.remove(&peer_id).is_some() {
+            let mut st = state.lock().await;
+            if st.offers_in.remove(&peer_id).is_some() {
+                let _ = app.emit("offers-updated", serde_json::json!({}));
+            }
+            if st.connections.remove(&peer_id).is_some() {
+                drop(st);
                 let _ = app.emit(
                     "peer-disconnected",
                     serde_json::json!({"name": name, "peer_id": peer_id, "clean": false, "reason": "Connection error"}),
@@ -267,12 +272,29 @@ pub async fn serve_incoming(
     }
 }
 
+/// Whether the session this handshake started in is still the one hosting.
+/// A join accepted before "stop hosting" could finish its handshake after it
+/// (an iroh peer may stall accept + Hello for ~40 s); by then the PIN and
+/// folder permissions were reset, so it got in with no PIN and every folder
+/// shared while the host UI showed no session. `host_epoch` changes when a
+/// session ends, so a stop-then-host-again is caught too.
+fn still_hosting(app_state: &AppState, epoch: u64) -> bool {
+    app_state.session_type == crate::state::SessionType::Host && app_state.host_epoch == epoch
+}
+
 async fn handle_client(
     stream: PeerStream,
     state: Arc<Mutex<AppState>>,
     app: Events,
     peer_label: String,
 ) -> Result<(), String> {
+    let epoch = {
+        let app_state = state.lock().await;
+        if app_state.session_type != crate::state::SessionType::Host {
+            return Err(format!("Not hosting; dropped connection from {}", peer_label));
+        }
+        app_state.host_epoch
+    };
     let peer_ip = stream
         .peer_ip()
         .map(|ip| ip.to_string())
@@ -312,10 +334,14 @@ async fn handle_client(
     // the IP over TCP.
     {
         let mut app_state = state.lock().await;
+        if !still_hosting(&app_state, epoch) {
+            return Err(format!("Hosting stopped during the handshake with {}", peer_label));
+        }
         let source = authenticated_node.clone().unwrap_or_else(|| peer_ip.clone());
         if let Some(expected_pin) = app_state.session_pin.clone() {
             let now = std::time::Instant::now();
-            let verdict = match app_state.pin_guard.check(&source, now) {
+            let trusted = authenticated_node.as_deref().is_some_and(|n| app_state.crews.crews.iter().any(|c| crate::crews::is_active_member(c, n)));
+            let verdict = match app_state.pin_guard.check(&source, trusted, now) {
                 Err(wait) => Err(format!("Too many wrong PIN attempts. Try again in {} s.", wait.as_secs().max(1))),
                 Ok(()) => match &peer_pin {
                     Some(provided) if crate::network::pin_guard::pin_matches(provided, &expected_pin) => {
@@ -396,6 +422,14 @@ async fn handle_client(
     let peer_id = uuid::Uuid::new_v4().to_string();
     {
         let mut app_state = state.lock().await;
+        if !still_hosting(&app_state, epoch) {
+            return Err(format!("Hosting stopped during the handshake with {}", peer_label));
+        }
+        // Checked before the handshake too, but concurrent joins all passed
+        // that check and could overshoot the limit.
+        if app_state.connections.len() >= MAX_PEERS {
+            return Err(format!("Rejecting {}: max peers ({}) reached", peer_label, MAX_PEERS));
+        }
         let peer = crate::state::PeerInfo {
             id: peer_id.clone(),
             name: peer_name.clone(),
@@ -431,16 +465,20 @@ async fn handle_client(
         serde_json::json!({"name": &peer_name, "peer_id": &peer_id}),
     );
 
-    // Send our game info to the peer
-    {
+    // Send our game info to the peer. Copied out first: sending while
+    // holding AppState froze the whole app for up to 30 s when a peer
+    // stopped reading.
+    let info = {
         let app_state = state.lock().await;
-        let active = &app_state.active_game;
-        if let Some(info) = app_state.game_info.get(active) {
+        app_state.game_info.get(&app_state.active_game).cloned()
+    };
+    {
+        if let Some(info) = info {
             let mut s = stream.lock().await;
             if let Err(e) = protocol::send_message(
                 &mut *s,
                 &Message::GameInfoExchange {
-                    game_info: info.clone(),
+                    game_info: info,
                 },
             )
             .await
@@ -537,6 +575,9 @@ async fn handle_client(
                 );
             }
             Message::FileRequest { path } => {
+                // Decide under the AppState lock, reply after releasing it: a
+                // peer that stops reading could otherwise block the send (and
+                // the whole app) for 30 s.
                 let base = {
                     let app_state = state.lock().await;
 
@@ -545,30 +586,17 @@ async fn handle_client(
                         .map(|info| app_state.is_file_info_allowed(info))
                         .unwrap_or(false);
                     if !allowed {
-                        let mut s = stream.lock().await;
-                        protocol::send_message(
-                            &mut *s,
-                            &Message::Error {
-                                message: "File not available".to_string(),
-                            },
-                        )
-                        .await?;
-                        continue;
+                        Err("File not available".to_string())
+                    } else {
+                        app_state.active_game_path()
                     }
-
-                    match app_state.active_game_path() {
-                        Ok(p) => p,
-                        Err(e) => {
-                            let mut s = stream.lock().await;
-                            protocol::send_message(
-                                &mut *s,
-                                &Message::Error {
-                                    message: e,
-                                },
-                            )
-                            .await?;
-                            continue;
-                        }
+                };
+                let base = match base {
+                    Ok(p) => p,
+                    Err(message) => {
+                        let mut s = stream.lock().await;
+                        protocol::send_message(&mut *s, &Message::Error { message }).await?;
+                        continue;
                     }
                 };
 
@@ -815,8 +843,13 @@ async fn handle_client(
     // The normal exit does its own cleanup (and emits the event) below.
     cleanup.armed = false;
 
-    // disconnect / disconnect_peer already removed the peer and emitted the event.
+    // disconnect / disconnect_peer already removed the peer and emitted the
+    // event. Its offer is ours to drop: left behind, a kicked friend's offer
+    // stayed listed and could still be "accepted".
     if removed_externally {
+        if state.lock().await.offers_in.remove(&peer_id).is_some() {
+            let _ = app.emit("offers-updated", serde_json::json!({}));
+        }
         return Ok(());
     }
 
@@ -1122,7 +1155,7 @@ pub(crate) async fn run_client_session(
                 Message::GameInfoExchange { game_info } => {
                     host_gi = Some(sanitize_game_info(game_info));
                 }
-                Message::Error { message } => return Err(message),
+                Message::Error { message } => return Err(clean_peer_text(&message, 300)),
                 _ => return Err("Unexpected message while waiting for manifest".to_string()),
             }
         }
@@ -1388,7 +1421,9 @@ async fn client_message_loop(
 /// How often a client with an open offer asks the host about it.
 const OFFER_POLL: std::time::Duration = std::time::Duration::from_millis(2000);
 /// Uploads per idle-loop pass, so pings and chat keep flowing between them.
-const OFFER_UPLOADS_PER_PASS: usize = 5;
+/// One: the stream stays locked for the whole upload, and five 2 GB files in
+/// a row held up leaving the session and starting a sync.
+const OFFER_UPLOADS_PER_PASS: usize = 1;
 
 struct OfferRequest {
     base: String,
@@ -1538,15 +1573,23 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
         let valid = crate::offers::valid_offer(files, &cts, &st.local_manifest);
         rejected = paths.into_iter().filter(|p| !valid.iter().any(|v| &v.relative_path == p)).collect();
         let count = valid.len();
-        st.offers_in.insert(
-            peer_id.to_string(),
-            IncomingOffer {
-                peer_id: peer_id.to_string(),
-                peer_name: peer_name.to_string(),
-                files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
-            },
-        );
-        if count > 0 {
+        // The same offer again (a retry, or a modified client repeating it)
+        // keeps the host's decisions and doesn't post another chat line:
+        // unthrottled, it could push the whole chat log out of view.
+        let same = st.offers_in.get(peer_id).is_some_and(|o| {
+            o.files.len() == valid.len() && o.files.iter().zip(&valid).all(|(a, b)| a.file.relative_path == b.relative_path && a.file.hash == b.hash)
+        });
+        if !same {
+            st.offers_in.insert(
+                peer_id.to_string(),
+                IncomingOffer {
+                    peer_id: peer_id.to_string(),
+                    peer_name: peer_name.to_string(),
+                    files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
+                },
+            );
+        }
+        if count > 0 && !same {
             let now = crate::utils::timestamp_now();
             let line = format!("{} offers {} file{} to the host", crate::chat::clean_name(peer_name), count, if count == 1 { "" } else { "s" });
             st.chat.post(peer_name, &line, true, now);
@@ -1719,7 +1762,7 @@ pub async fn refresh_remote_manifest(
                         conn.info.game_info = Some(sanitized);
                     }
                 }
-                Message::Error { message } => return Err(message),
+                Message::Error { message } => return Err(clean_peer_text(&message, 300)),
                 // The host closes the socket right after this; the message loop's
                 // next read fails and runs the normal disconnect cleanup.
                 Message::Disconnect => return Err("Host disconnected".to_string()),
@@ -1863,6 +1906,10 @@ fn destination_unchanged(dest: &std::path::Path, before: Option<&ExistingFile>) 
 /// - the host's `FileHeader` hash must match the plan's hash, so a file the
 ///   host changed after the compare isn't written unseen;
 /// - a destination that already has the expected content is left alone.
+/// How long a file request waits for the host to start answering (it may be
+/// hashing a multi-GB file first).
+const FILE_HEADER_WAIT: std::time::Duration = std::time::Duration::from_secs(600);
+
 pub async fn receive_file(
     state: &Arc<Mutex<AppState>>,
     peer_id: &str,
@@ -1931,13 +1978,27 @@ pub async fn receive_file(
     // Send file request
     protocol::send_message(&mut *s, &Message::FileRequest { path: req.remote_path.to_string() }).await?;
 
-    // Receive FileHeader
+    // Receive FileHeader. The host hashes a changed file before answering,
+    // which can take minutes for a huge one: waiting only 30 s gave up
+    // without draining, so the late header and body were then read as the
+    // *next* file's, and every remaining file failed. Wait for it to start
+    // (cancel-safe), and skip any stale file that still arrives first.
     let (expected_size, header_hash) = {
-        let msg = protocol::recv_message(&mut *s).await?;
-        match msg {
-            Message::FileHeader { size, hash, .. } => (size, hash),
-            Message::Error { message } => return Err(message),
-            _ => return Err("Expected FileHeader".to_string()),
+        let mut stale = 0;
+        loop {
+            let msg = protocol::try_recv_message(&mut *s, FILE_HEADER_WAIT)
+                .await?
+                .ok_or_else(|| format!("The host didn't start sending {} in time. Reconnect and try again.", req.remote_path))?;
+            match msg {
+                Message::FileHeader { path, .. } if path != req.remote_path && stale < 3 => {
+                    stale += 1;
+                    log::warn!("Skipping a late file ({}) while waiting for {}", path, req.remote_path);
+                    drain_until_file_end(&mut s).await;
+                }
+                Message::FileHeader { size, hash, .. } => break (size, hash),
+                Message::Error { message } => return Err(clean_peer_text(&message, 300)),
+                _ => return Err("Expected FileHeader".to_string()),
+            }
         }
     };
 
@@ -2068,6 +2129,20 @@ async fn drain_until_file_end(s: &mut PeerStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_handshake_from_an_ended_session_is_refused() {
+        let mut st = AppState::default();
+        st.session_type = crate::state::SessionType::Host;
+        let epoch = st.host_epoch;
+        assert!(still_hosting(&st, epoch));
+        // Stop hosting (disconnect bumps the epoch) and host again.
+        st.host_epoch += 1;
+        assert!(!still_hosting(&st, epoch), "a join accepted before the stop");
+        assert!(still_hosting(&st, st.host_epoch));
+        st.session_type = crate::state::SessionType::None;
+        assert!(!still_hosting(&st, st.host_epoch));
+    }
 
     #[test]
     fn decompression_is_bounded() {

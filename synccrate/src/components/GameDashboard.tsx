@@ -387,7 +387,7 @@ export default function GameDashboard({ gameId }: Props) {
         <Input
           label="Your name (friends see this)"
           value={hostName}
-          onChange={(e) => setHostName(e.target.value.replace(/[^\w\s-]/g, "").slice(0, 32))}
+          onChange={(e) => setHostName(e.target.value.replace(/[^\p{L}\p{N}\s_-]/gu, "").slice(0, 32))}
           maxLength={32}
           placeholder="e.g. Alex"
           wrapperClassName="max-w-sm"
@@ -569,11 +569,11 @@ export default function GameDashboard({ gameId }: Props) {
                     className="input input-mono flex-1 !h-11 text-center text-xl !tracking-[0.5em]"
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && pinInput.length === 4 && !isLoading && !isConnecting) retryWithPin(pinInput);
+                      if (e.key === "Enter" && pinInput.length === 5 && !isLoading && !isConnecting) retryWithPin(pinInput);
                       else if (e.key === "Escape") setPinPrompt(null);
                     }}
                   />
-                  <Button variant="primary" size="lg" onClick={() => retryWithPin(pinInput)} disabled={pinInput.length !== 4 || isLoading || isConnecting}>
+                  <Button variant="primary" size="lg" onClick={() => retryWithPin(pinInput)} disabled={pinInput.length !== 5 || isLoading || isConnecting}>
                     Connect
                   </Button>
                 </div>
@@ -915,7 +915,7 @@ export default function GameDashboard({ gameId }: Props) {
               &gt; Resuming — {syncPlan.resumed_files} files already transferred
             </p>
           )}
-          <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} />
+          <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncLoading} />
         </section>
       )}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (

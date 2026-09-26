@@ -988,11 +988,12 @@ pub(crate) fn undo_apply(
 /// downloads) or delete. Plain receives never replace an existing file, so a
 /// plan of only new files needs no backup.
 pub(crate) fn presync_targets(plan: &SyncPlan) -> Vec<String> {
+    let excluded: std::collections::HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
     let mut out = Vec::new();
     for action in &plan.actions {
         match action {
             SyncAction::ReceiveFromRemote(f) => {
-                if plan.excluded.contains(&f.relative_path) {
+                if excluded.contains(f.relative_path.as_str()) {
                     continue;
                 }
                 if let Some(target) = plan.use_theirs.get(&f.relative_path) {
@@ -1000,7 +1001,7 @@ pub(crate) fn presync_targets(plan: &SyncPlan) -> Vec<String> {
                 }
             }
             SyncAction::Delete(p) => {
-                if !plan.excluded.contains(p) {
+                if !excluded.contains(p.as_str()) {
                     out.push(p.clone());
                 }
             }
