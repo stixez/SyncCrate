@@ -205,7 +205,12 @@ export interface AutoPullResult {
   pulled: number;
   scripts_held: number;
   needs_review: number;
+  too_large?: number;
+  kept_failing?: number;
   skipped?: string | null;
+  /** Frontend only: when this check ran, and why it failed if it did. */
+  checked_at?: number;
+  error?: string;
 }
 
 /** A problem that stops mods from loading (src-tauri/src/compat.rs). */

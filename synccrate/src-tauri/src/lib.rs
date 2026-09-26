@@ -168,6 +168,9 @@ pub fn run() {
     };
 
     let mut initial_state = AppState::default();
+    if let Some(port) = commands::sync::read_sync_config().session_port.filter(|p| *p >= 1024) {
+        initial_state.session_port = port;
+    }
     initial_state.game_paths = game_paths;
     initial_state.active_game = active_game;
     initial_state.game_registry = game_registry;
@@ -341,6 +344,8 @@ pub fn run() {
                 {
                     api.prevent_close();
                     let _ = window.hide();
+                    // Looked like the app quit (while still hosting, even).
+                    let _ = tauri::Emitter::emit(window.app_handle(), "hidden-to-tray", ());
                 }
             }
         })
@@ -402,6 +407,8 @@ pub fn run() {
             commands::profiles::delete_profile,
             commands::session::get_app_version,
             commands::session::set_session_port,
+            commands::session::get_session_port,
+            commands::files::reveal_file,
             commands::session::check_port_available,
             commands::tags::get_predefined_tags,
             commands::tags::get_mod_tags,

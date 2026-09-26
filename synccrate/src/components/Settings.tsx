@@ -82,6 +82,7 @@ export default function Settings() {
     cmd.getClearCacheAfterSync().then(setClearCache).catch(() => {});
     cmd.getKeepFileHistory().then(setKeepHistory).catch(() => {});
     cmd.getCloseToTray().then(setCloseToTrayState).catch(() => {});
+    cmd.getSessionPort().then((p) => setPort(String(p))).catch(() => {});
   }, [setGamePaths, setExcludePatterns]);
 
   useEffect(() => {

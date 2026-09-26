@@ -652,7 +652,13 @@ pub async fn set_session_port(
         return Err("Cannot change port while in a session".to_string());
     }
     app_state.session_port = port;
-    Ok(())
+    drop(app_state);
+    crate::commands::sync::update_sync_config(|c| c.session_port = Some(port))
+}
+
+#[tauri::command]
+pub async fn get_session_port(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<u16, String> {
+    Ok(state.lock().await.session_port)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ import { gameLabel, getGameDef } from "../lib/games";
 import { loadDisplayName } from "../lib/prefs";
 import { formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
-import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import type { Crew, CrewInvite, CrewLanHost, CrewStatus } from "../lib/types";
 
 const myName = () => loadDisplayName().trim() || "Guest";
@@ -308,11 +308,14 @@ function CrewDetail({ crew, myNode, activeGame, inSession, isHosting, lanHosts, 
       if (types.size === 0) return;
       const s = await cmd.publishCrewSet(crew.id, Array.from(types), myName());
       addLog(`Published crew set v${s.version} for ${gameLabel(activeGame)}: ${s.pack.files.length} files`, "success");
-      toastSuccess(
-        isHosting
-          ? "Crew set published. Members get it the next time they connect to you."
-          : "Crew set published. Host a session and members get it when they join.",
-      );
+      if (isHosting) {
+        toastSuccess("Crew set published. Members get it the next time they connect to you.");
+      } else {
+        // The toast said "host a session" with no way to.
+        toastAction("Crew set published. Members get it when they join your session.", "Host now", () =>
+          useAppStore.getState().navigateToGame(activeGame, "dashboard"),
+        );
+      }
       await onChanged();
     } catch (e) {
       toastError(`Couldn't publish: ${e}`);

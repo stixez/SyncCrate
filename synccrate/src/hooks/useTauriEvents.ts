@@ -8,11 +8,8 @@ import type { BackupProgress, PeerDownloadProgress } from "../lib/types";
 import * as cmd from "../lib/commands";
 import { runPackApply } from "../lib/packApply";
 import { loadDisplayName } from "../lib/prefs";
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification as sendOsNotification,
-} from "@tauri-apps/plugin-notification";
+import { sendNotification } from "../lib/notify";
+import { friendlyError } from "../lib/errors";
 
 // One rescan at a time: a change during a scan queues exactly one more.
 let scanInFlight = false;
@@ -38,20 +35,10 @@ async function refreshManifest() {
   }
 }
 
-/** Desktop notification, only when enabled and the window is in the background. */
-async function sendNotification(title: string, body: string) {
-  try {
-    if (!useAppStore.getState().notificationsEnabled) return;
-    const win = getCurrentWebviewWindow();
-    const [focused, visible] = await Promise.all([win.isFocused(), win.isVisible()]);
-    if (focused && visible) return;
-    let granted = await isPermissionGranted();
-    if (!granted) granted = (await requestPermission()) === "granted";
-    if (granted) sendOsNotification({ title, body });
-  } catch {
-    // Notifications not supported in this environment
-  }
-}
+// Host: at most one toast about unreadable files per half minute.
+let lastSendErrorToast = 0;
+// Host: incoming offers already announced (peer -> file count).
+const announcedOffers = new Map<string, number>();
 
 function peerName(peerId?: string): string | null {
   if (!peerId) return null;
@@ -296,6 +283,13 @@ export function useTauriEvents() {
             addLog(`Peer disconnected: ${name}`, "info");
           } else {
             addLog(`Peer lost: ${name}${reason ? ` (${reason})` : ""}`, "warning");
+            // Only a log line before, even mid-download.
+            if (!wasClient && name && name !== "all") {
+              const mid = peer_id ? !!useAppStore.getState().peerDownloadProgress[peer_id]?.file : false;
+              const msg = `${name} lost the connection${mid ? " while downloading" : ""}.`;
+              toastInfo(msg);
+              sendNotification("SyncCrate", msg);
+            }
           }
 
           try {
@@ -534,6 +528,35 @@ export function useTauriEvents() {
         }),
         listen("offers-updated", () => {
           useAppStore.getState().bumpOffersVersion();
+          // Host: say when a friend offers files (it only refreshed a panel far down the page).
+          if (useAppStore.getState().session?.session_type !== "Host") return;
+          cmd.getIncomingOffers().then((offers) => {
+            for (const o of offers) {
+              const pending = o.files.filter((f) => f.state === "pending").length;
+              if (pending > 0 && pending !== announcedOffers.get(o.peer_id)) {
+                const msg = `${o.peer_name} wants to give you ${pending} file${pending !== 1 ? "s" : ""}. See "Files friends want to give you" on the Dashboard.`;
+                toastInfo(msg);
+                sendNotification("SyncCrate", msg);
+              }
+              announcedOffers.set(o.peer_id, pending);
+            }
+          }).catch(() => {});
+        }),
+        listen<{ peer_id: string; path: string; error: string }>("host-send-error", (event) => {
+          const who = peerName(event.payload.peer_id) ?? "A friend";
+          addLog(`Couldn't send ${event.payload.path} to ${who}: ${friendlyError(event.payload.error)}`, "warning");
+          if (Date.now() - lastSendErrorToast > 30_000) {
+            lastSendErrorToast = Date.now();
+            toastWithLog(`Couldn't send a file to ${who}: ${friendlyError(event.payload.error)}`, "error");
+          }
+        }),
+        listen("hidden-to-tray", () => {
+          // Once: closing looked like quitting, even while hosting.
+          try {
+            if (localStorage.getItem("synccrate.trayNoticeShown")) return;
+            localStorage.setItem("synccrate.trayNoticeShown", "1");
+          } catch { /* shows again next time; harmless */ }
+          sendNotification("SyncCrate is still running", "It's in the system tray. Right-click its icon to quit.");
         }),
         listen("offer-updated", () => {
           useAppStore.getState().bumpOffersVersion();

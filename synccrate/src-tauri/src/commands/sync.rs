@@ -1301,6 +1301,9 @@ pub struct SyncConfig {
     /// applied to every game.
     #[serde(default)]
     pub always_skip: std::collections::HashMap<String, Vec<String>>,
+    /// The hosting port picked in Settings (lost on restart before).
+    #[serde(default)]
+    pub session_port: Option<u16>,
 }
 
 /// Per game, so a list can't grow without bound.
@@ -1327,6 +1330,7 @@ impl Default for SyncConfig {
             close_to_tray: false,
             keep_file_history: true,
             always_skip: std::collections::HashMap::new(),
+            session_port: None,
         }
     }
 }
@@ -1629,6 +1633,7 @@ mod tests {
             close_to_tray: true,
             keep_file_history: false,
             always_skip: Default::default(),
+            session_port: None,
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let parsed: SyncConfig = serde_json::from_str(&json).expect("deserialize");

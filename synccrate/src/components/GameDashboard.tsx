@@ -891,6 +891,9 @@ export default function GameDashboard({ gameId }: Props) {
         </Panel>
       )}
 
+      {/* Hosts need this first: it was below the stats, offers and chat. */}
+      {isHost && session.peers.length > 0 && <PeerList />}
+
       {isHost && <FirewallCheck compact />}
 
       {isHost && session.host_ips && session.host_ips.length > 0 && (
@@ -938,13 +941,25 @@ export default function GameDashboard({ gameId }: Props) {
             label="Stay in sync"
             description="Pull the host's new mods automatically, every minute. Only adds files: anything that would replace or delete one of yours, and script mods, still wait for you. Paused while the game runs."
           />
-          {stayInSync && autoPull && (autoPull.scripts_held > 0 || autoPull.needs_review > 0) && (
+          {stayInSync && autoPull && !autoPull.skipped && (
+            <p className={cx("text-[11px] mt-2 pl-1", autoPull.error ? "text-amber" : "text-txt-muted")}>
+              Checked {new Date(autoPull.checked_at ?? Date.now()).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}:{" "}
+              {autoPull.error
+                ? `couldn't check (${autoPull.error}). Trying again in a minute.`
+                : autoPull.pulled > 0
+                  ? `pulled ${autoPull.pulled} new file${autoPull.pulled !== 1 ? "s" : ""}.`
+                  : "nothing new to pull."}
+            </p>
+          )}
+          {stayInSync && autoPull && (autoPull.scripts_held > 0 || autoPull.needs_review > 0 || !!autoPull.too_large || !!autoPull.kept_failing) && (
             <div className="flex items-center gap-3 mt-2 pl-1">
               <p className="text-xs text-txt-dim flex-1">
                 Waiting for you:{" "}
                 {[
                   autoPull.needs_review > 0 && `${autoPull.needs_review} change${autoPull.needs_review !== 1 ? "s" : ""} to review`,
                   autoPull.scripts_held > 0 && `${autoPull.scripts_held} script file${autoPull.scripts_held !== 1 ? "s" : ""}`,
+                  !!autoPull.too_large && `${autoPull.too_large} new file${autoPull.too_large !== 1 ? "s" : ""} too big to pull unattended`,
+                  !!autoPull.kept_failing && `${autoPull.kept_failing} file${autoPull.kept_failing !== 1 ? "s" : ""} that kept failing`,
                 ].filter(Boolean).join(", ")}
                 .
               </p>
@@ -1013,7 +1028,7 @@ export default function GameDashboard({ gameId }: Props) {
 
       <ChatPanel />
 
-      <PeerList />
+      {!(isHost && session.peers.length > 0) && <PeerList />}
     </div>
   );
 }

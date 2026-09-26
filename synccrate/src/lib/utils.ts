@@ -86,3 +86,13 @@ export function fileKind(relativePath: string): string {
   const i = name.lastIndexOf(".");
   return i <= 0 ? "" : name.slice(i);
 }
+
+/** "42 s", "3 min 5 s", "1 h 2 min" from milliseconds. */
+export function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+}

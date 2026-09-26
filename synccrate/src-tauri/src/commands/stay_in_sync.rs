@@ -76,6 +76,10 @@ pub struct AutoPullResult {
     pub scripts_held: usize,
     /// Changes that need the user: conflicts, replacements, deletions.
     pub needs_review: usize,
+    /// New files held because together they're over the unattended size cap.
+    pub too_large: usize,
+    /// New files that failed to arrive twice in a row (held until a manual sync).
+    pub kept_failing: usize,
     /// Why nothing ran, if nothing did (shown in the UI).
     pub skipped: Option<String>,
 }
@@ -89,7 +93,8 @@ pub(crate) fn is_script_path(path: &str, script_exts: &[String]) -> bool {
     SCRIPT_EXTENSIONS.contains(&ext.as_str()) || script_exts.iter().any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(&ext))
 }
 
-pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan, usize, usize) {
+/// (subset, scripts held, changes to review, new files held for size)
+pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan, usize, usize, usize) {
     let is_script = |path: &str| is_script_path(path, script_exts);
     let mut subset = SyncPlan { game_id: plan.game_id.clone(), base_path: plan.base_path.clone(), host_game: plan.host_game.clone(), auto_pull: true, ..Default::default() };
     let (mut scripts, mut review) = (0, 0);
@@ -114,13 +119,14 @@ pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan,
             _ => review += 1,
         }
     }
+    let mut too_large = 0;
     if subset.total_bytes > MAX_AUTO_PULL_BYTES {
-        review += subset.actions.len();
+        too_large = subset.actions.len();
         subset.actions.clear();
         subset.total_bytes = 0;
     }
     subset.plan_hash = Some(crate::sync::diff::compute_plan_hash(&subset));
-    (subset, scripts, review)
+    (subset, scripts, review, too_large)
 }
 
 #[tauri::command]
@@ -171,8 +177,8 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
     // Computed without storing: storing it here replaced a plan the user
     // opened while this ran (up to two minutes), so Sync ran the wrong files.
     let (_, plan) = crate::commands::sync::plan_for_peer(state, Some(peer_id.clone())).await?;
-    let (mut subset, scripts_held, mut needs_review) = safe_subset(&plan, &script_exts);
-    needs_review += drop_repeated(&mut subset, &mut ATTEMPTS.lock().unwrap_or_else(|e| e.into_inner()));
+    let (mut subset, scripts_held, needs_review, too_large) = safe_subset(&plan, &script_exts);
+    let kept_failing = drop_repeated(&mut subset, &mut ATTEMPTS.lock().unwrap_or_else(|e| e.into_inner()));
     let pulled = subset.actions.len();
     {
         let mut s = state.lock().await;
@@ -186,7 +192,7 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
         if plan.warning.is_some() {
             // e.g. an old host that seems to share another game: never unattended.
             conn.sync_plan = None;
-            return Ok(AutoPullResult { needs_review: needs_review + pulled, scripts_held, skipped: plan.warning.clone(), pulled: 0 });
+            return Ok(AutoPullResult { needs_review: needs_review + pulled, scripts_held, too_large, kept_failing, skipped: plan.warning.clone(), pulled: 0 });
         }
         conn.sync_plan = (pulled > 0).then_some(subset);
     }
@@ -194,7 +200,7 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
         NEEDS_RESCAN.store(true, std::sync::atomic::Ordering::SeqCst);
         crate::commands::sync::execute_sync_inner(state, events, Some(peer_id)).await?;
     }
-    Ok(AutoPullResult { pulled, scripts_held, needs_review, skipped: None })
+    Ok(AutoPullResult { pulled, scripts_held, needs_review, too_large, kept_failing, skipped: None })
 }
 
 #[cfg(test)]
@@ -245,7 +251,8 @@ mod tests {
         ];
         plan.use_theirs.insert("Mods/replace.package".into(), ReplaceTarget { local_path: "Mods/replace.package".into(), local_hash: "x".into() });
         plan.excluded.push("Mods/excluded.package".into());
-        let (subset, scripts, review) = safe_subset(&plan, &["myscript".into()]);
+        let (subset, scripts, review, too_large) = safe_subset(&plan, &["myscript".into()]);
+        assert_eq!(too_large, 0);
         let paths: Vec<_> = subset.actions.iter().map(|a| match a { SyncAction::ReceiveFromRemote(f) => f.relative_path.as_str(), _ => "?" }).collect();
         assert_eq!(paths, vec!["Mods/new.package"]);
         assert_eq!(subset.total_bytes, 10);
