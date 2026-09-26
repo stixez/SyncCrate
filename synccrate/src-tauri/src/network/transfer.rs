@@ -960,6 +960,12 @@ async fn handle_client(
 
     // The normal exit does its own cleanup (and emits the event) below.
     cleanup.armed = false;
+    // Kicked or hosting stopped, even if the stream errored first (closed
+    // under us): that made the host report an unclean drop, and a host that
+    // just stopped then "reconnected" to its own old code.
+    if !removed_externally && !state.lock().await.connections.contains_key(&peer_id) {
+        removed_externally = true;
+    }
 
     // disconnect / disconnect_peer already removed the peer and emitted the
     // event. Its offer is ours to drop: left behind, a kicked friend's offer
@@ -967,6 +973,12 @@ async fn handle_client(
     if removed_externally {
         if state.lock().await.offers_in.remove(&peer_id).is_some() {
             let _ = app.emit("offers-updated", serde_json::json!({}));
+        }
+        // Kick skips its Disconnect while the stream is busy with a file;
+        // without one the friend saw an unclean drop and auto-reconnected.
+        if let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await {
+            let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
+            s.close_gracefully().await;
         }
         return Ok(());
     }

@@ -13,6 +13,18 @@ struct HashCacheEntry {
     size: u64,
     mtime: u64,
     hash: String,
+    /// When the scan that hashed it started (secs). Mtimes are whole seconds:
+    /// a file rewritten in the same second as the hash (same size) kept the
+    /// old hash. Only trusted when this is later than `mtime`, so any later
+    /// write lands in a later second. 0 in caches written before this field
+    /// (trusted as before, so an update doesn't rehash everything).
+    #[serde(default)]
+    hashed_at: u64,
+}
+
+/// Whether a cached hash still describes a file with this size and mtime.
+fn cache_hit(cached: &HashCacheEntry, size: u64, mtime: u64) -> bool {
+    cached.size == size && cached.mtime == mtime && (cached.hashed_at == 0 || cached.hashed_at > mtime)
 }
 
 type HashCache = HashMap<String, HashCacheEntry>;
@@ -376,7 +388,7 @@ fn scan_directory(
             let hash = if compute_hashes {
                 let cache_key = path.to_string_lossy().replace('\\', "/");
                 if let Some(cached) = hash_cache.get(&cache_key) {
-                    if cached.size == file_size && cached.mtime == modified {
+                    if cache_hit(cached, file_size, modified) {
                         cached.hash.clone()
                     } else {
                         compute_file_hash(path).ok()?
@@ -486,6 +498,8 @@ pub async fn scan_files_inner(
 
     let manifest = tokio::task::spawn_blocking(move || {
         let hash_cache = if compute_hashes { load_hash_cache() } else { HashMap::new() };
+        // Before any file is hashed (see `HashCacheEntry::hashed_at`).
+        let scan_started = utils::timestamp_now();
 
         let mut all_files = HashMap::new();
 
@@ -525,14 +539,19 @@ pub async fn scan_files_inner(
                         .join(&info.relative_path)
                         .to_string_lossy()
                         .replace('\\', "/");
-                    (abs_path, HashCacheEntry { size: info.size, mtime: info.modified, hash: info.hash.clone() })
+                    // Kept from the cache when reused, this scan's start when hashed now.
+                    let hashed_at = hash_cache
+                        .get(&abs_path)
+                        .filter(|o| o.hash == info.hash && cache_hit(o, info.size, info.modified))
+                        .map_or(scan_started, |o| o.hashed_at);
+                    (abs_path, HashCacheEntry { size: info.size, mtime: info.modified, hash: info.hash.clone(), hashed_at })
                 })
                 .collect();
             // The cache holds every game's folders in one file; rewriting it
             // (tens of MB) after a scan that changed nothing was pure waste.
             let old_here = hash_cache.keys().filter(|k| k.starts_with(&base_prefix)).count();
             let unchanged = old_here == fresh.len()
-                && fresh.iter().all(|(k, e)| hash_cache.get(k).is_some_and(|o| o.size == e.size && o.mtime == e.mtime && o.hash == e.hash));
+                && fresh.iter().all(|(k, e)| hash_cache.get(k).is_some_and(|o| o.size == e.size && o.mtime == e.mtime && o.hash == e.hash && o.hashed_at == e.hashed_at));
             if !unchanged {
                 let mut new_cache: HashCache = hash_cache
                     .into_iter()
@@ -1871,6 +1890,15 @@ mod tests {
         let keys: Vec<&String> = files.keys().collect();
         assert_eq!(keys, vec!["Cozy.ini"]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cached_hashes_need_a_hash_taken_after_the_last_write() {
+        let e = |mtime, hashed_at| HashCacheEntry { size: 5, mtime, hash: "h".into(), hashed_at };
+        assert!(cache_hit(&e(100, 101), 5, 100), "hashed a second after the write");
+        assert!(!cache_hit(&e(100, 100), 5, 100), "hashed in the same second: a same-second rewrite could hide");
+        assert!(cache_hit(&e(100, 0), 5, 100), "caches from before the field are trusted as before");
+        assert!(!cache_hit(&e(100, 101), 6, 100) && !cache_hit(&e(100, 101), 5, 99));
     }
 
     #[test]

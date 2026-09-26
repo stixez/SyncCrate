@@ -348,7 +348,7 @@ pub async fn disconnect_peer(
 
     let _ = app.emit(
         "peer-disconnected",
-        serde_json::json!({"name": conn.info.name, "peer_id": peer_id}),
+        serde_json::json!({"name": conn.info.name, "peer_id": peer_id, "clean": true, "reason": "Removed by the host"}),
     );
 
     Ok(())

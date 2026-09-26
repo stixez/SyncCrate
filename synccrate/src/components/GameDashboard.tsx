@@ -56,6 +56,9 @@ export default function GameDashboard({ gameId }: Props) {
   const syncProgress = useAppStore((s) => s.syncProgress);
   const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, isStarting: isSyncStarting, loadingPhase } = useSync();
+  // Any sync, including a Stay-in-sync pull the banner doesn't show, or one
+  // started before this page mounted: comparing then only fails.
+  const syncBusy = isSyncLoading || !!syncProgress || !!session?.is_syncing;
 
   // "Host has new files" check: clients only, never while syncing/computing a
   // plan or while a plan with pending actions is on screen.
@@ -347,7 +350,11 @@ export default function GameDashboard({ gameId }: Props) {
             tone="warn"
             icon={<RefreshCw size={16} className="animate-spin" />}
             title={`Lost the connection to ${reconnecting.host}. Reconnecting…`}
-            actions={<Button size="sm" variant="ghost" onClick={() => useAppStore.getState().setReconnecting(null)}>Stop trying</Button>}
+            actions={<Button size="sm" variant="ghost" onClick={() => {
+              useAppStore.getState().setReconnecting(null);
+              // The attempt in flight would still connect (or toast) later.
+              cmd.disconnect().catch(() => {});
+            }}>Stop trying</Button>}
           >
             Attempt {reconnecting.attempt} of {reconnecting.max}. An interrupted sync picks up where it stopped.
           </Banner>
@@ -732,7 +739,7 @@ export default function GameDashboard({ gameId }: Props) {
               Disconnect
             </Button>
             {isClient && !sessionGameMismatch && (
-              <Button variant="primary" onClick={computePlan} disabled={isSyncLoading} icon={<ArrowDownUp size={14} />}>
+              <Button variant="primary" onClick={computePlan} disabled={syncBusy} icon={<ArrowDownUp size={14} />}>
                 {isSyncLoading ? (loadingPhase || "Computing...") : "Compare & Sync"}
               </Button>
             )}
@@ -887,7 +894,7 @@ export default function GameDashboard({ gameId }: Props) {
                 ].filter(Boolean).join(", ")}
                 .
               </p>
-              <Button size="sm" variant="secondary" onClick={() => computePlan()} disabled={isSyncLoading}>
+              <Button size="sm" variant="secondary" onClick={() => computePlan()} disabled={syncBusy}>
                 Compare &amp; Sync
               </Button>
             </div>
@@ -905,7 +912,7 @@ export default function GameDashboard({ gameId }: Props) {
           title={<>Host added {hostUpdates.files} file{hostUpdates.files !== 1 ? "s" : ""} <span className="font-mono text-xs text-txt-dim font-normal">({formatBytes(hostUpdates.bytes)})</span></>}
           actions={
             <>
-              <Button size="sm" variant="primary" onClick={() => { dismissHostUpdates(); computePlan(); }} disabled={isSyncLoading}>
+              <Button size="sm" variant="primary" onClick={() => { dismissHostUpdates(); computePlan(); }} disabled={syncBusy}>
                 Compare &amp; Sync
               </Button>
               <Button size="sm" variant="ghost" onClick={dismissHostUpdates}>Dismiss</Button>
