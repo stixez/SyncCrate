@@ -151,6 +151,12 @@ pub enum SyncAction {
 pub struct SyncPlan {
     pub actions: Vec<SyncAction>,
     pub total_bytes: u64,
+    /// Each file to delete as the compare saw it (path -> local hash). The
+    /// delete re-checks it: the live manifest was already replaced by the
+    /// watcher's quick rescan (empty hash) for exactly the file the user
+    /// edited after Compare, so the check never ran.
+    #[serde(default)]
+    pub delete_hashes: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub excluded: Vec<String>,
     #[serde(default)]

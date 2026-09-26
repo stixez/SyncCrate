@@ -382,7 +382,7 @@ export function useTauriEvents() {
             setSyncProgress(event.payload);
           },
         ),
-        listen<{ files_synced: number; total_bytes: number; errors: string[]; cancelled?: boolean }>("sync-complete", (event) => {
+        listen<{ files_synced: number; total_bytes: number; errors: string[]; warnings?: string[]; cancelled?: boolean }>("sync-complete", (event) => {
           setSyncProgress(null);
           // Or the next sync's "Preparing" shows this one's backup counts. Only
           // the presync bar: a manual backup running alongside keeps its own.
@@ -394,6 +394,13 @@ export function useTauriEvents() {
           // Watcher events were skipped while the sync wrote files.
           refreshManifest();
           const { files_synced, errors, cancelled } = event.payload;
+          // Not failures: the files synced, something around them didn't
+          // (e.g. file history couldn't keep an old copy).
+          const warnings = event.payload.warnings ?? [];
+          for (const w of warnings) addLog(w, "warning");
+          if (warnings.length > 0) {
+            toastInfo(`${warnings.length} file${warnings.length !== 1 ? "s" : ""} synced without an old copy kept in file history (see Activity).`);
+          }
 
           // "Apply pack exactly": disable/re-enable only after a clean
           // download, so a failed one never leaves mods disabled without

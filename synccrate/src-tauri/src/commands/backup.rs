@@ -324,7 +324,9 @@ pub(crate) fn store_object(root: &Path, src: &Path) -> Result<(String, u64, bool
     }
     if let Err(e) = std::fs::rename(&tmp, &dest) {
         let _ = std::fs::remove_file(&tmp);
-        if !dest.exists() {
+        // Lost a race to an identical object: fine. A short one we couldn't
+        // replace must not stand in for this content.
+        if !std::fs::metadata(&dest).is_ok_and(|m| m.len() == size) {
             return Err(format!("{}: {}", src.display(), e));
         }
         return Ok((hash, size, false));
@@ -1006,7 +1008,7 @@ pub(crate) fn undo_apply(
     }
 
     let Some(backup_id) = &record.presync_backup_id else {
-        undo_from_history(record, &utils::backups_dir(), &base_str, &mut result);
+        undo_from_history(record, &utils::backups_dir(), &base_str, cts, &mut result);
         return result;
     };
 
@@ -1068,7 +1070,7 @@ pub(crate) fn undo_apply(
             .collect();
         let mut fallback: Vec<String> = wanted.iter().filter(|k| !in_backup.contains(*k)).filter_map(|k| rel_of.get(k).cloned()).collect();
         fallback.sort();
-        restore_kept_versions(&fallback, record, &root, &base_str, &mut result);
+        restore_kept_versions(&fallback, record, &root, &base_str, cts, &mut result);
         let r = restore_inner(&root, backup_id, &restricted, base, cts, false, &mut |_, _, _| {});
         result.restored += r.restored + r.unchanged;
         result.skipped.extend(r.skipped);
@@ -1087,7 +1089,7 @@ pub(crate) fn undo_apply(
 /// history kept of the replaced and deleted files, with the same checks as
 /// the backup path (untouched since the sync / still absent). Runs under the
 /// store lock (held by `undo_apply`).
-fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, result: &mut UndoResult) {
+fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, cts: &[ContentType], result: &mut UndoResult) {
     let mut targets: Vec<(String, bool)> = Vec::new();
     for f in &record.replaced {
         if file_matches(base_str, f) {
@@ -1104,12 +1106,12 @@ fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, ba
         }
     }
     let targets: Vec<String> = targets.into_iter().map(|(rel, _)| rel).collect();
-    restore_kept_versions(&targets, record, root, base_str, result);
+    restore_kept_versions(&targets, record, root, base_str, cts, result);
 }
 
 /// Put back the history versions the record kept for `rels` (already checked
 /// as safe to restore by the caller).
-fn restore_kept_versions(rels: &[String], record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, result: &mut UndoResult) {
+fn restore_kept_versions(rels: &[String], record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, cts: &[ContentType], result: &mut UndoResult) {
     let by_path: HashMap<String, &crate::commands::undo::KeptVersion> =
         record.history_versions.iter().map(|v| (crate::sync::diff::match_key(&v.path), v)).collect();
     for rel in rels {
@@ -1127,6 +1129,18 @@ fn restore_kept_versions(rels: &[String], record: &crate::commands::undo::SyncRe
             result.skipped.push(format!("{} (invalid path)", rel));
             continue;
         };
+        // The same checks as a backup restore: only files the game's folders
+        // still sync, and never next to a disabled/enabled twin.
+        let Some((ct, inner)) = crate::sync::diff::content_type_for(cts, &rel) else {
+            result.skipped.push(format!("{} (not in this game's folders any more)", rel));
+            continue;
+        };
+        let dest_base = Path::new(base_str).join(&ct.folder);
+        let mods_dir = cts.first().map(|c| Path::new(base_str).join(&c.folder));
+        if let Some(twin) = disabled_twin(&dest_base.join(&inner), &dest_base, mods_dir.as_deref(), &inner) {
+            result.skipped.push(format!("{} ({} exists)", rel, twin));
+            continue;
+        }
         match restore_file(&object, &dest, v.mtime_ms) {
             Ok(()) => result.restored += 1,
             Err(e) => {
@@ -1871,7 +1885,8 @@ mod tests {
             plan_hash: None,
         };
         let mut r = UndoResult::default();
-        undo_from_history(&record, &root, &base.to_string_lossy(), &mut r);
+        let cts = vec![ct("mods", "Mods", &["package"])];
+        undo_from_history(&record, &root, &base.to_string_lossy(), &cts, &mut r);
         assert_eq!(r.restored, 2);
         assert_eq!(std::fs::read(base.join("Mods/r.package")).unwrap(), b"old");
         assert_eq!(std::fs::read(base.join("Mods/d.package")).unwrap(), b"deleted-one");
