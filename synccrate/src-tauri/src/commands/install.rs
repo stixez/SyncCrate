@@ -291,7 +291,24 @@ pub async fn confirm_install_duplicate(
                     });
                 }
             }
-            std::fs::copy(source_path, &dest).map_err(|e| e.to_string())?;
+            // Keep the replaced file in file history, so "Overwrite" can be
+            // undone like a sync replacement (Backups -> File history).
+            let rel = dest.strip_prefix(&base).ok().map(|p| p.to_string_lossy().replace('\\', "/"));
+            let capture = rel.filter(|_| crate::commands::sync::read_sync_config().keep_file_history).map(|rel| {
+                let id = uuid::Uuid::new_v4().to_string();
+                let root = crate::utils::backups_dir();
+                if let Err(e) = crate::commands::history::begin_capture(&root, &game_id, &base, std::slice::from_ref(&rel), "", &id, crate::utils::timestamp_now()) {
+                    log::warn!("File history: couldn't keep {}: {}", rel, e);
+                }
+                (root, id, rel)
+            });
+            let copied = std::fs::copy(source_path, &dest).map_err(|e| e.to_string());
+            if let Some((root, id, rel)) = capture {
+                // On failure nothing was replaced: finishing with no paths drops the pending copy.
+                let changed = if copied.is_ok() { vec![(rel, crate::commands::history::REASON_INSTALL_REPLACED)] } else { Vec::new() };
+                let _ = crate::commands::history::finish_local(&root, &game_id, &id, &changed, crate::utils::timestamp_now());
+            }
+            copied?;
             Ok(InstallResult {
                 source,
                 destination: dest.to_string_lossy().to_string(),

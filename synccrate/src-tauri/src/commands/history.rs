@@ -35,6 +35,11 @@ pub const REASON_REPLACED: &str = "replaced";
 pub const REASON_DELETED: &str = "deleted";
 /// The file as it was right before a version was restored over it.
 pub const REASON_BEFORE_RESTORE: &str = "before-restore";
+/// Removed with "Delete duplicates" / deleted from the Content page.
+pub const REASON_DUPLICATE_REMOVED: &str = "duplicate-removed";
+pub const REASON_REMOVED: &str = "removed";
+/// Replaced by dropping a file with the same name and choosing "Overwrite".
+pub const REASON_INSTALL_REPLACED: &str = "install-replaced";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileVersion {
@@ -248,21 +253,30 @@ pub(crate) fn begin_capture_from_backup(
 /// After the sync: keep the pending versions of files it really replaced or
 /// deleted (marking deletions as such), drop the rest, apply retention.
 pub(crate) fn finish(root: &Path, game: &str, capture_id: &str, replaced: &[String], deleted: &[String], now: u64) -> Result<(), String> {
+    let mut reasons: HashMap<String, &str> = replaced.iter().map(|p| (p.to_lowercase(), REASON_REPLACED)).collect();
+    reasons.extend(deleted.iter().map(|p| (p.to_lowercase(), REASON_DELETED)));
+    settle(root, game, capture_id, &reasons, now)
+}
+
+/// `finish` for a change the user made here (deleting files, an install
+/// overwrite): each changed path with its reason.
+pub(crate) fn finish_local(root: &Path, game: &str, capture_id: &str, changed: &[(String, &str)], now: u64) -> Result<(), String> {
+    let reasons: HashMap<String, &str> = changed.iter().map(|(p, r)| (p.to_lowercase(), *r)).collect();
+    settle(root, game, capture_id, &reasons, now)
+}
+
+/// Keep the pending versions whose (lowercased) path is in `reasons`, with
+/// that reason; drop the rest; apply retention.
+fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &str>, now: u64) -> Result<(), String> {
     let _lock = backup::store_lock();
     let mut h = load(root, game)?;
-    let replaced: HashSet<String> = replaced.iter().map(|p| p.to_lowercase()).collect();
-    let deleted: HashSet<String> = deleted.iter().map(|p| p.to_lowercase()).collect();
     let before = h.entries.len();
     h.entries.retain_mut(|e| {
         if e.pending.as_deref() != Some(capture_id) {
             return true;
         }
-        let key = e.path.to_lowercase();
-        if deleted.contains(&key) {
-            e.reason = REASON_DELETED.into();
-        } else if !replaced.contains(&key) {
-            return false;
-        }
+        let Some(reason) = reasons.get(&e.path.to_lowercase()) else { return false };
+        e.reason = reason.to_string();
         e.pending = None;
         true
     });
@@ -480,6 +494,22 @@ mod tests {
         assert_eq!(std::fs::read(base.join("Mods/gone.package")).unwrap(), b"G1");
         assert!(walkdir::WalkDir::new(&base).into_iter().filter_map(|e| e.ok()).all(|e| !e.file_name().to_string_lossy().contains("synccrate-restore")));
 
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn local_changes_keep_versions_with_their_own_reason() {
+        let (root, base, b) = setup();
+        let targets: Vec<String> = ["Mods/a.package", "Mods/gone.package"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(begin_capture(&root, "sims4", &b, &targets, "", "cap-local", 100).unwrap(), 2);
+        // Only "gone" was actually deleted (as a duplicate); "a" failed.
+        std::fs::remove_file(base.join("Mods/gone.package")).unwrap();
+        finish_local(&root, "sims4", "cap-local", &[("Mods/gone.package".into(), REASON_DUPLICATE_REMOVED)], 101).unwrap();
+        let all = list(&root, "sims4", None).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].path, "Mods/gone.package");
+        assert_eq!(all[0].reason, REASON_DUPLICATE_REMOVED);
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&base);
     }

@@ -86,6 +86,7 @@ export function useTauriEvents() {
     const unlisteners: UnlistenFn[] = [];
 
     function cancelRetry() {
+      useAppStore.getState().setReconnecting(null);
       retryRef.current.active = false;
       if (retryRef.current.timer) {
         clearTimeout(retryRef.current.timer);
@@ -104,11 +105,14 @@ export function useTauriEvents() {
 
         const delay = RETRY_DELAYS[attempt] || 8000;
         addLog(`Reconnecting in ${delay / 1000}s... (attempt ${attempt + 1}/${MAX_RETRIES})`, "info");
+        useAppStore.getState().setReconnecting({ host: hostName, attempt: attempt + 1, max: MAX_RETRIES });
 
         await new Promise<void>((resolve) => {
           retryRef.current.timer = setTimeout(resolve, delay);
         });
 
+        // The dashboard's Cancel clears `reconnecting`.
+        if (!useAppStore.getState().reconnecting) retryRef.current.active = false;
         if (!retryRef.current.active || cancelled) return;
 
         // A join code reaches the host on the LAN or over the internet
@@ -125,7 +129,7 @@ export function useTauriEvents() {
               setSession(status);
               addLog(`Reconnected to ${hostName}`, "success");
               sendNotification("SyncCrate", `Reconnected to ${hostName}`);
-              retryRef.current.active = false;
+              cancelRetry();
               return;
             }
           } catch {
@@ -149,7 +153,7 @@ export function useTauriEvents() {
               setSession(status);
               addLog(`Reconnected to ${hostName} via direct IP`, "success");
               sendNotification("SyncCrate", `Reconnected to ${hostName}`);
-              retryRef.current.active = false;
+              cancelRetry();
               return;
             }
             // Connection was attempted but failed (state reset by error handler)
@@ -179,7 +183,7 @@ export function useTauriEvents() {
               setSession(status);
               addLog(`Reconnected to ${hostName}`, "success");
               sendNotification("SyncCrate", `Reconnected to ${hostName}`);
-              retryRef.current.active = false;
+              cancelRetry();
               return;
             }
             // Still handshaking or failed: peer-connected / the next attempt decide.
@@ -193,6 +197,7 @@ export function useTauriEvents() {
       }
 
       retryRef.current.active = false;
+      useAppStore.getState().setReconnecting(null);
       addLog("Could not reconnect. Please rejoin manually.", "error");
       addLog("If using VPN/Tailscale, make sure the host has allowed SyncCrate through their firewall.", "info");
       sendNotification("SyncCrate", "Connection lost. Could not reconnect.");

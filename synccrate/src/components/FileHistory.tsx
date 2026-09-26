@@ -13,6 +13,9 @@ function describe(v: FileVersion) {
   const from = v.peer ? ` from ${v.peer}` : "";
   if (v.reason === "deleted") return `Deleted by a sync${from}`;
   if (v.reason === "before-restore") return "Before you restored an older version";
+  if (v.reason === "duplicate-removed") return "Removed as a duplicate";
+  if (v.reason === "removed") return "Deleted by you";
+  if (v.reason === "install-replaced") return "Replaced when you installed a file with the same name";
   return `Replaced by a sync${from}`;
 }
 

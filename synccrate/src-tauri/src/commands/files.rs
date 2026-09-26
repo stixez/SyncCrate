@@ -1413,7 +1413,7 @@ pub async fn delete_mod_files(
     paths: Vec<String>,
     keep: Option<HashMap<String, String>>,
 ) -> Result<DeleteResult, String> {
-    let (base, cts) = {
+    let (base, cts, game_id) = {
         let app_state = state.lock().await;
         if app_state.is_any_syncing() {
             return Err("Cannot delete files while a sync is in progress".into());
@@ -1423,11 +1423,23 @@ pub async fn delete_mod_files(
         let cts = get_game_def(&app_state.game_registry, &game_id)
             .map(|d| d.content_types.clone())
             .unwrap_or_default();
-        (base, cts)
+        (base, cts, game_id)
     };
     let keep = keep.unwrap_or_default();
     tokio::task::spawn_blocking(move || {
+        use crate::commands::history;
+        // Deleting was the one change with no way back; keep the old copies
+        // in file history like a sync does (Backups -> File history).
+        let root = utils::backups_dir();
+        let capture = crate::commands::sync::read_sync_config().keep_file_history.then(|| {
+            let id = uuid::Uuid::new_v4().to_string();
+            if let Err(e) = history::begin_capture(&root, &game_id, &base, &paths, "", &id, utils::timestamp_now()) {
+                log::warn!("File history: couldn't keep deleted files: {}", e);
+            }
+            id
+        });
         let mut result = DeleteResult::default();
+        let mut changed = Vec::new();
         for rel in paths {
             let res = match keep.get(&rel) {
                 Some(kept) => verify_kept_duplicate(&base, &cts, &rel, kept)
@@ -1435,8 +1447,17 @@ pub async fn delete_mod_files(
                 None => delete_content_file(&base, &cts, &rel),
             };
             match res {
-                Ok(()) => result.deleted += 1,
+                Ok(()) => {
+                    result.deleted += 1;
+                    let reason = if keep.contains_key(&rel) { history::REASON_DUPLICATE_REMOVED } else { history::REASON_REMOVED };
+                    changed.push((rel, reason));
+                }
                 Err(e) => result.errors.push(format!("{}: {}", rel, e)),
+            }
+        }
+        if let Some(id) = capture {
+            if let Err(e) = history::finish_local(&root, &game_id, &id, &changed, utils::timestamp_now()) {
+                log::warn!("File history: {}", e);
             }
         }
         result
