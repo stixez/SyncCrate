@@ -591,7 +591,7 @@ pub fn load_store(path: &Path) -> Result<CrewStore, String> {
 pub fn save_store(path: &Path, store: &CrewStore) -> Result<(), String> {
     let data = serde_json::to_vec_pretty(store).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, data).map_err(|e| format!("Could not save crews: {e}"))?;
+    crate::utils::write_synced(&tmp, &data).map_err(|e| format!("Could not save crews: {e}"))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("Could not save crews: {e}"))
 }
 

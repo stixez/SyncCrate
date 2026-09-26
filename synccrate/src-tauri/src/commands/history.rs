@@ -100,7 +100,7 @@ fn save(root: &Path, game: &str, h: &HistoryFile) -> Result<(), String> {
     let path = history_path(root, game);
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(h).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    crate::utils::write_synced(&tmp, &serde_json::to_vec(h).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
