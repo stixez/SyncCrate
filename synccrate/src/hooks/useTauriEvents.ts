@@ -107,6 +107,10 @@ export function useTauriEvents() {
       retryRef.current.active = true;
 
       const { lastHostIp, lastHostPort, lastHostCode } = useAppStore.getState();
+      // A crew join has no code or IP of its own: the stored "last host" is an
+      // older, different host. Reconnect through the crew instead.
+      const last = useAppStore.getState().lastConnectAttempt;
+      const crew = last?.kind === "crew" ? last : null;
       useAppStore.getState().setReconnecting({ host: hostName, attempt: 1, max: MAX_RETRIES });
       // "Stop trying" on the dashboard clears `reconnecting`; checked after
       // every await, and never set again once cleared (a click during an
@@ -128,6 +132,26 @@ export function useTauriEvents() {
         });
 
         if (stopped()) return;
+
+        if (crew) {
+          try {
+            useAppStore.getState().setLastConnectAttempt({ ...crew, name: localName });
+            await cmd.connectCrew(crew.crewId, crew.nodeId, localName, crew.pin);
+            await new Promise((r) => setTimeout(r, 4000));
+            const status = await cmd.getSessionStatus();
+            if (status.session_type === "Client" && status.peers.length > 0) {
+              setSession(status);
+              addLog(`Reconnected to ${hostName}`, "success");
+              sendNotification("SyncCrate", `Reconnected to ${hostName}`);
+              cancelRetry();
+              return;
+            }
+          } catch {
+            // next attempt
+          }
+          if (stopped()) return;
+          continue;
+        }
 
         // A join code reaches the host on the LAN or over the internet
         if (lastHostCode) {
@@ -249,10 +273,6 @@ export function useTauriEvents() {
               const isIp = /^[0-9a-f.:]+$/i.test(host.ip);
               if (isIp || code) {
                 useAppStore.getState().setLastHost(isIp ? host.ip : null, isIp ? host.port : null, host.name, code);
-              } else {
-                // A crew join (internet only, no code): the stored host is an
-                // older one, and reconnecting would reach them instead.
-                useAppStore.getState().clearLastHost();
               }
             }
           } catch {
@@ -364,8 +384,12 @@ export function useTauriEvents() {
         ),
         listen<{ files_synced: number; total_bytes: number; errors: string[]; cancelled?: boolean }>("sync-complete", (event) => {
           setSyncProgress(null);
-          // Or the next sync's "Preparing" shows this one's backup counts.
-          useAppStore.getState().setBackupProgress(null);
+          // Or the next sync's "Preparing" shows this one's backup counts. Only
+          // the presync bar: a manual backup running alongside keeps its own.
+          if (useAppStore.getState().backupProgress?.phase === "presync") useAppStore.getState().setBackupProgress(null);
+          // `is_syncing` in the stored session is a snapshot; a stale "true"
+          // kept Compare & Sync disabled after the sync ended.
+          cmd.getSessionStatus().then(setSession).catch(() => {});
           setSyncPlan(null);
           // Watcher events were skipped while the sync wrote files.
           refreshManifest();
