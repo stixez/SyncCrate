@@ -60,7 +60,7 @@ pub(crate) async fn offer_files_inner(state: &Arc<Mutex<AppState>>, paths: Vec<S
         return Err("None of these can be offered: the host already has them, or they aren't mod files in this game's folders.".into());
     }
     let offer = OutgoingOffer {
-        files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
+        files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None, script: false }).collect(),
         delivered: false,
     };
     s.offer_out = Some(offer.clone());

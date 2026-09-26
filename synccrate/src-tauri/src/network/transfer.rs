@@ -1613,6 +1613,7 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
     let mut rejected = Vec::new();
     if let Some(files) = files {
         let cts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
+        let script_exts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.dangerous_script_extensions.clone()).unwrap_or_default();
         // Capped before anything else: a 64 MB list (~200k entries) was
         // collected in full and compared O(n^2) with the AppState lock held.
         let files: Vec<_> = files.into_iter().take(crate::offers::MAX_OFFER_FILES * 2).collect();
@@ -1646,7 +1647,13 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
                 IncomingOffer {
                     peer_id: peer_id.to_string(),
                     peer_name: peer_name.to_string(),
-                    files: valid.into_iter().map(|file| OfferedFile { file, state: OfferState::Pending, message: None }).collect(),
+                    files: valid
+                        .into_iter()
+                        .map(|file| {
+                            let script = crate::commands::stay_in_sync::is_script_path(&file.relative_path, &script_exts);
+                            OfferedFile { file, state: OfferState::Pending, message: None, script }
+                        })
+                        .collect(),
                 },
             );
         }

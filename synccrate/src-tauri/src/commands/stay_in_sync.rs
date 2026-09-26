@@ -16,6 +16,55 @@ static NEEDS_RESCAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// host can't fill the disk while nobody's watching.
 const MAX_AUTO_PULL_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
+/// Automatic tries per host file (same path and hash) before it waits for a
+/// manual sync. A file that always fails (locked on the host, a stale hash)
+/// was pulled again every minute, forever, up to 4 GB each time.
+const MAX_AUTO_ATTEMPTS: u32 = 2;
+
+/// Path -> (host hash, automatic tries so far).
+static ATTEMPTS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, (String, u32)>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// Drop files already tried `MAX_AUTO_ATTEMPTS` times unchanged, and count
+/// this try for the rest. Entries for files no longer planned (pulled, or
+/// gone from the host) are forgotten. Returns how many were held back. Pure
+/// apart from `attempts`.
+pub(crate) fn drop_repeated(subset: &mut SyncPlan, attempts: &mut std::collections::HashMap<String, (String, u32)>) -> usize {
+    let planned: std::collections::HashSet<&str> = subset
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            SyncAction::ReceiveFromRemote(f) => Some(f.relative_path.as_str()),
+            _ => None,
+        })
+        .collect();
+    attempts.retain(|p, _| planned.contains(p.as_str()));
+    let before = subset.actions.len();
+    subset.actions.retain(|a| match a {
+        SyncAction::ReceiveFromRemote(f) => !attempts.get(&f.relative_path).is_some_and(|(h, n)| h == &f.hash && *n >= MAX_AUTO_ATTEMPTS),
+        _ => true,
+    });
+    let held = before - subset.actions.len();
+    for a in &subset.actions {
+        if let SyncAction::ReceiveFromRemote(f) = a {
+            let e = attempts.entry(f.relative_path.clone()).or_insert_with(|| (f.hash.clone(), 0));
+            if e.0 != f.hash {
+                *e = (f.hash.clone(), 0);
+            }
+            e.1 += 1;
+        }
+    }
+    if held > 0 {
+        subset.total_bytes = subset
+            .actions
+            .iter()
+            .map(|a| if let SyncAction::ReceiveFromRemote(f) = a { f.size } else { 0 })
+            .sum();
+        subset.plan_hash = Some(crate::sync::diff::compute_plan_hash(subset));
+    }
+    held
+}
+
 /// Always treated as scripts, on top of the game's `dangerous_script_extensions`.
 const SCRIPT_EXTENSIONS: &[&str] = &["dll", "exe", "ts4script", "lua", "jar", "js", "py", "bat", "cmd", "ps1", "asi", "so", "dylib"];
 
@@ -33,11 +82,15 @@ pub struct AutoPullResult {
 
 /// The part of a freshly computed plan that's safe to run unattended, plus
 /// what was held back. Pure.
+/// Whether a file runs code: the always-on list plus the game's
+/// `dangerous_script_extensions`.
+pub(crate) fn is_script_path(path: &str, script_exts: &[String]) -> bool {
+    let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
+    SCRIPT_EXTENSIONS.contains(&ext.as_str()) || script_exts.iter().any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(&ext))
+}
+
 pub(crate) fn safe_subset(plan: &SyncPlan, script_exts: &[String]) -> (SyncPlan, usize, usize) {
-    let is_script = |path: &str| {
-        let ext = crate::commands::files::effective_extension(std::path::Path::new(path));
-        SCRIPT_EXTENSIONS.contains(&ext.as_str()) || script_exts.iter().any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(&ext))
-    };
+    let is_script = |path: &str| is_script_path(path, script_exts);
     let mut subset = SyncPlan { game_id: plan.game_id.clone(), base_path: plan.base_path.clone(), host_game: plan.host_game.clone(), auto_pull: true, ..Default::default() };
     let (mut scripts, mut review) = (0, 0);
     let excluded: std::collections::HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
@@ -118,7 +171,8 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
     // Computed without storing: storing it here replaced a plan the user
     // opened while this ran (up to two minutes), so Sync ran the wrong files.
     let (_, plan) = crate::commands::sync::plan_for_peer(state, Some(peer_id.clone())).await?;
-    let (subset, scripts_held, needs_review) = safe_subset(&plan, &script_exts);
+    let (mut subset, scripts_held, mut needs_review) = safe_subset(&plan, &script_exts);
+    needs_review += drop_repeated(&mut subset, &mut ATTEMPTS.lock().unwrap_or_else(|e| e.into_inner()));
     let pulled = subset.actions.len();
     {
         let mut s = state.lock().await;
@@ -150,6 +204,29 @@ mod tests {
 
     fn f(path: &str) -> FileInfo {
         FileInfo { relative_path: path.into(), size: 10, hash: "h".into(), modified: 0, file_type: "CustomContent".into() }
+    }
+
+    #[test]
+    fn files_that_keep_failing_wait_for_a_manual_sync() {
+        let plan = |files: &[(&str, &str)]| {
+            let mut p = SyncPlan::default();
+            p.actions = files.iter().map(|(path, hash)| SyncAction::ReceiveFromRemote(FileInfo { hash: hash.to_string(), ..f(path) })).collect();
+            p
+        };
+        let mut attempts = std::collections::HashMap::new();
+        let mut p = plan(&[("Mods/stuck.package", "a"), ("Mods/ok.package", "b")]);
+        assert_eq!(drop_repeated(&mut p, &mut attempts), 0);
+        // ok.package arrived; stuck.package is still planned with the same hash.
+        let mut p = plan(&[("Mods/stuck.package", "a")]);
+        assert_eq!(drop_repeated(&mut p, &mut attempts), 0, "second try");
+        assert!(!attempts.contains_key("Mods/ok.package"), "pulled files are forgotten");
+        let mut p = plan(&[("Mods/stuck.package", "a")]);
+        assert_eq!(drop_repeated(&mut p, &mut attempts), 1, "held back after two tries");
+        assert!(p.actions.is_empty() && p.total_bytes == 0);
+        // The host changed the file: try again.
+        let mut p = plan(&[("Mods/stuck.package", "new")]);
+        assert_eq!(drop_repeated(&mut p, &mut attempts), 0);
+        assert_eq!(p.actions.len(), 1);
     }
 
     #[test]

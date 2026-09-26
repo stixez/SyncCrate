@@ -243,6 +243,8 @@ export interface OfferedFile {
   file: FileInfo;
   state: OfferState;
   message?: string | null;
+  /** Runs code: shown with a warning and not ticked unless the host ticks it. */
+  script?: boolean;
 }
 
 export interface IncomingOffer {
