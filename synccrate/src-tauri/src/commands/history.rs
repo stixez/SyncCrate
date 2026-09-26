@@ -40,6 +40,8 @@ pub const REASON_DUPLICATE_REMOVED: &str = "duplicate-removed";
 pub const REASON_REMOVED: &str = "removed";
 /// Replaced by dropping a file with the same name and choosing "Overwrite".
 pub const REASON_INSTALL_REPLACED: &str = "install-replaced";
+/// Rewritten by a health-check fix (a Paradox descriptor's path made portable).
+pub const REASON_PATH_FIXED: &str = "path-fixed";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileVersion {
