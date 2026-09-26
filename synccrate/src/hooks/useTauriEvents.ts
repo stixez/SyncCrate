@@ -503,10 +503,19 @@ export function useTauriEvents() {
             // The last event may have been mid-file (a read error ends a
             // file without the "done" event): don't leave "Sending x 40%".
             if (p.file) setPeerDownloadProgress(p.peer_id, { ...p, file: null, file_bytes_sent: 0, file_bytes_total: 0 });
-            if (p.files_sent > 0) {
-              sendNotification("SyncCrate", `${p.peer_name} finished downloading`);
-            }
+            // "Finished" is reported by the friend now (peer-synced): this
+            // guess fired on any pause mid-sync.
           }, PEER_IDLE_MS);
+        }),
+        listen<{ peer_id: string; name: string; files: number; failed: number }>("peer-synced", (event) => {
+          const { name, files, failed } = event.payload;
+          const msg = failed > 0
+            ? `${name} finished syncing: ${files} file${files !== 1 ? "s" : ""}, ${failed} failed.`
+            : `${name} is synced (${files} file${files !== 1 ? "s" : ""}).`;
+          addLog(msg, failed > 0 ? "warning" : "success");
+          toastInfo(msg);
+          sendNotification("SyncCrate", msg);
+          cmd.getSessionStatus().then(setSession).catch(() => {});
         }),
         listen("chat-updated", async () => {
           try {

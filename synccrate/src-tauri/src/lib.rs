@@ -221,11 +221,13 @@ pub fn run() {
             let status = MenuItemBuilder::with_id("status", "Idle").enabled(false).build(app)?;
             let show = MenuItemBuilder::with_id("show", "Show SyncCrate").build(app)?;
             let leave = MenuItemBuilder::with_id("leave", "Disconnect").enabled(false).build(app)?;
+            let copy_code = MenuItemBuilder::with_id("copy_code", "Copy join code").enabled(false).build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&status)
                 .separator()
                 .item(&show)
+                .item(&copy_code)
                 .item(&leave)
                 .separator()
                 .item(&quit)
@@ -245,6 +247,9 @@ pub fn run() {
                         }
                         "leave" => {
                             commands::tray::leave_session_from_tray(app);
+                        }
+                        "copy_code" => {
+                            commands::tray::copy_join_code_from_tray(app);
                         }
                         "quit" => {
                             commands::tray::QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -268,7 +273,7 @@ pub fn run() {
             let state: tauri::State<'_, Arc<Mutex<AppState>>> = app.state();
             let state_clone = state.inner().clone();
 
-            app.manage(commands::tray::TrayHandles { tray, status, leave });
+            app.manage(commands::tray::TrayHandles { tray, status, leave, copy_code });
 
             // Installers register the scheme; dev builds (and Linux AppImages,
             // which have no installer) need it at runtime. Release Windows
@@ -409,6 +414,7 @@ pub fn run() {
             commands::session::set_session_port,
             commands::session::get_session_port,
             commands::files::reveal_file,
+            commands::files::save_text_file,
             commands::session::check_port_available,
             commands::tags::get_predefined_tags,
             commands::tags::get_mod_tags,
@@ -464,6 +470,8 @@ pub fn run() {
             commands::offers::get_incoming_offers,
             commands::offers::decide_offer,
             commands::history::list_file_history,
+            commands::backup::storage_usage,
+            commands::backup::clear_file_history,
             commands::history::restore_file_version,
             commands::sync::get_keep_file_history,
             commands::sync::set_keep_file_history,

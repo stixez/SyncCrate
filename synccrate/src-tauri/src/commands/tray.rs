@@ -23,6 +23,8 @@ pub struct TrayHandles {
     pub tray: TrayIcon<Wry>,
     pub status: MenuItem<Wry>,
     pub leave: MenuItem<Wry>,
+    /// "Copy join code", enabled while hosting.
+    pub copy_code: MenuItem<Wry>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +40,60 @@ impl TrayStatus {
     pub fn tooltip(&self) -> String {
         format!("SyncCrate \u{2014} {}", self.line)
     }
+}
+
+/// The status line names the game while in a session ("Hosting, 2 friends,
+/// The Sims 4"): with several games it wasn't clear which one was shared.
+pub fn with_game(mut status: TrayStatus, game_label: &str) -> TrayStatus {
+    if status.in_session && !game_label.is_empty() {
+        status.line = format!("{} \u{b7} {}", status.line, game_label);
+    }
+    status
+}
+
+/// Put text on the clipboard without a window (tray "Copy join code": the
+/// webview may be hidden, and its clipboard needs focus).
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut c = std::process::Command::new(crate::utils::windows_system_exe("clip.exe"));
+        c.creation_flags(0x0800_0000);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("pbcopy");
+    #[cfg(target_os = "linux")]
+    let mut cmd = {
+        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+        let mut c = std::process::Command::new(if wayland { "wl-copy" } else { "xclip" });
+        if !wayland {
+            c.args(["-selection", "clipboard"]);
+        }
+        c
+    };
+    let mut child = cmd.stdin(std::process::Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    child.stdin.take().ok_or("no stdin")?.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+    child.wait().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Tray "Copy join code" (only enabled while hosting).
+pub fn copy_join_code_from_tray(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
+        match crate::commands::session::join_code_for(&state).await {
+            Ok(code) => {
+                let copied = tokio::task::spawn_blocking(move || copy_to_clipboard(&code)).await.map_err(|e| e.to_string()).and_then(|r| r);
+                if let Err(e) = copied {
+                    log::warn!("Couldn't copy the join code: {e}");
+                }
+            }
+            Err(e) => log::warn!("{e}"),
+        }
+    });
 }
 
 /// Pure formatter for the tray status (unit-tested).
@@ -106,11 +162,12 @@ pub fn start_tray_status_updates(app: &tauri::AppHandle, state: Arc<Mutex<AppSta
                 }
                 let pct = SYNC_PERCENT.load(Ordering::Relaxed);
                 let names: Vec<String> = s.connections.values().map(|c| c.info.name.clone()).collect();
-                tray_status(
+                let status = tray_status(
                     &s.session_type,
                     &names,
                     if syncing && pct >= 0 { Some(pct as u8) } else { None },
-                )
+                );
+                with_game(status, &s.game_label(&s.active_game))
             };
             if last.as_ref() != Some(&status) {
                 if let Some(h) = app.try_state::<TrayHandles>() {
@@ -118,6 +175,7 @@ pub fn start_tray_status_updates(app: &tauri::AppHandle, state: Arc<Mutex<AppSta
                     let _ = h.status.set_text(&status.line);
                     let _ = h.leave.set_text(status.leave_label);
                     let _ = h.leave.set_enabled(status.in_session);
+                    let _ = h.copy_code.set_enabled(status.leave_label == "Stop hosting");
                 }
                 last = Some(status);
             }
@@ -171,6 +229,13 @@ mod tests {
         assert_eq!(s.line, "Hosting \u{b7} 2 friends");
         assert_eq!(s.leave_label, "Stop hosting");
         assert!(s.in_session);
+    }
+
+    #[test]
+    fn in_a_session_the_line_names_the_game() {
+        let hosting = with_game(tray_status(&SessionType::Host, &names(&["A"]), None), "The Sims 4");
+        assert_eq!(hosting.line, "Hosting \u{b7} 1 friend \u{b7} The Sims 4");
+        assert_eq!(with_game(tray_status(&SessionType::None, &[], None), "The Sims 4").line, "Idle");
     }
 
     #[test]

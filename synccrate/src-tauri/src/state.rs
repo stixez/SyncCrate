@@ -104,6 +104,18 @@ pub struct PeerInfo {
     /// be recognised on the LAN. None for hosts older than 0.6.0.
     #[serde(default)]
     pub node_id: Option<String>,
+    /// Host side: this friend's last sync, as they reported it. The host
+    /// could only guess "finished" from 4 s without a download request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_sync: Option<PeerSyncReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PeerSyncReport {
+    pub files: u64,
+    pub failed: u64,
+    /// Unix seconds, host clock.
+    pub at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

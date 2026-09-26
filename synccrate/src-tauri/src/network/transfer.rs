@@ -512,6 +512,7 @@ async fn handle_client(
             game_id: peer_game.clone(),
             addresses: Vec::new(),
             node_id: peer_node.clone(),
+            last_sync: None,
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -930,10 +931,17 @@ async fn handle_client(
                 let reply = host_receive_offered(&state, &app, &mut s, &peer_id, path, size, hash).await?;
                 protocol::send_message(&mut *s, &reply).await?;
             }
-            Message::ChatSync { since, outgoing, synced_files } => {
+            Message::ChatSync { since, outgoing, synced_files, sync_failed } => {
                 let (reply, changed, accepted) = {
                     let mut app_state = state.lock().await;
                     let now = crate::utils::timestamp_now();
+                    if let Some(files) = synced_files {
+                        let report = crate::state::PeerSyncReport { files, failed: sync_failed.unwrap_or(0), at: now };
+                        if let Some(conn) = app_state.connections.get_mut(&peer_id) {
+                            conn.info.last_sync = Some(report.clone());
+                        }
+                        let _ = app.emit("peer-synced", serde_json::json!({ "peer_id": &peer_id, "name": &peer_name, "files": report.files, "failed": report.failed }));
+                    }
                     crate::chat::host_sync(&mut app_state.chat, &mut chat_limiter, &peer_name, since, outgoing, synced_files, now)
                 };
                 if changed {
@@ -1341,6 +1349,7 @@ pub(crate) async fn run_client_session(
             game_id: host_game,
             addresses: addresses.to_vec(),
             node_id: host_node,
+            last_sync: None,
         };
         app_state.connections.insert(
             peer_id.to_string(),
@@ -1412,7 +1421,7 @@ async fn client_message_loop(
             let due = last_chat.elapsed() >= CHAT_POLL || (!chat_held && !st.chat.outbox.is_empty()) || st.chat.pending_synced.is_some();
             due.then(|| {
                 let out: Vec<String> = st.chat.outbox.iter().take(crate::chat::MAX_OUTGOING).cloned().collect();
-                (st.chat.last_seq(), out, st.chat.pending_synced)
+                (st.chat.last_seq(), out, st.chat.pending_synced.map(|n| (n, st.chat.pending_failed)))
             })
         } else {
             None
@@ -1883,9 +1892,10 @@ async fn chat_round_trip(
     s: &mut PeerStream,
     since: u64,
     outgoing: Vec<String>,
-    synced_files: Option<u64>,
+    synced: Option<(u64, u64)>,
 ) -> Result<(Option<(Vec<crate::chat::ChatMessage>, Option<usize>)>, Option<Message>), String> {
-    protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files }).await?;
+    let (synced_files, sync_failed) = (synced.map(|(n, _)| n), synced.map(|(_, f)| f));
+    protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files, sync_failed }).await?;
     let mut pending = None;
     loop {
         let msg = protocol::try_recv_message(s, POLL_REPLY_WAIT)

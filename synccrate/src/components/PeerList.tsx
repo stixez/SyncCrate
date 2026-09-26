@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Users, Monitor, X, ChevronDown, ChevronRight, Gamepad2, ArrowUpFromLine } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, formatRelative } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { useLogStore } from "../stores/useLogStore";
 import { toastError } from "../lib/toast";
@@ -87,6 +87,14 @@ export default function PeerList() {
                   </p>
                   <p className="font-mono text-[11px] text-txt-muted truncate mt-0.5">
                     {/^[0-9a-f.:]+$/i.test(peer.ip) ? (peer.port > 0 ? `${peer.ip}:${peer.port}` : peer.ip) : `${peer.ip} (via join code)`}
+                    {isHost && peer.last_sync && (
+                      <span className={cx("ml-2", peer.last_sync.failed > 0 ? "text-status-red" : "text-status-green")}>
+                        {peer.last_sync.failed > 0
+                          ? `· synced ${peer.last_sync.files}, ${peer.last_sync.failed} failed`
+                          : `· synced ${peer.last_sync.files} file${peer.last_sync.files !== 1 ? "s" : ""}`}{" "}
+                        {formatRelative(peer.last_sync.at)}
+                      </span>
+                    )}
                   </p>
                 </div>
                 {peer.game_info?.game_version && (() => {

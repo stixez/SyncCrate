@@ -342,6 +342,7 @@ mod tests {
             game_id: Some("sims4".into()),
             addresses: vec![ip.into()],
             node_id,
+            last_sync: None,
         }
     }
 

@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   LayoutDashboard,
   FolderOpen,
   Archive,
   Activity,
+  Pin,
   BookOpen,
   Settings,
   Sun,
@@ -107,6 +108,8 @@ export function BrandMark({ size = 28 }: { size?: number }) {
   );
 }
 
+const PIN_KEY = "synccrate.pinnedGames";
+
 export default function Sidebar() {
   const page = useAppStore((s) => s.page);
   const session = useAppStore((s) => s.session);
@@ -138,7 +141,29 @@ export default function Sidebar() {
   const hiddenGames = useAppStore((s) => s.hiddenGames);
   // Hidden games stay in the library (Settings → Games) but not here. The
   // selected game is always shown, so the sidebar never loses where you are.
-  const libraryGames = gameRegistry.filter((g) => myLibrary.includes(g.id) && (!hiddenGames.includes(g.id) || g.id === selectedGame));
+  const shownGames = gameRegistry.filter((g) => myLibrary.includes(g.id) && (!hiddenGames.includes(g.id) || g.id === selectedGame));
+  // Pinned games first (in pin order): with many games the one you play sat
+  // wherever the registry put it. Per-PC convenience, so localStorage.
+  const [pinned, setPinned] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(PIN_KEY) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const togglePin = (id: string) =>
+    setPinned((prev) => {
+      const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
+      try { localStorage.setItem(PIN_KEY, JSON.stringify(next)); } catch { /* convenience only */ }
+      return next;
+    });
+  const [gameFilter, setGameFilter] = useState("");
+  const libraryGames = useMemo(() => {
+    const q = gameFilter.trim().toLowerCase();
+    const matching = q ? shownGames.filter((g) => g.label.toLowerCase().includes(q) || g.id === selectedGame) : shownGames;
+    const pinnedFirst = pinned.map((id) => matching.find((g) => g.id === id)).filter((g): g is (typeof shownGames)[number] => !!g);
+    return [...pinnedFirst, ...matching.filter((g) => !pinned.includes(g.id))];
+  }, [shownGames, pinned, gameFilter, selectedGame]);
   const hiddenCount = gameRegistry.filter((g) => myLibrary.includes(g.id) && hiddenGames.includes(g.id) && g.id !== selectedGame).length;
 
   // Auto-expand the selected game
@@ -209,10 +234,24 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto py-3">
         <div className="px-4 pb-2 flex items-center justify-between">
           <span className="hud-label"><b>//</b> Library</span>
-          <span className="font-mono text-[10px] text-txt-muted tabular">{String(libraryGames.length).padStart(2, "0")}</span>
+          <span className="font-mono text-[10px] text-txt-muted tabular">{String(shownGames.length).padStart(2, "0")}</span>
         </div>
+        {shownGames.length > 8 && (
+          <div className="px-3 pb-2">
+            <input
+              value={gameFilter}
+              onChange={(e) => setGameFilter(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setGameFilter("")}
+              placeholder="Find a game..."
+              aria-label="Find a game in your library"
+              className="input input-sm w-full"
+            />
+          </div>
+        )}
 
-        {libraryGames.length === 0 ? (
+        {libraryGames.length === 0 && gameFilter.trim() ? (
+          <p className="px-4 py-1 text-xs text-txt-muted">No game in your library matches.</p>
+        ) : libraryGames.length === 0 ? (
           <div className="mx-4 my-1 border border-dashed border-line-hi px-3 py-3">
             <p className="text-xs text-txt-dim">No games added yet.</p>
             <button
@@ -271,6 +310,18 @@ export default function Sidebar() {
                         <span className="block font-mono text-[10px] text-neon uppercase tracking-[0.1em] mt-0.5">{statusLabel}</span>
                       )}
                     </span>
+                  </button>
+                  <button
+                    onClick={() => togglePin(game.id)}
+                    className={cx(
+                      "p-1 text-txt-muted hover:text-neon transition-opacity",
+                      pinned.includes(game.id) ? "opacity-100 text-neon/70" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                    )}
+                    title={pinned.includes(game.id) ? `Unpin ${game.label}` : `Pin ${game.label} to the top`}
+                    aria-label={pinned.includes(game.id) ? `Unpin ${game.label}` : `Pin ${game.label} to the top`}
+                    aria-pressed={pinned.includes(game.id)}
+                  >
+                    <Pin size={12} className={pinned.includes(game.id) ? "fill-current" : undefined} />
                   </button>
                   {!(isConnected && game.id === activeGame) && <button
                     onClick={() => handleRemoveGame(game.id, game.label)}

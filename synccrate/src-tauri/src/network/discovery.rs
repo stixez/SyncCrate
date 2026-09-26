@@ -310,6 +310,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                 game_id: s.game_id,
                 addresses: ranked,
                 node_id: s.node_id,
+                last_sync: None,
             })
         })
         .collect()

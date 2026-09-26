@@ -144,6 +144,26 @@ export async function getAppVersion(): Promise<string> {
   return invoke("get_app_version");
 }
 
+export interface StorageUsage {
+  folder: string;
+  on_disk: number;
+  games: { game: string; backups: number; backup_bytes: number; history_versions: number; history_bytes: number }[];
+}
+
+export async function storageUsage(): Promise<StorageUsage> {
+  return invoke("storage_usage");
+}
+
+/** Delete a game's file history; returns how many versions went. */
+export async function clearFileHistory(gameId: string): Promise<number> {
+  return invoke("clear_file_history", { gameId });
+}
+
+/** Write the Activity log to a .txt/.log file the user picked. */
+export async function saveTextFile(dest: string, content: string): Promise<void> {
+  return invoke("save_text_file", { dest, content });
+}
+
 export async function getSessionPort(): Promise<number> {
   return invoke("get_session_port");
 }

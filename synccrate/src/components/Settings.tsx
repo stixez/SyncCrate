@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import StoragePanel from "./StoragePanel";
 import { friendlyError } from "../lib/errors";
 import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -578,7 +579,11 @@ export default function Settings() {
         </Panel>
       </Section>
 
-      <Section num="06" title="Application" description="Support the project and keep SyncCrate up to date.">
+      <Section num="06" title="Storage" description="What SyncCrate keeps on this PC, per game.">
+        <StoragePanel />
+      </Section>
+
+      <Section num="07" title="Application" description="Support the project and keep SyncCrate up to date.">
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
