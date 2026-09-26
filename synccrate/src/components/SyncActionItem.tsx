@@ -9,6 +9,9 @@ interface SyncActionItemProps {
   excluded: boolean;
   onToggle: (path: string) => void;
   disabled?: boolean;
+  /** Skipped every time for this game. */
+  always?: boolean;
+  onAlways?: (path: string, skip: boolean) => void;
 }
 
 function getActionInfo(action: SyncAction) {
@@ -48,7 +51,7 @@ function getActionInfo(action: SyncAction) {
 }
 
 // Memoized: the plan list re-rendered every row on each progress event.
-export default memo(function SyncActionItem({ action, excluded, onToggle, disabled }: SyncActionItemProps) {
+export default memo(function SyncActionItem({ action, excluded, onToggle, disabled, always, onAlways }: SyncActionItemProps) {
   const info = getActionInfo(action);
   if (!info) return null;
 
@@ -80,6 +83,25 @@ export default memo(function SyncActionItem({ action, excluded, onToggle, disabl
         <span className={cx("text-txt", excluded && "line-through")}>{fileName}</span>
         {folder && <span className="font-mono text-[10px] text-txt-muted ml-2">{folder}</span>}
       </span>
+      {onAlways && (excluded || always) && (
+        <button
+          type="button"
+          onClick={(e) => {
+            // Inside the row's label: don't also tick the checkbox.
+            e.preventDefault();
+            e.stopPropagation();
+            onAlways(info.path, !always);
+          }}
+          disabled={disabled}
+          title={always ? "Skipped in every sync of this game. Click to stop." : "Skip this file in every sync of this game, not just this one"}
+          className={cx(
+            "shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] px-1.5 h-5 border transition-colors",
+            always ? "border-amber/60 text-amber" : "border-line-hi text-txt-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-txt",
+          )}
+        >
+          {always ? "Always skipped ✕" : "Always skip"}
+        </button>
+      )}
       <span className="font-mono text-[10.5px] text-txt-dim tabular shrink-0">{formatBytes(info.size)}</span>
     </label>
   );

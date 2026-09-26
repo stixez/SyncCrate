@@ -125,6 +125,8 @@ export interface SyncPlan {
   actions: SyncAction[];
   total_bytes: number;
   excluded: string[];
+  /** Of `excluded`, the ones always skipped for this game. */
+  always_skipped?: string[];
   resumed_files?: number;
   /** Host files skipped because they're outside this game's content folders. */
   skipped_foreign?: number;

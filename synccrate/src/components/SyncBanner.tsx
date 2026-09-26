@@ -1,13 +1,13 @@
 import { useRef, useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
-import { ArrowUpDown, ArrowDown, AlertTriangle, ChevronDown, ChevronUp, Gamepad2, Trash2, X } from "lucide-react";
+import { ArrowUpDown, ArrowDown, AlertTriangle, ChevronDown, ChevronUp, Gamepad2, Search, Trash2, X } from "lucide-react";
 import type { SyncPlan } from "../lib/types";
 import { formatBytes } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { gameLabel } from "../lib/games";
 import SyncActionItem from "./SyncActionItem";
 import * as cmd from "../lib/commands";
-import { toastError } from "../lib/toast";
-import { Banner, Button, LiveDot, ProgressBar, cx } from "./ui";
+import { toastError, toastSuccess } from "../lib/toast";
+import { Banner, Button, Input, LiveDot, ProgressBar, cx } from "./ui";
 
 interface SyncBannerProps {
   plan: SyncPlan;
@@ -150,6 +150,41 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
     },
     [excluded, session, setSyncPlan],
   );
+
+  const alwaysSkipped = useMemo(() => new Set((plan.always_skipped ?? []).map((p) => p.toLowerCase())), [plan.always_skipped]);
+  const toggleAlways = useCallback(
+    async (path: string, skip: boolean) => {
+      const peerId = session?.peers?.[0]?.id;
+      const game = useAppStore.getState().activeGame;
+      try {
+        await cmd.setAlwaysSkip(game, path, skip);
+        const current = useAppStore.getState().syncPlan ?? plan;
+        const always = (current.always_skipped ?? []).filter((p) => p.toLowerCase() !== path.toLowerCase());
+        if (skip) always.push(path);
+        // Skipping for good also skips it now.
+        if (skip && peerId && !excluded.has(path)) {
+          const updated = await cmd.updateSyncSelection(peerId, [...Array.from(excluded), path]);
+          setSyncPlan({ ...updated, always_skipped: always });
+        } else {
+          setSyncPlan({ ...current, always_skipped: always });
+        }
+        toastSuccess(skip ? "Skipped in every sync of this game from now on" : "No longer always skipped");
+      } catch (e) {
+        toastError(`Couldn't change that: ${e}`);
+      }
+    },
+    [session, plan, excluded, setSyncPlan],
+  );
+
+  // Finding one file in a 2,000-file first sync meant paging 50 at a time.
+  const [planQuery, setPlanQuery] = useState("");
+  const shownActions = useMemo(() => {
+    const q = planQuery.trim().toLowerCase();
+    if (!q) return plan.actions;
+    return plan.actions.filter((a) =>
+      (a.SendToRemote?.relative_path || a.ReceiveFromRemote?.relative_path || a.Conflict?.local.relative_path || a.Delete || "").toLowerCase().includes(q),
+    );
+  }, [plan.actions, planQuery]);
 
   const applyQuickFilter = useCallback(
     async (filter: string) => {
@@ -409,8 +444,23 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                 </button>
               ))}
             </div>
+            {plan.actions.length > 20 && (
+              <Input
+                size="sm"
+                value={planQuery}
+                onChange={(e) => setPlanQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setPlanQuery("")}
+                placeholder="Find a file in this sync..."
+                aria-label="Find a file in this sync"
+                icon={<Search size={12} />}
+                wrapperClassName="mb-2"
+              />
+            )}
             <div className="max-h-48 overflow-y-auto border border-border bg-bg divide-y divide-border/60">
-              {plan.actions.slice(0, visibleCount).map((action, i) => {
+              {planQuery && shownActions.length === 0 && (
+                <p className="px-3 py-2 text-xs text-txt-muted">No file in this sync matches "{planQuery.trim()}".</p>
+              )}
+              {shownActions.slice(0, visibleCount).map((action, i) => {
                 const path = action.SendToRemote?.relative_path
                   || action.ReceiveFromRemote?.relative_path
                   || action.Conflict?.local.relative_path
@@ -423,15 +473,17 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                     excluded={excluded.has(path)}
                     onToggle={toggleExclusion}
                     disabled={selectionLocked}
+                    always={alwaysSkipped.has(path.toLowerCase())}
+                    onAlways={toggleAlways}
                   />
                 );
               })}
-              {plan.actions.length > visibleCount && (
+              {shownActions.length > visibleCount && (
                 <button
                   onClick={() => setVisibleCount((c) => c + 50)}
                   className="w-full text-center py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim hover:text-neon transition-colors"
                 >
-                  Show more ({plan.actions.length - visibleCount} remaining)
+                  Show more ({shownActions.length - visibleCount} remaining)
                 </button>
               )}
             </div>
