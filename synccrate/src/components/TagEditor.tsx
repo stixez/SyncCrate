@@ -25,12 +25,22 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
+      // The button that opened it toggles it itself: closing here too made
+      // its click reopen the editor.
+      if ((e.target as Element | null)?.closest?.("[data-tag-trigger]")) return;
       if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose();
       }
     }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [onClose]);
 
   // Shown right away; put back if saving fails, or the chips show tags that

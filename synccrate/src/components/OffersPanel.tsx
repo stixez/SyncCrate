@@ -44,6 +44,7 @@ export default function OffersPanel() {
   }, [isHost, version, session?.session_type]);
 
   const [deciding, setDeciding] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const decide = async (offer: IncomingOffer, acceptAll?: boolean) => {
     if (deciding) return;
     setDeciding(true);
@@ -146,7 +147,19 @@ export default function OffersPanel() {
       title={active ? "Waiting for the host" : "Offer finished"}
       icon={<Gift size={16} className="text-neon" />}
       actions={
-        <Button size="sm" variant="ghost" onClick={() => cmd.cancelOffer().then(() => setOutgoing({ available: outgoing?.available ?? false, offer: null })).catch(() => {})}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={cancelling}
+          onClick={() => {
+            setCancelling(true);
+            cmd
+              .cancelOffer()
+              .then(() => setOutgoing({ available: outgoing?.available ?? false, offer: null }))
+              .catch((e) => toastError(`Couldn't cancel the offer: ${friendlyError(e)}`))
+              .finally(() => setCancelling(false));
+          }}
+        >
           {active ? "Cancel offer" : "Clear"}
         </Button>
       }

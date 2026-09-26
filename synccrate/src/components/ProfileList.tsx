@@ -7,6 +7,7 @@ import { Banner, Button, Input, Panel, SectionHeader, StatTile } from "./ui";
 import { getGameDef } from "../lib/games";
 import { isDemoMode } from "../lib/demoData";
 import { toastError } from "../lib/toast";
+import { friendlyError } from "../lib/errors";
 import * as cmd from "../lib/commands";
 import type { ProfileComparison } from "../lib/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -45,8 +46,11 @@ export default function ProfileList({ gameId }: Props) {
     return profiles.filter((p) => p.game === gameId);
   }, [profiles, gameId]);
 
+  const [saving, setSaving] = useState(false);
   const handleCreate = async () => {
-    if (!name.trim() || readOnly) return;
+    // Saving scans every file: a double-click saved two profiles.
+    if (!name.trim() || readOnly || saving) return;
+    setSaving(true);
     try {
       await cmd.saveProfile(name, desc, "\uD83D\uDCE6", gameId);
       const updated = await cmd.listProfiles();
@@ -58,6 +62,8 @@ export default function ProfileList({ gameId }: Props) {
     } catch (e) {
       addLog(`Failed to create profile: ${e}`, "error");
       toastError(`Couldn't save profile: ${e}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -74,6 +80,7 @@ export default function ProfileList({ gameId }: Props) {
       addLog("Profile deleted", "info");
     } catch (e) {
       addLog(`Failed to delete profile: ${e}`, "error");
+      toastError(`Couldn't delete the profile: ${friendlyError(e)}`);
     }
   };
 
@@ -102,6 +109,7 @@ export default function ProfileList({ gameId }: Props) {
       }
     } catch (e) {
       addLog(`Failed to export profile: ${e}`, "error");
+      toastError(`Couldn't export the profile: ${friendlyError(e)}`);
     }
   };
 
@@ -120,6 +128,7 @@ export default function ProfileList({ gameId }: Props) {
       }
     } catch (e) {
       addLog(`Failed to import profile: ${e}`, "error");
+      toastError(`Couldn't import the profile: ${friendlyError(e)}`);
     }
   };
 
@@ -197,6 +206,7 @@ export default function ProfileList({ gameId }: Props) {
             onExport={() => handleExport(profile.id, profile.name)}
             isDeletePending={deleteConfirm === profile.id}
             onCancelDelete={() => setDeleteConfirm(null)}
+            compareDisabled={readOnly}
           />
         ))}
 
@@ -221,8 +231,8 @@ export default function ProfileList({ gameId }: Props) {
                 className="input !h-auto py-2 resize-none"
               />
               <div className="flex gap-2">
-                <Button variant="primary" block onClick={handleCreate} disabled={!name.trim()}>
-                  Save Profile
+                <Button variant="primary" block onClick={handleCreate} disabled={!name.trim() || saving}>
+                  {saving ? "Saving..." : "Save Profile"}
                 </Button>
                 <Button variant="ghost" onClick={() => setShowCreate(false)}>
                   Cancel
