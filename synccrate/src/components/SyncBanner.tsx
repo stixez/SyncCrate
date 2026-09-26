@@ -35,6 +35,8 @@ function formatEstimate(seconds: number): string {
 
 export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBannerProps) {
   const syncProgress = useAppStore((s) => s.syncProgress);
+  const backupProgress = useAppStore((s) => s.backupProgress);
+  const preparing = !!busy && !syncProgress;
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
   const session = useAppStore((s) => s.session);
   const startTimeRef = useRef<number | null>(null);
@@ -205,7 +207,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
     ? (syncProgress.bytes_sent / syncProgress.bytes_total) * 100
     : 0;
   const blocked = conflictCount > 0;
-  const state = syncProgress ? "Syncing" : blocked ? "Blocked" : "Ready";
+  const state = syncProgress ? "Syncing" : preparing ? "Preparing" : blocked ? "Blocked" : "Ready";
 
   const QUICK_FILTERS: { id: string; label: string }[] = [
     { id: "select_all", label: "Select all" },
@@ -228,13 +230,22 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
           <h3 className="display text-[1.5rem] text-txt">
             {syncProgress ? (
               <>Syncing <span className="text-neon">{Math.round(pct)}%</span></>
+            ) : preparing ? (
+              <>Getting <span className="text-neon">ready</span></>
             ) : blocked ? (
               <>{conflictCount} conflict{conflictCount !== 1 ? "s" : ""} <span className="text-amber">to resolve</span></>
             ) : (
               <>Ready to <span className="text-neon">sync</span></>
             )}
           </h3>
-          {conflictCount > 0 && (
+          {preparing && (
+            <p className="text-xs text-txt-dim mt-2">
+              {backupProgress?.phase === "presync" && backupProgress.files_total > 0
+                ? `Backing up the files this sync replaces: ${backupProgress.files_done} of ${backupProgress.files_total}`
+                : "Saving copies of the files this sync changes, then downloading."}
+            </p>
+          )}
+          {conflictCount > 0 && !preparing && (
             <p className="text-xs text-txt-dim mt-2">
               {conflictCount} conflict{conflictCount !== 1 ? "s" : ""} must be resolved before syncing
               {modConflicts > 0 && saveConflicts > 0 && ` (${modConflicts} mod, ${saveConflicts} save)`}

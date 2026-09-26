@@ -80,6 +80,9 @@ interface AppState {
   // True while a join/connect handshake is in flight (before peer-connected fires)
   isConnecting: boolean;
   setIsConnecting: (connecting: boolean) => void;
+  /** Auto-reconnect in progress (lost the host). Set to null to cancel it. */
+  reconnecting: { host: string; attempt: number; max: number } | null;
+  setReconnecting: (r: { host: string; attempt: number; max: number } | null) => void;
 
   // Last connect attempt (exact args) so a PIN rejection can retry it with a PIN
   lastConnectAttempt: ConnectAttempt | null;
@@ -254,6 +257,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   isConnecting: false,
   setIsConnecting: (connecting) => set({ isConnecting: connecting }),
+  reconnecting: null,
+  setReconnecting: (reconnecting) => set({ reconnecting }),
 
   lastConnectAttempt: null,
   setLastConnectAttempt: (attempt) => set({ lastConnectAttempt: attempt }),

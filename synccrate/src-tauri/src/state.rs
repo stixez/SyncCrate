@@ -1,4 +1,3 @@
-use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -367,7 +366,7 @@ pub struct AppState {
     pub discovered_peers: Vec<PeerInfo>,
     pub connections: HashMap<String, PeerConnection>,
     #[allow(dead_code)]
-    pub file_watcher: Option<RecommendedWatcher>,
+    pub file_watcher: Option<crate::watcher::file_watcher::FolderWatcher>,
     /// Game registry loaded at startup (immutable after init).
     pub game_registry: GameRegistry,
     /// Game IDs the user has added to their library.

@@ -1,29 +1,51 @@
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use std::time::Duration;
 use tauri::Emitter;
+
+/// The running watcher. Dropping it stops watching (and ends its thread,
+/// which only holds a weak reference).
+pub struct FolderWatcher {
+    _inner: Arc<Mutex<RecommendedWatcher>>,
+}
+
+/// How often folders that didn't exist yet are looked for again.
+const MISSING_RECHECK: Duration = Duration::from_secs(5);
+
+/// Watch `paths`; those that don't exist yet are picked up once they do.
+/// Before, a Saves or Mods folder created later (often by the first sync)
+/// wasn't watched until the game or its path changed.
+fn watch_existing(watcher: &mut RecommendedWatcher, paths: &[String]) -> Vec<String> {
+    let mut missing = Vec::new();
+    for path_str in paths {
+        let p = Path::new(path_str);
+        if !p.is_dir() {
+            missing.push(path_str.clone());
+            continue;
+        }
+        // One unwatchable folder (permissions, network drive, ...) shouldn't
+        // disable change detection for all the others.
+        if let Err(e) = watcher.watch(p, RecursiveMode::Recursive) {
+            log::warn!("Cannot watch {}: {}", path_str, e);
+        }
+    }
+    missing
+}
 
 /// Start watching a dynamic list of content type directories.
 pub fn start_watching(
     paths: &[String],
     app: tauri::AppHandle,
-) -> Result<RecommendedWatcher, String> {
+) -> Result<FolderWatcher, String> {
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2)))
         .map_err(|e| e.to_string())?;
-
-    for path_str in paths {
-        let p = Path::new(path_str);
-        if p.exists() {
-            // One unwatchable folder (permissions, network drive, ...) shouldn't
-            // disable change detection for all the others.
-            if let Err(e) = watcher.watch(p, RecursiveMode::Recursive) {
-                log::warn!("Cannot watch {}: {}", path_str, e);
-            }
-        }
-    }
+    let mut missing = watch_existing(&mut watcher, paths);
+    let inner = Arc::new(Mutex::new(watcher));
+    let weak = Arc::downgrade(&inner);
 
     // Spawn a thread to process FS events with debouncing
     let app_handle = app.clone();
@@ -40,6 +62,7 @@ pub fn start_watching(
         let mut first_pending: Option<std::time::Instant> = None;
         let mut pending_paths: Vec<String> = Vec::new();
         let mut pending_kind: Option<String> = None;
+        let mut last_recheck = std::time::Instant::now();
 
         let emit = |paths: &mut Vec<String>, kind: &mut Option<String>| {
             let _ = app_handle.emit(
@@ -72,6 +95,22 @@ pub fn start_watching(
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
 
+            if !missing.is_empty() && last_recheck.elapsed() >= MISSING_RECHECK {
+                last_recheck = std::time::Instant::now();
+                if missing.iter().any(|p| Path::new(p).is_dir()) {
+                    let Some(w) = weak.upgrade() else { break };
+                    let Ok(mut w) = w.lock() else { break };
+                    let appeared: Vec<String> = missing.iter().filter(|p| Path::new(p).is_dir()).cloned().collect();
+                    missing = watch_existing(&mut w, &missing);
+                    // Files may have landed before the watch started: rescan once.
+                    pending_paths.extend(appeared);
+                    pending_kind.get_or_insert_with(|| "FolderCreated".to_string());
+                    let now = std::time::Instant::now();
+                    last_event = Some(now);
+                    first_pending.get_or_insert(now);
+                }
+            }
+
             let settled = last_event.is_some_and(|t| t.elapsed() >= quiet);
             let overdue = first_pending.is_some_and(|t| t.elapsed() >= max_wait);
             if pending_kind.is_some() && (settled || overdue) {
@@ -81,7 +120,7 @@ pub fn start_watching(
         }
     });
 
-    Ok(watcher)
+    Ok(FolderWatcher { _inner: inner })
 }
 
 /// Content folders of the active game, as absolute paths.
@@ -115,5 +154,25 @@ pub fn restart_for_active(state: &mut crate::state::AppState, app: tauri::AppHan
     match start_watching(&paths, app) {
         Ok(w) => state.file_watcher = Some(w),
         Err(e) => log::warn!("Failed to start file watcher: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_folders_are_reported_for_a_later_watch() {
+        let dir = crate::testutil::temp_dir("watch");
+        std::fs::create_dir_all(dir.join("Mods")).unwrap();
+        let (tx, _rx) = mpsc::channel::<Result<Event, notify::Error>>();
+        let mut w = RecommendedWatcher::new(tx, Config::default()).unwrap();
+        let mods = dir.join("Mods").to_string_lossy().to_string();
+        let saves = dir.join("Saves").to_string_lossy().to_string();
+        assert_eq!(watch_existing(&mut w, &[mods.clone(), saves.clone()]), vec![saves.clone()]);
+        std::fs::create_dir_all(dir.join("Saves")).unwrap();
+        assert!(watch_existing(&mut w, &[saves]).is_empty(), "watched once it exists");
+        drop(w);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

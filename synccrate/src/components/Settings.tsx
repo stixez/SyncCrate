@@ -539,8 +539,8 @@ export default function Settings() {
               <Toggle
                 checked={keepHistory}
                 onChange={(v) => saveSetting(v, keepHistory, setKeepHistory, cmd.setKeepFileHistory)}
-                label="Keep earlier versions of synced files"
-                description="When a sync replaces or deletes a file, keep the old one so you can put just that file back (Backups → File history)."
+                label="Keep earlier versions of files"
+                description="When a sync, a duplicate cleanup or an install replaces or deletes a file, keep the old one so you can put just that file back (Backups → File history)."
               />
             </SettingRow>
             <SettingRow>

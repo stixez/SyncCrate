@@ -32,6 +32,7 @@ interface Props {
 export default function GameDashboard({ gameId }: Props) {
   const session = useAppStore((s) => s.session);
   const isConnecting = useAppStore((s) => s.isConnecting);
+  const reconnecting = useAppStore((s) => s.reconnecting);
   const manifest = useAppStore((s) => s.manifest);
   const setManifest = useAppStore((s) => s.setManifest);
   const syncPlan = useAppStore((s) => s.syncPlan);
@@ -340,7 +341,18 @@ export default function GameDashboard({ gameId }: Props) {
 
         {writeAccessBanner}
 
-        {isConnecting && (
+        {reconnecting && (
+          <Banner
+            tone="warn"
+            icon={<RefreshCw size={16} className="animate-spin" />}
+            title={`Lost the connection to ${reconnecting.host}. Reconnecting…`}
+            actions={<Button size="sm" variant="ghost" onClick={() => useAppStore.getState().setReconnecting(null)}>Stop trying</Button>}
+          >
+            Attempt {reconnecting.attempt} of {reconnecting.max}. An interrupted sync picks up where it stopped.
+          </Banner>
+        )}
+
+        {isConnecting && !reconnecting && (
           <Banner tone="info" icon={<RefreshCw size={16} className="animate-spin" />} title="Connecting to host…">
             Finishing the handshake. A large mod folder can take a moment to scan on the host.
           </Banner>
