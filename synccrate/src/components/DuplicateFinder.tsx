@@ -178,11 +178,11 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
                     variant="ghost"
                     onClick={() => disable([g])}
                     disabled={busy || extras(g).every((f) => isDisabledPath(f.relative_path))}
-                    className="!h-6"
+                    className="h-6!"
                   >
                     Disable extras
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => askDelete([g])} disabled={busy} className="!h-6 !text-status-red">
+                  <Button size="sm" variant="ghost" onClick={() => askDelete([g])} disabled={busy} className="h-6! text-status-red!">
                     Delete extras
                   </Button>
                 </div>

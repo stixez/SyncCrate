@@ -16,40 +16,41 @@ tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-tauri-plugin-notification = "~2.3"
+tauri-plugin-notification = "~2.4"
 tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-sha2 = "0.10"
-notify = "7"
-mdns-sd = "0.11"
+sha2 = "0.11"
+notify = "8"
+mdns-sd = "0.21"
 walkdir = "2"
 uuid = { version = "1", features = ["v4"] }
-dirs = "6"
+dirs = "7"
 log = "0.4"
 env_logger = "0.11"
 hex = "0.4"
 chrono = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 tokio-util = { version = "0.7", features = ["codec"] }
-rand = "0.8"
-socket2 = "0.5"
-if-addrs = "0.13"
+rand = "0.10"
+socket2 = "0.6"
+if-addrs = "0.15"
 rayon = "1.10"
-zstd = "0.13"
-# Both already in the tree (zip 4.6 via tauri, flate2 via png and the updater): read mod metadata out of .jar files.
-zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
+zstd = "0.14"
+# Read mod metadata out of .jar files. flate2 is shared with png and the updater;
+# tauri still pulls zip 4, so two zip versions are built until it moves on.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
 flate2 = "1.1"
 iroh = "1.2"
 # Both already in the tree via iroh / the updater; same versions, ring provider.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
-# Already in the tree (windows-rs); reads uninstall/GOG keys as UTF-16, which
+# Reads uninstall/GOG keys as UTF-16 (older copies also come in via windows-rs), which
 # `reg query` mangles through the OEM code page (e.g. "The Sims™ 4").
 [target.'cfg(windows)'.dependencies]
-windows-registry = "0.6"
+windows-registry = "0.100"
 
 # Desktop only; forwards a second launch's argv (links, .scpack paths) to
 # the running window instead of opening another one.

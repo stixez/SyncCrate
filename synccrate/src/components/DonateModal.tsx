@@ -64,7 +64,7 @@ export default function DonateModal() {
                 <Coffee size={18} className="text-amber" />
               </div>
               <div className="flex-1">
-                <p className="font-display font-bold uppercase tracking-[0.05em] text-sm">Buy me a coffee</p>
+                <p className="font-display font-bold uppercase tracking-wider text-sm">Buy me a coffee</p>
                 <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-txt-muted mt-0.5">One-time support</p>
               </div>
               <ExternalLink size={14} className="text-amber opacity-40 group-hover:opacity-100 transition-opacity" />

@@ -332,7 +332,7 @@ export default function ModpackList({ gameId }: Props) {
               placeholder="Description (optional)..."
               aria-label="Pack description"
               rows={2}
-              className="input !h-auto py-2 resize-none"
+              className="input h-auto! py-2 resize-none"
             />
             {contentTypes.length > 0 && (
               <div>
@@ -569,7 +569,7 @@ function FileGroupBox({ title, tone, entries }: { title: string; tone: "red" | "
   const groups = groupByContentType(entries);
   return (
     <div className="bg-bg border border-border">
-      <p className={cx("hud-label px-3 py-2 border-b border-border", tone === "red" ? "!text-status-red" : tone === "amber" ? "!text-amber" : tone === "green" ? "!text-status-green" : "!text-txt-dim")}>{title}</p>
+      <p className={cx("hud-label px-3 py-2 border-b border-border", tone === "red" ? "text-status-red!" : tone === "amber" ? "text-amber!" : tone === "green" ? "text-status-green!" : "text-txt-dim!")}>{title}</p>
       <div className="max-h-40 overflow-y-auto px-3 py-2 space-y-1.5">
         {groups.map(([type, files]) => (
           <div key={type}>

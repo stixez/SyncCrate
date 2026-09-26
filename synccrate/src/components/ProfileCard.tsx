@@ -37,14 +37,14 @@ export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDel
           {monogram}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-display font-bold uppercase tracking-[0.03em] text-[1.05rem] leading-tight line-clamp-2 break-words" title={profile.name}>
+          <h3 className="font-display font-bold uppercase tracking-[0.03em] text-[1.05rem] leading-tight line-clamp-2 wrap-break-word" title={profile.name}>
             {profile.name}
           </h3>
           {profile.author && <p className="font-mono text-[11px] text-txt-muted mt-0.5 truncate">by {profile.author}</p>}
         </div>
         <div className="text-right shrink-0">
           <p className="font-display font-bold text-[1.7rem] leading-none tabular text-txt">{profile.mods.length}</p>
-          <p className="hud-label !text-[10px] mt-1">mods</p>
+          <p className="hud-label text-[10px]! mt-1">mods</p>
         </div>
       </div>
 
@@ -69,7 +69,7 @@ export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDel
               Compare
             </Button>
             <Button size="sm" variant="ghost" onClick={onExport} aria-label="Export profile" title="Export profile" icon={<Download size={13} />} />
-            <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete profile" title="Delete profile" icon={<Trash2 size={13} />} className="hover:!text-status-red" />
+            <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete profile" title="Delete profile" icon={<Trash2 size={13} />} className="hover:text-status-red!" />
           </div>
         )}
       </div>

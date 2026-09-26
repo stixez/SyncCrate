@@ -441,7 +441,7 @@ export default function BackupList({ gameId }: Props) {
                         onClick={() => (restorePending ? setRestoreConfirm(null) : askRestore(backup.id))}
                         disabled={busy}
                         icon={<RotateCcw size={12} />}
-                        className={restorePending ? "!text-amber [--btn-line:rgb(var(--color-amber))] [--btn-fill:rgb(var(--color-amber)/0.1)]" : undefined}
+                        className={restorePending ? "text-amber! [--btn-line:rgb(var(--color-amber))] [--btn-fill:rgb(var(--color-amber)/0.1)]" : undefined}
                       >
                         {restorePending ? "Cancel" : "Restore"}
                       </Button>

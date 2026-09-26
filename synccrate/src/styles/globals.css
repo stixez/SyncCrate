@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+/* The theme stays in the JS config: its colors are rgb(var(--color-*) / <alpha-value>)
+ * triplets that lib/theme.ts rewrites per game at runtime. */
+@config "../../tailwind.config.js";
+/* safelist is gone in v4: these are built from strings at runtime. */
+@source inline("bg-accent-light bg-status-green bg-status-yellow bg-status-red");
 
 /*
  * Design tokens. Colors are RGB triplets so Tailwind's `/ <alpha>` works.
@@ -62,6 +65,20 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+  }
+
+  /* Tailwind v3 defaults that v4 dropped: a bare `border` was gray, not
+   * currentColor, and buttons showed a pointer. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: rgb(var(--color-border));
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 
   body {

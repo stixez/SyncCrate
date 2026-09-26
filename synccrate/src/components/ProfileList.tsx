@@ -197,7 +197,7 @@ export default function ProfileList({ gameId }: Props) {
             <div className="grid grid-cols-2 gap-3 mt-4">
               {comparison.missing.length > 0 && (
                 <div className="bg-bg border border-border">
-                  <p className="hud-label px-3 py-2 border-b border-border !text-status-red">Missing mods</p>
+                  <p className="hud-label px-3 py-2 border-b border-border text-status-red!">Missing mods</p>
                   <div className="max-h-32 overflow-y-auto px-3 py-2 space-y-0.5">
                     {comparison.missing.map((p) => (
                       <p key={p} className="text-[11px] text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
@@ -207,7 +207,7 @@ export default function ProfileList({ gameId }: Props) {
               )}
               {comparison.modified.length > 0 && (
                 <div className="bg-bg border border-border">
-                  <p className="hud-label px-3 py-2 border-b border-border !text-amber">Modified mods</p>
+                  <p className="hud-label px-3 py-2 border-b border-border text-amber!">Modified mods</p>
                   <div className="max-h-32 overflow-y-auto px-3 py-2 space-y-0.5">
                     {comparison.modified.map((p) => (
                       <p key={p} className="text-[11px] text-txt-dim font-mono truncate">{p.split("/").pop()}</p>
@@ -253,7 +253,7 @@ export default function ProfileList({ gameId }: Props) {
                 placeholder="Description..."
                 aria-label="Profile description"
                 rows={2}
-                className="input !h-auto py-2 resize-none"
+                className="input h-auto! py-2 resize-none"
               />
               <div className="flex gap-2">
                 <Button variant="primary" block onClick={handleCreate} disabled={!name.trim() || saving}>
@@ -275,7 +275,7 @@ export default function ProfileList({ gameId }: Props) {
             </span>
             <span>
               <span className="hud-label block mb-1">// Slot empty</span>
-              <span className="font-display font-semibold uppercase tracking-[0.05em] text-[15px] text-txt group-hover:text-neon transition-colors">
+              <span className="font-display font-semibold uppercase tracking-wider text-[15px] text-txt group-hover:text-neon transition-colors">
                 Create New Profile
               </span>
             </span>

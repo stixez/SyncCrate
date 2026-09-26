@@ -33,7 +33,7 @@ export default function InstallResultsModal({ results, onClose, onResolveDuplica
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Install results">
+    <div className="fixed inset-0 z-100 bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Install results">
       <div ref={dialogRef} className="panel panel-accent max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border">
           <div>

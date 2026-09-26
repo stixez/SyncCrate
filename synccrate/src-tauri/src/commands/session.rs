@@ -1,7 +1,6 @@
 use crate::network::discovery;
 use crate::state::{AppState, PeerInfo, SessionInfo, SessionStatus, SessionType, SyncFolderPermissions};
 use crate::network::protocol::{self, Message};
-use rand::Rng;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
@@ -79,7 +78,7 @@ fn valid_pin(pin: &str) -> bool {
 }
 
 fn random_pin() -> String {
-    rand::thread_rng().gen_range(10000..=65535u16).to_string()
+    rand::random_range(10000..=65535u16).to_string()
 }
 
 fn saved_or_new_pin() -> String {

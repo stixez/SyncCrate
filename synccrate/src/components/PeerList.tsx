@@ -60,7 +60,7 @@ export default function PeerList() {
       title="Who's connected"
       icon={<Users size={15} className="text-neon" />}
       actions={<Badge tone="neon" dot>{session.peers.length} online</Badge>}
-      bodyClassName="!px-0 !pb-0"
+      bodyClassName="px-0! pb-0!"
     >
       <div className="border-t border-border">
         {session.peers.map((peer) => {

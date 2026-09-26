@@ -112,7 +112,7 @@ function Line({ m, highlight }: { m: ChatMessage; highlight: boolean }) {
     );
   }
   return (
-    <p className={cx("text-[13px] text-txt-dim break-words", highlight && "border-l-2 border-neon pl-2 text-txt")}>
+    <p className={cx("text-[13px] text-txt-dim wrap-break-word", highlight && "border-l-2 border-neon pl-2 text-txt")}>
       <span className="font-mono text-[10px] text-txt-muted tabular mr-1.5">{time(m.at)}</span>
       <span className="font-medium text-txt">{m.from}</span> {m.text}
     </p>

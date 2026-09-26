@@ -143,7 +143,7 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
           aria-label="Custom tag"
           className="input input-sm input-mono flex-1"
         />
-        <Button size="sm" onClick={addCustom} aria-label="Add custom tag" icon={<Plus size={13} />} className="!h-[30px]" />
+        <Button size="sm" onClick={addCustom} aria-label="Add custom tag" icon={<Plus size={13} />} className="h-[30px]!" />
       </div>
     </div>
   );

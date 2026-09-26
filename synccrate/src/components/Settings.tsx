@@ -312,7 +312,7 @@ export default function Settings() {
                           fallback={<GameIcon iconName={game.icon} size={14} className={game.color} />}
                         />
                       </span>
-                      <h3 className="font-display font-semibold uppercase tracking-[0.05em] text-[14px]">{game.label}</h3>
+                      <h3 className="font-display font-semibold uppercase tracking-wider text-[14px]">{game.label}</h3>
                       {unavailable.includes(game.id) ? (
                         <Badge tone="amber" dot title="The saved folder is kept; SyncCrate won't scan or sync this game until it's back.">
                           Folder not found — drive disconnected?
@@ -361,9 +361,9 @@ export default function Settings() {
                         placeholder={`Path to ${game.label} folder...`}
                         aria-label={`${game.label} folder path`}
                         wrapperClassName="flex-1"
-                        className="!text-[12px] !tracking-[0.02em]"
+                        className="text-[12px]! tracking-[0.02em]!"
                       />
-                      <Button size="sm" onClick={() => handleBrowse(game.id)} icon={<FolderOpen size={13} />} className="!h-[30px]">
+                      <Button size="sm" onClick={() => handleBrowse(game.id)} icon={<FolderOpen size={13} />} className="h-[30px]!">
                         Browse
                       </Button>
                     </div>
@@ -393,8 +393,8 @@ export default function Settings() {
               aria-label="Session port"
               className={cx(
                 "input input-mono w-32",
-                portStatus === "taken" && "!border-status-red",
-                portStatus === "available" && "!border-status-green",
+                portStatus === "taken" && "border-status-red!",
+                portStatus === "available" && "border-status-green!",
               )}
             />
             <Button variant="primary" onClick={handlePortSave} disabled={portStatus === "taken"}>
@@ -445,9 +445,9 @@ export default function Settings() {
               placeholder="e.g. *.ts4script or Saves/*"
               aria-label="Sync exclusion pattern"
               wrapperClassName="flex-1"
-              className="!text-[12px]"
+              className="text-[12px]!"
             />
-            <Button size="sm" onClick={handleAddPattern} icon={<Plus size={13} />} className="!h-[30px]">
+            <Button size="sm" onClick={handleAddPattern} icon={<Plus size={13} />} className="h-[30px]!">
               Add
             </Button>
           </div>
@@ -789,7 +789,7 @@ function AppearanceSection() {
 function AccentPreview() {
   return (
     <div aria-hidden className="panel panel-accent w-[216px] shrink-0">
-      <div className="p-3.5 space-y-3">
+      <div className="p-3.5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="hud-label"><b>// Preview</b></span>
           <Badge tone="neon">Live</Badge>

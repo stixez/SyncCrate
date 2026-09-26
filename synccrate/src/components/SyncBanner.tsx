@@ -417,7 +417,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
         <button
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
-          className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
+          className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-neon transition-colors"
         >
           {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           {expanded ? "Hide files" : `Files in this sync (${plan.actions.length})`}
@@ -437,7 +437,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                     "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
                     i > 0 && "-ml-px",
                     quickFilter === f.id
-                      ? "relative z-[1] bg-neon/10 border-neon text-neon"
+                      ? "relative z-1 bg-neon/10 border-neon text-neon"
                       : "bg-bg border-line-hi text-txt-dim hover:text-txt",
                   )}
                 >
@@ -512,7 +512,7 @@ function Readout({
 }) {
   return (
     <div className={cx("px-5 py-3 min-w-0", !last && "border-r border-border")}>
-      <p className={cx("hud-label flex items-center gap-1.5", warn && "!text-amber")}>
+      <p className={cx("hud-label flex items-center gap-1.5", warn && "text-amber!")}>
         {icon}
         {label}
       </p>

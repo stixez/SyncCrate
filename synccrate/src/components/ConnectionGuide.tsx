@@ -40,10 +40,10 @@ export default function ConnectionGuide() {
           </p>
         </Panel>
       </div>
-      <div className="border border-border border-l-2 border-l-amber bg-amber/[0.05] p-4 flex items-start gap-3">
+      <div className="border border-border border-l-2 border-l-amber bg-amber/5 p-4 flex items-start gap-3">
         <AlertTriangle size={16} className="text-amber shrink-0 mt-0.5" />
         <div className="min-w-0">
-          <p className="hud-label !text-amber mb-2">// Still not connecting?</p>
+          <p className="hud-label text-amber! mb-2">// Still not connecting?</p>
           <ol className="text-[11.5px] text-txt-dim leading-relaxed space-y-1.5">
             {TROUBLESHOOTING.map((tip, i) => (
               <li key={i} className="flex gap-2.5">

@@ -55,7 +55,7 @@ export function FirewallCheck({ compact = false }: { compact?: boolean }) {
     <div className="border border-status-red/40 border-l-2 border-l-status-red bg-status-red/[0.07] p-3.5 flex items-start gap-3" role="alert">
       <ShieldAlert size={16} className="text-status-red shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <p className="font-display font-semibold uppercase tracking-[0.05em] text-[13px] text-status-red leading-snug">
+        <p className="font-display font-semibold uppercase tracking-wider text-[13px] text-status-red leading-snug">
           {status.has_block_rule ? "Windows Firewall is blocking SyncCrate" : "SyncCrate isn't allowed through Windows Firewall"}
         </p>
         <p className="text-[11.5px] text-txt-dim leading-relaxed mt-1">
@@ -150,7 +150,7 @@ export default function NetworkHealth() {
           />
           <Button
             size="sm"
-            className="!h-[30px]"
+            className="h-[30px]!"
             onClick={runTest}
             disabled={testing || !testIp.trim()}
             icon={testing ? <Loader2 size={12} className="animate-spin" /> : <PlugZap size={12} />}

@@ -30,7 +30,7 @@ export default function DonationBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="hud-label mb-1"><b>//</b> Milestone</p>
-          <h4 className="font-display font-semibold uppercase tracking-[0.05em] text-[0.95rem] leading-tight">{title}</h4>
+          <h4 className="font-display font-semibold uppercase tracking-wider text-[0.95rem] leading-tight">{title}</h4>
           <p className="text-xs text-txt-dim mt-1.5">{message}</p>
           <div className="flex items-center gap-2 mt-3">
             <Button variant="primary" size="sm" onClick={handleDonate} icon={<Coffee size={12} />}>

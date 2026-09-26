@@ -2,9 +2,9 @@ import { Download } from "lucide-react";
 
 export default function DropZoneOverlay() {
   return (
-    <div className="fixed inset-0 z-[100] bg-bg/85 backdrop-blur-sm flex items-center justify-center pointer-events-none p-10">
+    <div className="fixed inset-0 z-100 bg-bg/85 backdrop-blur-xs flex items-center justify-center pointer-events-none p-10">
       <div className="corner-brackets w-full max-w-xl">
-        <div className="border border-dashed border-neon/60 bg-neon/[0.04] px-10 py-12 flex flex-col items-center text-center">
+        <div className="border border-dashed border-neon/60 bg-neon/4 px-10 py-12 flex flex-col items-center text-center">
           <div className="w-16 h-16 grid place-items-center border border-neon/50 bg-bg mb-5">
             <Download size={30} className="text-neon animate-bounce" />
           </div>
