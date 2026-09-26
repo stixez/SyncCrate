@@ -564,6 +564,7 @@ export function useTauriEvents() {
             toastWithLog(`Couldn't send a file to ${who}: ${friendlyError(event.payload.error)}`, "error");
           }
         }),
+        listen("game-info-ready", () => useAppStore.getState().bumpGameInfoVersion()),
         listen("hidden-to-tray", () => {
           // Once: closing looked like quitting, even while hosting.
           try {

@@ -208,10 +208,22 @@ pub async fn get_game_art(
     };
 
     if !dest.is_file() {
-        if let Err(e) = download(&urls, &dest).await {
-            log::debug!("Game art for {game_id} ({kind}) unavailable: {e}");
+        // Art that isn't there (a game without a hero image, or offline) was
+        // fetched again on every launch, with a 20 s timeout, holding up the
+        // art that does exist. Remember a miss for a day.
+        let miss = dest.with_extension("miss");
+        let recent_miss = std::fs::metadata(&miss)
+            .and_then(|m| m.modified())
+            .is_ok_and(|t| t.elapsed().is_ok_and(|age| age < std::time::Duration::from_secs(24 * 3600)));
+        if recent_miss {
             return Ok(None);
         }
+        if let Err(e) = download(&urls, &dest).await {
+            log::debug!("Game art for {game_id} ({kind}) unavailable: {e}");
+            let _ = std::fs::write(&miss, b"");
+            return Ok(None);
+        }
+        let _ = std::fs::remove_file(&miss);
     }
     Ok(data_url(&dest))
 }

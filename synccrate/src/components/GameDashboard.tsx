@@ -261,11 +261,13 @@ export default function GameDashboard({ gameId }: Props) {
     }
   }, [gameId, setGameInfo, addLog]);
 
+  // Again once startup's pack detection is done (gameInfoVersion).
+  const gameInfoVersion = useAppStore((s) => s.gameInfoVersion);
   useEffect(() => {
     cmd.getGameInfo(gameId).then((info) => {
       if (info) setGameInfo(info);
     }).catch(() => {});
-  }, [gameId, setGameInfo]);
+  }, [gameId, setGameInfo, gameInfoVersion]);
 
   const [localVersion, setLocalVersion] = useState("");
   useEffect(() => {

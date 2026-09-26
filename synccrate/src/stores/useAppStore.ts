@@ -185,6 +185,9 @@ interface AppState {
 
   gameInfo: GameInfo | null;
   setGameInfo: (info: GameInfo | null) => void;
+  /** Bumped when the backend finished detecting packs/versions at startup. */
+  gameInfoVersion: number;
+  bumpGameInfoVersion: () => void;
 
   modCompatibility: ModCompatibility[];
   setModCompatibility: (compat: ModCompatibility[]) => void;
@@ -361,6 +364,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),
 
   gameInfo: null,
+  gameInfoVersion: 0,
+  bumpGameInfoVersion: () => set((s) => ({ gameInfoVersion: s.gameInfoVersion + 1 })),
   setGameInfo: (info) => set({ gameInfo: info }),
 
   modCompatibility: [],

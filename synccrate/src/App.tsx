@@ -1,19 +1,21 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { Toaster } from "sonner";
 import Layout from "./components/Layout";
 import GameDashboard from "./components/GameDashboard";
 import ContentBrowser from "./components/ContentBrowser";
-import ProfileList from "./components/ProfileList";
-import BackupList from "./components/BackupList";
-import ModpackList from "./components/ModpackList";
-import CrewList from "./components/CrewList";
-import ActivityLog from "./components/ActivityLog";
-import Settings from "./components/Settings";
-import GameBrowser from "./components/GameBrowser";
+// Pages you don't see at launch load when first opened: one 660 KB bundle
+// had to be parsed before anything showed.
+const ProfileList = lazy(() => import("./components/ProfileList"));
+const BackupList = lazy(() => import("./components/BackupList"));
+const ModpackList = lazy(() => import("./components/ModpackList"));
+const CrewList = lazy(() => import("./components/CrewList"));
+const ActivityLog = lazy(() => import("./components/ActivityLog"));
+const Settings = lazy(() => import("./components/Settings"));
+const GameBrowser = lazy(() => import("./components/GameBrowser"));
+const Guide = lazy(() => import("./components/Guide"));
 import WelcomeScreen, { isOnboardingComplete } from "./components/WelcomeScreen";
 import DropZoneOverlay from "./components/DropZoneOverlay";
 import InstallResultsModal from "./components/InstallResultsModal";
-import Guide from "./components/Guide";
 import { useAppStore } from "./stores/useAppStore";
 import { useLogStore } from "./stores/useLogStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
@@ -90,18 +92,20 @@ function App() {
   useEffect(() => {
     async function init() {
       try {
-        // Load game registry from backend
-        const registry = await cmd.getGameRegistryCmd();
+        // Independent reads, in parallel: the window stayed blank for the
+        // whole chain of one-after-another requests.
+        const [registry, library, allPaths, backendActive] = await Promise.all([
+          cmd.getGameRegistryCmd(),
+          cmd.getUserLibrary(),
+          cmd.getAllGamePaths(),
+          cmd.getActiveGame(),
+        ]);
         setGameRegistry(registry);
         useAppStore.getState().setGameRegistry(registry);
-
-        // Load user library
-        const library = await cmd.getUserLibrary();
         useAppStore.getState().setMyLibrary(library);
         cmd.getHiddenGames().then((h) => useAppStore.getState().setHiddenGames(h)).catch(() => {});
 
-        // Load all known game paths (saved config + auto-detected)
-        const allPaths = await cmd.getAllGamePaths();
+        // All known game paths (saved config + auto-detected)
         const paths: Record<string, string> = {};
         for (const [id, p] of Object.entries(allPaths)) {
           if (p) paths[id] = p;
@@ -116,7 +120,6 @@ function App() {
 
         // The backend restores the saved active game; mirror it instead of
         // assuming the store default.
-        const backendActive = await cmd.getActiveGame();
         useAppStore.getState().setActiveGame(backendActive);
 
         // Auto-select a game if none selected (skip during onboarding): the saved
@@ -410,7 +413,7 @@ function App() {
 
   return (
     <Layout>
-      {renderPage()}
+      <Suspense fallback={null}>{renderPage()}</Suspense>
       {isDragging && <DropZoneOverlay />}
       {installResults && (
         <InstallResultsModal
