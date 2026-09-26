@@ -24,6 +24,7 @@ import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
 import UndoLastSync from "./UndoLastSync";
 import PlayButton from "./PlayButton";
+import WhatsNew from "./WhatsNew";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
 import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
@@ -994,6 +995,7 @@ export default function GameDashboard({ gameId }: Props) {
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
         </section>
       )}
+      {isClient && !syncProgress && <WhatsNew gameId={gameId} />}
       {isClient && !syncPlan && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
