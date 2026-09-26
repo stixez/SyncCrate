@@ -469,6 +469,7 @@ export type Page =
   | "crews"
   | "activity"
   | "settings"
+  | "guide"
   | "game-browser";
 
 export interface BackupInfo {

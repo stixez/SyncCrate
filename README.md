@@ -51,6 +51,8 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 3. **One friend clicks Start Hosting.** Everyone else picks the host under **Scan for Hosts** (same network) or pastes the join code (anywhere).
 4. **Click Compare & Sync**, check the plan, then **Sync Now**.
 
+New to it? The **Guide** page in the app's sidebar walks through every feature.
+
 > [!TIP]
 > Can't connect? On the **host** PC click **Fix Windows Firewall** (shown while hosting and in *Network Check*). It asks for admin permission once; SyncCrate itself never needs to run as administrator.
 
@@ -101,6 +103,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Hardened against bad peers.** A host can only write into the game's content folders, never executables or shortcut-style files; downloads must match the sizes and hashes in the host's file list; session PINs are on by default, five digits, and lock out guessers (three tries, then a growing wait).
 
 **Yours**
+- **Built-in guide.** The **Guide** page in the sidebar explains every feature one task at a time (first sync, LAN and internet play, undo, file history, modpacks, crews, Sims 4 tips, troubleshooting), with search and a button that takes you to the right page.
 - **Appearance.** Any accent color (or each game's own), dark/light/system theme, UI scale, compact rows, and effects off for a calmer look.
 
 **Shortcuts:** <kbd>Ctrl/Cmd+Shift+S</kbd> Settings · <kbd>/</kbd> or <kbd>Ctrl+F</kbd> search · <kbd>Esc</kbd> close / clear.

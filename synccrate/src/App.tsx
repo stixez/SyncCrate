@@ -13,6 +13,7 @@ import GameBrowser from "./components/GameBrowser";
 import WelcomeScreen, { isOnboardingComplete } from "./components/WelcomeScreen";
 import DropZoneOverlay from "./components/DropZoneOverlay";
 import InstallResultsModal from "./components/InstallResultsModal";
+import Guide from "./components/Guide";
 import { useAppStore } from "./stores/useAppStore";
 import { useLogStore } from "./stores/useLogStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
@@ -378,6 +379,8 @@ function App() {
         return <ActivityLog />;
       case "settings":
         return <Settings />;
+      case "guide":
+        return <Guide />;
       case "game-browser":
         return <GameBrowser />;
     }
