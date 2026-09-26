@@ -543,6 +543,30 @@ mod tests {
         }
     }
 
+    /// Folder facts that were wrong (from the 2026-09 registry audit), so they
+    /// don't regress: Steam install folders are the store's `installdir`.
+    #[test]
+    fn audited_folders_stay_fixed() {
+        let registry = load_registry();
+        let get = |id: &str| registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+        let steam_folders = |id: &str| -> Vec<String> {
+            get(id).detection.iter().flat_map(|d| &d.strategies).filter_map(|s| match s {
+                DetectionStrategy::SteamLibrary { folders } => Some(folders.clone()),
+                _ => None,
+            }).flatten().collect()
+        };
+        for (id, folder) in [("cod4", "Call of Duty 4"), ("stronghold_hd", "Stronghold"), ("stronghold_crusader_hd", "Stronghold Crusader Extreme"), ("stronghold_2", "Stronghold 2"), ("riftbreaker", "Riftbreaker")] {
+            assert!(steam_folders(id).iter().any(|f| f == folder), "{id}: Steam folder {folder}");
+        }
+        let folders = |id: &str| -> Vec<&str> { get(id).content_types.iter().map(|c| c.folder.as_str()).collect() };
+        assert_eq!(folders("subnautica")[0], "BepInEx/plugins", "QModManager is gone since Subnautica 2.0");
+        assert!(!folders("rimworld").contains(&"Saves"), "RimWorld saves are in AppData");
+        assert!(!folders("7daystodie").contains(&"Data/Config"), "the base game's own config");
+        assert!(matches!(&get("tmnf").detection.as_ref().unwrap().strategies[0], DetectionStrategy::DocumentsRelative { base, .. } if base == "TrackMania"));
+        assert_eq!(get("simcity4").disable_method.as_deref(), Some("none"), "SC4 loads every file in Plugins");
+        assert_eq!(get("dragon_age_origins").disable_method.as_deref(), Some("rename"));
+    }
+
     /// The game's own files in a mods folder never sync: syncing Bethesda's
     /// `Data` copied the base game, DLC and paid Creation Club content to
     /// friends (and KSP's paid DLC sits in `GameData`).
@@ -562,6 +586,14 @@ mod tests {
             ("kerbal_space_program", &["GameData/Squad/Parts/Engine/x.cfg", "GameData/SquadExpansion/Serenity/y.cfg"], "GameData/MechJeb2/Parts/z.cfg"),
             ("bannerlord", &["Modules/Native/SubModule.xml", "Modules/NavalDLC/SubModule.xml", "Modules/SandBox/bin/x.dll"], "Modules/Bannerlord.Harmony/SubModule.xml"),
             ("mount_blade_warband", &["Modules/Native/module.ini"], "Modules/Floris/module.ini"),
+            ("cod1", &["main/pak0.pk3", "main/localized_english_pak1.pk3"], "main/zzz_custommap.pk3"),
+            ("cod2", &["main/iw_07.iwd", "main/localized_english_iw03.iwd"], "main/zzz_mod.iwd"),
+            ("gmod", &["maps/gm_construct.bsp", "maps/gm_flatgrass.bsp"], "maps/ttt_minecraft_b5.bsp"),
+            ("assetto_corsa", &["content/cars/ks_porsche_911_gt3_r_2016/data.acd", "content/tracks/ks_nordschleife/map.png"], "content/cars/rss_formula_hybrid_2021/data.acd"),
+            ("dst", &["mods/modsettings.lua", "mods/dedicated_server_mods_setup.lua"], "mods/workshop-mine/modmain.lua"),
+            ("hearts_of_iron_4", &["mod/ugc_2027735001.mod"], "mod/MyMod/descriptor.mod"),
+            ("wow_retail", &["WTF/Config.wtf"], "WTF/Account/ME/SavedVariables/WeakAuras.lua"),
+            ("ark_survival_evolved", &["ShooterGame/Content/Mods/TheCenter/x.umap"], "ShooterGame/Content/Mods/731604991/x.uasset"),
         ];
         for (id, official, modded) in cases {
             for f in *official {

@@ -130,7 +130,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 | Game | What syncs |
 |------|------------|
-| **7 Days to Die** | Mods, Server Configs |
+| **7 Days to Die** | Mods |
 | **ARK: Survival Evolved** | Mods, Save Files |
 | **Barotrauma** | Local Mods |
 | **Conan Exiles** | Mods |
@@ -138,7 +138,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Don't Starve Together** | Mods |
 | **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
-| **Subnautica** | Mods (QMods), Save Files |
+| **Subnautica** | Plugins (BepInEx), Save Files |
 | **V Rising** | Plugins (BepInEx), Mod Configs |
 | **Valheim** | Plugins (BepInEx), Mod Configs |
 
@@ -180,7 +180,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Dragon Age: Origins** | Override Mods, AddIns (DAZip), Save Files |
 | **Fallout 4** | Mods & Plugins |
 | **Fallout: New Vegas** | Mods & Plugins |
-| **Kenshi** | Mods, Save Files |
+| **Kenshi** | Mods |
 | **Kingdom Come: Deliverance II** | Mods |
 | **Skyrim (Legendary Edition)** | Mods & Plugins |
 | **Skyrim Special Edition** | Mods & Plugins |
@@ -188,7 +188,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **The Elder Scrolls III: Morrowind** | Mods & Plugins |
 | **The Elder Scrolls IV: Oblivion** | Mods & Plugins |
 | **The Witcher 3: Wild Hunt** | Mods, Mod Menus |
-| **Torchlight II** | Mods |
+| **Torchlight II** | Mods, Save Files |
 
 </details>
 
@@ -217,7 +217,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Hearts of Iron IV** | Mods, Save Files |
 | **Mount & Blade II: Bannerlord** | Modules |
 | **Mount & Blade: Warband** | Modules |
-| **RimWorld** | Mods, Save Files |
+| **RimWorld** | Mods |
 | **Sid Meier's Civilization VI** | Mods, Save Files |
 | **Stellaris** | Mods, Save Files |
 | **Stronghold 2** | Custom Maps |
@@ -266,7 +266,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Call of Duty** | Mods |
 | **Call of Duty 2** | Mods |
 | **Call of Duty 4: Modern Warfare** | Mods, Custom Maps |
-| **Counter-Strike 2** | Maps, Configs |
+| **Counter-Strike 2** | Configs |
 | **Left 4 Dead 2** | Addons & Maps, Configs |
 | **Team Fortress 2** | Custom (HUDs, Skins, Sounds), Maps, Configs |
 
@@ -314,8 +314,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Assetto Corsa** | Cars, Tracks |
 | **Trackmania (2020)** | Maps, Replays, Skins |
 | **TrackMania 2: Stadium** | Maps, Replays, Skins |
-| **TrackMania Nations Forever** | Tracks, Replays, Skins |
-| **TrackMania United Forever** | Tracks, Replays, Skins |
+| **TrackMania Nations Forever** | Tracks, Skins |
+| **TrackMania United Forever** | Tracks, Skins |
 
 </details>
 
