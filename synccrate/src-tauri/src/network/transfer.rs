@@ -891,11 +891,15 @@ async fn handle_client(
                     }
                     Err(e) => {
                         log::error!("File read error: {}", e);
+                        // Named on both sides: the friend only saw "File not
+                        // available", and the host nothing at all.
+                        let why = crate::utils::plain_io_error(&e.to_string());
+                        let _ = app.emit("host-send-error", serde_json::json!({ "peer_id": &peer_id, "path": &path, "error": &why }));
                         let mut s = stream.lock().await;
                         protocol::send_message(
                             &mut *s,
                             &Message::Error {
-                                message: "File not available".to_string(),
+                                message: format!("The host couldn't read {path}: {why}"),
                             },
                         )
                         .await?;

@@ -3,6 +3,7 @@ import * as cmd from "../lib/commands";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { AutoPullResult } from "../lib/types";
+import { friendlyError } from "../lib/errors";
 
 const POLL_MS = 60_000;
 const FIRST_PULL_MS = 3_000;
@@ -28,10 +29,12 @@ export function useStayInSync(enabled: boolean) {
     try {
       const r = await cmd.autoPull();
       if (!enabledRef.current) return;
-      setLast(r);
+      setLast({ ...r, checked_at: Date.now() });
       if (r.pulled > 0) addLog(`Stay in sync: pulled ${r.pulled} new file${r.pulled !== 1 ? "s" : ""} from the host`, "success");
     } catch (e) {
       addLog(`Stay in sync: ${e}`, "warning");
+      // Shown on the Dashboard too: it only reached the log.
+      if (enabledRef.current) setLast({ pulled: 0, scripts_held: 0, needs_review: 0, checked_at: Date.now(), error: friendlyError(e) });
     } finally {
       inFlight.current = false;
     }

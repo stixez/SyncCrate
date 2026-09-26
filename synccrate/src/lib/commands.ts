@@ -144,6 +144,15 @@ export async function getAppVersion(): Promise<string> {
   return invoke("get_app_version");
 }
 
+export async function getSessionPort(): Promise<number> {
+  return invoke("get_session_port");
+}
+
+/** Show a file in Explorer/Finder, selected. */
+export async function revealFile(path: string): Promise<void> {
+  return invoke("reveal_file", { path });
+}
+
 export async function setSessionPort(port: number): Promise<void> {
   return invoke("set_session_port", { port });
 }

@@ -1,4 +1,4 @@
-import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
+import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle, Copy } from "lucide-react";
 import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
@@ -86,12 +86,16 @@ export default function ModDetailsPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const fullPath = basePath ? `${basePath}/${file.relative_path}` : "";
   const handleReveal = () => {
-    if (!basePath) return;
-    const parts = file.relative_path.split(/[/\\]/);
-    parts.pop(); // remove filename
-    const dir = basePath + "/" + parts.join("/");
-    cmd.openFolder(dir);
+    if (!fullPath) return;
+    cmd.revealFile(fullPath).catch((e) => toastError(`Couldn't show the file: ${e}`));
+  };
+  const copyPath = () => {
+    navigator.clipboard.writeText(fullPath.replace(/\//g, "\\")).then(
+      () => toastSuccess("Path copied"),
+      () => toastError("Couldn't copy to the clipboard."),
+    );
   };
 
   return (
@@ -197,9 +201,12 @@ export default function ModDetailsPanel({
               </Button>
             )}
             {basePath && (
-              <Button variant="ghost" onClick={handleReveal} icon={<FolderOpen size={14} />}>
-                Reveal in Explorer
-              </Button>
+              <>
+                <Button variant="ghost" onClick={handleReveal} icon={<FolderOpen size={14} />}>
+                  Show in folder
+                </Button>
+                <Button variant="ghost" onClick={copyPath} icon={<Copy size={14} />} aria-label="Copy the file's full path" title="Copy the file's full path" />
+              </>
             )}
           </div>
         </div>

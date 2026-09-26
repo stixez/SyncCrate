@@ -1105,6 +1105,38 @@ pub(crate) fn openable_folder(path: &str, allowed_roots: &[std::path::PathBuf]) 
     Ok(canonical)
 }
 
+/// Show a file in the file manager with it selected (Explorer's /select):
+/// opening its folder left the user hunting through thousands of CC files.
+/// Same folder rules as `open_folder`.
+#[tauri::command]
+pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: String) -> Result<(), String> {
+    let file = std::fs::canonicalize(&path).map_err(|_| "That file doesn't exist any more.".to_string())?;
+    let parent = file.parent().ok_or("Invalid path")?.to_string_lossy().to_string();
+    let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
+    roots.push(utils::config_root().join("synccrate"));
+    let dir = openable_folder(&parent, &roots)?;
+    #[cfg(target_os = "windows")]
+    {
+        let file = crate::utils::clean_path(file);
+        std::process::Command::new(utils::windows_system_exe("explorer.exe"))
+            .arg(format!("/select,{}", file.to_string_lossy()))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        let _ = dir;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = dir;
+        std::process::Command::new("open").arg("-R").arg(&file).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = file;
+        std::process::Command::new("xdg-open").arg(&dir).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Folders the user saved an export into this run (a pack or profile file,
 /// wherever they picked): "Show in folder" may open those too.
 static EXPORT_DIRS: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());

@@ -161,10 +161,23 @@ export default function GameBrowser() {
   };
 
   const handleRemove = async (gameId: string) => {
+    const label = gameRegistry.find((g) => g.id === gameId)?.label ?? gameId;
+    const s = useAppStore.getState();
+    if (s.session && s.session.session_type !== "None" && s.activeGame === gameId) {
+      toastError(`${label} is in a session right now. Disconnect first.`);
+      return;
+    }
     try {
       await cmd.removeFromLibrary(gameId);
       setMyLibrary(myLibrary.filter((id) => id !== gameId));
-      addLog(`Removed ${gameRegistry.find((g) => g.id === gameId)?.label} from library`, "info");
+      addLog(`Removed ${label} from library`, "info");
+      // Same as the sidebar: one click, with a way back.
+      toastAction(`Removed ${label} from your library`, "Undo", () => {
+        cmd.addToLibrary(gameId)
+          .then(() => cmd.getUserLibrary())
+          .then(setMyLibrary)
+          .catch((e) => toastError(`Couldn't add ${label} back: ${e}`));
+      });
     } catch (e) {
       addLog(`Failed to remove game: ${e}`, "error");
       toastError(`Couldn't remove the game: ${e}`);

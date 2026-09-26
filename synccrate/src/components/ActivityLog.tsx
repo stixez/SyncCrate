@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from "react";
-import { Trash2, History, ArrowUpDown, ArrowDown, ArrowUp, Terminal } from "lucide-react";
+import { Trash2, History, ArrowUpDown, ArrowDown, ArrowUp, Terminal, Copy } from "lucide-react";
+import { toastError, toastSuccess } from "../lib/toast";
 import { useLogStore } from "../stores/useLogStore";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, formatDuration } from "../lib/utils";
 import { gameLabel } from "../lib/games";
 import * as cmd from "../lib/commands";
 import type { SyncHistoryEntry } from "../lib/types";
@@ -12,6 +13,9 @@ export default function ActivityLog() {
   const clearLogs = useLogStore((s) => s.clearLogs);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"log" | "history">("log");
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [openEntry, setOpenEntry] = useState<number | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [history, setHistory] = useState<SyncHistoryEntry[]>([]);
 
   useEffect(() => {
@@ -90,21 +94,42 @@ export default function ActivityLog() {
         </div>
         <div className="pb-1.5">
           {tab === "log" && (
-            <Button size="sm" variant="ghost" onClick={clearLogs} icon={<Trash2 size={12} />}>
-              Clear
-            </Button>
+            <span className="flex gap-1.5">
+              <Button size="sm" variant={errorsOnly ? "primary" : "ghost"} onClick={() => setErrorsOnly(!errorsOnly)} aria-pressed={errorsOnly}>
+                Problems only
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  navigator.clipboard
+                    .writeText(logs.map((l) => `${formatTime(l.timestamp)} [${levelTag[l.level].trim()}] ${l.message}`).join("\n"))
+                    .then(() => toastSuccess("Log copied"), () => toastError("Couldn't copy to the clipboard."))
+                }
+                icon={<Copy size={12} />}
+                disabled={logs.length === 0}
+              >
+                Copy
+              </Button>
+              <Button size="sm" variant="ghost" onClick={clearLogs} icon={<Trash2 size={12} />}>
+                Clear
+              </Button>
+            </span>
           )}
           {tab === "history" && history.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                cmd.clearSyncHistory().then(() => setHistory([])).catch(() => {});
-              }}
-              icon={<Trash2 size={12} />}
-            >
-              Clear
-            </Button>
+            confirmClear ? (
+              <span className="flex items-center gap-1.5">
+                <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-status-red">Delete all sync history?</span>
+                <Button size="sm" variant="danger" onClick={() => { setConfirmClear(false); cmd.clearSyncHistory().then(() => setHistory([])).catch(() => {}); }}>
+                  Delete
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmClear(false)}>Cancel</Button>
+              </span>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setConfirmClear(true)} icon={<Trash2 size={12} />}>
+                Clear
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -124,7 +149,7 @@ export default function ActivityLog() {
                 <span className="text-neon">&gt;</span> No activity yet<span className="animate-pulse">_</span>
               </p>
             ) : (
-              logs.map((log) => (
+              logs.filter((l) => !errorsOnly || l.level === "error" || l.level === "warning").map((log) => (
                 <div key={log.id} className="flex items-start gap-3 px-4 py-[3px] hover:bg-bg-card-hover">
                   <span className="text-txt-muted shrink-0 tabular">{formatTime(log.timestamp)}</span>
                   <span className={cx("shrink-0 whitespace-pre", levelColor[log.level])}>[{levelTag[log.level]}]</span>
@@ -146,9 +171,14 @@ export default function ActivityLog() {
           ) : (
             <div className="divide-y divide-border">
               {history.slice().reverse().map((entry, i) => (
+                <div key={i}>
                 <div
-                  key={i}
-                  className="relative flex items-center gap-4 px-4 py-3 hover:bg-bg-card-hover before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-transparent hover:before:bg-neon"
+                  onClick={() => entry.errors.length > 0 && setOpenEntry(openEntry === i ? null : i)}
+                  className={cx(
+                    "relative flex items-center gap-4 px-4 py-3 hover:bg-bg-card-hover before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-transparent hover:before:bg-neon",
+                    entry.errors.length > 0 && "cursor-pointer",
+                  )}
+                  title={entry.errors.length > 0 ? "Click to see what went wrong" : undefined}
                 >
                   <span className="w-8 h-8 shrink-0 grid place-items-center border border-line-hi text-accent-light">
                     {entry.direction === "received" ? <ArrowDown size={14} /> : entry.direction === "sent" ? <ArrowUp size={14} /> : <ArrowUpDown size={14} />}
@@ -159,14 +189,33 @@ export default function ActivityLog() {
                         {directionLabel(entry.direction)} with <span className="text-txt">{entry.peer_name}</span>
                       </span>
                       {entry.errors.length > 0 && <Badge tone="red">{entry.errors.length} error(s)</Badge>}
+                      {entry.cancelled && <Badge tone="amber">Cancelled</Badge>}
                     </div>
                     <div className="font-mono text-[11px] text-txt-muted mt-0.5">
                       <span className="uppercase tracking-[0.06em]">{gameLabel(entry.game)}</span> &middot;{" "}
                       <span className="text-txt-dim tabular">{entry.files_synced}</span> file{entry.files_synced !== 1 ? "s" : ""} &middot;{" "}
                       <span className="text-txt-dim tabular">{formatBytes(entry.total_bytes)}</span>
+                      {!!entry.duration_ms && <> &middot; <span className="text-txt-dim tabular">{formatDuration(entry.duration_ms)}</span></>}
                     </div>
                   </div>
                   <span className="font-mono text-[11px] text-txt-muted shrink-0">{formatDate(entry.timestamp)}</span>
+                </div>
+                {openEntry === i && (
+                  <div className="px-4 pb-3 pl-16">
+                    <ul className="font-mono text-[11px] text-status-red space-y-0.5 max-h-40 overflow-y-auto">
+                      {entry.errors.map((e, j) => <li key={j} className="break-words">{e}</li>)}
+                    </ul>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2"
+                      icon={<Copy size={12} />}
+                      onClick={() => navigator.clipboard.writeText(entry.errors.join("\n")).then(() => toastSuccess("Errors copied"), () => toastError("Couldn't copy to the clipboard."))}
+                    >
+                      Copy errors
+                    </Button>
+                  </div>
+                )}
                 </div>
               ))}
             </div>

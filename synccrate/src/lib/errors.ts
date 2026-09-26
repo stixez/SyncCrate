@@ -29,6 +29,10 @@ const PHRASES: [RegExp, string][] = [
   [/Multiple peers connected/i, "Choose which friend to sync with."],
   [/Connection timed out (reading|writing) message/i, "The other PC stopped responding. Check both are still online and try again."],
   [/Connection closed by peer/i, "The other PC closed the connection."],
+  [/Peer '.*' not found|No connection for peer/i, "That friend isn't connected any more."],
+  [/Hash mismatch for (.+?):/i, "A file changed or got damaged on the way. Click Compare & Sync again."],
+  [/File too large: \d+ bytes/i, "A file is over the 2 GB limit, so it was skipped."],
+  [/Expected Welcome message|Unexpected message while waiting for manifest/i, "The other PC runs an incompatible SyncCrate version. Both of you should update (Settings → Check for updates)."],
 ];
 
 export function friendlyError(e: unknown): string {

@@ -11,15 +11,9 @@ import * as cmd from "../lib/commands";
 import { toastError, toastInfo, toastSuccess } from "../lib/toast";
 import type { BackupInfo, BackupProgress, RestoreResult, UndoResult, UndoStatus } from "../lib/types";
 
-function sendNotification(title: string, body: string) {
-  try {
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body });
-    }
-  } catch {
-    // Notifications not supported
-  }
-}
+// The shared helper: honours the notifications setting (the web
+// Notification API here ignored it and doesn't work in the webview).
+import { sendNotification } from "../lib/notify";
 
 interface Props {
   gameId: string;
@@ -123,9 +117,15 @@ export default function BackupList({ gameId }: Props) {
   };
 
   // Filter backups to current game
-  const filteredBackups = useMemo(() => {
-    return backups.filter((b) => b.game === gameId);
-  }, [backups, gameId]);
+  // Scheduled, before-sync and safety backups piled up between the manual ones.
+  const [kindFilter, setKindFilter] = useState<string>("all");
+  const gameBackups = useMemo(() => backups.filter((b) => b.game === gameId), [backups, gameId]);
+  const kindOf = (b: BackupInfo) => b.kind ?? (b.auto ? "auto" : "manual");
+  const kindsPresent = useMemo(() => [...new Set(gameBackups.map(kindOf))], [gameBackups]);
+  const filteredBackups = useMemo(
+    () => (kindFilter === "all" ? gameBackups : gameBackups.filter((b) => kindOf(b) === kindFilter)),
+    [gameBackups, kindFilter],
+  );
 
   const busy = creating || restoring || undoing;
 
@@ -326,6 +326,23 @@ export default function BackupList({ gameId }: Props) {
         </Banner>
       )}
 
+      {kindsPresent.length > 1 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show backups of type">
+          {["all", ...kindsPresent].map((k) => (
+            <button
+              key={k}
+              onClick={() => setKindFilter(k)}
+              aria-pressed={kindFilter === k}
+              className={cx(
+                "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
+                kindFilter === k ? "bg-neon/10 border-neon text-neon" : "bg-bg border-line-hi text-txt-dim hover:text-txt",
+              )}
+            >
+              {k === "all" ? `All (${gameBackups.length})` : `${KIND_LABEL[k as keyof typeof KIND_LABEL] ?? "Manual"} (${gameBackups.filter((b) => kindOf(b) === k).length})`}
+            </button>
+          ))}
+        </div>
+      )}
       {filteredBackups.length === 0 ? (
         <EmptyState
           icon={<Archive size={18} />}

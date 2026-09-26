@@ -20,6 +20,7 @@ export default function PeerList() {
   const peerDownloadProgress = useAppStore((s) => s.peerDownloadProgress);
   const addLog = useLogStore((s) => s.addLog);
   const [expandedPeer, setExpandedPeer] = useState<string | null>(null);
+  const [confirmKick, setConfirmKick] = useState<string | null>(null);
 
   const isHost = session?.session_type === "Host";
 
@@ -28,6 +29,11 @@ export default function PeerList() {
       await cmd.disconnectPeer(peerId);
       addLog(`Removed ${peerName} from the session`, "info");
     } catch (e) {
+      // They left meanwhile: that's what the user wanted anyway.
+      if (/not found|No connection for peer/i.test(String(e))) {
+        addLog(`${peerName} had already left`, "info");
+        return;
+      }
       addLog(`Couldn't remove ${peerName}: ${e}`, "error");
       toastError(`Couldn't remove ${peerName}: ${e}`);
     }
@@ -83,9 +89,16 @@ export default function PeerList() {
                     {/^[0-9a-f.:]+$/i.test(peer.ip) ? (peer.port > 0 ? `${peer.ip}:${peer.port}` : peer.ip) : `${peer.ip} (via join code)`}
                   </p>
                 </div>
-                {peer.game_info?.game_version && (
-                  <Badge tone="neon" icon={<Gamepad2 size={10} />}>v{peer.game_info.game_version}</Badge>
-                )}
+                {peer.game_info?.game_version && (() => {
+                  // A different game patch breaks script mods; it looked the same as a match.
+                  const mine = gameInfo?.game_version;
+                  const differs = !!mine && mine !== peer.game_info.game_version;
+                  return (
+                    <Badge tone={differs ? "amber" : "neon"} icon={<Gamepad2 size={10} />} title={differs ? `Different game patch than yours (v${mine}): script mods may break for one of you.` : "Same game version as yours"}>
+                      v{peer.game_info.game_version}
+                    </Badge>
+                  );
+                })()}
                 <span className="font-mono text-[11px] text-txt-dim tabular whitespace-nowrap">
                   <span className="text-txt">{peer.mod_count}</span> files
                 </span>
@@ -99,9 +112,19 @@ export default function PeerList() {
                     {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                   </button>
                 )}
-                {isHost && (
+                {isHost && confirmKick === peer.id ? (
+                  <span className="flex items-center gap-1.5 ml-1">
+                    <button onClick={() => { setConfirmKick(null); handleKick(peer.id, peer.name); }} className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.08em] border border-status-red/60 text-status-red hover:bg-status-red/10">
+                      Remove
+                    </button>
+                    <button onClick={() => setConfirmKick(null)} className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.08em] text-txt-muted hover:text-txt">
+                      Cancel
+                    </button>
+                  </span>
+                ) : isHost && (
                   <button
-                    onClick={() => handleKick(peer.id, peer.name)}
+                    // One click removed a friend, mid-download even.
+                    onClick={() => setConfirmKick(peer.id)}
                     title="Remove from session"
                     aria-label={`Remove ${peer.name} from the session`}
                     className="ml-1 w-7 h-7 grid place-items-center border border-transparent text-txt-muted hover:text-status-red hover:border-status-red/50 hover:bg-status-red/10 transition-colors"
