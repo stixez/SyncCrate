@@ -1122,6 +1122,7 @@
       "primary_color": "#f97316",
       "genres": ["shooter"],
       "steam_app_id": 730,
+      "steam_workshop_app_id": 730,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -1170,6 +1171,7 @@
       "primary_color": "#3b82f6",
       "genres": ["sandbox"],
       "steam_app_id": 4000,
+      "steam_workshop_app_id": 4000,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -1884,6 +1886,7 @@
       "primary_color": "#818cf8",
       "genres": ["sandbox", "simulation"],
       "steam_app_id": 244850,
+      "steam_workshop_app_id": 244850,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2166,6 +2169,7 @@
       "primary_color": "#fb923c",
       "genres": ["rpg", "action"],
       "steam_app_id": 200710,
+      "steam_workshop_app_id": 200710,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2269,6 +2273,7 @@
       "primary_color": "#dc2626",
       "genres": ["survival"],
       "steam_app_id": 440900,
+      "steam_workshop_app_id": 440900,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2316,6 +2321,7 @@
       "primary_color": "#fbbf24",
       "genres": ["survival"],
       "steam_app_id": 322330,
+      "steam_workshop_app_id": 322330,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2424,6 +2430,7 @@
       "primary_color": "#eab308",
       "genres": ["strategy", "simulation"],
       "steam_app_id": 294100,
+      "steam_workshop_app_id": 294100,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2471,6 +2478,7 @@
       "primary_color": "#22d3ee",
       "genres": ["city-builder", "simulation"],
       "steam_app_id": 255710,
+      "steam_workshop_app_id": 255710,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2566,6 +2574,7 @@
       "primary_color": "#f87171",
       "genres": ["simulation"],
       "steam_app_id": 227300,
+      "steam_workshop_app_id": 227300,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -2772,6 +2781,7 @@
       "primary_color": "#ef4444",
       "genres": ["shooter", "horror"],
       "steam_app_id": 550,
+      "steam_workshop_app_id": 550,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -3026,6 +3036,7 @@
       "primary_color": "#34d399",
       "genres": ["survival", "horror"],
       "steam_app_id": 108600,
+      "steam_workshop_app_id": 108600,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4045,6 +4056,7 @@
       "primary_color": "#d97706",
       "genres": ["survival"],
       "steam_app_id": 219740,
+      "steam_workshop_app_id": 219740,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4166,6 +4178,7 @@
       "primary_color": "#3b82f6",
       "genres": ["simulation"],
       "steam_app_id": 270880,
+      "steam_workshop_app_id": 270880,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4459,6 +4472,7 @@
       "primary_color": "#ca8a04",
       "genres": ["strategy"],
       "steam_app_id": 1158310,
+      "steam_workshop_app_id": 1158310,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4519,6 +4533,7 @@
       "primary_color": "#fbbf24",
       "genres": ["strategy"],
       "steam_app_id": 236850,
+      "steam_workshop_app_id": 236850,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4579,6 +4594,7 @@
       "primary_color": "#a8a29e",
       "genres": ["strategy"],
       "steam_app_id": 394360,
+      "steam_workshop_app_id": 394360,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4639,6 +4655,7 @@
       "primary_color": "#a78bfa",
       "genres": ["strategy"],
       "steam_app_id": 281990,
+      "steam_workshop_app_id": 281990,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4777,6 +4794,7 @@
       "primary_color": "#60a5fa",
       "genres": ["strategy"],
       "steam_app_id": 268500,
+      "steam_workshop_app_id": 268500,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -4836,6 +4854,7 @@
       "primary_color": "#22d3ee",
       "genres": ["strategy"],
       "steam_app_id": 289070,
+      "steam_workshop_app_id": 289070,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -5188,6 +5207,7 @@
       "primary_color": "#34d399",
       "genres": ["simulation", "survival"],
       "steam_app_id": 457140,
+      "steam_workshop_app_id": 457140,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -5267,6 +5287,7 @@
       "primary_color": "#ef4444",
       "genres": ["roguelike", "strategy"],
       "steam_app_id": 646570,
+      "steam_workshop_app_id": 646570,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -5726,6 +5747,7 @@
       "primary_color": "#65a30d",
       "genres": ["shooter", "simulation"],
       "steam_app_id": 107410,
+      "steam_workshop_app_id": 107410,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -5914,6 +5936,7 @@
       "primary_color": "#0891b2",
       "genres": ["survival"],
       "steam_app_id": 346110,
+      "steam_workshop_app_id": 346110,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6293,6 +6316,7 @@
       "primary_color": "#991b1b",
       "genres": ["rpg", "roguelike"],
       "steam_app_id": 262060,
+      "steam_workshop_app_id": 262060,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6344,6 +6368,7 @@
       "primary_color": "#14b8a6",
       "genres": ["survival", "simulation"],
       "steam_app_id": 602960,
+      "steam_workshop_app_id": 602960,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6406,6 +6431,7 @@
       "primary_color": "#a8a29e",
       "genres": ["rpg", "sandbox"],
       "steam_app_id": 233860,
+      "steam_workshop_app_id": 233860,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6446,6 +6472,7 @@
       "primary_color": "#818cf8",
       "genres": ["sandbox", "survival"],
       "steam_app_id": 211820,
+      "steam_workshop_app_id": 211820,
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6506,6 +6533,7 @@
       "primary_color": "#ea580c",
       "genres": ["roguelike", "action"],
       "steam_app_id": 881100,
+      "steam_workshop_app_id": 881100,
       "auto_detect": true,
       "detection": {
         "strategies": [
