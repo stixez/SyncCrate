@@ -169,6 +169,7 @@ export const GUIDE: GuideGroup[] = [
         steps: [
           "On the Profiles page, **Create New Profile**, name it and **Save Profile**.",
           "**Compare** shows which mods match, are missing or changed since.",
+          "**Apply this loadout** (after Compare) opens it on the Modpacks page: get missing files from a friend, or **Apply Pack Exactly** to load only its mods.",
           "Export a profile as a `.synccrate-profile` file to share it.",
         ],
         keywords: "loadout snapshot profile compare",

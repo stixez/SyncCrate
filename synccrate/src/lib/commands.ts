@@ -227,6 +227,11 @@ export interface BisectView {
 
 /** The running "find a broken mod" search for a game, if any. */
 /** Whether "Play" can start this game (Steam install, or The Sims 4's exe). */
+/** A saved profile as a modpack (for "Apply this loadout"). */
+export async function profileAsPack(id: string): Promise<ModPack> {
+  return invoke("profile_as_pack", { id });
+}
+
 /** Always skip `path` for this game (or stop). Returns the game's list. */
 export async function setAlwaysSkip(gameId: string, path: string, skip: boolean): Promise<string[]> {
   return invoke("set_always_skip", { gameId, path, skip });
