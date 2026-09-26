@@ -779,6 +779,7 @@ async fn run_sync(
                         expected_hash: &file_info.hash,
                         expected_size: Some(file_info.size),
                         policy,
+                        modified_secs: Some(file_info.modified),
                     },
                 )
                 .await;
