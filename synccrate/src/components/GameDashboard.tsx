@@ -22,6 +22,7 @@ import ChatPanel from "./ChatPanel";
 import OffersPanel from "./OffersPanel";
 import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
+import UndoLastSync from "./UndoLastSync";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
 import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
@@ -135,6 +136,14 @@ export default function GameDashboard({ gameId }: Props) {
   // Display name, "use PIN" and per-game share permissions are remembered locally
   const [hostName, setHostNameState] = useState(loadDisplayName);
   const setHostName = (name: string) => { setHostNameState(name); saveDisplayName(name); };
+  // No name yet (first run skipped, older installs): the OS account name
+  // beats a room of "Guest"s.
+  useEffect(() => {
+    if (hostName) return;
+    cmd.defaultDisplayName().then((n) => { if (n && !loadDisplayName()) setHostName(n); }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [usePin, setUsePinState] = useState(loadUsePin);
   const setUsePin = (v: boolean) => { setUsePinState(v); saveUsePin(v); };
   const [folderPerms, setFolderPermsState] = useState<SyncFolderPermissions>({});
@@ -738,9 +747,30 @@ export default function GameDashboard({ gameId }: Props) {
                 Open Folder
               </Button>
             )}
-            <Button size="sm" variant="danger" onClick={leave} disabled={isLoading} icon={<Power size={13} />}>
-              Disconnect
-            </Button>
+            {confirmLeave ? (
+              <>
+                <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-status-red">
+                  {syncProgress ? "Stop the sync and disconnect?" : isHost ? `Disconnect ${session.peers.length} friend${session.peers.length !== 1 ? "s" : ""}?` : "Disconnect?"}
+                </span>
+                <Button size="sm" variant="danger" onClick={() => { setConfirmLeave(false); leave(); }} disabled={isLoading}>
+                  Disconnect
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmLeave(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="danger"
+                // Friends mid-download lost it to one stray click.
+                onClick={() => (syncProgress || (isHost && session.peers.length > 0) ? setConfirmLeave(true) : leave())}
+                disabled={isLoading}
+                icon={<Power size={13} />}
+              >
+                Disconnect
+              </Button>
+            )}
             {isClient && !sessionGameMismatch && (
               <Button variant="primary" onClick={computePlan} disabled={syncBusy} icon={<ArrowDownUp size={14} />}>
                 {isSyncLoading ? (loadingPhase || "Computing...") : "Compare & Sync"}
@@ -944,6 +974,7 @@ export default function GameDashboard({ gameId }: Props) {
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
         </section>
       )}
+      {isClient && !syncPlan && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
           You have everything the host shares. Turn on Stay in sync to get their new mods automatically.

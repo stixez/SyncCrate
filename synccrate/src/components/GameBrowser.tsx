@@ -4,7 +4,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
-import { toastError, toastSuccess } from "../lib/toast";
+import { toastAction, toastError, toastSuccess } from "../lib/toast";
 import { open } from "@tauri-apps/plugin-shell";
 
 const REQUEST_GAME_URL = "https://github.com/stixez/synccrate/issues/new?template=game_request.md";
@@ -153,7 +153,7 @@ export default function GameBrowser() {
       await cmd.addToLibrary(gameId);
       setMyLibrary([...myLibrary, gameId]);
       addLog(`Added ${gameRegistry.find((g) => g.id === gameId)?.label} to library`, "success");
-      toastSuccess("Game added to library");
+      toastAction(`${gameRegistry.find((g) => g.id === gameId)?.label ?? "Game"} added to your library`, "Open", () => useAppStore.getState().navigateToGame(gameId));
     } catch (e) {
       addLog(`Failed to add game: ${e}`, "error");
       toastError(`Couldn't add the game: ${e}`);

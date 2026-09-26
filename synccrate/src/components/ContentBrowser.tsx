@@ -85,6 +85,9 @@ interface Props {
   gameId: string;
 }
 
+const SORT_KEY = "synccrate.contentSort";
+const TAB_KEY = "synccrate.contentTab";
+
 export default function ContentBrowser({ gameId }: Props) {
   const manifest = useAppStore((s) => s.manifest);
   const setManifest = useAppStore((s) => s.setManifest);
@@ -98,7 +101,18 @@ export default function ContentBrowser({ gameId }: Props) {
   const { resolve, resolveAll } = useSync();
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortBy>("name");
+  // Remembered (it reset on every visit, unlike the view mode).
+  const [sortBy, setSortByState] = useState<SortBy>(() => {
+    try {
+      return (localStorage.getItem(SORT_KEY) as SortBy | null) ?? "name";
+    } catch {
+      return "name";
+    }
+  });
+  const setSortBy = (s: SortBy) => {
+    setSortByState(s);
+    try { localStorage.setItem(SORT_KEY, s); } catch { /* per-user convenience only */ }
+  };
   const [predefinedTags, setPredefinedTags] = useState<string[]>([]);
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -128,10 +142,15 @@ export default function ContentBrowser({ gameId }: Props) {
   const gameDef = getGameDef(gameId);
   const contentTypes = gameDef?.content_types ?? [];
 
-  // Pick active tab — default to first content type
+  // Pick active tab: this visit's, else the one last used for this game, else the first.
+  const savedTab = (() => {
+    try { return localStorage.getItem(`${TAB_KEY}.${gameId}`); } catch { return null; }
+  })();
   const activeTab = activeContentTab && contentTypes.some((ct) => ct.id === activeContentTab)
     ? activeContentTab
-    : contentTypes[0]?.id ?? null;
+    : savedTab && contentTypes.some((ct) => ct.id === savedTab)
+      ? savedTab
+      : contentTypes[0]?.id ?? null;
 
   const activeCt = contentTypes.find((ct) => ct.id === activeTab);
 
@@ -343,6 +362,34 @@ export default function ContentBrowser({ gameId }: Props) {
   );
 
   const [conflictLimit, setConflictLimit] = useState(25);
+  // Conflicts per tab: they're listed per tab, and a Saves conflict sat
+  // unseen while the Mods tab was open.
+  const conflictsByTab = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!syncPlan) return counts;
+    const tabOf = new Map<string, string>();
+    for (const ct of contentTypes) {
+      for (const ft of [ct.file_type, ...Object.values(ct.classify_by_extension ?? {})]) if (!tabOf.has(ft)) tabOf.set(ft, ct.id);
+    }
+    for (const a of syncPlan.actions) {
+      const tab = a.Conflict && tabOf.get(a.Conflict.local.file_type);
+      if (tab) counts[tab] = (counts[tab] ?? 0) + 1;
+    }
+    return counts;
+  }, [syncPlan, contentTypes]);
+  const totalConflicts = Object.values(conflictsByTab).reduce((n, c) => n + c, 0);
+  const focusConflicts = useAppStore((s) => s.focusConflicts);
+  const [cameForConflicts, setCameForConflicts] = useState(false);
+  useEffect(() => {
+    if (!focusConflicts) return;
+    useAppStore.getState().setFocusConflicts(false);
+    const tab = contentTypes.find((ct) => conflictsByTab[ct.id])?.id;
+    if (!tab) return;
+    switchTab(tab);
+    setStatusFilter(new Set<StatusKey>(["conflict"]));
+    setCameForConflicts(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusConflicts]);
   const conflicts = useMemo(() => {
     if (!syncPlan || !activeCt) return [];
     return syncPlan.actions
@@ -490,6 +537,7 @@ export default function ContentBrowser({ gameId }: Props) {
 
   const switchTab = (id: string) => {
     setActiveContentTab(id);
+    try { localStorage.setItem(`${TAB_KEY}.${gameId}`, id); } catch { /* per-user convenience only */ }
     clearFilters();
     setCollapsed(new Set());
     setSelected(new Set());
@@ -829,6 +877,11 @@ export default function ContentBrowser({ gameId }: Props) {
                   <span className={cx("font-mono font-normal text-[10px] tracking-normal tabular", active ? "text-neon" : "text-txt-muted")}>
                     {tabCounts[ct.id] ?? 0}
                   </span>
+                  {!!conflictsByTab[ct.id] && (
+                    <span className="font-mono font-normal text-[10px] tracking-normal tabular text-amber" title={`${conflictsByTab[ct.id]} conflict(s) to resolve`}>
+                      ⚠ {conflictsByTab[ct.id]}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1017,6 +1070,19 @@ export default function ContentBrowser({ gameId }: Props) {
         </div>
       )}
 
+      {cameForConflicts && syncPlan && totalConflicts === 0 && (
+        <Banner
+          tone="success"
+          title="All conflicts resolved"
+          actions={
+            <Button size="sm" variant="primary" onClick={() => useAppStore.getState().navigateToGame(gameId, "dashboard")}>
+              Back to sync
+            </Button>
+          }
+        >
+          The plan is ready. Sync it from the Dashboard.
+        </Banner>
+      )}
       {conflicts.length > 0 && (
         <div className="space-y-3">
           {conflicts.length > 1 && (

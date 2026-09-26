@@ -58,6 +58,9 @@ interface AppState {
   // Active content type tab within a game's Content page
   activeContentTab: string | null;
   setActiveContentTab: (tab: string | null) => void;
+  /** "View Conflicts": the Content page opens the tab with conflicts, filtered to them. */
+  focusConflicts: boolean;
+  setFocusConflicts: (on: boolean) => void;
 
   gamePaths: Record<string, string>;
   setGamePaths: (paths: Record<string, string>) => void;
@@ -242,6 +245,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   activeContentTab: null,
   setActiveContentTab: (tab) => set({ activeContentTab: tab }),
+  focusConflicts: false,
+  setFocusConflicts: (on) => set({ focusConflicts: on }),
 
   gamePaths: {},
   setGamePaths: (paths) => set({ gamePaths: paths }),

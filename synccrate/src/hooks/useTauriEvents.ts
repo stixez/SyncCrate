@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { toastAction, toastError, toastInfo, toastSuccess, toastWithLog } from "../lib/toast";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
@@ -399,7 +399,7 @@ export function useTauriEvents() {
           const warnings = event.payload.warnings ?? [];
           for (const w of warnings) addLog(w, "warning");
           if (warnings.length > 0) {
-            toastInfo(`${warnings.length} file${warnings.length !== 1 ? "s" : ""} synced without an old copy kept in file history (see Activity).`);
+            toastWithLog(`${warnings.length} file${warnings.length !== 1 ? "s" : ""} synced without an old copy kept in file history.`);
           }
 
           // "Apply pack exactly": disable/re-enable only after a clean
@@ -429,7 +429,7 @@ export function useTauriEvents() {
                 toastAction(
                   cancelled
                     ? `Sync cancelled after ${files_synced} file${files_synced !== 1 ? "s" : ""}. Compare again to resume.`
-                    : problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see Activity).` : "Sync complete.",
+                    : problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see the Activity log).` : "Sync complete.",
                   "Undo",
                   () => {
                   cmd.undoLastSync(game).then((r) => {
@@ -439,11 +439,14 @@ export function useTauriEvents() {
                     toastInfo(`Undo: ${parts.join(", ")}`);
                     addLog(`Sync undone: ${parts.join(", ")}`, "info");
                   }).catch((e) => toastError(`Undo failed: ${e}`));
-                });
+                },
+                // The default ~4 s was often gone before anyone read it (undo
+                // is also on the Dashboard and the Backups page).
+                { duration: 15000 });
               } else if (event.payload.errors?.length) {
                 // Nothing arrived, so no Undo toast: say what happened instead.
                 const n = event.payload.errors.length;
-                toastError(`${n} file${n !== 1 ? "s" : ""} couldn't be synced. The Activity log has the details.`);
+                toastWithLog(`${n} file${n !== 1 ? "s" : ""} couldn't be synced. The Activity log has the details.`, "error");
               } else if (cancelled) {
                 toastInfo("Sync cancelled. Compare again to resume.");
               } else {

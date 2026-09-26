@@ -1,5 +1,6 @@
 import { friendlyError } from "./errors";
 import { toast } from "sonner";
+import { useAppStore } from "../stores/useAppStore";
 
 export function toastSuccess(message: string) {
   toast.success(message);
@@ -19,6 +20,17 @@ export function toastInfo(message: string) {
 }
 
 /** A toast with a single action button (e.g. "Undo"). */
-export function toastAction(message: string, actionLabel: string, onAction: () => void) {
-  toast(message, { action: { label: actionLabel, onClick: onAction } });
+export function toastAction(
+  message: string,
+  actionLabel: string,
+  onAction: () => void,
+  opts: { duration?: number; tone?: "info" | "error" } = {},
+) {
+  const show = opts.tone === "error" ? toast.error : toast;
+  show(message, { action: { label: actionLabel, onClick: onAction }, duration: opts.duration });
+}
+
+/** For messages that point at the Activity log: a button that opens it. */
+export function toastWithLog(message: string, tone: "info" | "error" = "info") {
+  toastAction(message, "View log", () => useAppStore.getState().navigateToGlobal("activity"), { tone, duration: 8000 });
 }

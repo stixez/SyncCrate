@@ -37,7 +37,7 @@ export function useSession() {
       setDiscoveredPeers(peers);
       addLog(`Found ${peers.length} host(s) on LAN`, "info");
       if (peers.length === 0) {
-        toastInfo("No hosts found. If a friend is hosting, use Connect by IP with an address from their screen.");
+        toastInfo("No hosts found on this network. Ask your friend for their join code (it starts with SC-) and paste it above.");
       }
     } catch (e: any) {
       addLog(`Failed to scan: ${e}`, "error");

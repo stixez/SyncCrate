@@ -3,6 +3,7 @@ import { Plus, Check, ArrowRight, RefreshCw, Search, Radar } from "lucide-react"
 import { useAppStore } from "../stores/useAppStore";
 import { BrandMark, GameIcon } from "./Sidebar";
 import * as cmd from "../lib/commands";
+import { loadDisplayName, saveDisplayName } from "../lib/prefs";
 import type { GameDefinition } from "../lib/types";
 import { Button, GameArt, Input, LiveDot, cx } from "./ui";
 
@@ -52,6 +53,17 @@ export default function WelcomeScreen() {
     return detected;
   });
   const [adding, setAdding] = useState(false);
+  // Friends saw a room of "Guest"s: nothing asked for a name before the
+  // Dashboard's easy-to-miss field. Starts as the Windows account name.
+  const [name, setName] = useState(loadDisplayName);
+  useEffect(() => {
+    if (name) return;
+    cmd.defaultDisplayName().then((n) => setName((prev) => prev || n)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const keepName = () => {
+    if (name.trim()) saveDisplayName(name.trim());
+  };
 
   const detected = useMemo(
     () => gameRegistry.filter((g) => installedGames.includes(g.id) && !myLibrary.includes(g.id)),
@@ -84,6 +96,7 @@ export default function WelcomeScreen() {
   };
 
   const handleGetStarted = async () => {
+    keepName();
     if (selected.size === 0) {
       markOnboardingComplete();
       navigateToGlobal("game-browser");
@@ -115,6 +128,7 @@ export default function WelcomeScreen() {
   };
 
   const handleSkip = () => {
+    keepName();
     markOnboardingComplete();
     navigateToGlobal("game-browser");
   };
@@ -200,7 +214,15 @@ export default function WelcomeScreen() {
             ))}
           </ol>
 
-          <div className="flex items-center gap-3 mt-8">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value.replace(/[^\p{L}\p{N}\s_-]/gu, "").slice(0, 32))}
+            label="// Your name (friends see it when you host or join)"
+            placeholder="e.g. Alex"
+            aria-label="Your name"
+            wrapperClassName="mt-8 max-w-[320px]"
+          />
+          <div className="flex items-center gap-3 mt-5">
             <Button
               variant="primary"
               size="lg"

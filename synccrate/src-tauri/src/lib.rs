@@ -14,6 +14,7 @@ mod state;
 mod sync;
 mod utils;
 mod watcher;
+mod window_state;
 
 #[cfg(test)]
 mod testutil;
@@ -210,6 +211,9 @@ pub fn run() {
         .manage(app_state)
         .manage(commands::open_intent::PendingIntents::default())
         .setup(|app| {
+            if let Some(w) = app.get_webview_window("main") {
+                window_state::restore(&w);
+            }
             // Set up tray icon
             let status = MenuItemBuilder::with_id("status", "Idle").enabled(false).build(app)?;
             let show = MenuItemBuilder::with_id("show", "Show SyncCrate").build(app)?;
@@ -328,6 +332,9 @@ pub fn run() {
             // Close-to-tray: hide the main window instead of quitting when the
             // setting is on. Tray "Quit" sets QUITTING and always exits.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if let Some(w) = window.app_handle().get_webview_window("main").filter(|_| window.label() == "main") {
+                    window_state::save(&w);
+                }
                 if window.label() == "main"
                     && !commands::tray::QUITTING.load(std::sync::atomic::Ordering::SeqCst)
                     && commands::sync::read_sync_config().close_to_tray
@@ -468,6 +475,7 @@ pub fn run() {
             commands::system::fix_firewall,
             commands::system::is_elevated,
             commands::system::restart_as_admin,
+            commands::system::default_display_name,
             commands::system::check_game_path_writable,
             commands::system::get_network_diagnostics,
             commands::system::test_connection,
@@ -481,6 +489,10 @@ pub fn run() {
             // "connected" until the idle timeout. Say goodbye first (at most
             // a few seconds), then exit for real.
             if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
+                // Tray Quit never closes the window, so CloseRequested didn't save it.
+                if let Some(w) = _app.get_webview_window("main") {
+                    window_state::save(&w);
+                }
                 static SAID_GOODBYE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
                 let state = _app.state::<Arc<Mutex<AppState>>>().inner().clone();
                 let in_session = state.try_lock().map_or(true, |s| s.session_type != state::SessionType::None);

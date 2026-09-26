@@ -195,6 +195,18 @@ pub async fn is_elevated() -> Result<bool, String> {
     }
 }
 
+/// A starting name for "your name" (the OS account name), cleaned the way
+/// the name field is: friends saw a room of "Guest"s when nobody typed one.
+#[tauri::command]
+pub fn default_display_name() -> String {
+    clean_display_name(&std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default())
+}
+
+pub(crate) fn clean_display_name(raw: &str) -> String {
+    let kept: String = raw.chars().filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '_' | '-')).take(32).collect();
+    kept.trim().to_string()
+}
+
 /// A copy started by `restart_as_admin` (`--wait-pid N`) waits for N to exit
 /// (up to 10 s) before starting.
 pub fn wait_for_previous_instance() {
@@ -335,6 +347,15 @@ pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_names_keep_letters_digits_spaces() {
+        assert_eq!(clean_display_name("Zvonimir"), "Zvonimir");
+        assert_eq!(clean_display_name(" Ana-Marija_2 "), "Ana-Marija_2");
+        assert_eq!(clean_display_name(r"DOMAIN\j.doe"), "DOMAINjdoe");
+        assert_eq!(clean_display_name("Łukasz"), "Łukasz");
+        assert_eq!(clean_display_name(&"x".repeat(50)).len(), 32);
+    }
 
     #[test]
     fn temp_dir_is_writable() {
