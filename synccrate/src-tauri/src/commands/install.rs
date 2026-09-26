@@ -30,7 +30,14 @@ fn file_hash(path: &Path) -> Result<String, String> {
     // Stream instead of reading the whole file (up to 2 GB) into memory.
     let mut file = std::fs::File::open(path).map_err(|e| format!("Cannot read file: {}", e))?;
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("Cannot read file: {}", e))?;
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = std::io::Read::read(&mut file, &mut buf).map_err(|e| format!("Cannot read file: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
     Ok(hex::encode(hasher.finalize()))
 }
 

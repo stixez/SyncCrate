@@ -349,7 +349,7 @@ fn scan_mdns() -> Result<Vec<Sighting>, String> {
                     game_version: get("game_version").filter(|v| !v.is_empty()),
                     game_id: get("game").filter(|v| !v.is_empty()),
                     node_id: get("node").filter(|v| crate::crews::is_valid_node_id(v)),
-                    addrs: info.get_addresses().iter().copied().collect(),
+                    addrs: info.get_addresses().iter().map(|a| a.to_ip_addr()).collect(),
                 });
             }
             Ok(_) => {}
