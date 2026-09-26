@@ -66,7 +66,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 **Sync**
 - **Only what changed.** SHA-256 diffing, zstd compression (50–80% less data), 100–900 MB/s peer-to-peer on LAN.
-- **You decide.** Review the plan with size and time estimate, exclude files or patterns (`*.ts4script`, `Mods/WickedWhims/*`, or just a file name; case doesn't matter), and resolve conflicts per file: keep yours, use theirs, keep both, or keep newer.
+- **You decide.** Review the plan with size and time estimate (search it by file name), **Always skip** a file for that game from its row, exclude files or patterns (`*.ts4script`, `Mods/WickedWhims/*`, or just a file name; case doesn't matter), and resolve conflicts per file: keep yours, use theirs, keep both, or keep newer.
 - **See what's new.** After a sync the Dashboard lists what it brought ("From Alex: New 12 — WickedWhims, …; Updated 3"), grouped by mod and named from the mods' own info where they have it.
 - **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done. Files over 2 GB are listed as skipped instead of breaking the rest of the sync.
 

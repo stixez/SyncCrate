@@ -227,6 +227,12 @@ export interface BisectView {
 
 /** The running "find a broken mod" search for a game, if any. */
 /** Whether "Play" can start this game (Steam install, or The Sims 4's exe). */
+/** Always skip `path` for this game (or stop). Returns the game's list. */
+export async function setAlwaysSkip(gameId: string, path: string, skip: boolean): Promise<string[]> {
+  return invoke("set_always_skip", { gameId, path, skip });
+}
+
+/** Whether "Play" can start this game (Steam install, or The Sims 4's exe). */
 export async function canLaunchGame(gameId: string): Promise<boolean> {
   return invoke("can_launch_game", { gameId });
 }

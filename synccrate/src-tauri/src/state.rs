@@ -159,6 +159,10 @@ pub struct SyncPlan {
     pub delete_hashes: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub excluded: Vec<String>,
+    /// Of `excluded`, the ones the user always skips for this game (Always
+    /// skip on a plan row), so the row can say so and offer to undo it.
+    #[serde(default)]
+    pub always_skipped: Vec<String>,
     #[serde(default)]
     pub resumed_files: u64,
     /// "Keep both" conflict resolutions: maps the local path the remote copy

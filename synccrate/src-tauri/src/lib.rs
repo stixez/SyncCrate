@@ -461,6 +461,7 @@ pub fn run() {
             commands::sync::set_keep_file_history,
             commands::stay_in_sync::auto_pull,
             commands::sync::update_sync_selection,
+            commands::sync::set_always_skip,
             commands::sync::set_exclude_patterns,
             commands::sync::get_exclude_patterns,
             commands::sync::get_auto_backup_config,

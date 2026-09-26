@@ -291,16 +291,13 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
         SyncAction::Delete(_) => true,
     });
 
-    // Apply stored exclude patterns to pre-populate excluded list
-    let patterns = read_exclude_patterns();
-    if !patterns.is_empty() {
-        plan.excluded = plan
-            .actions
-            .iter()
-            .map(action_path)
-            .filter(|path| patterns.iter().any(|pat| glob_matches(pat, path)))
-            .map(str::to_string)
-            .collect();
+    // Apply stored exclude patterns and the game's always-skip list to
+    // pre-populate the excluded list
+    let config = read_sync_config();
+    let skips = config.always_skip.get(&plan.game_id).cloned().unwrap_or_default();
+    if !config.exclude_patterns.is_empty() || !skips.is_empty() {
+        let paths: Vec<&str> = plan.actions.iter().map(action_path).collect();
+        (plan.excluded, plan.always_skipped) = preselect_excluded(&paths, &config.exclude_patterns, &skips);
     }
     let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
     plan.total_bytes = plan
@@ -1299,7 +1296,15 @@ pub struct SyncConfig {
     /// (`commands::history`).
     #[serde(default = "default_true")]
     pub keep_file_history: bool,
+    /// Per game: files never to sync (exact paths, any case). Unticking a
+    /// plan row only lasted for that compare, and a pattern in Settings
+    /// applied to every game.
+    #[serde(default)]
+    pub always_skip: std::collections::HashMap<String, Vec<String>>,
 }
+
+/// Per game, so a list can't grow without bound.
+const MAX_ALWAYS_SKIP: usize = 5000;
 
 fn default_true() -> bool { true }
 fn default_backup_interval() -> u32 { 4 }
@@ -1321,6 +1326,7 @@ impl Default for SyncConfig {
             clear_cache_after_sync: true,
             close_to_tray: false,
             keep_file_history: true,
+            always_skip: std::collections::HashMap::new(),
         }
     }
 }
@@ -1344,6 +1350,62 @@ pub(crate) fn update_sync_config(change: impl FnOnce(&mut SyncConfig)) -> Result
 
 pub(crate) fn read_exclude_patterns() -> Vec<String> {
     read_sync_config().exclude_patterns
+}
+
+/// The plan's pre-unticked files: those matching an exclude pattern or on the
+/// game's always-skip list (any case). Returns (excluded, always skipped).
+fn preselect_excluded(paths: &[&str], patterns: &[String], always_skip: &[String]) -> (Vec<String>, Vec<String>) {
+    let skips: HashSet<String> = always_skip.iter().map(|p| p.to_lowercase()).collect();
+    let (mut excluded, mut always) = (Vec::new(), Vec::new());
+    for path in paths {
+        let skipped = skips.contains(&path.to_lowercase());
+        if skipped {
+            always.push(path.to_string());
+        }
+        if skipped || patterns.iter().any(|pat| glob_matches(pat, path)) {
+            excluded.push(path.to_string());
+        }
+    }
+    (excluded, always)
+}
+
+/// Add `path` to (or take it off) the active game's always-skip list.
+/// Returns the game's list.
+#[tauri::command]
+pub async fn set_always_skip(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    game_id: String,
+    path: String,
+    skip: bool,
+) -> Result<Vec<String>, String> {
+    crate::utils::validate_relative(&path)?;
+    let game = {
+        let st = state.lock().await;
+        crate::commands::files::resolve_game(&st, &game_id)?
+    };
+    let mut list = Vec::new();
+    update_sync_config(|config| {
+        let entry = config.always_skip.entry(game.clone()).or_default();
+        entry.retain(|p| !p.eq_ignore_ascii_case(&path));
+        if skip && entry.len() < MAX_ALWAYS_SKIP {
+            entry.push(path.clone());
+        }
+        list = entry.clone();
+        if entry.is_empty() {
+            config.always_skip.remove(&game);
+        }
+    })?;
+    // The open plan says so right away (a row's badge).
+    let mut st = state.lock().await;
+    for conn in st.connections.values_mut() {
+        if let Some(plan) = conn.sync_plan.as_mut().filter(|p| p.game_id == game) {
+            plan.always_skipped.retain(|p| !p.eq_ignore_ascii_case(&path));
+            if skip {
+                plan.always_skipped.push(path.clone());
+            }
+        }
+    }
+    Ok(list)
 }
 
 #[tauri::command]
@@ -1544,6 +1606,17 @@ mod tests {
     }
 
     #[test]
+    fn always_skipped_files_start_unticked_whatever_their_case() {
+        let (excluded, always) = preselect_excluded(
+            &["Mods/a.package", "Mods/b.ts4script", "Saves/s.save"],
+            &["*.ts4script".to_string()],
+            &["mods/A.package".to_string()],
+        );
+        assert_eq!(excluded, ["Mods/a.package", "Mods/b.ts4script"]);
+        assert_eq!(always, ["Mods/a.package"], "only the listed one says 'always'");
+    }
+
+    #[test]
     fn test_sync_config_roundtrip_with_speed_limit() {
         let config = SyncConfig {
             exclude_patterns: vec!["*.tmp".to_string()],
@@ -1555,6 +1628,7 @@ mod tests {
             clear_cache_after_sync: false,
             close_to_tray: true,
             keep_file_history: false,
+            always_skip: Default::default(),
         };
         let json = serde_json::to_string(&config).expect("serialize");
         let parsed: SyncConfig = serde_json::from_str(&json).expect("deserialize");
