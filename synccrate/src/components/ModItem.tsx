@@ -183,6 +183,8 @@ function ModItem({
             )}
             title="Edit tags"
             aria-label={`Edit tags for ${name}`}
+            aria-expanded={showTagEditor}
+            data-tag-trigger
           >
             <Tag size={12} />
           </button>

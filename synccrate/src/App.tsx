@@ -30,6 +30,7 @@ import {
 } from "./lib/demoData";
 import type { InstallResult } from "./lib/types";
 import { toastSuccess, toastError, toastInfo } from "./lib/toast";
+import { friendlyError } from "./lib/errors";
 import { gameLabel } from "./lib/games";
 import { toast } from "sonner";
 import { check } from "@tauri-apps/plugin-updater";
@@ -361,6 +362,7 @@ function App() {
       }
     } catch (e) {
       addLog(`Install failed: ${e}`, "error");
+      toastError(`Couldn't install ${source.split(/[/\\]/).pop()}: ${friendlyError(e)}`);
     }
   };
 

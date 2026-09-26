@@ -36,9 +36,12 @@ export default function ChatPanel() {
   }, [session?.session_type, setChat]);
 
   const count = (chat?.messages.length ?? 0) + (chat?.outbox.length ?? 0);
+  // Follow new messages only when already at the bottom: someone scrolled up
+  // reading older ones was yanked down by every new message.
+  const atBottom = useRef(true);
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [count]);
 
   if (!chat) return null;
@@ -63,7 +66,7 @@ export default function ChatPanel() {
         <p className="text-xs text-txt-dim">Chat needs SyncCrate 0.6 or newer on the host.</p>
       ) : (
         <>
-          <div ref={listRef} className="max-h-64 min-h-24 overflow-y-auto space-y-1.5 pr-1" aria-live="polite">
+          <div ref={listRef} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }} className="max-h-64 min-h-24 overflow-y-auto space-y-1.5 pr-1" aria-live="polite">
             {chat.messages.length === 0 && chat.outbox.length === 0 && (
               <p className="text-xs text-txt-muted">No messages yet. Say hi, or tell everyone which mods you just added.</p>
             )}
@@ -80,7 +83,9 @@ export default function ChatPanel() {
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
+              // Enter also confirms an IME composition (CJK input); that one
+              // mustn't send the half-typed word.
+              onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && send()}
               maxLength={MAX_CHARS}
               placeholder="Message everyone in the session..."
               aria-label="Chat message"

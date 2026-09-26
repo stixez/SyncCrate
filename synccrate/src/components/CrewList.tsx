@@ -303,7 +303,10 @@ function CrewDetail({ crew, myNode, activeGame, inSession, isHosting, lanHosts, 
     setConfirmPublish(false);
     setPublishing(true);
     try {
-      const s = await cmd.publishCrewSet(crew.id, types.size > 0 ? Array.from(types) : undefined, myName());
+      // `undefined` means every type to the backend, saves included: unticking
+      // every chip must not publish the member's personal saves.
+      if (types.size === 0) return;
+      const s = await cmd.publishCrewSet(crew.id, Array.from(types), myName());
       addLog(`Published crew set v${s.version} for ${gameLabel(activeGame)}: ${s.pack.files.length} files`, "success");
       toastSuccess(
         isHosting
@@ -428,6 +431,7 @@ function CrewDetail({ crew, myNode, activeGame, inSession, isHosting, lanHosts, 
                 <button
                   key={ct.id}
                   onClick={() => setTypes((prev) => { const n = new Set(prev); n.has(ct.id) ? n.delete(ct.id) : n.add(ct.id); return n; })}
+                  aria-pressed={types.has(ct.id)}
                   className={cx(
                     "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
                     types.has(ct.id) ? "bg-neon/10 border-neon text-neon" : "bg-bg border-line-hi text-txt-dim hover:text-txt",

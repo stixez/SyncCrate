@@ -11,9 +11,11 @@ interface ProfileCardProps {
   onExport: () => void;
   isDeletePending?: boolean;
   onCancelDelete?: () => void;
+  /** Another game is active: comparing would scan the wrong folder. */
+  compareDisabled?: boolean;
 }
 
-export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDeletePending, onCancelDelete }: ProfileCardProps) {
+export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDeletePending, onCancelDelete, compareDisabled }: ProfileCardProps) {
   // Profiles store an emoji icon; the HUD look has no emoji, so show a monogram instead.
   const monogram = (profile.name.trim()[0] ?? "?").toUpperCase();
 
@@ -63,7 +65,7 @@ export default function ProfileCard({ profile, onDelete, onLoad, onExport, isDel
           </div>
         ) : (
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" block onClick={onLoad} icon={<BarChart3 size={12} />}>
+            <Button size="sm" variant="secondary" block onClick={onLoad} disabled={compareDisabled} icon={<BarChart3 size={12} />}>
               Compare
             </Button>
             <Button size="sm" variant="ghost" onClick={onExport} aria-label="Export profile" title="Export profile" icon={<Download size={13} />} />

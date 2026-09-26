@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CheckCircle, AlertTriangle, XCircle, X, FileWarning } from "lucide-react";
 import type { InstallResult } from "../lib/types";
 import { Button, cx } from "./ui";
@@ -6,7 +7,7 @@ import { useDialog } from "../hooks/useDialog";
 interface InstallResultsModalProps {
   results: InstallResult[];
   onClose: () => void;
-  onResolveDuplicate: (source: string, strategy: "overwrite" | "rename") => void;
+  onResolveDuplicate: (source: string, strategy: "overwrite" | "rename") => Promise<void>;
 }
 
 export default function InstallResultsModal({ results, onClose, onResolveDuplicate }: InstallResultsModalProps) {
@@ -15,6 +16,21 @@ export default function InstallResultsModal({ results, onClose, onResolveDuplica
   const failed = results.filter((r) => r.status === "Failed").length;
   const attention = results.length - ok - failed;
   const dialogRef = useDialog(onClose);
+  // A double-click on Rename installed two renamed copies.
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const resolve = async (source: string, strategy: "overwrite" | "rename") => {
+    if (busy.has(source)) return;
+    setBusy((b) => new Set(b).add(source));
+    try {
+      await onResolveDuplicate(source, strategy);
+    } finally {
+      setBusy((b) => {
+        const n = new Set(b);
+        n.delete(source);
+        return n;
+      });
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Install results">
@@ -62,10 +78,10 @@ export default function InstallResultsModal({ results, onClose, onResolveDuplica
                 {r.message && <p className="text-xs text-txt-dim mt-0.5">{r.message}</p>}
                 {r.status === "Duplicate" && (
                   <div className="flex gap-2 mt-2">
-                    <Button size="sm" variant="danger" onClick={() => onResolveDuplicate(r.source, "overwrite")}>
+                    <Button size="sm" variant="danger" disabled={busy.has(r.source)} onClick={() => resolve(r.source, "overwrite")}>
                       Overwrite
                     </Button>
-                    <Button size="sm" onClick={() => onResolveDuplicate(r.source, "rename")}>
+                    <Button size="sm" disabled={busy.has(r.source)} onClick={() => resolve(r.source, "rename")}>
                       Rename
                     </Button>
                   </div>

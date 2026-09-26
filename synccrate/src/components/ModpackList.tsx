@@ -204,6 +204,9 @@ export default function ModpackList({ gameId }: Props) {
     try {
       await cmd.setActiveGame(importedPack.game_id);
       useAppStore.getState().setActiveGame(importedPack.game_id);
+      // The page follows too: its apply/revert status and the manifest the
+      // apply writes are per game, and stayed on the old one.
+      useAppStore.getState().navigateToGame(importedPack.game_id, "modpacks");
       await runComparison(importedPack);
     } catch (e) {
       toastError(`Couldn't switch game: ${e}`);
@@ -339,6 +342,7 @@ export default function ModpackList({ gameId }: Props) {
                     <button
                       key={ct.id}
                       onClick={() => toggleType(ct.id)}
+                      aria-pressed={selectedTypes.has(ct.id)}
                       className={cx(
                         "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
                         selectedTypes.has(ct.id) ? "bg-neon/10 border-neon text-neon" : "bg-bg border-line-hi text-txt-dim hover:text-txt",
