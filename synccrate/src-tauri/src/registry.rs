@@ -236,8 +236,13 @@ pub const GENRES: &[&str] = &[
 
 /// Load the game registry from the embedded JSON.
 pub fn load_registry() -> GameRegistry {
-    let json = include_str!("game_registry.json");
-    serde_json::from_str(json).expect("Invalid embedded game_registry.json")
+    // Parsed once: startup, detection and every pack lookup call this, and
+    // parsing the embedded 180 KB JSON each time added up to 2N+1 parses
+    // per launch.
+    static PARSED: std::sync::OnceLock<GameRegistry> = std::sync::OnceLock::new();
+    PARSED
+        .get_or_init(|| serde_json::from_str(include_str!("game_registry.json")).expect("Invalid embedded game_registry.json"))
+        .clone()
 }
 
 /// Build a lookup map from game ID to definition.

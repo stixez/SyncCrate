@@ -33,11 +33,14 @@ export function useKeyboardShortcuts() {
 
       // "/" → focus search on current page (only if not in an input)
       if (e.key === "/" && !isInput) {
-        e.preventDefault();
         const searchInput = document.querySelector<HTMLInputElement>(
-          'input[type="text"][placeholder*="Search"]'
+          'input[type="search"], input[aria-label^="Search" i], input[placeholder*="Search"], input[placeholder*="Find"]'
         );
-        searchInput?.focus();
+        // Otherwise leave the key alone (it was swallowed on pages without one).
+        if (searchInput) {
+          e.preventDefault();
+          searchInput.focus();
+        }
         return;
       }
 

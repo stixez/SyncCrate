@@ -840,8 +840,10 @@ pub async fn set_active_game(
         app_state.local_manifest = FileManifest::default();
     }
     app_state.active_game = game_id;
-    save_game_config(&app_state);
     if changed {
+        // Only on a real change: startup calls this twice, and each call
+        // rewrote the config file under the lock.
+        save_game_config(&app_state);
         crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
     }
     Ok(())

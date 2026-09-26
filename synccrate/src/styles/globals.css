@@ -44,7 +44,8 @@
   --color-line-hi: 178 190 184;
   --color-txt: 10 14 12;
   --color-txt-dim: 70 82 76;
-  --color-txt-muted: 104 116 110;
+  /* 4.4:1 before; small mono labels need 4.5:1 (AA). */
+  --color-txt-muted: 88 100 94;
   --color-accent: var(--game-accent, 31 184 126);
   --color-accent-light: var(--game-accent-ink, 20 121 84);
   --color-neon: var(--game-neon-ink, 20 121 84);

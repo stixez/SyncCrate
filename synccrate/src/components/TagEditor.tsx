@@ -23,6 +23,11 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
     cmd.getPredefinedTags().then(setPredefined).catch(() => {});
   }, []);
 
+  // Focus moves in once, when it opens (it stayed on the button behind it).
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("input, button")?.focus();
+  }, []);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       // The button that opened it toggles it itself: closing here too made
@@ -33,7 +38,11 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
       }
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // Back to the button that opened it (focus was left on the page).
+      const trigger = document.querySelector<HTMLElement>('[data-tag-trigger][aria-expanded="true"]');
+      onClose();
+      setTimeout(() => trigger?.focus(), 0);
     }
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKey);
@@ -95,6 +104,7 @@ export default function TagEditor({ filePath, currentTags, onTagsChanged, onClos
           <button
             key={tag}
             onClick={() => toggleTag(tag)}
+            aria-pressed={tags.includes(tag)}
             className={cx(
               "tag h-[22px] px-2 transition-colors",
               tags.includes(tag) ? "text-neon bg-neon/10" : "tag-neutral hover:text-txt hover:border-txt-muted",

@@ -214,8 +214,11 @@ pub fn run() {
         .manage(app_state)
         .manage(commands::open_intent::PendingIntents::default())
         .setup(|app| {
+            // The window starts hidden (tauri.conf.json) and shows once it has
+            // its saved size and place: it used to open at the default and jump.
             if let Some(w) = app.get_webview_window("main") {
                 window_state::restore(&w);
+                let _ = w.show();
             }
             // Set up tray icon
             let status = MenuItemBuilder::with_id("status", "Idle").enabled(false).build(app)?;
@@ -304,6 +307,7 @@ pub fn run() {
                 let active_game = app_state.active_game.clone();
                 let game_registry = app_state.game_registry.clone();
                 drop(app_state);
+                let ready_app = handle.clone();
 
                 // Start file watcher for active game's content type folders
                 let watcher_result = game_paths.get(&active_game).map(|base_path| {
@@ -332,6 +336,10 @@ pub fn run() {
                 if let (Some(Ok(w)), true, true) = (watcher_result, unchanged, app_state.file_watcher.is_none()) {
                     app_state.file_watcher = Some(w);
                 }
+                drop(app_state);
+                // The Dashboard asked for game info on mount, often before this
+                // finished, and showed no packs until the next visit.
+                let _ = tauri::Emitter::emit(&ready_app, "game-info-ready", ());
             });
 
             Ok(())

@@ -228,6 +228,23 @@ pub fn steam_common_dirs() -> Vec<PathBuf> {
 /// All `steamapps` directories (where `appmanifest_<id>.acf` files live)
 /// across every Steam library on this machine.
 pub fn steam_steamapps_dirs() -> Vec<PathBuf> {
+    // Detection asks once per game (60 of them, twice at startup): registry
+    // reads, two VDF files and an existence check per library each time, and
+    // seconds when a library is on an unplugged or network drive. Libraries
+    // rarely change, so a short cache.
+    static CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<PathBuf>)>> = std::sync::Mutex::new(None);
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, dirs)) = cache.as_ref() {
+        if at.elapsed() < std::time::Duration::from_secs(30) {
+            return dirs.clone();
+        }
+    }
+    let dirs = scan_steam_steamapps_dirs();
+    *cache = Some((std::time::Instant::now(), dirs.clone()));
+    dirs
+}
+
+fn scan_steam_steamapps_dirs() -> Vec<PathBuf> {
     let mut libs: Vec<PathBuf> = Vec::new();
     for root in steam_roots() {
         libs.push(root.clone());

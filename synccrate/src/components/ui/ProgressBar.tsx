@@ -9,9 +9,11 @@ export interface ProgressBarProps {
   /** Right caption (defaults to the percentage when a label is given). */
   meta?: ReactNode;
   className?: string;
+  /** Name for screen readers (defaults to a text `label`). */
+  ariaLabel?: string;
 }
 
-export default function ProgressBar({ value, label, meta, className }: ProgressBarProps) {
+export default function ProgressBar({ value, label, meta, className, ariaLabel }: ProgressBarProps) {
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div className={className}>
@@ -21,7 +23,7 @@ export default function ProgressBar({ value, label, meta, className }: ProgressB
           <span className="tabular shrink-0">{meta ?? `${Math.round(pct)}%`}</span>
         </div>
       )}
-      <div className={cx("progress")} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+      <div className={cx("progress")} role="progressbar" aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
         <i style={{ width: `${pct}%` }} />
       </div>
     </div>
