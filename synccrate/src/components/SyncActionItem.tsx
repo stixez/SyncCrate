@@ -7,6 +7,7 @@ interface SyncActionItemProps {
   action: SyncAction;
   excluded: boolean;
   onToggle: (path: string) => void;
+  disabled?: boolean;
 }
 
 function getActionInfo(action: SyncAction) {
@@ -45,7 +46,7 @@ function getActionInfo(action: SyncAction) {
   return null;
 }
 
-export default function SyncActionItem({ action, excluded, onToggle }: SyncActionItemProps) {
+export default function SyncActionItem({ action, excluded, onToggle, disabled }: SyncActionItemProps) {
   const info = getActionInfo(action);
   if (!info) return null;
 
@@ -55,12 +56,13 @@ export default function SyncActionItem({ action, excluded, onToggle }: SyncActio
   return (
     <label
       className={cx(
-        "group flex items-center gap-2.5 px-2.5 py-1.5 border-l-2 hover:bg-bg-card-hover transition-colors cursor-pointer",
+        "group flex items-center gap-2.5 px-2.5 py-1.5 border-l-2 hover:bg-bg-card-hover transition-colors",
+        disabled ? "cursor-not-allowed" : "cursor-pointer",
         info.direction === "conflict" ? "border-l-amber" : info.direction === "delete" ? "border-l-status-red" : "border-l-transparent",
         excluded && "opacity-45",
       )}
     >
-      <input type="checkbox" checked={!excluded} onChange={() => onToggle(info.path)} className="check" />
+      <input type="checkbox" checked={!excluded} onChange={() => onToggle(info.path)} disabled={disabled} aria-label={`Include ${info.path}`} className="check" />
       {info.direction === "upload" && <ArrowUp size={12} className="text-neon shrink-0" aria-label="Upload" />}
       {info.direction === "download" && <ArrowDown size={12} className="text-accent-light shrink-0" aria-label="Download" />}
       {info.direction === "conflict" && <AlertTriangle size={12} className="text-amber shrink-0" aria-label="Conflict" />}

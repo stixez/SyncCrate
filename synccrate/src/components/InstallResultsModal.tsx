@@ -1,6 +1,7 @@
 import { CheckCircle, AlertTriangle, XCircle, X, FileWarning } from "lucide-react";
 import type { InstallResult } from "../lib/types";
 import { Button, cx } from "./ui";
+import { useDialog } from "../hooks/useDialog";
 
 interface InstallResultsModalProps {
   results: InstallResult[];
@@ -13,10 +14,11 @@ export default function InstallResultsModal({ results, onClose, onResolveDuplica
   const ok = results.filter((r) => r.status === "Success").length;
   const failed = results.filter((r) => r.status === "Failed").length;
   const attention = results.length - ok - failed;
+  const dialogRef = useDialog(onClose);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Install results">
-      <div className="panel panel-accent max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
+      <div ref={dialogRef} className="panel panel-accent max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border">
           <div>
             <p className="hud-label mb-1"><b>//</b> Drop install</p>

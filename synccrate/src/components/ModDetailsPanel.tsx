@@ -1,5 +1,6 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { friendlyError } from "../lib/errors";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS } from "../lib/modMeta";
@@ -54,7 +55,11 @@ export default function ModDetailsPanel({
   const isDisabled = isDisabledPath(file.relative_path);
   const basePath = gamePaths[gameId];
 
+  // A double click ran a second toggle on the old (already renamed) path.
+  const [toggling, setToggling] = useState(false);
   const handleToggle = async () => {
+    if (toggling) return;
+    setToggling(true);
     try {
       const newPath = await cmd.toggleMod(gameId, file.relative_path, isDisabled);
       const m = useAppStore.getState().manifest;
@@ -64,7 +69,9 @@ export default function ModDetailsPanel({
       // The file now has a new path; this panel still points at the old one.
       onClose();
     } catch (e) {
-      toastError(`${e}`);
+      toastError(friendlyError(e));
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -183,6 +190,7 @@ export default function ModDetailsPanel({
               <Button
                 variant={isDisabled ? "primary" : "secondary"}
                 onClick={handleToggle}
+                disabled={toggling}
                 icon={isDisabled ? <Power size={14} /> : <PowerOff size={14} />}
               >
                 {isDisabled ? "Enable" : "Disable"}

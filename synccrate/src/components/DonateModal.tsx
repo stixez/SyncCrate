@@ -2,14 +2,16 @@ import { X, Coffee, Heart, ExternalLink } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { open } from "@tauri-apps/plugin-shell";
 import { getSyncCount, getTimeSaved } from "../lib/donations";
+import { useDialog } from "../hooks/useDialog";
 
 export default function DonateModal() {
   const setShowDonate = useAppStore((s) => s.setShowDonate);
   const syncCount = getSyncCount();
+  const dialogRef = useDialog(() => setShowDonate(false));
 
   return (
     <div className="fixed inset-0 bg-black/65 backdrop-blur-[2px] flex items-center justify-center z-50 p-4" onClick={() => setShowDonate(false)} role="dialog" aria-modal="true" aria-label="Support SyncCrate">
-      <div className="corner-brackets max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} className="corner-brackets max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
         <div className="panel shadow-2xl">
           <div className="p-6">
             <div className="flex items-start justify-between gap-3 mb-4">

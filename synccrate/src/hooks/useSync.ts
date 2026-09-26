@@ -5,6 +5,7 @@ import { toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
+import { friendlyError } from "../lib/errors";
 
 export function useSync() {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +24,7 @@ export function useSync() {
       // Full scan with hashes needed for accurate sync comparison
       setLoadingPhase("Hashing files...");
       await cmd.scanFiles(undefined, false);
-      setLoadingPhase("Comparing manifests...");
+      setLoadingPhase("Comparing with the host...");
       const plan = await cmd.computeSyncPlan();
       setSyncPlan(plan);
       const count = plan.actions.length;
@@ -90,6 +91,7 @@ export function useSync() {
       addLog(`Resolved conflict for ${path}: ${resolution}`, "success");
     } catch (e: any) {
       addLog(`Failed to resolve conflict: ${e}`, "error");
+      toastError(`Couldn't resolve the conflict: ${friendlyError(e)}`);
     }
   };
 
@@ -100,6 +102,7 @@ export function useSync() {
       addLog(`Resolved all conflicts using "${strategy}"`, "success");
     } catch (e: any) {
       addLog(`Failed to resolve all conflicts: ${e}`, "error");
+      toastError(`Couldn't resolve the conflicts: ${friendlyError(e)}`);
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { friendlyError } from "../lib/errors";
 import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X, Loader2, Undo2 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
@@ -205,6 +206,7 @@ export default function BackupList({ gameId }: Props) {
       addLog("Backup deleted", "info");
     } catch (e) {
       addLog(`Delete failed: ${e}`, "error");
+      toastError(`Couldn't delete the backup: ${friendlyError(e)}`);
     }
   };
 
@@ -221,6 +223,7 @@ export default function BackupList({ gameId }: Props) {
       addLog(`Backup renamed to "${trimmed}"`, "info");
     } catch (e) {
       addLog(`Rename failed: ${e}`, "error");
+      toastError(`Couldn't rename the backup: ${friendlyError(e)}`);
     }
     setRenaming(null);
   };

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { friendlyError } from "../lib/errors";
 import { useAppStore, type ConnectAttempt } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import type { SyncFolderPermissions } from "../lib/types";
@@ -156,6 +157,7 @@ export function useSession() {
       addLog("Disconnected", "info");
     } catch (e: any) {
       addLog(`Failed to disconnect: ${e}`, "error");
+      toastError(`Couldn't disconnect: ${friendlyError(e)}`);
     } finally {
       setIsLoading(false);
     }
