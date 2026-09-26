@@ -61,6 +61,53 @@ pub(crate) fn clear_failed_client_attempt_if_active(state: &mut AppState, peer_i
     true
 }
 
+/// The host's PIN, kept between sessions: a new one on every Start Hosting
+/// broke every friend's saved Reconnect, since the PIN is part of the join
+/// code. "New PIN" (`new_host_pin`) makes a fresh one.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SavedPin {
+    pin: String,
+}
+
+fn host_pin_path() -> std::path::PathBuf {
+    crate::utils::config_root().join("synccrate").join("host_pin.json")
+}
+
+/// Five digits that fit the join code's u16.
+fn valid_pin(pin: &str) -> bool {
+    pin.len() == 5 && pin.parse::<u16>().is_ok_and(|n| n >= 10000)
+}
+
+fn random_pin() -> String {
+    rand::thread_rng().gen_range(10000..=65535u16).to_string()
+}
+
+fn saved_or_new_pin() -> String {
+    if let Ok(Some(SavedPin { pin })) = crate::utils::read_json_strict::<SavedPin>(&host_pin_path()) {
+        if valid_pin(&pin) {
+            return pin;
+        }
+    }
+    let pin = random_pin();
+    if let Err(e) = crate::utils::write_json_atomic(&host_pin_path(), &SavedPin { pin: pin.clone() }) {
+        log::warn!("{e}; the PIN will change next time you host");
+    }
+    pin
+}
+
+/// A fresh host PIN, used from now on (also for the running session, if it
+/// has one). Friends already connected stay; new joins need the new code.
+#[tauri::command]
+pub async fn new_host_pin(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+    let pin = random_pin();
+    crate::utils::write_json_atomic(&host_pin_path(), &SavedPin { pin: pin.clone() })?;
+    let mut app_state = state.lock().await;
+    if app_state.session_type == SessionType::Host && app_state.session_pin.is_some() {
+        app_state.session_pin = Some(pin.clone());
+    }
+    Ok(pin)
+}
+
 #[tauri::command]
 pub async fn start_host(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -99,11 +146,7 @@ pub async fn start_host(
     // Optionally generate a session PIN. Five digits (it has to fit the join
     // code's u16), with lockouts against guessing in `network::pin_guard`.
     // On by default (callers that don't say, e.g. older frontends, get one too).
-    let pin = if use_pin.unwrap_or(true) {
-        Some(rand::thread_rng().gen_range(10000..=65535u16).to_string())
-    } else {
-        None
-    };
+    let pin = if use_pin.unwrap_or(true) { Some(saved_or_new_pin()) } else { None };
 
     // Commit session state now that we know the port is available
     {
@@ -615,6 +658,12 @@ pub async fn set_session_port(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_pins_are_five_digits_that_fit_the_join_code() {
+        assert!(valid_pin("10000") && valid_pin("65535") && valid_pin(&random_pin()));
+        assert!(!valid_pin("09999") && !valid_pin("65536") && !valid_pin("1234") && !valid_pin("12a45") && !valid_pin(""));
+    }
 
     fn manifest(paths: &[(&str, u64)]) -> crate::state::FileManifest {
         let mut m = crate::state::FileManifest::default();

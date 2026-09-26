@@ -64,7 +64,7 @@ export const GUIDE: GuideGroup[] = [
           "Friends paste the code (or click the link: it opens SyncCrate with the code filled in).",
           "SyncCrate connects directly when it can, otherwise through an encrypted relay that can't read your files.",
         ],
-        tip: "Anyone with the code can join. Turn on **Require PIN to join** if you post it somewhere public.",
+        tip: "The code (and its PIN) stays the same between sessions, so friends can use **Reconnect**. Posted it somewhere public? Click **New PIN** while hosting.",
         keywords: "online remote code relay invite link pin",
         go: { label: "Open the Dashboard", page: "dashboard" },
       },

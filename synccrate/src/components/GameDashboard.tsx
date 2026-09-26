@@ -11,7 +11,7 @@ import { useHostUpdates } from "../hooks/useHostUpdates";
 import { useStayInSync } from "../hooks/useStayInSync";
 import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadStayInSync, saveStayInSync } from "../lib/prefs";
 import { formatBytes, plural } from "../lib/utils";
-import { toastSuccess, toastError } from "../lib/toast";
+import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
@@ -863,6 +863,23 @@ export default function GameDashboard({ gameId }: Props) {
                 >
                   {pinCopied ? <Check size={12} className="text-neon" /> : <Copy size={12} />}
                   {pinCopied ? "Copied" : "Copy PIN"}
+                </button>
+                {/* The PIN stays the same between sessions so saved Reconnects keep working; this retires it. */}
+                <button
+                  onClick={async () => {
+                    try {
+                      await cmd.newHostPin();
+                      useAppStore.getState().setSession(await cmd.getSessionStatus());
+                      toastInfo("New PIN. Friends who are connected stay; anyone joining needs the new join code.");
+                    } catch (e) {
+                      toastError(`Couldn't make a new PIN: ${e}`);
+                    }
+                  }}
+                  title="Friends' saved join codes stop working. Use it if the code got shared too widely."
+                  className="self-start flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-txt-muted hover:text-neon transition-colors"
+                >
+                  <RefreshCw size={12} />
+                  New PIN
                 </button>
               </div>
             )}
