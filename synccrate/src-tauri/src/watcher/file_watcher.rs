@@ -24,8 +24,10 @@ pub struct WatchSpec {
     pub folders: Vec<(String, bool)>,
     /// File extensions a scan can pick up (None: any file can).
     extensions: Option<HashSet<String>>,
-    /// File names every content type ignores (ReShade.ini, ...).
-    excluded: HashSet<String>,
+    /// Per content folder (lowercase, `/`-separated): file names it ignores
+    /// (ReShade.ini, ...). Merged across folders, TF2's `config.cfg` rule
+    /// hid `custom/**/config.cfg` changes too.
+    excluded: Vec<(String, HashSet<String>)>,
 }
 
 pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
@@ -45,7 +47,15 @@ pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
             .chain(["disabled".to_string()])
             .collect()
     });
-    let excluded = cts.iter().flat_map(|c| c.exclude_files.iter().map(|n| n.to_lowercase())).collect();
+    let mut excluded: Vec<(String, HashSet<String>)> = Vec::new();
+    for ct in cts {
+        let key = norm_path(&PathBuf::from(base).join(&ct.folder));
+        let names = ct.exclude_files.iter().map(|n| n.to_lowercase());
+        match excluded.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, set)) => set.extend(names),
+            None => excluded.push((key, names.collect())),
+        }
+    }
     WatchSpec { folders, extensions, excluded }
 }
 
@@ -59,12 +69,25 @@ impl WatchSpec {
             return true;
         }
         let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-        if self.excluded.contains(&name) {
+        // The most specific content folder the file is in decides.
+        let p = norm_path(path);
+        let folder = self
+            .excluded
+            .iter()
+            .filter(|(k, _)| p.starts_with(&format!("{}/", k.trim_end_matches('/'))))
+            .max_by_key(|(k, _)| k.len());
+        if folder.is_some_and(|(_, names)| names.contains(&name)) {
             return false;
         }
         let Some(exts) = &self.extensions else { return true };
         path.extension().is_some_and(|e| exts.contains(&e.to_string_lossy().to_lowercase()))
     }
+}
+
+/// Lowercase with `/`, and without a trailing "/." (the `folder: "."` types).
+fn norm_path(p: &Path) -> String {
+    let s = p.to_string_lossy().replace('\\', "/").to_lowercase();
+    s.strip_suffix("/.").unwrap_or(&s).trim_end_matches('/').to_string()
 }
 
 /// A watched folder and what it was when the watch started (its creation
