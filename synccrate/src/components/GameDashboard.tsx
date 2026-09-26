@@ -589,7 +589,7 @@ export default function GameDashboard({ gameId }: Props) {
             {pinPrompt && (
               <div className={cx("mt-4 bg-bg border p-3", pinPrompt.wrongPin ? "border-status-red/60" : "border-line-hi")}>
                 <p className="hud-label mb-1"><b>PIN</b> &nbsp;required</p>
-                <p className={cx("text-xs mb-2.5", pinPrompt.wrongPin ? "text-status-red" : "text-txt-dim")}>
+                <p id="pin-help" role={pinPrompt.wrongPin ? "alert" : undefined} className={cx("text-xs mb-2.5", pinPrompt.wrongPin ? "text-status-red" : "text-txt-dim")}>
                   {pinPrompt.wrongPin
                     ? "That PIN was rejected. It's the 5-digit number on the host's SyncCrate screen, next to their join code."
                     : `${pinPrompt.attempt.label === "host" ? "The host" : pinPrompt.attempt.label} uses a PIN. It's the 5-digit number on their SyncCrate screen, next to the join code.`}
@@ -603,6 +603,7 @@ export default function GameDashboard({ gameId }: Props) {
                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
                     placeholder="0000"
                     aria-label="Session PIN"
+                    aria-describedby="pin-help"
                     className="input input-mono flex-1 !h-11 text-center text-xl !tracking-[0.5em]"
                     autoFocus
                     onKeyDown={(e) => {

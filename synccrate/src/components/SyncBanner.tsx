@@ -401,7 +401,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                 {cancelling ? "Cancelling…" : "Cancel"}
               </Button>
             </div>
-            <ProgressBar value={pct} />
+            <ProgressBar value={pct} ariaLabel="Sync progress" />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 font-mono text-[11px] text-txt-dim tabular">
               <span><span className="text-txt">{syncProgress.files_done}</span>/{syncProgress.files_total} files</span>
               <span>
@@ -430,6 +430,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                 <button
                   key={f.id}
                   onClick={() => applyQuickFilter(f.id)}
+                  aria-pressed={quickFilter === f.id}
                   disabled={selectionLocked}
                   className={cx(
                     "disabled:opacity-50 disabled:cursor-not-allowed",

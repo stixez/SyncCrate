@@ -153,14 +153,14 @@ export default function ActivityLog() {
       />
 
       <div className="flex items-end justify-between gap-4 border-b border-border">
-        <div className="flex -mb-px">
-          <button onClick={() => setTab("log")} className={tabClass(tab === "log")}>
+        <div className="flex -mb-px" role="tablist" aria-label="Activity">
+          <button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")} className={tabClass(tab === "log")}>
             <Terminal size={13} />
             Log
             <span className={cx("font-mono font-normal text-[10px] tracking-normal", tab === "log" ? "text-neon" : "text-txt-muted")}>{logs.length}</span>
             {counts.problems > 0 && <span className="font-mono font-normal text-[10px] tracking-normal text-amber">⚠ {counts.problems}</span>}
           </button>
-          <button onClick={() => setTab("history")} className={tabClass(tab === "history")}>
+          <button role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")} className={tabClass(tab === "history")}>
             <History size={13} />
             Sync History
           </button>

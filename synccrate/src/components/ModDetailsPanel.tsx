@@ -1,4 +1,5 @@
 import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle, Copy } from "lucide-react";
+import { useDialog } from "../hooks/useDialog";
 import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
@@ -75,16 +76,11 @@ export default function ModDetailsPanel({
     }
   };
 
-  // Escape closes, and focus starts on the close button (keyboard users).
+  // The shared dialog behaviour: Escape (topmost dialog only), focus kept
+  // inside, and back on the row it was opened from (it fell to the page,
+  // losing the place in a list of thousands of files).
   const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = useDialog(onClose);
 
   const fullPath = basePath ? `${basePath}/${file.relative_path}` : "";
   const handleReveal = () => {
@@ -100,7 +96,7 @@ export default function ModDetailsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="corner-brackets w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mod-details-title">
+      <div ref={dialogRef} className="corner-brackets w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mod-details-title">
         <div className="panel shadow-2xl">
           <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border">
             <div className="flex items-center gap-3 min-w-0">

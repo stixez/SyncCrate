@@ -342,6 +342,7 @@ export default function Sidebar() {
                           <button
                             key={p}
                             onClick={() => navigateToGame(game.id, p)}
+                            aria-current={active ? "page" : undefined}
                             className={cx(
                               "row-h-sm relative w-full flex items-center gap-2.5 pl-4 pr-3 h-8 font-display font-semibold text-[11.5px] uppercase tracking-[0.1em] transition-colors",
                               active ? "text-neon" : "text-txt-muted hover:text-txt",

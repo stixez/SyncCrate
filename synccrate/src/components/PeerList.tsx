@@ -153,7 +153,7 @@ export default function PeerList() {
                     </span>
                     <span className="shrink-0 text-neon tabular">{dlPercent}%</span>
                   </div>
-                  <ProgressBar value={dlPercent} />
+                  <ProgressBar value={dlPercent} ariaLabel={`${peer.name}'s download`} />
                   {dlProgress.files_sent > 0 && (
                     <p className="font-mono text-[10px] text-txt-muted mt-1">
                       {dlProgress.files_sent} file(s) sent
