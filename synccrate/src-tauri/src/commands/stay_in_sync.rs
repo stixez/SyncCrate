@@ -115,12 +115,20 @@ pub(crate) async fn auto_pull_inner(state: &Arc<Mutex<AppState>>, events: crate:
         }
     }
     crate::network::transfer::refresh_remote_manifest(state, &peer_id).await?;
-    let plan = crate::commands::sync::compute_sync_plan_inner(state, Some(peer_id.clone())).await?;
+    // Computed without storing: storing it here replaced a plan the user
+    // opened while this ran (up to two minutes), so Sync ran the wrong files.
+    let (_, plan) = crate::commands::sync::plan_for_peer(state, Some(peer_id.clone())).await?;
     let (subset, scripts_held, needs_review) = safe_subset(&plan, &script_exts);
     let pulled = subset.actions.len();
     {
         let mut s = state.lock().await;
+        if s.is_any_syncing() {
+            return skip("A sync or restore is running.");
+        }
         let Some(conn) = s.connections.get_mut(&peer_id) else { return skip("Disconnected.") };
+        if conn.sync_plan.as_ref().is_some_and(|p| !p.actions.is_empty()) {
+            return skip("A sync plan is open.");
+        }
         if plan.warning.is_some() {
             // e.g. an old host that seems to share another game: never unattended.
             conn.sync_plan = None;

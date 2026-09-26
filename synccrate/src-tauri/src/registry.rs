@@ -594,7 +594,7 @@ mod tests {
             ("skyrim_le", &["Data/Skyrim.esm", "Data/Dawnguard.bsa", "Data/HighResTexturePack01.bsa"], "Data/SkyUI.esp"),
             ("fallout4", &["Data/Fallout4.esm", "Data/DLCNukaWorld.esm", "Data/DLCRobot - Main.ba2", "Data/ccBGSFO4044-HellfirePowerArmor.esl", "Data/Fallout4 - Textures1.ba2"], "Data/ArmorKeywords.esm"),
             ("fallout_new_vegas", &["Data/FalloutNV.esm", "Data/DeadMoney.esm", "Data/Fallout - Textures.bsa"], "Data/YUP - Base Game + All DLC.esm"),
-            ("oblivion", &["Data/Oblivion.esm", "Data/DLCShiveringIsles.esp", "Data/Knights.bsa"], "Data/Unofficial Oblivion Patch.esp"),
+            ("oblivion", &["Data/Oblivion.esm", "Data/DLCShiveringIsles.esp", "Data/Knights.bsa"], "Data/DLCHorseArmor - Unofficial Patch.esp"),
             ("morrowind", &["Data Files/Morrowind.esm", "Data Files/Bloodmoon.bsa"], "Data Files/Patch for Purists.esm"),
             ("starfield", &["Data/Starfield.esm", "Data/Constellation.esm", "Data/ShatteredSpace.esm", "Data/SFBGS003.esm"], "Data/StarUI Inventory.esp"),
             ("kerbal_space_program", &["GameData/Squad/Parts/Engine/x.cfg", "GameData/SquadExpansion/Serenity/y.cfg"], "GameData/MechJeb2/Parts/z.cfg"),

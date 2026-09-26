@@ -181,6 +181,12 @@ pub(crate) async fn undo_last_sync_inner(
     let Some(_guard) = backup::try_begin_restoring() else {
         return Err("A restore is already running.".to_string());
     };
+    // Checked again now that the flag is held: a sync (a stay-in-sync pull)
+    // could start while we checked the game above. New syncs check the flag
+    // under the AppState lock, so none can start after this.
+    if state.lock().await.is_any_syncing() {
+        return Err("Can't undo while a sync is in progress.".to_string());
+    }
 
     let base = std::path::PathBuf::from(&base_path);
     let result = tokio::task::spawn_blocking(move || backup::undo_apply(&record, &base, &content_types))

@@ -522,6 +522,7 @@ pub(crate) fn count_new_host_files(
         let key = match_key(path);
         if local_keys.contains(&key)
             || !path_accepted_by(content_types, path)
+            || !crate::sync::diff::receivable(path, info)
             || !allowed(info)
             || !seen.insert(key)
         {

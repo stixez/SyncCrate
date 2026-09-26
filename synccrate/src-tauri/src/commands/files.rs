@@ -29,13 +29,6 @@ fn load_hash_cache() -> HashCache {
     HashMap::new()
 }
 
-/// Hashes scans already computed, by absolute path ('/'-separated):
-/// `(size, mtime secs, hash)`. Lets a backup skip copying a file whose
-/// content the store already has.
-pub(crate) fn scanned_hashes() -> HashMap<String, (u64, u64, String)> {
-    load_hash_cache().into_iter().map(|(k, e)| (k, (e.size, e.mtime, e.hash))).collect()
-}
-
 fn save_hash_cache(cache: &HashCache) {
     let path = utils::hash_cache_path();
     if let Ok(data) = serde_json::to_string(cache) {
