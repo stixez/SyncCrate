@@ -27,7 +27,14 @@ fn key_path() -> std::path::PathBuf {
 }
 
 /// Load (or create and save) this install's secret key.
+/// Loaded (or made) once per run: when saving failed, every call made a new
+/// key, so the join code's internet id no longer matched the endpoint's.
 pub fn secret_key() -> SecretKey {
+    static KEY: std::sync::OnceLock<SecretKey> = std::sync::OnceLock::new();
+    KEY.get_or_init(load_or_create_key).clone()
+}
+
+fn load_or_create_key() -> SecretKey {
     let path = key_path();
     if let Ok(bytes) = std::fs::read(&path) {
         if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
