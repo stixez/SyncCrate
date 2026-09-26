@@ -186,6 +186,11 @@ export async function getAllGamePaths(): Promise<Record<string, string | null>> 
   return invoke("get_all_game_paths");
 }
 
+/** The OS account name, cleaned like the name field (a first-run default). */
+export async function defaultDisplayName(): Promise<string> {
+  return invoke("default_display_name");
+}
+
 export async function openFolder(path: string): Promise<void> {
   return invoke("open_folder", { path });
 }

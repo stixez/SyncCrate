@@ -284,7 +284,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
                 Keep newer for all
               </Button>
             )}
-            <Button onClick={() => setPage("content")}>View Conflicts</Button>
+            <Button onClick={() => { useAppStore.getState().setFocusConflicts(true); setPage("content"); }}>View Conflicts</Button>
           </div>
         )}
       </div>

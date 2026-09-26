@@ -5,9 +5,9 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Banner, Button, EmptyState, Input, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { getGameDef, gameLabel } from "../lib/games";
-import { formatBytes, formatDate } from "../lib/utils";
+import { dirOf, formatBytes, formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
-import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { runPackApply } from "../lib/packApply";
 import type { ModPack, PackApplyPreview, PackApplyStatus, PackComparison, PackFileStatus } from "../lib/types";
 
@@ -157,7 +157,7 @@ export default function ModpackList({ gameId }: Props) {
       if (dest) {
         await cmd.savePack(exportedPack, dest);
         addLog(`Pack saved as ${dest.split(/[/\\]/).pop()}`, "success");
-        toastSuccess("Pack saved");
+        toastAction(`Pack saved as ${dest.split(/[/\\]/).pop()}`, "Show in folder", () => cmd.openFolder(dirOf(dest)).catch(() => {}));
       }
     } catch (e) {
       toastError(`Couldn't save pack: ${e}`);
@@ -324,7 +324,7 @@ export default function ModpackList({ gameId }: Props) {
         {/* Export */}
         <Panel tone="accent" label={<b>// Export</b>} title="Build a pack">
           <div className="space-y-3">
-            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} placeholder="Pack name (e.g. My CC Set)..." aria-label="Pack name" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !creating && name.trim() && handleCreate()} maxLength={128} placeholder="Pack name (e.g. My CC Set)..." aria-label="Pack name" />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -384,7 +384,7 @@ export default function ModpackList({ gameId }: Props) {
             </Button>
             <p className="text-center font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted">— or drop one anywhere, or paste a link —</p>
             <div className="flex gap-2">
-              <Input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
+              <Input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
               <Button onClick={handleImportLink} disabled={!linkInput.trim()} icon={<Link2 size={12} />}>
                 Load
               </Button>

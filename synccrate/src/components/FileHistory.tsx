@@ -24,6 +24,7 @@ function describe(v: FileVersion) {
 /** Previous versions of synced files (backend `commands::history`): one
  * file's when `path` is given (mod details), otherwise the game's latest. */
 export default function FileHistory({ gameId, path, limit, className }: { gameId: string; path?: string; limit?: number; className?: string }) {
+  const [showAll, setShowAll] = useState(false);
   const setManifest = useAppStore((s) => s.setManifest);
   const activeGame = useAppStore((s) => s.activeGame);
   const addLog = useLogStore((s) => s.addLog);
@@ -83,7 +84,7 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
       </p>
     );
   }
-  const shown = limit ? versions.slice(0, limit) : versions;
+  const shown = limit && !showAll ? versions.slice(0, limit) : versions;
   return (
     <div className={className}>
       <ul className="border border-border divide-y divide-border">
@@ -111,7 +112,13 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
           </li>
         ))}
       </ul>
-      {limit && versions.length > limit && <p className="text-[11px] text-txt-muted mt-2">…and {versions.length - limit} older versions. Open a mod's details to see all of its versions.</p>}
+      {limit && !showAll && versions.length > limit && (
+        // Files a sync deleted aren't on the Content page, so "open the mod's
+        // details" couldn't reach their older versions.
+        <Button size="sm" variant="ghost" className="mt-2" onClick={() => setShowAll(true)}>
+          Show all {versions.length} versions
+        </Button>
+      )}
     </div>
   );
 }

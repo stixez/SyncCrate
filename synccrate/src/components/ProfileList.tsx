@@ -6,7 +6,8 @@ import ProfileCard from "./ProfileCard";
 import { Banner, Button, Input, Panel, SectionHeader, StatTile } from "./ui";
 import { getGameDef } from "../lib/games";
 import { isDemoMode } from "../lib/demoData";
-import { toastError } from "../lib/toast";
+import { toastAction, toastError, toastSuccess } from "../lib/toast";
+import { dirOf } from "../lib/utils";
 import { friendlyError } from "../lib/errors";
 import * as cmd from "../lib/commands";
 import type { ProfileComparison } from "../lib/types";
@@ -59,6 +60,7 @@ export default function ProfileList({ gameId }: Props) {
       setDesc("");
       setShowCreate(false);
       addLog(`Profile "${name}" created`, "success");
+      toastSuccess(`Profile "${name}" saved`);
     } catch (e) {
       addLog(`Failed to create profile: ${e}`, "error");
       toastError(`Couldn't save profile: ${e}`);
@@ -106,6 +108,7 @@ export default function ProfileList({ gameId }: Props) {
         await cmd.exportProfile(id, dest);
         const filename = dest.split(/[/\\]/).pop() || dest;
         addLog(`Profile exported as ${filename}`, "success");
+        toastAction(`Profile exported as ${filename}`, "Show in folder", () => cmd.openFolder(dirOf(dest)).catch(() => {}));
       }
     } catch (e) {
       addLog(`Failed to export profile: ${e}`, "error");
@@ -125,6 +128,7 @@ export default function ProfileList({ gameId }: Props) {
         const updated = await cmd.listProfiles();
         setProfiles(updated);
         addLog("Profile imported", "success");
+        toastSuccess("Profile imported");
       }
     } catch (e) {
       addLog(`Failed to import profile: ${e}`, "error");
@@ -216,6 +220,7 @@ export default function ProfileList({ gameId }: Props) {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 maxLength={64}
                 placeholder="Profile name..."
                 aria-label="Profile name"
