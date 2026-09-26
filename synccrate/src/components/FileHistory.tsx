@@ -55,7 +55,7 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
       setConfirm(null);
       if (gameId === activeGame) {
         try {
-          setManifest(await cmd.scanFiles(gameId));
+          setManifest(await cmd.scanFiles(gameId), gameId);
         } catch {}
       }
       await load();

@@ -59,6 +59,10 @@ pub struct ChatLog {
     /// With `pending_synced`: files that sync couldn't get.
     #[serde(skip)]
     pub pending_failed: u64,
+    /// Bumped with every new report, so a poll's reply only clears the
+    /// report it carried (one queued meanwhile used to be wiped).
+    #[serde(skip)]
+    pub pending_seq: u64,
     #[serde(skip)]
     next_seq: u64,
 }

@@ -37,9 +37,11 @@ export default function UndoLastSync({ gameId }: { gameId: string }) {
       if (r.skipped.length) parts.push(`${r.skipped.length} skipped`);
       setStatus(null);
       useAppStore.getState().setUndoStatus(null);
+      // "What's new" listed the files the undo just removed.
+      useAppStore.getState().setLastSyncChanges(null);
       addLog(`Sync undone: ${parts.join(", ")}`, "success");
       toastSuccess(`Sync undone: ${parts.join(", ")}`);
-      cmd.scanFiles(gameId).then((m) => useAppStore.getState().setManifest(m)).catch(() => {});
+      cmd.scanFiles(gameId).then((m) => useAppStore.getState().setManifest(m, gameId)).catch(() => {});
     } catch (e) {
       addLog(`Undo failed: ${e}`, "error");
       toastError(`Undo failed: ${e}`);

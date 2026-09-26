@@ -236,7 +236,7 @@ export default function Sidebar() {
           <span className="hud-label"><b>//</b> Library</span>
           <span className="font-mono text-[10px] text-txt-muted tabular">{String(shownGames.length).padStart(2, "0")}</span>
         </div>
-        {shownGames.length > 8 && (
+        {(shownGames.length > 8 || gameFilter) && (
           <div className="px-3 pb-2">
             <input
               value={gameFilter}

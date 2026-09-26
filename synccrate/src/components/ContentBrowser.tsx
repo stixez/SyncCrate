@@ -128,6 +128,8 @@ export default function ContentBrowser({ gameId }: Props) {
   const [busyPaths, setBusyPaths] = useState<Set<string> | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [showFifty, setShowFifty] = useState(false);
+  // Half the mods are off while a search runs: its panel can't be hidden.
+  const [fiftyActive, setFiftyActive] = useState(false);
   const [legacyCount, setLegacyCount] = useState(0);
   const [legacyDismissed, setLegacyDismissed] = useState<string | null>(null);
   const [fixingLegacy, setFixingLegacy] = useState(false);
@@ -195,7 +197,7 @@ export default function ContentBrowser({ gameId }: Props) {
     setScanError(null);
     setScanning(true);
     cmd.scanFiles(gameId)
-      .then((m) => { if (!cancelled) setManifest(m); })
+      .then((m) => { if (!cancelled) setManifest(m, gameId); })
       .catch((e) => { if (!cancelled) setScanError(friendlyError(e)); })
       .finally(() => { if (!cancelled) setScanning(false); });
     return () => { cancelled = true; };
@@ -233,7 +235,7 @@ export default function ContentBrowser({ gameId }: Props) {
     setFixingLegacy(true);
     try {
       const r = await cmd.migrateLegacyDisabled(gameId);
-      setManifest(await cmd.scanFiles(gameId));
+      setManifest(await cmd.scanFiles(gameId), gameId);
       setLegacyCount(await cmd.countLegacyDisabled(gameId));
       if (r.moved) toastSuccess(`Disabled ${r.moved} mod${r.moved !== 1 ? "s" : ""} properly (renamed to .disabled)`);
       if (r.collisions.length) toastInfo(`${r.collisions.length} file(s) left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
@@ -804,8 +806,8 @@ export default function ContentBrowser({ gameId }: Props) {
             {isModLike && canBisect && (
               <Button
                 size="sm"
-                variant={showFifty ? "primary" : "secondary"}
-                onClick={() => setShowFifty(!showFifty)}
+                variant={showFifty || fiftyActive ? "primary" : "secondary"}
+                onClick={() => !fiftyActive && setShowFifty(!showFifty)}
                 icon={<SearchCheck size={12} />}
                 title="Turn half your mods off at a time to find the one causing a problem (the 50/50 method)"
               >
@@ -876,8 +878,8 @@ export default function ContentBrowser({ gameId }: Props) {
         </Banner>
       )}
 
-      {showFifty && canBisect && (
-        <FiftyFifty gameId={gameId} gameLabel={gameDef?.label ?? gameId} onClose={() => setShowFifty(false)} />
+      {(showFifty || fiftyActive) && canBisect && (
+        <FiftyFifty gameId={gameId} gameLabel={gameDef?.label ?? gameId} onClose={() => setShowFifty(false)} onActive={setFiftyActive} />
       )}
 
       {showDuplicates && gameDef?.duplicate_finder && !readOnly && (

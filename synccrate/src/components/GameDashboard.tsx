@@ -308,7 +308,7 @@ export default function GameDashboard({ gameId }: Props) {
       const m = await cmd.scanFiles(gameId);
       // Don't overwrite the manifest if the user switched games mid-scan.
       if (useAppStore.getState().selectedGame !== gameId) return;
-      setManifest(m);
+      setManifest(m, gameId);
       const count = Object.keys(m.files).length;
       if (manual) toastSuccess(`Files refreshed: ${plural(count, "file")} found`);
     } catch (e) {

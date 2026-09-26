@@ -5,6 +5,7 @@ import type { StorageUsage } from "../lib/commands";
 import { gameLabel } from "../lib/games";
 import { formatBytes } from "../lib/utils";
 import { toastError, toastSuccess } from "../lib/toast";
+import { friendlyError } from "../lib/errors";
 import { Button, Panel } from "./ui";
 
 /**
@@ -13,10 +14,16 @@ import { Button, Panel } from "./ui";
  */
 export default function StoragePanel() {
   const [usage, setUsage] = useState<StorageUsage | null>(null);
+  // A failed measurement showed "Measuring…" forever.
+  const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => cmd.storageUsage().then(setUsage).catch(() => setUsage(null));
+  const load = () =>
+    cmd
+      .storageUsage()
+      .then((u) => { setUsage(u); setError(null); })
+      .catch((e) => setError(friendlyError(e)));
   useEffect(() => { load(); }, []);
 
   const clear = async (game: string) => {
@@ -45,7 +52,12 @@ export default function StoragePanel() {
         )
       }
     >
-      {!usage ? (
+      {error && !usage ? (
+        <p className="text-xs text-txt-dim">
+          Couldn't measure it: {error}{" "}
+          <button className="text-neon hover:underline" onClick={() => { setError(null); load(); }}>Try again</button>
+        </p>
+      ) : !usage ? (
         <p className="flex items-center gap-2 text-xs text-txt-dim"><Loader2 size={12} className="animate-spin" /> Measuring…</p>
       ) : (
         <div className="space-y-3">
@@ -58,10 +70,10 @@ export default function StoragePanel() {
               {usage.games.map((g) => (
                 <div key={g.game} className="row-y flex items-center gap-3 px-3 py-2">
                   <span className="text-[13px] text-txt flex-1 min-w-0 truncate">{gameLabel(g.game)}</span>
-                  <span className="font-mono text-[11px] text-txt-muted tabular shrink-0">
+                  <span className="font-mono text-[11px] text-txt-muted tabular shrink-0 whitespace-nowrap">
                     {g.backups} backup{g.backups !== 1 ? "s" : ""} · {formatBytes(g.backup_bytes)}
                   </span>
-                  <span className="font-mono text-[11px] text-txt-muted tabular shrink-0 w-44 text-right">
+                  <span className="font-mono text-[11px] text-txt-muted tabular shrink-0 whitespace-nowrap">
                     {g.history_versions} earlier version{g.history_versions !== 1 ? "s" : ""} · {formatBytes(g.history_bytes)}
                   </span>
                   {confirm === g.game ? (

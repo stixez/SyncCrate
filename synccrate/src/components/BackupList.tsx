@@ -102,11 +102,12 @@ export default function BackupList({ gameId }: Props) {
       const r = await cmd.undoLastSync(gameId);
       setUndoStatus(null);
       useAppStore.getState().setUndoStatus(null);
+      useAppStore.getState().setLastSyncChanges(null);
       addLog(`Sync undone: ${undoSummary(r)}`, "success");
       toastSuccess(`Sync undone: ${undoSummary(r)}`);
       try {
         const m = await cmd.scanFiles(gameId);
-        useAppStore.getState().setManifest(m);
+        useAppStore.getState().setManifest(m, gameId);
       } catch {}
     } catch (e) {
       addLog(`Undo failed: ${e}`, "error");
@@ -165,7 +166,7 @@ export default function BackupList({ gameId }: Props) {
       setBackups(updated);
       try {
         const m = await cmd.scanFiles(gameId);
-        useAppStore.getState().setManifest(m);
+        useAppStore.getState().setManifest(m, gameId);
       } catch {}
       const safety = r.safety_backup ? ` Your previous files are in the safety backup "${r.safety_backup}".` : "";
       if (r.error) {

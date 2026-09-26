@@ -83,9 +83,14 @@ fn random_pin() -> String {
 }
 
 fn saved_or_new_pin() -> String {
-    if let Ok(Some(SavedPin { pin })) = crate::utils::read_json_strict::<SavedPin>(&host_pin_path()) {
-        if valid_pin(&pin) {
-            return pin;
+    match crate::utils::read_json_strict::<SavedPin>(&host_pin_path()) {
+        Ok(Some(SavedPin { pin })) if valid_pin(&pin) => return pin,
+        Ok(_) => {}
+        // Held by antivirus or OneDrive: a new saved PIN would break every
+        // friend's saved join code for good. This session only.
+        Err(e) => {
+            log::warn!("{e}; using a one-time PIN");
+            return random_pin();
         }
     }
     let pin = random_pin();

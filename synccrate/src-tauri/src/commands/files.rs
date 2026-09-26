@@ -1008,14 +1008,22 @@ pub(crate) fn toggle_file(
     }
     std::fs::rename(&full_path, &dest).map_err(|e| e.to_string())?;
 
+    // `dest` may be built from the canonical folder or from `base` as stored
+    // (a junctioned "Electronic Arts", a different case): try both, then the
+    // renamed file's own canonical path. Falling back to the absolute path put
+    // it into the manifest, and a 50/50 search could never turn it back on.
     let base_canonical = utils::clean_path(std::fs::canonicalize(base).map_err(|e| e.to_string())?);
+    let base_plain = utils::clean_path(std::path::PathBuf::from(base));
     let dest_clean = utils::clean_path(dest.clone());
-    let new_rel = dest_clean
+    let dest_canonical = std::fs::canonicalize(&dest).map(utils::clean_path).ok();
+    let rel = dest_clean
         .strip_prefix(&base_canonical)
-        .unwrap_or(&dest_clean)
-        .to_string_lossy()
-        .replace('\\', "/");
-    Ok(Some(new_rel))
+        .or_else(|_| dest_clean.strip_prefix(&base_plain))
+        .map(|r| r.to_path_buf())
+        .ok()
+        .or_else(|| dest_canonical.as_ref().and_then(|d| d.strip_prefix(&base_canonical).ok().map(|r| r.to_path_buf())))
+        .ok_or_else(|| format!("{} moved outside the game folder's path", dest.display()))?;
+    Ok(Some(rel.to_string_lossy().replace('\\', "/")))
 }
 
 /// Destination for games that disable by renaming (`x.package` <->
@@ -1110,6 +1118,9 @@ pub(crate) fn openable_folder(path: &str, allowed_roots: &[std::path::PathBuf]) 
 /// Same folder rules as `open_folder`.
 #[tauri::command]
 pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: String) -> Result<(), String> {
+    // Before any filesystem call: canonicalizing `\\server\share\x` already
+    // connects to that server (and hands it the Windows login hash).
+    refuse_network_path(&path)?;
     let file = std::fs::canonicalize(&path).map_err(|_| "That file doesn't exist any more.".to_string())?;
     let parent = file.parent().ok_or("Invalid path")?.to_string_lossy().to_string();
     let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
@@ -1117,9 +1128,13 @@ pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: St
     let dir = openable_folder(&parent, &roots)?;
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         let file = crate::utils::clean_path(file);
+        // Explorer parses its own command line: `/select,"<path>"` as one raw
+        // argument. Rust's quoting of the whole token (every Sims 4 path has
+        // spaces) made it open Documents instead.
         std::process::Command::new(utils::windows_system_exe("explorer.exe"))
-            .arg(format!("/select,{}", file.to_string_lossy()))
+            .raw_arg(format!("/select,\"{}\"", file.to_string_lossy()))
             .spawn()
             .map_err(|e| e.to_string())?;
         let _ = dir;
@@ -1141,6 +1156,7 @@ pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: St
 /// dialog (text only, and not huge).
 #[tauri::command]
 pub async fn save_text_file(dest: String, content: String) -> Result<(), String> {
+    refuse_network_path(&dest)?;
     let lower = dest.to_lowercase();
     if !(lower.ends_with(".txt") || lower.ends_with(".log")) {
         return Err("Save it as a .txt or .log file.".into());
@@ -1153,12 +1169,22 @@ pub async fn save_text_file(dest: String, content: String) -> Result<(), String>
     Ok(())
 }
 
+/// `\\server\share`, `//server`, `\\?\UNC\...`: never opened or written from
+/// the webview's side (see `openable_folder`).
+fn refuse_network_path(path: &str) -> Result<(), String> {
+    let p = path.replace('/', "\\");
+    if p.starts_with("\\\\") && !p.to_ascii_lowercase().starts_with("\\\\?\\") || p.to_ascii_lowercase().starts_with("\\\\?\\unc\\") {
+        return Err("Network paths can't be used from SyncCrate.".into());
+    }
+    Ok(())
+}
+
 /// Folders the user saved an export into this run (a pack or profile file,
 /// wherever they picked): "Show in folder" may open those too.
 static EXPORT_DIRS: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
 
 pub(crate) fn allow_open_export_dir(file: &std::path::Path) {
-    if let Some(dir) = file.parent() {
+    if let Some(dir) = file.parent().filter(|d| refuse_network_path(&d.to_string_lossy()).is_ok()) {
         let mut dirs = EXPORT_DIRS.lock().unwrap_or_else(|e| e.into_inner());
         if !dirs.iter().any(|d| d == dir) {
             dirs.push(dir.to_path_buf());
@@ -2099,6 +2125,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("Mods").join("Creator")).unwrap();
         dir
+    }
+
+    #[test]
+    fn network_paths_are_refused_before_any_filesystem_call() {
+        for p in [r"\\server\share\x.txt", "//server/share/x.txt", r"\\?\UNC\server\share\x", r"\\.\UNC\server\x"] {
+            assert!(refuse_network_path(p).is_err(), "{p}");
+        }
+        for p in [r"C:\Users\me\Desktop\log.txt", "C:/Games/The Sims 4/Mods/a.package", r"\\?\C:\Users\me\x.txt"] {
+            assert!(refuse_network_path(p).is_ok(), "{p}");
+        }
     }
 
     #[test]

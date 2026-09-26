@@ -151,6 +151,16 @@ export interface StorageUsage {
 }
 
 export async function storageUsage(): Promise<StorageUsage> {
+  if (isDemoMode()) {
+    return {
+      folder: "C:/Users/you/AppData/Roaming/synccrate",
+      on_disk: 3_870_000_000,
+      games: [
+        { game: "sims4", backups: 6, backup_bytes: 9_400_000_000, history_versions: 42, history_bytes: 310_000_000 },
+        { game: "minecraft_java", backups: 2, backup_bytes: 1_200_000_000, history_versions: 5, history_bytes: 48_000_000 },
+      ],
+    };
+  }
   return invoke("storage_usage");
 }
 

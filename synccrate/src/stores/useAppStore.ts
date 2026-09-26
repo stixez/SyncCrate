@@ -87,7 +87,10 @@ interface AppState {
   setActiveGame: (game: string) => void;
 
   manifest: FileManifest | null;
-  setManifest: (manifest: FileManifest | null) => void;
+  /** `forGame`: the game the list was scanned for. A late result for another
+   *  game than the selected one is dropped (it was shown, and with the
+   *  page-visit rescan skipped, it stuck). Omitted: the selected game. */
+  setManifest: (manifest: FileManifest | null, forGame?: string) => void;
   /** Game the manifest was scanned for (the selected game at the time) and when. */
   manifestGame: string | null;
   manifestAt: number;
@@ -276,12 +279,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // A rescan that found nothing new keeps the old object: every list,
   // count and backend lookup keyed on the manifest re-ran on each identical
   // rescan (30k files: the watcher's rescan after every toggle, every visit).
-  setManifest: (manifest) =>
-    set((s) => ({
-      manifest: manifest && s.manifest && s.manifestGame === s.selectedGame && sameFiles(s.manifest, manifest) ? s.manifest : manifest,
-      manifestGame: manifest ? s.selectedGame : null,
-      manifestAt: manifest ? Date.now() : 0,
-    })),
+  setManifest: (manifest, forGame) =>
+    set((s) => {
+      if (manifest && forGame !== undefined && forGame !== s.selectedGame) return {};
+      const game = manifest ? (forGame ?? s.selectedGame) : null;
+      return {
+        manifest: manifest && s.manifest && s.manifestGame === game && sameFiles(s.manifest, manifest) ? s.manifest : manifest,
+        manifestGame: game,
+        manifestAt: manifest ? Date.now() : 0,
+      };
+    }),
   manifestGame: null,
   manifestAt: 0,
 

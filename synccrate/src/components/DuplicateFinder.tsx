@@ -53,7 +53,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
 
   const refresh = async () => {
     try {
-      setManifest(await cmd.scanFiles(gameId));
+      setManifest(await cmd.scanFiles(gameId), gameId);
     } catch { /* ignore */ }
     await load();
   };

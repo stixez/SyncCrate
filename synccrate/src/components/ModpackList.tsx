@@ -301,7 +301,7 @@ export default function ModpackList({ gameId }: Props) {
       if (r.skipped.length) toastInfo(`Reverted: ${summary}. See the activity log.`);
       else toastSuccess(`Reverted: ${summary}`);
       try {
-        useAppStore.getState().setManifest(await cmd.scanFiles(gameId));
+        useAppStore.getState().setManifest(await cmd.scanFiles(gameId), gameId);
       } catch {}
       if (importedPack) runComparison(importedPack);
     } catch (e) {
