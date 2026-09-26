@@ -596,12 +596,21 @@ fn carry_over_hashes(new: &mut FileManifest, old: &FileManifest) {
 
 #[tauri::command]
 pub async fn scan_files(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     game: Option<String>,
     quick: Option<bool>,
 ) -> Result<FileManifest, String> {
     let compute_hashes = !quick.unwrap_or(false);
-    scan_files_inner(&*state, game, compute_hashes).await
+    let manifest = scan_files_inner(&*state, game, compute_hashes).await?;
+    // A path auto-detected by this scan (a game installed after launch)
+    // never started the active game's file watcher, and one that failed to
+    // start stayed off: files added in Explorer then never showed up.
+    let mut app_state = state.lock().await;
+    if app_state.file_watcher.is_none() && app_state.game_paths.contains_key(&app_state.active_game) {
+        crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
+    }
+    Ok(manifest)
 }
 
 #[tauri::command]

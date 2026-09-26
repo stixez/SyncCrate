@@ -17,7 +17,6 @@ import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
-import { manifestIsCurrent } from "../lib/manifest";
 import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
@@ -159,10 +158,6 @@ export default function ContentBrowser({ gameId }: Props) {
     // Ignore results that land after switching to another game (stale manifest).
     let cancelled = false;
     setScanError(null);
-    if (manifestIsCurrent(gameId)) {
-      setScanning(false);
-      return;
-    }
     setScanning(true);
     cmd.scanFiles(gameId)
       .then((m) => { if (!cancelled) setManifest(m); })

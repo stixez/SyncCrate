@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Open dialogs, newest last: only the top one handles keys, or one Escape
+// closed every open dialog and two fought over Tab.
+const stack: symbol[] = [];
+
 /** Modal keyboard behavior: Escape closes, focus moves into the dialog and
  * Tab stays inside it, and focus returns to where it was on close. Put the
  * returned ref on the dialog's content element. */
@@ -11,11 +15,14 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () =>
   closeRef.current = onClose;
 
   useEffect(() => {
+    const id = Symbol("dialog");
+    stack.push(id);
     const before = document.activeElement as HTMLElement | null;
     const focusables = () => Array.from(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
     focusables()[0]?.focus();
 
     const onKey = (e: KeyboardEvent) => {
+      if (stack[stack.length - 1] !== id) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         closeRef.current();
@@ -38,6 +45,8 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () =>
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      const i = stack.indexOf(id);
+      if (i >= 0) stack.splice(i, 1);
       before?.focus?.();
     };
   }, []);
