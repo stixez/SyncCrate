@@ -198,6 +198,11 @@ pub struct SyncPlan {
     /// Plan-level warning for the UI (e.g. "host may be sharing a different game").
     #[serde(default)]
     pub warning: Option<String>,
+    /// Informational line (e.g. "3 host files can't be saved here and were
+    /// skipped"). Unlike `warning`, it doesn't stop Stay in sync: one
+    /// `desktop.ini` on the host used to switch auto-pull off for good.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
     /// Pack files (by relative path) the connected host doesn't have with the
     /// pack's exact hash. Only set on a plan from `compute_pack_plan`.
     #[serde(default)]

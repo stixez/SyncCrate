@@ -138,7 +138,10 @@ pub fn games_conflict(ours: &str, theirs: Option<&str>) -> bool {
 
 pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), String> {
     let json = serde_json::to_vec(msg).map_err(|e| e.to_string())?;
-    if json.len() > MAX_MESSAGE_SIZE {
+    // The receiver also caps the file count: say so here instead of every
+    // friend being dropped with "Manifest too large".
+    let too_many = matches!(msg, Message::ManifestResponse { manifest } if manifest.files.len() > MAX_MANIFEST_FILES);
+    if json.len() > MAX_MESSAGE_SIZE || too_many {
         return Err(too_large_to_send(msg, json.len()));
     }
     let len = json.len() as u32;

@@ -135,6 +135,8 @@ export interface SyncPlan {
   /** Host files the host has disabled while yours are enabled (left alone). */
   disabled_on_host?: number;
   warning?: string | null;
+  /** Informational (skipped files); doesn't block anything. */
+  notice?: string | null;
   /** Pack files (by path) the host doesn't have with the pack's exact hash. Only set on a pack sync plan. */
   pack_unavailable?: string[];
 }

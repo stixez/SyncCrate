@@ -70,6 +70,7 @@ pub async fn start_host(
     allowed_folders: Option<SyncFolderPermissions>,
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
+    crate::commands::backup::refuse_during_restore()?;
 
     // Validate and read state, then drop lock before async bind
     let (port, mod_count, game_version, game_id) = {
@@ -327,8 +328,10 @@ pub async fn disconnect_peer(
             .ok_or_else(|| format!("Peer '{}' not found", peer_id))?
     };
 
-    {
-        let mut s = conn.stream.lock().await;
+    // Not while the stream is busy (a friend's offered upload can take
+    // minutes): Kick used to hang until it finished. The connection is
+    // already removed, which ends that loop.
+    if let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), conn.stream.lock()).await {
         let _ = protocol::send_message(&mut *s, &Message::Disconnect).await;
     }
 

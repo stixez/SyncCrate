@@ -376,6 +376,24 @@ mod tests {
     }
 
     #[test]
+    fn steam_games_are_found_in_every_steam_library() {
+        // Hard-coded "C:\...\Steam\steamapps\common\X" / "D:\SteamLibrary\..."
+        // paths missed any other library (E:\Games, ...): 24 games were
+        // never auto-detected there. A steam_library strategy searches all.
+        for g in load_registry().games {
+            let Some(det) = &g.detection else { continue };
+            let hard_coded = det.strategies.iter().any(|s| match s {
+                DetectionStrategy::AbsolutePaths { paths } => {
+                    serde_json::to_string(paths).unwrap().replace("\\\\", "/").to_lowercase().contains("steamapps/common/")
+                }
+                _ => false,
+            });
+            let library = det.strategies.iter().any(|s| matches!(s, DetectionStrategy::SteamLibrary { .. }));
+            assert!(!hard_coded || library, "{}: add a steam_library strategy", g.id);
+        }
+    }
+
+    #[test]
     fn content_folders_are_relative_to_the_game_folder() {
         // Scans, backups and the watcher join `folder` onto the game path, so
         // 7 Days to Die's "%APPDATA%/7DaysToDie/Saves" never existed and its

@@ -78,6 +78,7 @@ pub async fn install_mod_files(
     file_paths: Vec<String>,
     game: Option<String>,
 ) -> Result<Vec<InstallResult>, String> {
+    crate::commands::backup::refuse_during_restore()?;
     let (base, game_id) = {
         let app_state = state.lock().await;
         let game_id = match game {
@@ -111,6 +112,18 @@ pub async fn install_mod_files(
                 destination: String::new(),
                 status: InstallStatus::Failed,
                 message: Some("File does not exist".into()),
+            });
+            continue;
+        }
+
+        // Same rule as files from a friend: accept-anything folders (Garry's
+        // Mod, Stardew, ...) otherwise took a dropped .exe / .lnk / .bat.
+        if crate::utils::is_dangerous_extension(&source_str) {
+            results.push(InstallResult {
+                source: source_str.clone(),
+                destination: String::new(),
+                status: InstallStatus::InvalidExtension,
+                message: Some("This file type is blocked because it could run programs.".into()),
             });
             continue;
         }
@@ -164,6 +177,20 @@ pub async fn install_mod_files(
             continue;
         }
         let dest = mods_dir.join(file_name);
+
+        // Dropping x.package next to a disabled x.package.disabled (or the
+        // legacy _Disabled/x) installed an enabled duplicate of a mod the
+        // user had turned off. Same check a restore makes.
+        let first_folder = game_def.content_types.first().map(|ct| std::path::PathBuf::from(&base).join(&ct.folder));
+        if let Some(twin) = crate::commands::backup::disabled_twin(&dest, &mods_dir, first_folder.as_deref(), file_name) {
+            results.push(InstallResult {
+                source: source_str.clone(),
+                destination: dest.to_string_lossy().to_string(),
+                status: InstallStatus::Failed,
+                message: Some(format!("You already have this mod as {}. Turn it on in Content instead of installing it again.", twin)),
+            });
+            continue;
+        }
 
         if dest.exists() {
             let source_hash = match file_hash(source) {
@@ -239,6 +266,7 @@ pub async fn confirm_install_duplicate(
     strategy: String,
     game: Option<String>,
 ) -> Result<InstallResult, String> {
+    crate::commands::backup::refuse_during_restore()?;
     let (base, game_id) = {
         let app_state = state.lock().await;
         let game_id = match game {

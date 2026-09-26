@@ -314,6 +314,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
             {plan.warning}
           </Banner>
         )}
+        {plan.notice && <p className="text-xs text-txt-dim">{plan.notice}</p>}
         {!plan.warning && (plan.skipped_foreign ?? 0) > 0 && (
           <p className="text-xs text-txt-dim">
             {plan.skipped_foreign} host file{plan.skipped_foreign !== 1 ? "s" : ""} outside {gameLabel(activeGame)}'s folders{" "}

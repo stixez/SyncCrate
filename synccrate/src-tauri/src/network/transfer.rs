@@ -1576,8 +1576,13 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
         // The same offer again (a retry, or a modified client repeating it)
         // keeps the host's decisions and doesn't post another chat line:
         // unthrottled, it could push the whole chat log out of view.
+        // A re-offer after a failed receive is a retry, though: those rows
+        // would otherwise stay Failed (shown as pending forever on the
+        // friend's side, and not re-acceptable here).
         let same = st.offers_in.get(peer_id).is_some_and(|o| {
-            o.files.len() == valid.len() && o.files.iter().zip(&valid).all(|(a, b)| a.file.relative_path == b.relative_path && a.file.hash == b.hash)
+            o.files.len() == valid.len()
+                && o.files.iter().all(|f| f.state != OfferState::Failed)
+                && o.files.iter().zip(&valid).all(|(a, b)| a.file.relative_path == b.relative_path && a.file.hash == b.hash)
         });
         if !same {
             st.offers_in.insert(
@@ -1661,7 +1666,17 @@ async fn host_receive_offered(
     let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let tmp = dest.with_file_name(format!(".{}.synccrate-offer-{}.tmp", name, uuid::Uuid::new_v4()));
     let received = receive_file_body(s, &tmp, size, &hash, &path).await;
+    // The friend may have been removed (or hosting stopped) during a long
+    // upload: then the file isn't wanted any more.
+    let still_connected = {
+        let st = state.lock().await;
+        st.session_type == crate::state::SessionType::Host && st.connections.contains_key(peer_id)
+    };
     let outcome = match received {
+        Ok(()) if !still_connected => {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            Err("The session ended during the upload.".to_string())
+        }
         Ok(()) if dest.exists() => {
             let _ = tokio::fs::remove_file(&tmp).await;
             Err("You already have a file with that name.".to_string())
@@ -1985,10 +2000,24 @@ pub async fn receive_file(
     // (cancel-safe), and skip any stale file that still arrives first.
     let (expected_size, header_hash) = {
         let mut stale = 0;
+        let started = std::time::Instant::now();
         loop {
-            let msg = protocol::try_recv_message(&mut *s, FILE_HEADER_WAIT)
-                .await?
-                .ok_or_else(|| format!("The host didn't start sending {} in time. Reconnect and try again.", req.remote_path))?;
+            // In short slices: the stream stays locked while we wait, so
+            // Leave and Cancel must be noticed here, not after 10 minutes.
+            // Giving up early is safe: a header arriving later is skipped
+            // as stale by the next request.
+            let Some(msg) = protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(1)).await? else {
+                if crate::commands::sync::cancel_requested() {
+                    return Err("Sync cancelled".to_string());
+                }
+                if !state.lock().await.connections.contains_key(peer_id) {
+                    return Err("Disconnected from the host".to_string());
+                }
+                if started.elapsed() >= FILE_HEADER_WAIT {
+                    return Err(format!("The host didn't start sending {} in time. Reconnect and try again.", req.remote_path));
+                }
+                continue;
+            };
             match msg {
                 Message::FileHeader { path, .. } if path != req.remote_path && stale < 3 => {
                     stale += 1;

@@ -136,11 +136,15 @@ pub async fn load_profile(
     let manifest = crate::commands::files::scan_files_inner(&state, Some(profile.game.clone()), true).await?;
     let mod_file_types = mod_file_types(&*state.lock().await, &profile.game);
 
-    let current_mods: std::collections::HashMap<String, String> = manifest
+    // Keyed like a sync compare (case- and `.disabled`-insensitive): an exact
+    // path match listed a disabled or case-different mod as both "missing"
+    // and "extra".
+    use crate::sync::diff::match_key;
+    let current_mods: std::collections::HashMap<String, (&str, &str)> = manifest
         .files
         .values()
         .filter(|f| mod_file_types.contains(&f.file_type))
-        .map(|f| (f.relative_path.clone(), f.hash.clone()))
+        .map(|f| (match_key(&f.relative_path), (f.relative_path.as_str(), f.hash.as_str())))
         .collect();
 
     let mut missing = Vec::new();
@@ -148,19 +152,19 @@ pub async fn load_profile(
     let mut matched = Vec::new();
 
     for pm in &profile.mods {
-        match current_mods.get(&pm.relative_path) {
+        match current_mods.get(&match_key(&pm.relative_path)) {
             None => missing.push(pm.relative_path.clone()),
-            Some(hash) if hash != &pm.hash => modified.push(pm.relative_path.clone()),
+            Some((_, hash)) if *hash != pm.hash => modified.push(pm.relative_path.clone()),
             _ => matched.push(pm.relative_path.clone()),
         }
     }
 
-    let profile_paths: std::collections::HashSet<&str> =
-        profile.mods.iter().map(|m| m.relative_path.as_str()).collect();
+    let profile_keys: std::collections::HashSet<String> =
+        profile.mods.iter().map(|m| match_key(&m.relative_path)).collect();
     let extra: Vec<String> = current_mods
-        .keys()
-        .filter(|p| !profile_paths.contains(p.as_str()))
-        .cloned()
+        .iter()
+        .filter(|(k, _)| !profile_keys.contains(k.as_str()))
+        .map(|(_, (path, _))| path.to_string())
         .collect();
 
     Ok(ProfileComparison {

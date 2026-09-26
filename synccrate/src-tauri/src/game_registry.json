@@ -1300,6 +1300,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Counter-Strike Global Offensive/game/csgo"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -1365,6 +1371,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "GarrysMod/garrysmod"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -1450,6 +1462,13 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Stardew Valley/Contents/MacOS",
+              "Stardew Valley"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -1515,6 +1534,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Valheim"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -1715,6 +1740,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Call of Duty"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -1768,6 +1799,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Call of Duty 2"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -1823,6 +1860,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Call of Duty 4 - Modern Warfare"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -1889,6 +1932,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Stronghold HD"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -1942,6 +1991,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Stronghold Crusader HD"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -1997,6 +2052,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Stronghold 2 Steam Edition"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -2043,10 +2104,19 @@
       "color": "text-orange-600",
       "primary_color": "#ea580c",
       "genres": ["strategy", "city-builder"],
+      "process_names": [
+        "Crusader2.exe"
+      ],
       "steam_app_id": 232890,
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Stronghold Crusader 2"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -2452,6 +2522,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Torchlight II"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -2502,10 +2578,20 @@
       "color": "text-violet-400",
       "primary_color": "#a78bfa",
       "genres": ["strategy", "survival", "action"],
+      "process_names": [
+        "riftbreaker_win_release.exe",
+        "riftbreaker_winstore_release.exe"
+      ],
       "steam_app_id": 780310,
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "The Riftbreaker"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -2557,6 +2643,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Conan Exiles"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -2607,6 +2699,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Don't Starve Together"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -2667,6 +2765,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Satisfactory"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -2723,6 +2827,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "RimWorld"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -3044,6 +3154,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Palworld"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -3098,6 +3214,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Left 4 Dead 2/left4dead2"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -3164,6 +3286,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Subnautica"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -3233,6 +3361,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "7 Days To Die"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -3305,6 +3439,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Kerbal Space Program"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {
@@ -3453,6 +3593,12 @@
       "detection": {
         "strategies": [
           {
+            "type": "steam_library",
+            "folders": [
+              "Skyrim Special Edition"
+            ]
+          },
+          {
             "type": "absolute_paths",
             "paths": {
               "windows": [
@@ -3516,6 +3662,12 @@
       "auto_detect": true,
       "detection": {
         "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Mount & Blade II Bannerlord"
+            ]
+          },
           {
             "type": "absolute_paths",
             "paths": {

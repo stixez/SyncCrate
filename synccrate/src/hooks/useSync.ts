@@ -8,6 +8,8 @@ import type { Resolution } from "../lib/types";
 
 export function useSync() {
   const [isLoading, setIsLoading] = useState(false);
+  // Only a started sync (not a compare): the banner's "Getting ready".
+  const [isStarting, setIsStarting] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState("");
   const setSyncPlan = useAppStore((s) => s.setSyncPlan);
   const addLog = useLogStore((s) => s.addLog);
@@ -46,6 +48,7 @@ export function useSync() {
 
   const executeSync = async () => {
     setIsLoading(true);
+    setIsStarting(true);
     setLoadingPhase("Syncing files...");
     try {
       await cmd.executeSync();
@@ -63,17 +66,19 @@ export function useSync() {
         setSyncPlan(null);
         toastError(`${e}`);
       } else if (String(e).includes("Sync cancelled")) {
-        toastInfo("Sync cancelled. Compute the plan again to resume.");
-      } else if (/file\(s\) failed to sync/.test(String(e))) {
+        // The sync-complete listener says it (with Undo if files arrived).
+      } else if (/file\(s\) failed to sync/.test(String(e)) && useAppStore.getState().session?.session_type === "Client") {
         // Partly done: sync-complete reports it (with the details in the log
         // and an Undo for what did arrive); a second, red "Sync failed" toast
-        // on top of that contradicted it.
+        // on top of that contradicted it. Not if the host dropped: then the
+        // session is gone and that report never comes.
       } else {
         addLog(`Sync failed: ${e}`, "error");
         toastError(`Sync failed: ${e}`);
       }
     } finally {
       setIsLoading(false);
+      setIsStarting(false);
       setLoadingPhase("");
     }
   };
@@ -98,5 +103,5 @@ export function useSync() {
     }
   };
 
-  return { computePlan, executeSync, resolve, resolveAll, isLoading, loadingPhase };
+  return { computePlan, executeSync, resolve, resolveAll, isLoading, isStarting, loadingPhase };
 }

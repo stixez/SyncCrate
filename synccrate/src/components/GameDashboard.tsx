@@ -54,7 +54,7 @@ export default function GameDashboard({ gameId }: Props) {
   const setGameSwitchPrompt = useAppStore((s) => s.setGameSwitchPrompt);
   const syncProgress = useAppStore((s) => s.syncProgress);
   const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading } = useSession();
-  const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, loadingPhase } = useSync();
+  const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, isStarting: isSyncStarting, loadingPhase } = useSync();
 
   // "Host has new files" check: clients only, never while syncing/computing a
   // plan or while a plan with pending actions is on screen.
@@ -927,7 +927,7 @@ export default function GameDashboard({ gameId }: Props) {
               &gt; Resuming — {syncPlan.resumed_files} files already transferred
             </p>
           )}
-          <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncLoading} />
+          <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
         </section>
       )}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (

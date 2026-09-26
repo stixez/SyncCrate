@@ -1437,9 +1437,10 @@ async fn apply_pack_exactly_conflict_is_never_silently_overwritten_tcp() {
     run_sync_now(&client_state).await.expect_err("unresolved conflicts must refuse to sync");
     assert_eq!(read_file(&client_dir, "Mods/a.package"), b"MY_OWN_CONTENT");
 
-    // "Keep mine" leaves it different; the rename step still never touches it.
-    let result = pack_apply::apply_pack_exact_inner(&client_state, pack, preview).await.expect("apply");
-    assert_eq!((result.enabled, result.disabled), (0, 0));
+    // "Keep mine" leaves it different: applying refuses (it used to report
+    // "Pack applied" with the wrong version live) and never touches it.
+    let err = pack_apply::apply_pack_exact_inner(&client_state, pack, preview).await.expect_err("a kept conflict isn't the pack");
+    assert!(err.contains("aren't the pack's version"), "{err}");
     assert_eq!(read_file(&client_dir, "Mods/a.package"), b"MY_OWN_CONTENT");
 
     let _ = std::fs::remove_dir_all(&host_dir);

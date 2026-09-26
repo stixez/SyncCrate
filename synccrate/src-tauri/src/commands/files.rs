@@ -758,6 +758,7 @@ pub async fn toggle_mod(
     relative_path: String,
     enabled: bool,
 ) -> Result<String, String> {
+    crate::commands::backup::refuse_during_restore()?;
     let (game_id, base, first_content_folder, rename_method) = {
         let app_state = state.lock().await;
         let game_id = require_active(&app_state, &game_id)?;
@@ -1285,6 +1286,7 @@ pub async fn migrate_legacy_disabled(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     game: Option<String>,
 ) -> Result<LegacyMigrationResult, String> {
+    crate::commands::backup::refuse_during_restore()?;
     let target = {
         let app_state = state.lock().await;
         if app_state.is_any_syncing() {
@@ -1413,6 +1415,7 @@ pub async fn delete_mod_files(
     paths: Vec<String>,
     keep: Option<HashMap<String, String>>,
 ) -> Result<DeleteResult, String> {
+    crate::commands::backup::refuse_during_restore()?;
     let (base, cts, game_id) = {
         let app_state = state.lock().await;
         if app_state.is_any_syncing() {

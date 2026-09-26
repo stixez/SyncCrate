@@ -378,7 +378,7 @@ pub fn keep_tmp_original(file_name: &str) -> Option<&str> {
 /// types they were then scanned, backed up, served to friends and auto-pulled.
 pub fn is_synccrate_temp(file_name: &str) -> bool {
     let Some(rest) = file_name.strip_suffix(".tmp") else { return false };
-    if rest.ends_with(".synccrate-restore") || keep_tmp_original(file_name).is_some() {
+    if rest.ends_with(".synccrate-restore") || rest.contains(".synccrate-offer-") || keep_tmp_original(file_name).is_some() {
         return true;
     }
     // Download temps: a nanosecond timestamp (19 digits today) before ".tmp".
@@ -539,6 +539,7 @@ mod tests {
         assert!(is_synccrate_temp("a.package.synccrate-restore.tmp"));
         assert!(is_synccrate_temp(".3f2a-uuid.synccrate-restore.tmp"));
         assert!(is_synccrate_temp("a.package.synccrate-keep-123.tmp"));
+        assert!(is_synccrate_temp(".a.package.synccrate-offer-3f2a.tmp"), "a friend's upload in progress");
         assert!(!is_synccrate_temp("a.package"));
         assert!(!is_synccrate_temp("notes.2024.tmp"), "a user's own .tmp file");
         assert!(!is_synccrate_temp("save.tmp"));

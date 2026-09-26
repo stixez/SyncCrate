@@ -461,7 +461,8 @@ pub(crate) async fn apply_pack_exact_inner(
     }
 
     let manifest = files::scan_files_inner(state, Some(ctx.game_id.clone()), true).await?;
-    let missing = compare_pack_to_local(&pack, &manifest, &ctx.cts).missing;
+    let cmp = compare_pack_to_local(&pack, &manifest, &ctx.cts);
+    let missing = cmp.missing;
     if !missing.is_empty() {
         let names: Vec<&str> = missing.iter().take(3).map(|m| m.relative_path.as_str()).collect();
         return Err(format!(
@@ -469,6 +470,23 @@ pub(crate) async fn apply_pack_exact_inner(
             missing.len(),
             names.join(", "),
             if missing.len() > 3 { ", …" } else { "" }
+        ));
+    }
+    // A conflict the user settled as "keep mine" leaves their version live,
+    // and "keep both" adds the pack's copy next to it (the preview, made
+    // before the sync, doesn't know that file): either way the result isn't
+    // the pack, so don't report "Pack applied" over duplicate or wrong mods.
+    // Mods only: this step only enables and disables mods, so a pack save the
+    // user kept their own copy of is fine.
+    let in_mods = |p: &str| crate::sync::diff::content_type_for(&ctx.cts, p).is_some_and(|(ct, _)| ct.id == mods.id);
+    let different: Vec<_> = cmp.different.iter().filter(|m| in_mods(&m.relative_path)).collect();
+    if !different.is_empty() {
+        let names: Vec<&str> = different.iter().take(3).map(|m| m.relative_path.as_str()).collect();
+        return Err(format!(
+            "{} mod(s) aren't the pack's version ({}{}), usually because a conflict kept your copy. Resolve them with \"use theirs\" and apply again. Nothing was disabled.",
+            different.len(),
+            names.join(", "),
+            if different.len() > 3 { ", …" } else { "" }
         ));
     }
     // The scan awaited; a sync or session may have started meanwhile.
