@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type CSSProperties, type ReactNode } from "react";
 import {
   Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles,
-  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift,
+  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift, SearchCheck,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
@@ -12,6 +12,7 @@ import CompatIssues from "./CompatIssues";
 import ModUpdates, { canCheckUpdates } from "./ModUpdates";
 import ConflictResolver from "./ConflictResolver";
 import DuplicateFinder from "./DuplicateFinder";
+import FiftyFifty from "./FiftyFifty";
 import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "./ui";
 import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
@@ -126,6 +127,7 @@ export default function ContentBrowser({ gameId }: Props) {
   /** Paths being enabled/disabled right now; one job at a time keeps rescans sane. */
   const [busyPaths, setBusyPaths] = useState<Set<string> | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [showFifty, setShowFifty] = useState(false);
   const [legacyCount, setLegacyCount] = useState(0);
   const [legacyDismissed, setLegacyDismissed] = useState<string | null>(null);
   const [fixingLegacy, setFixingLegacy] = useState(false);
@@ -168,6 +170,15 @@ export default function ContentBrowser({ gameId }: Props) {
   // Toggle/delete/install act on the backend's active game; while it's another
   // game (session running), this page must not offer them for this one.
   const readOnly = !isDemoMode() && refusedFor === gameId && activeGame !== gameId;
+  // Turning mods off only works file by file for these, and only in the active game.
+  const canBisect = !readOnly && !isDemoMode() && gameDef?.disable_method !== "none";
+  // A search left running (the app was closed to play): show it again.
+  useEffect(() => {
+    if (!canBisect) return;
+    let cancelled = false;
+    cmd.bisectStatus(gameId).then((v) => { if (!cancelled && v) setShowFifty(true); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [gameId, canBisect]);
   const activeLabel = getGameDef(activeGame)?.label ?? activeGame;
 
   // Re-scan when switching games or when manifest is missing. `scanning` is
@@ -790,6 +801,17 @@ export default function ContentBrowser({ gameId }: Props) {
                 Find duplicates
               </Button>
             )}
+            {isModLike && canBisect && (
+              <Button
+                size="sm"
+                variant={showFifty ? "primary" : "secondary"}
+                onClick={() => setShowFifty(!showFifty)}
+                icon={<SearchCheck size={12} />}
+                title="Turn half your mods off at a time to find the one causing a problem (the 50/50 method)"
+              >
+                Find a broken mod
+              </Button>
+            )}
             {isModLike && (
               <Button
                 size="sm"
@@ -852,6 +874,10 @@ export default function ContentBrowser({ gameId }: Props) {
         >
           The game loads subfolders, so these mods aren't really disabled.
         </Banner>
+      )}
+
+      {showFifty && canBisect && (
+        <FiftyFifty gameId={gameId} gameLabel={gameDef?.label ?? gameId} onClose={() => setShowFifty(false)} />
       )}
 
       {showDuplicates && gameDef?.duplicate_finder && !readOnly && (

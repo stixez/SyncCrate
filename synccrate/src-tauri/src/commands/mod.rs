@@ -1,5 +1,6 @@
 pub mod art;
 pub mod backup;
+pub mod bisect;
 pub mod chat;
 pub mod compat;
 pub mod crew;

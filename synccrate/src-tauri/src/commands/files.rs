@@ -848,7 +848,7 @@ pub async fn set_active_game(
 }
 
 /// (game id, base path, first content folder, rename method) for toggling.
-async fn toggle_context(state: &Arc<Mutex<AppState>>, game_id: &str) -> Result<(String, String, String, bool), String> {
+pub(crate) async fn toggle_context(state: &Arc<Mutex<AppState>>, game_id: &str) -> Result<(String, String, String, bool), String> {
     let app_state = state.lock().await;
     let game_id = require_active(&app_state, &game_id)?;
     let base = app_state
@@ -938,17 +938,23 @@ pub async fn toggle_mods(
         .iter()
         .filter_map(|o| o.new_path.as_ref().filter(|n| **n != o.path).map(|n| (o.path.clone(), n.clone())))
         .collect();
-    crate::commands::tags::move_tags_batch(&game_id, &moved);
+    record_toggles(state.inner(), &game_id, &moved).await;
+    Ok(outcomes)
+}
+
+/// After files were turned on or off (`from` -> `to`): their tags follow, and
+/// the active game's manifest is patched instead of rescanned.
+pub(crate) async fn record_toggles(state: &Arc<Mutex<AppState>>, game_id: &str, moved: &[(String, String)]) {
+    crate::commands::tags::move_tags_batch(game_id, moved);
     let mut app_state = state.lock().await;
     if app_state.active_game == game_id {
-        for (from, to) in &moved {
+        for (from, to) in moved {
             if let Some(mut info) = app_state.local_manifest.files.remove(from) {
                 info.relative_path = to.clone();
                 app_state.local_manifest.files.insert(to.clone(), info);
             }
         }
     }
-    Ok(outcomes)
 }
 
 /// Why a `disable_method: "none"` game can't disable single files. Shared
