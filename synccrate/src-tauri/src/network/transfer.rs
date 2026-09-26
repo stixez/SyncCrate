@@ -211,6 +211,47 @@ impl Drop for HandshakeSlot {
     }
 }
 
+/// Connections at once from one source (a LAN address, or one iroh node).
+/// The global limit alone let one PC hold every spare slot with connections
+/// that never sent a Hello, so nobody else could join.
+const MAX_PER_SOURCE: usize = 3;
+static PER_SOURCE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, usize>>> = std::sync::LazyLock::new(Default::default);
+
+pub(crate) struct SourceSlot(String);
+
+impl SourceSlot {
+    pub(crate) fn try_acquire(key: String) -> Option<SourceSlot> {
+        let mut map = PER_SOURCE.lock().unwrap_or_else(|e| e.into_inner());
+        let n = map.entry(key.clone()).or_insert(0);
+        if *n >= MAX_PER_SOURCE {
+            return None;
+        }
+        *n += 1;
+        Some(SourceSlot(key))
+    }
+}
+
+impl Drop for SourceSlot {
+    fn drop(&mut self) {
+        let mut map = PER_SOURCE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(n) = map.get_mut(&self.0) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                map.remove(&self.0);
+            }
+        }
+    }
+}
+
+/// The source part of a connection label: the IP of `ip:port` (IPv6 keeps
+/// its brackets), or the whole `internet:<node>` label.
+fn source_key(label: &str) -> String {
+    if label.starts_with("internet:") {
+        return label.to_string();
+    }
+    label.rsplit_once(':').map_or(label, |(host, _)| host).to_string()
+}
+
 /// Removes a peer that `handle_client` added if the handler exits early (an
 /// error mid-session or a panic): without it the peer stayed in
 /// `connections` forever, and eight of them locked the host.
@@ -258,6 +299,10 @@ pub async fn serve_incoming(
 ) {
     let Some(_slot) = HandshakeSlot::try_acquire() else {
         log::warn!("Rejecting connection from {} — too many connections in progress", label);
+        return;
+    };
+    let Some(_source_slot) = SourceSlot::try_acquire(source_key(&label)) else {
+        log::warn!("Rejecting connection from {} — too many connections from there", label);
         return;
     };
     // Enforce connection limit
@@ -1529,7 +1574,7 @@ async fn offer_round_trip(s: &mut PeerStream, req: OfferRequest) -> Result<(Offe
     let sending = req.files.is_some();
     protocol::send_message(s, &Message::OfferSync { files: req.files }).await?;
     loop {
-        let msg = protocol::try_recv_message(s, std::time::Duration::from_secs(15))
+        let msg = protocol::try_recv_message(s, POLL_REPLY_WAIT)
             .await?
             .ok_or_else(|| "The host stopped answering".to_string())?;
         match msg {
@@ -1784,6 +1829,12 @@ const CHAT_POLL: std::time::Duration = std::time::Duration::from_millis(1000);
 /// caller so the host's reply can't reach a sync reader. Returns the batch
 /// (None if the host disconnected first) and a message the loop must still
 /// act on (the host's `Disconnect` or `GameInfoExchange`).
+/// How long a chat or offer poll waits for the host's reply. The host
+/// answers requests in order, so a reply can queue behind a big file it's
+/// still hashing for a request we already gave up on (a cancelled sync): 15 s
+/// ended the whole session then. Same allowance as a manifest request.
+const POLL_REPLY_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+
 async fn chat_round_trip(
     s: &mut PeerStream,
     since: u64,
@@ -1793,7 +1844,7 @@ async fn chat_round_trip(
     protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files }).await?;
     let mut pending = None;
     loop {
-        let msg = protocol::try_recv_message(s, std::time::Duration::from_secs(15))
+        let msg = protocol::try_recv_message(s, POLL_REPLY_WAIT)
             .await?
             .ok_or_else(|| "The host stopped answering".to_string())?;
         match msg {
@@ -2246,6 +2297,19 @@ async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connections_are_limited_per_source() {
+        assert_eq!(source_key("192.168.1.20:51234"), "192.168.1.20");
+        assert_eq!(source_key("[fe80::1]:51234"), "[fe80::1]");
+        assert_eq!(source_key("internet:abc123"), "internet:abc123");
+        let key = format!("10.9.8.{}", std::process::id() % 250);
+        let slots: Vec<_> = (0..MAX_PER_SOURCE).map(|_| SourceSlot::try_acquire(key.clone()).expect("within the limit")).collect();
+        assert!(SourceSlot::try_acquire(key.clone()).is_none(), "one PC can't take every slot");
+        assert!(SourceSlot::try_acquire(format!("{key}.other")).is_some(), "others still can");
+        drop(slots);
+        assert!(SourceSlot::try_acquire(key).is_some(), "freed on drop");
+    }
 
     #[test]
     fn drains_cover_files_bigger_than_the_old_fixed_budget() {

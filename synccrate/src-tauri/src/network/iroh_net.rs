@@ -121,7 +121,9 @@ async fn accept_loop(ep: Endpoint, state: Arc<Mutex<AppState>>, app: Events) {
             };
             let remote = conn.remote_id();
             // The client opens one bidirectional stream and speaks first (Hello).
-            let (send, recv) = match tokio::time::timeout(Duration::from_secs(30), conn.accept_bi()).await {
+            // Real clients open their stream right away; 30 s let idle
+            // connections (node ids are free to make) hold handshake slots.
+            let (send, recv) = match tokio::time::timeout(Duration::from_secs(10), conn.accept_bi()).await {
                 Ok(Ok(s)) => s,
                 _ => {
                     log::warn!("Internet peer {} never opened a stream", remote.fmt_short());
