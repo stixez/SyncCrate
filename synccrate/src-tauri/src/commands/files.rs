@@ -29,6 +29,13 @@ fn load_hash_cache() -> HashCache {
     HashMap::new()
 }
 
+/// Hashes scans already computed, by absolute path ('/'-separated):
+/// `(size, mtime secs, hash)`. Lets a backup skip copying a file whose
+/// content the store already has.
+pub(crate) fn scanned_hashes() -> HashMap<String, (u64, u64, String)> {
+    load_hash_cache().into_iter().map(|(k, e)| (k, (e.size, e.mtime, e.hash))).collect()
+}
+
 fn save_hash_cache(cache: &HashCache) {
     let path = utils::hash_cache_path();
     if let Ok(data) = serde_json::to_string(cache) {
@@ -186,6 +193,7 @@ pub(crate) fn effective_extension(path: &std::path::Path) -> String {
 }
 
 /// Per-content-type filters beyond the extension list.
+#[derive(Clone, Copy)]
 pub(crate) struct ScanFilter<'a> {
     pub recursive: bool,
     pub must_contain: Option<&'a str>,
@@ -193,9 +201,12 @@ pub(crate) struct ScanFilter<'a> {
     pub exclude_patterns: &'a [String],
     /// The content type's folder, which anchors `exclude_patterns` with a `/`.
     pub folder: &'a str,
+    /// The content folder on disk, when the caller knows it: the path inside
+    /// it is then exact, the same as `diff::content_type_for` computes.
+    pub root: Option<&'a std::path::Path>,
 }
 
-impl ScanFilter<'_> {
+impl<'a> ScanFilter<'a> {
     pub(crate) fn from_ct(ct: &crate::registry::ContentType) -> ScanFilter<'_> {
         ScanFilter {
             recursive: ct.recursive,
@@ -203,7 +214,12 @@ impl ScanFilter<'_> {
             exclude_files: &ct.exclude_files,
             exclude_patterns: &ct.exclude_patterns,
             folder: &ct.folder,
+            root: None,
         }
+    }
+
+    pub(crate) fn with_root(self, root: &'a std::path::Path) -> ScanFilter<'a> {
+        ScanFilter { root: Some(root), ..self }
     }
 
     /// `exclude_patterns` for an absolute path. Callers only have the full
@@ -212,6 +228,12 @@ impl ScanFilter<'_> {
     fn excluded_by_pattern(&self, path: &std::path::Path) -> bool {
         if self.exclude_patterns.is_empty() {
             return false;
+        }
+        if let Some(inner) = self.root.and_then(|r| path.strip_prefix(r).ok()) {
+            // Exact: a mod that contains a folder named like the content
+            // folder (GameData/MyMod/GameData/Squad) was excluded by the
+            // suffix search below but accepted by the receive side.
+            return crate::sync::diff::excluded_by_patterns(self.exclude_patterns, &inner.to_string_lossy().replace('\\', "/"));
         }
         let full = path.to_string_lossy().replace('\\', "/");
         let segs: Vec<&str> = full.split('/').filter(|s| !s.is_empty()).collect();
@@ -243,6 +265,12 @@ impl ScanFilter<'_> {
 /// (extension list incl. `.disabled` files, exclusions, content sniffing).
 /// Depth is enforced by the caller's walker (`ct.recursive`).
 pub(crate) fn content_type_accepts(ct: &crate::registry::ContentType, path: &std::path::Path) -> bool {
+    content_type_accepts_in(ct, path, None)
+}
+
+/// `content_type_accepts` with the content folder's path on disk (`root`),
+/// which makes folder-anchored `exclude_patterns` exact.
+pub(crate) fn content_type_accepts_in(ct: &crate::registry::ContentType, path: &std::path::Path, root: Option<&std::path::Path>) -> bool {
     if path.file_name().and_then(|n| n.to_str()).is_some_and(crate::sync::diff::is_synccrate_temp) {
         return false;
     }
@@ -252,7 +280,11 @@ pub(crate) fn content_type_accepts(ct: &crate::registry::ContentType, path: &std
             return false;
         }
     }
-    ScanFilter::from_ct(ct).accepts(path)
+    let filter = ScanFilter::from_ct(ct);
+    match root {
+        Some(r) => filter.with_root(r).accepts(path),
+        None => filter.accepts(path),
+    }
 }
 
 /// True if the first 64 KB of the file contain `needle` (lossy UTF-8).
@@ -295,6 +327,8 @@ fn scan_directory(
     // (Slay the Spire) never matched, so those saves were never scanned.
     let ext_lower: Vec<String> = valid_extensions.iter().map(|s| s.to_ascii_lowercase()).collect();
     let ext_refs: Vec<&str> = ext_lower.iter().map(|s| s.as_str()).collect();
+    let filter: ScanFilter<'_> = *filter;
+    let filter = filter.with_root(&dir);
 
     // Collect eligible file entries first, then hash in parallel
     let mut walker = WalkDir::new(&dir).follow_links(false);
@@ -490,24 +524,30 @@ pub async fn scan_files_inner(
                 "{}/",
                 base_path.replace('\\', "/").trim_end_matches('/')
             );
-            let mut new_cache: HashCache = hash_cache
-                .into_iter()
-                .filter(|(k, _)| !k.starts_with(&base_prefix))
-                .collect();
-            for info in all_files.values() {
-                if !info.hash.is_empty() {
+            let fresh: Vec<(String, HashCacheEntry)> = all_files
+                .values()
+                .filter(|info| !info.hash.is_empty())
+                .map(|info| {
                     let abs_path = std::path::PathBuf::from(&base_path)
                         .join(&info.relative_path)
                         .to_string_lossy()
                         .replace('\\', "/");
-                    new_cache.insert(abs_path, HashCacheEntry {
-                        size: info.size,
-                        mtime: info.modified,
-                        hash: info.hash.clone(),
-                    });
-                }
+                    (abs_path, HashCacheEntry { size: info.size, mtime: info.modified, hash: info.hash.clone() })
+                })
+                .collect();
+            // The cache holds every game's folders in one file; rewriting it
+            // (tens of MB) after a scan that changed nothing was pure waste.
+            let old_here = hash_cache.keys().filter(|k| k.starts_with(&base_prefix)).count();
+            let unchanged = old_here == fresh.len()
+                && fresh.iter().all(|(k, e)| hash_cache.get(k).is_some_and(|o| o.size == e.size && o.mtime == e.mtime && o.hash == e.hash));
+            if !unchanged {
+                let mut new_cache: HashCache = hash_cache
+                    .into_iter()
+                    .filter(|(k, _)| !k.starts_with(&base_prefix))
+                    .collect();
+                new_cache.extend(fresh);
+                save_hash_cache(&new_cache);
             }
-            save_hash_cache(&new_cache);
         }
 
         FileManifest {
@@ -1835,7 +1875,7 @@ mod tests {
     fn scans_skip_the_games_own_files_by_pattern() {
         // KSP-style: paid DLC and stock parts live next to mods in GameData.
         let dir = std::env::temp_dir().join(format!("synccrate-pat-{}", uuid::Uuid::new_v4()));
-        for f in ["GameData/SquadExpansion/MakingHistory/a.cfg", "GameData/Squad/Parts/b.cfg", "GameData/MechJeb2/c.cfg", "GameData/MyMod/Squad/d.cfg", "GameData/ccBGSSSE001-Fish.cfg"] {
+        for f in ["GameData/SquadExpansion/MakingHistory/a.cfg", "GameData/Squad/Parts/b.cfg", "GameData/MechJeb2/c.cfg", "GameData/MyMod/Squad/d.cfg", "GameData/MyMod/GameData/Squad/e.cfg", "GameData/ccBGSSSE001-Fish.cfg"] {
             let p = dir.join(f);
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(&p, "x").unwrap();
@@ -1848,7 +1888,9 @@ mod tests {
         let files = scan_directory(&dir.to_string_lossy(), "GameData", |_| "Mod".to_string(), &ct.extensions, &ScanFilter::from_ct(&ct), false, &HashMap::new());
         let mut keys: Vec<&String> = files.keys().collect();
         keys.sort();
-        assert_eq!(keys, vec!["GameData/MechJeb2/c.cfg", "GameData/MyMod/Squad/d.cfg"]);
+        // Nested "GameData/Squad" inside a mod is the mod's own folder, as the
+        // receive side (`content_type_for`) sees it too.
+        assert_eq!(keys, vec!["GameData/MechJeb2/c.cfg", "GameData/MyMod/GameData/Squad/e.cfg", "GameData/MyMod/Squad/d.cfg"]);
         assert!(!content_type_accepts(&ct, &dir.join("GameData/SquadExpansion/MakingHistory/a.cfg")));
         assert!(content_type_accepts(&ct, &dir.join("GameData/MechJeb2/c.cfg")));
         let _ = std::fs::remove_dir_all(&dir);

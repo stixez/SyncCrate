@@ -218,7 +218,7 @@ fn collect_full(base: &Path, cts: &[ContentType]) -> Result<Vec<SourceFile>, Str
             if !entry.file_type().is_file() || entry.path_is_symlink() {
                 continue;
             }
-            if !crate::commands::files::content_type_accepts(ct, entry.path()) {
+            if !crate::commands::files::content_type_accepts_in(ct, entry.path(), Some(&dir)) {
                 continue;
             }
             let Ok(rel) = entry.path().strip_prefix(&dir) else { continue };
@@ -358,6 +358,7 @@ fn store_sources(
     root: &Path,
     sources: &[SourceFile],
     reuse: &ReuseMap,
+    scanned: &HashMap<String, (u64, u64, String)>,
     progress: &mut dyn FnMut(usize, usize, &str),
 ) -> Result<(Vec<BackupFileEntry>, u64), String> {
     let mut entries = Vec::with_capacity(sources.len());
@@ -369,7 +370,19 @@ fn store_sources(
             .filter(|(size, mtime, hash)| {
                 *size == src.size && Some(*mtime) == src.mtime_ms && object_path(root, hash).is_file()
             })
-            .map(|(size, _, hash)| (hash.clone(), *size));
+            .map(|(size, _, hash)| (hash.clone(), *size))
+            // A scan hashed it (same size and mtime) and the store already
+            // has that content: copying the whole file first, only to find
+            // the object exists, is what made re-backups of touched-but-
+            // unchanged files slow.
+            .or_else(|| {
+                let key = src.abs.to_string_lossy().replace('\\', "/");
+                let secs = src.mtime_ms.and_then(|ms| u64::try_from(ms / 1000).ok());
+                scanned
+                    .get(&key)
+                    .filter(|(size, mtime, hash)| *size == src.size && Some(*mtime) == secs && is_valid_hash(hash) && object_path(root, hash).is_file())
+                    .map(|(size, _, hash)| (hash.clone(), *size))
+            });
         let (hash, size) = match reused {
             Some(v) => v,
             None => {
@@ -467,7 +480,8 @@ fn create_backup_inner(
     let id = Uuid::new_v4().to_string();
     let dir = root.join(&id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let (files, new_bytes) = match store_sources(root, &sources, &reuse, progress) {
+    let scanned = crate::commands::files::scanned_hashes();
+    let (files, new_bytes) = match store_sources(root, &sources, &reuse, &scanned, progress) {
         Ok(v) => v,
         Err(e) => {
             // Collect the objects already stored now: GC otherwise only runs
