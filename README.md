@@ -117,7 +117,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 | Game | What syncs |
 |------|------------|
-| **The Sims 2** | Mods & CC, Neighborhoods, Tray Items, Screenshots |
+| **The Sims 2** | Downloads (CC), Neighborhoods, Saved Sims |
 | **The Sims 3** | Mods & CC, Save Files, Tray Items, Screenshots |
 | **The Sims 4** | Script Mods, Save Files, Tray Items, Screenshots |
 | **The Sims 4 (GShade)** | GShade Presets, GShade Shaders |
