@@ -129,8 +129,14 @@ pub(crate) fn plan_renames(
     cts: &[ContentType],
     mods: &ContentType,
 ) -> RenamePlan {
-    let pack_hash: HashMap<String, &str> =
-        pack_files.iter().map(|pf| (match_key(&pf.relative_path), pf.hash.as_str())).collect();
+    // Only mods the pack has *enabled* define what loads: `match_key` drops
+    // the `.disabled` suffix, so a mod the pack's author had switched off
+    // got re-enabled here. A key the pack only has disabled is an extra.
+    let pack_hash: HashMap<String, &str> = pack_files
+        .iter()
+        .filter(|pf| !is_disabled_path(&pf.relative_path))
+        .map(|pf| (match_key(&pf.relative_path), pf.hash.as_str()))
+        .collect();
 
     // BTreeMap + sorted groups: a stable order for the preview and so the
     // same copy wins every time when two disabled copies both match.
@@ -661,6 +667,20 @@ mod tests {
         assert!(plan.to_enable.is_empty() && plan.to_disable.is_empty());
         assert_eq!(plan.blocked.len(), 1);
         assert_eq!(plan.blocked[0].relative_path, "Mods/a.package.disabled");
+    }
+
+    #[test]
+    fn mods_the_pack_has_disabled_stay_off() {
+        let cts = sims4_cts();
+        let pack = [pf("Mods/Off.package.disabled", "o"), pf("Mods/On.package", "n")];
+        let local = manifest(&[("Mods/Off.package.disabled", "o"), ("Mods/On.package", "n"), ("Mods/Also.package.disabled", "a")]);
+        let plan = plan_renames(&pack, &local, &cts, &cts[0]);
+        assert!(plan.to_enable.is_empty(), "the pack's author turned Off.package off");
+        assert!(plan.to_disable.is_empty());
+        // Enabled here, disabled in the pack: switched off to match.
+        let local = manifest(&[("Mods/Off.package", "o"), ("Mods/On.package", "n")]);
+        let plan = plan_renames(&pack, &local, &cts, &cts[0]);
+        assert_eq!(paths(&plan.to_disable), ["Mods/Off.package"]);
     }
 
     #[test]

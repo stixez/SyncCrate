@@ -66,11 +66,11 @@ fn write_checkpoint(checkpoint: &SyncCheckpoint) {
     }
 }
 
-/// Writes the resume checkpoint at most every `EVERY_FILES` files or
-/// `EVERY` seconds (plus once after the loop). Rewriting the whole, growing
-/// list after every file made a 50k-file sync quadratic (~50k writes of up
-/// to a few MB); losing the last few entries on a crash only means those
-/// files are found already present on resume.
+/// Writes the resume checkpoint at most every `EVERY` seconds (plus once
+/// after the loop). Rewriting the whole, growing list after every file made
+/// a 50k-file sync quadratic, and so did every 100 files (150k files meant
+/// ~1,500 rewrites of up to 6 MB); losing the last few seconds of entries on
+/// a crash only means those files are found already present on resume.
 ///
 /// Auto-pulls (`enabled: false`) keep no checkpoint: they re-diff on the next
 /// poll anyway, and writing one clobbered a cancelled manual sync's.
@@ -84,8 +84,7 @@ struct CheckpointWriter {
 }
 
 impl CheckpointWriter {
-    const EVERY_FILES: usize = 100;
-    const EVERY: std::time::Duration = std::time::Duration::from_secs(2);
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(5);
 
     fn new(checkpoint: &SyncCheckpoint, enabled: bool) -> Self {
         let seen = checkpoint.completed_files.iter().cloned().collect();
@@ -97,7 +96,7 @@ impl CheckpointWriter {
             checkpoint.completed_files.push(path.to_string());
         }
         self.pending += 1;
-        if self.pending >= Self::EVERY_FILES || self.last.elapsed() >= Self::EVERY {
+        if self.last.elapsed() >= Self::EVERY {
             self.flush(checkpoint);
         }
     }
@@ -596,6 +595,10 @@ async fn run_sync(
         })
         .count() as u64;
     let mut files_done = 0u64;
+    // One progress event per file re-rendered the dashboard hundreds of times
+    // a second on folders of small files; ~10 a second (and the last file
+    // always) looks the same.
+    let mut last_progress: Option<std::time::Instant> = None;
     let mut bytes_done = 0u64;
     let mut sync_errors: Vec<String> = Vec::new();
     let mut files_received = 0u64;
@@ -727,7 +730,10 @@ async fn run_sync(
                         );
                     }
                 }
-                let _ = app.emit(
+                let due = last_progress.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(100));
+                if due || files_done as usize >= total_files as usize {
+                    last_progress = Some(std::time::Instant::now());
+                    let _ = app.emit(
                     "sync-progress",
                     serde_json::json!({
                         "file": file_info.relative_path,
@@ -738,6 +744,7 @@ async fn run_sync(
                         "peer_id": peer_id,
                     }),
                 );
+                }
             }
             SyncAction::SendToRemote(file_info) => {
                 files_done += 1;

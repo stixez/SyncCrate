@@ -174,6 +174,8 @@ pub async fn run_listener(
                         continue;
                     }
                 };
+                // Small request/response messages; don't let Nagle hold them.
+                let _ = stream.set_nodelay(true);
 
                 let state = state.clone();
                 let app = app.clone();
@@ -620,7 +622,14 @@ async fn handle_client(
                 match tokio::fs::File::open(&full_path).await {
                     Ok(mut file) => {
                         // Get file size + mtime for the header / cache check
-                        let metadata = file.metadata().await.map_err(|e| e.to_string())?;
+                        let metadata = match file.metadata().await {
+                            Ok(m) => m,
+                            Err(e) => {
+                                let mut s = stream.lock().await;
+                                protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                continue;
+                            }
+                        };
                         let file_size = metadata.len();
                         let file_mtime = metadata
                             .modified()
@@ -661,14 +670,27 @@ async fn handle_client(
                             None => {
                                 // Cache miss/stale: compute by streaming once, then rewind.
                                 use tokio::io::AsyncSeekExt;
-                                let mut hasher = Sha256::new();
-                                loop {
-                                    let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
-                                    if n == 0 { break; }
-                                    hasher.update(&buf[..n]);
+                                let hashed: Result<String, std::io::Error> = async {
+                                    let mut hasher = Sha256::new();
+                                    loop {
+                                        let n = file.read(&mut buf).await?;
+                                        if n == 0 { break; }
+                                        hasher.update(&buf[..n]);
+                                    }
+                                    file.seek(std::io::SeekFrom::Start(0)).await?;
+                                    Ok(hex::encode(hasher.finalize()))
                                 }
-                                file.seek(std::io::SeekFrom::Start(0)).await.map_err(|e| e.to_string())?;
-                                hex::encode(hasher.finalize())
+                                .await;
+                                match hashed {
+                                    Ok(h) => h,
+                                    // A file the running game has locked: fail this
+                                    // file, not the friend's whole session.
+                                    Err(e) => {
+                                        let mut s = stream.lock().await;
+                                        protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                        continue;
+                                    }
+                                }
                             }
                         };
 
@@ -704,9 +726,21 @@ async fn handle_client(
                         // without needing periodic resets.
                         let mut throttle_bytes = 0u64;
                         let throttle_start = tokio::time::Instant::now();
+                        // Progress at most ~10 times a second: one event per
+                        // 64 KB chunk was thousands a second at LAN speed.
+                        let mut last_progress = tokio::time::Instant::now();
+                        let mut read_failed = false;
 
                         loop {
-                            let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
+                            let n = match file.read(&mut buf).await {
+                                Ok(n) => n,
+                                Err(e) => {
+                                    // The client ends this file on Error (stream in sync).
+                                    protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                    read_failed = true;
+                                    break;
+                                }
+                            };
                             if n == 0 { break; }
 
                             let (send_data, is_compressed) = if compress_this_file {
@@ -741,6 +775,10 @@ async fn handle_client(
                             }
 
                             // Emit chunk progress to frontend
+                            if last_progress.elapsed() < std::time::Duration::from_millis(100) {
+                                continue;
+                            }
+                            last_progress = tokio::time::Instant::now();
                             let _ = app.emit(
                                 "peer-download-progress",
                                 serde_json::json!({
@@ -754,6 +792,9 @@ async fn handle_client(
                             );
                         }
 
+                        if read_failed {
+                            continue;
+                        }
                         peer_files_sent += 1;
                         protocol::send_message(&mut *s, &Message::FileComplete { path }).await?;
 
@@ -948,7 +989,10 @@ async fn connect_any(addresses: &[String], port: u16) -> Result<TcpStream, Strin
                 tokio::time::sleep(std::time::Duration::from_millis(400 * i as u64)).await;
             }
             match tokio::time::timeout(std::time::Duration::from_secs(8), TcpStream::connect(target)).await {
-                Ok(Ok(s)) => Ok(s),
+                Ok(Ok(s)) => {
+                    let _ = s.set_nodelay(true);
+                    Ok(s)
+                }
                 Ok(Err(e)) => Err((classify_connect_error(&e), e.to_string())),
                 Err(_) => Err((ConnectFailure::Timeout, "timed out".to_string())),
             }
@@ -1861,6 +1905,12 @@ fn same_file_name(a: &str, b: &str) -> bool {
 pub(crate) fn find_existing(dest: &std::path::Path) -> Option<std::path::PathBuf> {
     if std::fs::symlink_metadata(dest).is_ok() {
         return Some(dest.to_path_buf());
+    }
+    // Windows lookups already ignore case and trailing dots/spaces, so a
+    // miss is final. Listing the folder anyway ran for every new file (the
+    // normal case), twice: O(n²) on a first sync of 50k files into one folder.
+    if cfg!(windows) {
+        return None;
     }
     let name = dest.file_name()?.to_str()?;
     std::fs::read_dir(dest.parent()?)
