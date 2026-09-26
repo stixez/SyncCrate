@@ -593,6 +593,44 @@ fn mtime_ms_of(path: &std::path::Path) -> i64 {
     std::fs::metadata(path).ok().and_then(|m| crate::commands::backup::mtime_ms(&m)).unwrap_or(0)
 }
 
+/// The same plan resumed after a cancel: both attempts' changes in one
+/// record, so undo reverts all of it. The first attempt's presync backup
+/// stays the record's backup; files only the resumed part replaced come
+/// back from file history. None when it isn't a resume of that record.
+fn merge_resumed_record(prev: &SyncRecord, new: &SyncRecord) -> Option<SyncRecord> {
+    if prev.plan_hash.is_none() || prev.plan_hash != new.plan_hash || prev.game != new.game || prev.base_path != new.base_path {
+        return None;
+    }
+    let mut merged = prev.clone();
+    merged.sync_id = new.sync_id.clone();
+    merged.created_at = new.created_at;
+    if merged.presync_backup_id.is_none() {
+        merged.presync_backup_id = new.presync_backup_id.clone();
+    }
+    let key = |p: &str| crate::sync::diff::match_key(p);
+    for f in &new.added {
+        if !merged.added.iter().any(|a| key(&a.relative_path) == key(&f.relative_path)) {
+            merged.added.push(f.clone());
+        }
+    }
+    for f in &new.replaced {
+        if !merged.replaced.iter().any(|a| key(&a.relative_path) == key(&f.relative_path)) {
+            merged.replaced.push(f.clone());
+        }
+    }
+    for p in &new.deleted {
+        if !merged.deleted.iter().any(|d| key(d) == key(p)) {
+            merged.deleted.push(p.clone());
+        }
+    }
+    for v in &new.history_versions {
+        if !merged.history_versions.iter().any(|h| key(&h.path) == key(&v.path)) {
+            merged.history_versions.push(v.clone());
+        }
+    }
+    Some(merged)
+}
+
 /// An auto-pull's additions folded into the previous record for the same
 /// folder (kept as-is otherwise: a record for another folder can't be undone
 /// here anyway, so the new one replaces it).
@@ -882,7 +920,15 @@ async fn run_sync(
         replaced: undo_replaced,
         deleted: undo_deleted,
         history_versions,
+        plan_hash: plan.plan_hash.clone(),
     };
+    if !plan.auto_pull {
+        if let Some(prev) = crate::commands::undo::read_record(&undo_record.game) {
+            if let Some(merged) = merge_resumed_record(&prev, &undo_record) {
+                undo_record = merged;
+            }
+        }
+    }
     if plan.auto_pull {
         // A stay-in-sync pull only adds files. Replacing the record would make
         // the user's last real sync (its replacements, deletions and presync
@@ -1368,12 +1414,33 @@ mod tests {
     }
 
     #[test]
+    fn a_resumed_sync_extends_the_first_attempts_record() {
+        use crate::commands::undo::{KeptVersion, RecordedFile, SyncRecord};
+        let f = |p: &str| RecordedFile { relative_path: p.into(), size: 1, mtime_ms: 1, hash: "h".into() };
+        let rec = |id: &str, plan: Option<&str>, replaced: Vec<RecordedFile>, backup: Option<&str>| SyncRecord {
+            sync_id: id.into(), created_at: 1, game: "sims4".into(), base_path: "C:/g".into(),
+            presync_backup_id: backup.map(str::to_string), added: vec![], replaced, deleted: vec![],
+            history_versions: vec![KeptVersion { path: format!("Mods/{id}.package"), hash: "x".into(), mtime_ms: None }],
+            plan_hash: plan.map(str::to_string),
+        };
+        let first = rec("one", Some("P"), vec![f("Mods/one.package")], Some("b1"));
+        let resumed = rec("two", Some("P"), vec![f("Mods/two.package")], Some("b2"));
+        let m = merge_resumed_record(&first, &resumed).expect("same plan: merged");
+        let paths: Vec<&str> = m.replaced.iter().map(|r| r.relative_path.as_str()).collect();
+        assert_eq!(paths, ["Mods/one.package", "Mods/two.package"]);
+        assert_eq!(m.presync_backup_id.as_deref(), Some("b1"), "the first backup holds the first part");
+        assert_eq!(m.history_versions.len(), 2, "the resumed part comes back from history");
+        assert!(merge_resumed_record(&first, &rec("three", Some("Q"), vec![], None)).is_none(), "another plan replaces the record");
+        assert!(merge_resumed_record(&rec("old", None, vec![], None), &resumed).is_none(), "records from before plan hashes");
+    }
+
+    #[test]
     fn auto_pull_record_merges_into_the_same_folder_only() {
         use crate::commands::undo::{RecordedFile, SyncRecord};
         let f = |p: &str| RecordedFile { relative_path: p.into(), size: 1, mtime_ms: 1, hash: "h".into() };
         let rec = |id: &str, base: &str, added: Vec<RecordedFile>, replaced: Vec<RecordedFile>| SyncRecord {
             sync_id: id.into(), created_at: 1, game: "sims4".into(), base_path: base.into(),
-            presync_backup_id: Some("b".into()), added, replaced, deleted: vec!["Mods/gone.package".into()], history_versions: vec![],
+            presync_backup_id: Some("b".into()), added, replaced, deleted: vec!["Mods/gone.package".into()], history_versions: vec![], plan_hash: None,
         };
         let prev = rec("manual", "C:/g", vec![f("Mods/a.package")], vec![f("Mods/r.package")]);
         let new = rec("auto", "C:/g", vec![f("Mods/a.package"), f("Mods/b.package")], vec![]);

@@ -1025,9 +1025,11 @@ pub(crate) fn undo_apply(
     };
 
     let mut wanted: HashSet<String> = HashSet::new();
+    let mut rel_of: HashMap<String, String> = HashMap::new();
     for f in &record.replaced {
         if file_matches(&base_str, f) {
             wanted.insert(crate::sync::diff::match_key(&f.relative_path));
+            rel_of.insert(crate::sync::diff::match_key(&f.relative_path), f.relative_path.clone());
         } else {
             result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
         }
@@ -1036,6 +1038,7 @@ pub(crate) fn undo_apply(
         let still_absent = utils::safe_join(&base_str, p).map_or(true, |abs| !abs.exists());
         if still_absent {
             wanted.insert(crate::sync::diff::match_key(p));
+            rel_of.insert(crate::sync::diff::match_key(p), p.clone());
         } else {
             result.skipped.push(format!("{} (recreated since the sync)", p));
         }
@@ -1055,6 +1058,17 @@ pub(crate) fn undo_apply(
                 .cloned()
                 .collect(),
         };
+        // Files this backup doesn't hold (a resumed sync replaced more after
+        // the first attempt's backup): their file-history versions, if kept.
+        let in_backup: HashSet<String> = restricted
+            .files
+            .iter()
+            .filter_map(|e| entry_game_root_path(cts, e))
+            .map(|p| crate::sync::diff::match_key(&p))
+            .collect();
+        let mut fallback: Vec<String> = wanted.iter().filter(|k| !in_backup.contains(*k)).filter_map(|k| rel_of.get(k).cloned()).collect();
+        fallback.sort();
+        restore_kept_versions(&fallback, record, &root, &base_str, &mut result);
         let r = restore_inner(&root, backup_id, &restricted, base, cts, false, &mut |_, _, _| {});
         result.restored += r.restored + r.unchanged;
         result.skipped.extend(r.skipped);
@@ -1074,8 +1088,6 @@ pub(crate) fn undo_apply(
 /// the backup path (untouched since the sync / still absent). Runs under the
 /// store lock (held by `undo_apply`).
 fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, result: &mut UndoResult) {
-    let by_path: HashMap<String, &crate::commands::undo::KeptVersion> =
-        record.history_versions.iter().map(|v| (crate::sync::diff::match_key(&v.path), v)).collect();
     let mut targets: Vec<(String, bool)> = Vec::new();
     for f in &record.replaced {
         if file_matches(base_str, f) {
@@ -1091,7 +1103,17 @@ fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, ba
             result.skipped.push(format!("{} (recreated since the sync)", p));
         }
     }
-    for (rel, _) in targets {
+    let targets: Vec<String> = targets.into_iter().map(|(rel, _)| rel).collect();
+    restore_kept_versions(&targets, record, root, base_str, result);
+}
+
+/// Put back the history versions the record kept for `rels` (already checked
+/// as safe to restore by the caller).
+fn restore_kept_versions(rels: &[String], record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, result: &mut UndoResult) {
+    let by_path: HashMap<String, &crate::commands::undo::KeptVersion> =
+        record.history_versions.iter().map(|v| (crate::sync::diff::match_key(&v.path), v)).collect();
+    for rel in rels {
+        let rel = rel.clone();
         let Some(v) = by_path.get(&crate::sync::diff::match_key(&rel)) else {
             result.skipped.push(format!("{} (no backup or kept version for this sync)", rel));
             continue;
@@ -1846,6 +1868,7 @@ mod tests {
                 KeptVersion { path: "Mods/r.package".into(), hash: old_hash, mtime_ms: None },
                 KeptVersion { path: "Mods/d.package".into(), hash: del_hash, mtime_ms: None },
             ],
+            plan_hash: None,
         };
         let mut r = UndoResult::default();
         undo_from_history(&record, &root, &base.to_string_lossy(), &mut r);

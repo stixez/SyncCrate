@@ -44,6 +44,11 @@ pub(crate) struct SyncRecord {
     /// every one of them.
     #[serde(default)]
     pub(crate) history_versions: Vec<KeptVersion>,
+    /// The plan this sync ran. A cancelled sync resumed from its checkpoint
+    /// runs the same plan; its record is merged into the first attempt's
+    /// instead of replacing it (undo then covered only the resumed part).
+    #[serde(default)]
+    pub(crate) plan_hash: Option<String>,
 }
 
 /// One file's pre-sync version in the object store (via file history).
@@ -232,7 +237,7 @@ mod tests {
     fn is_empty_true_only_with_no_files_at_all() {
         let mut r = SyncRecord {
             sync_id: "s".into(), created_at: 0, game: "g".into(), base_path: "b".into(),
-            presync_backup_id: None, added: vec![], replaced: vec![], deleted: vec![], history_versions: vec![],
+            presync_backup_id: None, added: vec![], replaced: vec![], deleted: vec![], history_versions: vec![], plan_hash: None,
         };
         assert!(r.is_empty());
         r.added.push(file("Mods/a.package"));
@@ -251,7 +256,7 @@ mod tests {
         let record = SyncRecord {
             sync_id: "abc".into(), created_at: 123, game: "sims4".into(), base_path: "C:/Game".into(),
             presync_backup_id: Some("bkp1".into()), added: vec![file("Mods/new.package")],
-            replaced: vec![], deleted: vec!["Mods/gone.package".into()], history_versions: vec![],
+            replaced: vec![], deleted: vec!["Mods/gone.package".into()], history_versions: vec![], plan_hash: None,
         };
         write_record(&record);
         let read = read_record("sims4").expect("record round-trips");
