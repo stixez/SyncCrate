@@ -98,17 +98,11 @@ function ModItem({
         // Lift the row with an open tag editor above the rows positioned after it.
         showTagEditor && "z-20",
       )}
+      // The whole row is clickable with a mouse; for the keyboard and screen
+      // readers the name is the button. A role="button" row hid its status,
+      // badges and size behind one label, and nested the switch and tag
+      // buttons inside a button.
       onClick={() => {
-        if (bulkMode) onSelect?.(file.relative_path);
-        else onShowDetails?.(file);
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label={bulkMode ? `Select ${name}` : `Details for ${name}`}
-      onKeyDown={(e) => {
-        // Only the row itself: keys typed into the tag editor or on the switch bubble here too.
-        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-        e.preventDefault();
         if (bulkMode) onSelect?.(file.relative_path);
         else onShowDetails?.(file);
       }}
@@ -133,15 +127,22 @@ function ModItem({
         <ModIcon meta={ownMeta} size={22} fallback={isMod ? <Puzzle size={12} /> : <Palette size={12} />} />
       </div>
       <div className="flex-1 min-w-0 flex items-center gap-2">
-        <p
-          className={cx("text-[13px] font-medium truncate", isDisabled ? "text-txt-muted line-through decoration-txt-muted/60" : "text-txt")}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (bulkMode) onSelect?.(file.relative_path);
+            else onShowDetails?.(file);
+          }}
+          aria-label={bulkMode ? `Select ${ownMeta ? ownMeta.name : name}` : undefined}
+          className={cx("text-left text-[13px] font-medium truncate min-w-0", isDisabled ? "text-txt-muted line-through decoration-txt-muted/60" : "text-txt")}
           title={ownMeta ? `${ownMeta.name} · ${file.relative_path}` : file.relative_path}
         >
           {ownMeta ? ownMeta.name : name}
           {ownMeta?.version && <span className="font-mono text-[10.5px] text-txt-dim font-normal ml-1.5 no-underline">v{ownMeta.version.replace(/^v/i, "")}</span>}
           {ownMeta && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
           {!ownMeta && meta && showDir && <span className="text-[11px] text-txt-muted font-normal ml-2">· {meta.name}</span>}
-        </p>
+        </button>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
         {update && <Badge tone="neon" className="shrink-0" title={`Update available: ${update.latest}`}>Update</Badge>}
         {isOutdated && (
