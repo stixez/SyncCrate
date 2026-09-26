@@ -1,6 +1,6 @@
 {
   "productName": "SyncCrate",
-  "version": "0.5.6",
+  "version": "0.6.0",
   "identifier": "com.synccrate.app",
   "build": {
     "beforeDevCommand": "npm run dev",
