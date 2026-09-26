@@ -223,14 +223,26 @@ fn mod_folder_name(p: &str) -> Option<&str> {
     p.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().filter(|s| !s.is_empty() && *s != "." && *s != "..")
 }
 
+/// Where a descriptor's absolute path leads, as seen by the caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptorTarget {
+    /// This game's own `mod/<folder>`: fixable here.
+    ThisModFolder,
+    /// Nothing on this PC: the descriptor came from someone else's PC.
+    Missing,
+    /// Some other folder that exists (a dev copy elsewhere): left alone.
+    Elsewhere,
+}
+
 /// Descriptors (`mod/<name>.mod`) whose path is absolute, split into the
-/// ones pointing at a folder that exists on this PC (fixable here) and ones
-/// that came from someone else's PC. Only descriptors whose mod folder is
-/// really in `mod/` here count; `(descriptor, folder)` pairs.
+/// ones pointing at this game's `mod/<folder>` (fixable here) and ones that
+/// came from someone else's PC. Only descriptors whose mod folder is really
+/// in `mod/` here count; `(descriptor, folder as spelled on disk)` pairs.
+/// `target(path, folder)` says where the path leads.
 pub fn absolute_descriptors(
     manifest: &FileManifest,
     read: impl Fn(&str) -> Option<String>,
-    dir_exists: impl Fn(&str) -> bool,
+    target: impl Fn(&str, &str) -> DescriptorTarget,
 ) -> (Vec<(String, String)>, Vec<(String, String)>) {
     let (mut own, mut foreign) = (Vec::new(), Vec::new());
     for key in manifest.files.keys() {
@@ -245,11 +257,16 @@ pub fn absolute_descriptors(
         }
         let Some(folder) = mod_folder_name(&path) else { continue };
         let prefix = format!("mod/{}/", folder.to_ascii_lowercase());
-        if !manifest.files.keys().any(|k| k.to_ascii_lowercase().starts_with(&prefix)) {
+        // The folder name as it's spelled here (it matters on Linux).
+        let Some(on_disk) = manifest.files.keys().find(|k| k.to_ascii_lowercase().starts_with(&prefix)).and_then(|k| k.get(4..4 + folder.len())) else {
             continue; // the mod itself isn't here: a different problem
+        };
+        let entry = (key.clone(), on_disk.to_string());
+        match target(&path, on_disk) {
+            DescriptorTarget::ThisModFolder => own.push(entry),
+            DescriptorTarget::Missing => foreign.push(entry),
+            DescriptorTarget::Elsewhere => {}
         }
-        let entry = (key.clone(), folder.to_string());
-        if dir_exists(&path) { own.push(entry) } else { foreign.push(entry) }
     }
     own.sort();
     foreign.sort();
@@ -274,8 +291,8 @@ pub fn relative_descriptor(text: &str, folder: &str) -> String {
 }
 
 /// Paradox checks: descriptors with absolute paths, here or from another PC.
-pub fn check_paradox(manifest: &FileManifest, read: impl Fn(&str) -> Option<String>, dir_exists: impl Fn(&str) -> bool) -> Vec<CompatIssue> {
-    let (own, foreign) = absolute_descriptors(manifest, read, dir_exists);
+pub fn check_paradox(manifest: &FileManifest, read: impl Fn(&str) -> Option<String>, target: impl Fn(&str, &str) -> DescriptorTarget) -> Vec<CompatIssue> {
+    let (own, foreign) = absolute_descriptors(manifest, read, target);
     let plural = |n: usize| if n == 1 { "" } else { "s" };
     let mut out = Vec::new();
     if !own.is_empty() {
@@ -344,7 +361,7 @@ mod tests {
         .into_iter()
         .collect();
         let read = |k: &str| files.get(k).map(|s| s.to_string());
-        let here = |p: &str| p.contains("/Users/me/");
+        let here = |p: &str, _folder: &str| if p.contains("/Users/me/") { DescriptorTarget::ThisModFolder } else { DescriptorTarget::Missing };
         let (own, foreign) = absolute_descriptors(&m, read, here);
         assert_eq!(own, vec![("mod/Mine.mod".to_string(), "Mine".to_string())]);
         assert_eq!(foreign, vec![("mod/Theirs.mod".to_string(), "Theirs".to_string())], "Gone has no folder here, ugc is the Workshop's");

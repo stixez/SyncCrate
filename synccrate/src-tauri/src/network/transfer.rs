@@ -174,6 +174,8 @@ pub async fn run_listener(
                         continue;
                     }
                 };
+                // Small request/response messages; don't let Nagle hold them.
+                let _ = stream.set_nodelay(true);
 
                 let state = state.clone();
                 let app = app.clone();
@@ -620,7 +622,14 @@ async fn handle_client(
                 match tokio::fs::File::open(&full_path).await {
                     Ok(mut file) => {
                         // Get file size + mtime for the header / cache check
-                        let metadata = file.metadata().await.map_err(|e| e.to_string())?;
+                        let metadata = match file.metadata().await {
+                            Ok(m) => m,
+                            Err(e) => {
+                                let mut s = stream.lock().await;
+                                protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                continue;
+                            }
+                        };
                         let file_size = metadata.len();
                         let file_mtime = metadata
                             .modified()
@@ -661,14 +670,27 @@ async fn handle_client(
                             None => {
                                 // Cache miss/stale: compute by streaming once, then rewind.
                                 use tokio::io::AsyncSeekExt;
-                                let mut hasher = Sha256::new();
-                                loop {
-                                    let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
-                                    if n == 0 { break; }
-                                    hasher.update(&buf[..n]);
+                                let hashed: Result<String, std::io::Error> = async {
+                                    let mut hasher = Sha256::new();
+                                    loop {
+                                        let n = file.read(&mut buf).await?;
+                                        if n == 0 { break; }
+                                        hasher.update(&buf[..n]);
+                                    }
+                                    file.seek(std::io::SeekFrom::Start(0)).await?;
+                                    Ok(hex::encode(hasher.finalize()))
                                 }
-                                file.seek(std::io::SeekFrom::Start(0)).await.map_err(|e| e.to_string())?;
-                                hex::encode(hasher.finalize())
+                                .await;
+                                match hashed {
+                                    Ok(h) => h,
+                                    // A file the running game has locked: fail this
+                                    // file, not the friend's whole session.
+                                    Err(e) => {
+                                        let mut s = stream.lock().await;
+                                        protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                        continue;
+                                    }
+                                }
                             }
                         };
 
@@ -704,9 +726,21 @@ async fn handle_client(
                         // without needing periodic resets.
                         let mut throttle_bytes = 0u64;
                         let throttle_start = tokio::time::Instant::now();
+                        // Progress at most ~10 times a second: one event per
+                        // 64 KB chunk was thousands a second at LAN speed.
+                        let mut last_progress = tokio::time::Instant::now();
+                        let mut read_failed = false;
 
                         loop {
-                            let n = file.read(&mut buf).await.map_err(|e| e.to_string())?;
+                            let n = match file.read(&mut buf).await {
+                                Ok(n) => n,
+                                Err(e) => {
+                                    // The client ends this file on Error (stream in sync).
+                                    protocol::send_message(&mut *s, &Message::Error { message: format!("The host couldn't read {}: {}", path, e) }).await?;
+                                    read_failed = true;
+                                    break;
+                                }
+                            };
                             if n == 0 { break; }
 
                             let (send_data, is_compressed) = if compress_this_file {
@@ -741,6 +775,10 @@ async fn handle_client(
                             }
 
                             // Emit chunk progress to frontend
+                            if last_progress.elapsed() < std::time::Duration::from_millis(100) {
+                                continue;
+                            }
+                            last_progress = tokio::time::Instant::now();
                             let _ = app.emit(
                                 "peer-download-progress",
                                 serde_json::json!({
@@ -754,6 +792,9 @@ async fn handle_client(
                             );
                         }
 
+                        if read_failed {
+                            continue;
+                        }
                         peer_files_sent += 1;
                         protocol::send_message(&mut *s, &Message::FileComplete { path }).await?;
 
@@ -948,7 +989,10 @@ async fn connect_any(addresses: &[String], port: u16) -> Result<TcpStream, Strin
                 tokio::time::sleep(std::time::Duration::from_millis(400 * i as u64)).await;
             }
             match tokio::time::timeout(std::time::Duration::from_secs(8), TcpStream::connect(target)).await {
-                Ok(Ok(s)) => Ok(s),
+                Ok(Ok(s)) => {
+                    let _ = s.set_nodelay(true);
+                    Ok(s)
+                }
                 Ok(Err(e)) => Err((classify_connect_error(&e), e.to_string())),
                 Err(_) => Err((ConnectFailure::Timeout, "timed out".to_string())),
             }
@@ -1649,17 +1693,17 @@ async fn host_receive_offered(
     let dest = match checked {
         Ok(d) if !d.exists() => d,
         Ok(_) => {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, "You already have a file with that name."));
         }
         Err(why) => {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, why));
         }
     };
     if let Some(parent) = dest.parent() {
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
-            drain_until_file_end(s).await;
+            drain_until_file_end(s, Some(size)).await;
             return Ok(result(false, &e.to_string()));
         }
     }
@@ -1688,7 +1732,7 @@ async fn host_receive_offered(
         Err((e, in_sync)) => {
             let _ = tokio::fs::remove_file(&tmp).await;
             if !in_sync {
-                drain_until_file_end(s).await;
+                drain_until_file_end(s, Some(size)).await;
             }
             Err(e)
         }
@@ -1862,6 +1906,12 @@ pub(crate) fn find_existing(dest: &std::path::Path) -> Option<std::path::PathBuf
     if std::fs::symlink_metadata(dest).is_ok() {
         return Some(dest.to_path_buf());
     }
+    // Windows lookups already ignore case and trailing dots/spaces, so a
+    // miss is final. Listing the folder anyway ran for every new file (the
+    // normal case), twice: O(n²) on a first sync of 50k files into one folder.
+    if cfg!(windows) {
+        return None;
+    }
     let name = dest.file_name()?.to_str()?;
     std::fs::read_dir(dest.parent()?)
         .ok()?
@@ -2000,6 +2050,7 @@ pub async fn receive_file(
     // (cancel-safe), and skip any stale file that still arrives first.
     let (expected_size, header_hash) = {
         let mut stale = 0;
+        let mut leftovers = 0u64;
         let started = std::time::Instant::now();
         loop {
             // In short slices: the stream stays locked while we wait, so
@@ -2019,26 +2070,32 @@ pub async fn receive_file(
                 continue;
             };
             match msg {
-                Message::FileHeader { path, .. } if path != req.remote_path && stale < 3 => {
+                Message::FileHeader { path, size, .. } if path != req.remote_path && stale < 3 => {
                     stale += 1;
                     log::warn!("Skipping a late file ({}) while waiting for {}", path, req.remote_path);
-                    drain_until_file_end(&mut s).await;
+                    drain_until_file_end(&mut s, Some(size)).await;
                 }
                 Message::FileHeader { size, hash, .. } => break (size, hash),
                 Message::Error { message } => return Err(clean_peer_text(&message, 300)),
+                // Leftovers of a file an earlier request gave up on. Failing
+                // here left them in the stream, so every later file in the
+                // sync failed too ("Expected FileHeader").
+                Message::FileChunk { .. } | Message::FileComplete { .. } if leftovers < MAX_LEFTOVER_MESSAGES => {
+                    leftovers += 1;
+                }
                 _ => return Err("Expected FileHeader".to_string()),
             }
         }
     };
 
     if req.expected_size.is_some_and(|want| want != expected_size) {
-        drain_until_file_end(&mut s).await;
+        drain_until_file_end(&mut s, Some(expected_size)).await;
         return Err(format!("Host sent {} bytes for {}, but its file list said {}", expected_size, req.remote_path, req.expected_size.unwrap_or(0)));
     }
     if !req.expected_hash.is_empty() && header_hash != req.expected_hash {
         // The host streams the body regardless; consume it so the next
         // request doesn't read stale chunks.
-        drain_until_file_end(&mut s).await;
+        drain_until_file_end(&mut s, Some(expected_size)).await;
         return Err(HOST_CHANGED.to_string());
     }
 
@@ -2048,7 +2105,7 @@ pub async fn receive_file(
     let result = receive_file_body(&mut s, &tmp_path, expected_size, &header_hash, req.remote_path).await;
     if let Err((e, stream_in_sync)) = result {
         if !stream_in_sync {
-            drain_until_file_end(&mut s).await;
+            drain_until_file_end(&mut s, Some(expected_size)).await;
         }
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(e);
@@ -2141,12 +2198,23 @@ async fn receive_file_body(
     Ok(())
 }
 
+/// Leftover chunks of an abandoned file skipped while waiting for the next
+/// header (a 64 GB file at 64 KB chunks is ~1M messages).
+const MAX_LEFTOVER_MESSAGES: u64 = 1_100_000;
+
+/// How many messages a drain may read for a file of `size` bytes: chunks are
+/// normally 64 KB, so this is generous, but it still ends on a host that
+/// never sends FileComplete. A fixed 40k (about 2.4 GB) stopped halfway
+/// through bigger files and left the rest in the stream.
+fn drain_budget(size: Option<u64>) -> u64 {
+    size.map_or(40_000, |s| s / 16_384 + 1_000)
+}
+
 /// Discard messages until the host finishes the current file. Gives up after
 /// a bounded number of messages / a read error (the connection is then
 /// unusable anyway and the loop will notice).
-async fn drain_until_file_end(s: &mut PeerStream) {
-    // A 2 GB file at 64 KB per chunk is ~32k chunks.
-    for _ in 0..40_000 {
+async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
+    for _ in 0..drain_budget(size) {
         match protocol::recv_message(s).await {
             Ok(Message::FileComplete { .. }) | Ok(Message::Error { .. }) => return,
             Ok(_) => continue,
@@ -2158,6 +2226,14 @@ async fn drain_until_file_end(s: &mut PeerStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drains_cover_files_bigger_than_the_old_fixed_budget() {
+        let three_gb = 3 * 1024 * 1024 * 1024u64;
+        assert!(drain_budget(Some(three_gb)) > three_gb / (64 * 1024), "every 64 KB chunk of a 3 GB file");
+        assert_eq!(drain_budget(None), 40_000);
+        assert!(drain_budget(Some(0)) > 0);
+    }
 
     #[test]
     fn a_handshake_from_an_ended_session_is_refused() {

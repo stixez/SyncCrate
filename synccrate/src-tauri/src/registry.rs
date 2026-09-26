@@ -565,6 +565,14 @@ mod tests {
         assert!(matches!(&get("tmnf").detection.as_ref().unwrap().strategies[0], DetectionStrategy::DocumentsRelative { base, .. } if base == "TrackMania"));
         assert_eq!(get("simcity4").disable_method.as_deref(), Some("none"), "SC4 loads every file in Plugins");
         assert_eq!(get("dragon_age_origins").disable_method.as_deref(), Some("rename"));
+        // Extensions are compared lower-cased on every side.
+        for g in &registry.games {
+            for c in &g.content_types {
+                for e in &c.extensions {
+                    assert!(!e.starts_with('.'), "{}/{}: extension {e} without the dot", g.id, c.id);
+                }
+            }
+        }
         // Workshop mods live under the game's own app id, except tModLoader's.
         for g in registry.games.iter().filter(|g| g.steam_workshop_app_id.is_some()) {
             let expected = if g.id == "terraria" { Some(1281930) } else { g.steam_app_id };

@@ -90,6 +90,12 @@ pub struct BackupInfo {
     pub kind: String,
     #[serde(default)]
     pub category_counts: HashMap<String, usize>,
+    /// Each category's folder when the backup was made. A later registry fix
+    /// can move a content type (Sims 2 `Mods` -> `Downloads`); restoring into
+    /// the new folder, and above all an exact restore cleaning it, must not
+    /// use a backup of the old one.
+    #[serde(default)]
+    pub category_folders: HashMap<String, String>,
     /// Bytes this backup added to the object store (the rest was shared with
     /// earlier backups). None for old full-copy backups.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -499,6 +505,7 @@ fn create_backup_inner(
         auto: req.kind == KIND_AUTO || req.kind == KIND_PRESYNC,
         kind: req.kind.to_string(),
         category_counts,
+        category_folders: req.cts.iter().map(|ct| (ct.id.clone(), ct.folder.clone())).collect(),
         new_bytes: Some(new_bytes),
     };
     let manifest = BackupManifest { version: MANIFEST_VERSION, info: info.clone(), files };
@@ -654,6 +661,32 @@ pub struct RestoreResult {
     pub safety_backup: Option<String>,
 }
 
+/// Content types whose folder the registry changed before backups recorded
+/// their folders (the 2026-09 audit). Older backups of these hold the old
+/// folder's files.
+const MOVED_BEFORE_FOLDERS_WERE_RECORDED: &[(&str, &str)] = &[
+    ("sims2", "mods"),
+    ("sims2", "saves"),
+    ("sims2", "tray"),
+    ("satisfactory", "mods"),
+    ("subnautica", "mods"),
+    ("tf2", "maps"),
+];
+
+fn same_folder(a: &str, b: &str) -> bool {
+    let n = |s: &str| s.replace('\\', "/").trim_matches('/').to_ascii_lowercase();
+    n(a) == n(b)
+}
+
+/// Whether a backup's `category` was taken from a different folder than
+/// `ct` uses now.
+fn category_moved(info: &BackupInfo, ct: &ContentType) -> bool {
+    match info.category_folders.get(&ct.id) {
+        Some(folder) => !same_folder(folder, &ct.folder),
+        None => MOVED_BEFORE_FOLDERS_WERE_RECORDED.contains(&(info.game.as_str(), ct.id.as_str())),
+    }
+}
+
 fn resolve_ct<'a>(cts: &'a [ContentType], category: &str) -> Option<&'a ContentType> {
     cts.iter()
         .find(|c| c.id == category)
@@ -746,10 +779,18 @@ fn restore_inner(
             result.missing += 1;
             continue;
         }
-        let Some(ct) = resolve_ct(cts, &entry.category) else {
+        let Some(ct) = resolve_ct(cts, &entry.category).filter(|ct| !category_moved(&manifest.info, ct)) else {
             result.missing += 1;
             continue;
         };
+        let under_base_check = if ct.folder == "." { entry.relative_path.clone() } else { format!("{}/{}", ct.folder, entry.relative_path) };
+        // Files the game's folders no longer sync (a Bethesda game's own
+        // Data files in an old backup) aren't put back: restoring them can
+        // downgrade base files after a patch.
+        if !crate::sync::diff::content_type_for(cts, &under_base_check).is_some_and(|(c, _)| c.id == ct.id) {
+            result.missing += 1;
+            continue;
+        }
         // Same check as every other write from outside the game folder: no
         // ADS ':' names, and no escaping through a junction placed in the
         // folder after the backup was made. (`dest` itself keeps the plain
@@ -802,8 +843,12 @@ fn restore_inner(
         } else {
             manifest.info.category_counts.keys().cloned().collect()
         };
-        let covered_ids: HashSet<String> =
-            covered.iter().filter_map(|c| resolve_ct(cts, c)).map(|ct| ct.id.clone()).collect();
+        let covered_ids: HashSet<String> = covered
+            .iter()
+            .filter_map(|c| resolve_ct(cts, c))
+            .filter(|ct| !category_moved(&manifest.info, ct))
+            .map(|ct| ct.id.clone())
+            .collect();
         let in_scope: Vec<ContentType> = cts.iter().filter(|c| covered_ids.contains(&c.id)).cloned().collect();
         match collect_full(base, &in_scope) {
             Ok(current) => {
@@ -1525,7 +1570,7 @@ mod tests {
         BackupInfo {
             id: id.into(), created_at, label: id.into(), file_count, total_size: 0, mods_count: 0, saves_count: 0,
             tray_count: 0, screenshots_count: 0, game: "g".into(), auto: kind == KIND_AUTO, kind: kind.into(),
-            category_counts: HashMap::new(), new_bytes: None,
+            category_counts: HashMap::new(), category_folders: HashMap::new(), new_bytes: None,
         }
     }
 
@@ -1705,6 +1750,56 @@ mod tests {
         out.sort();
         assert_eq!(out, vec!["a".to_string(), "b".to_string()], "only \"c\" (truly newest) should survive");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restores_skip_categories_whose_folder_moved() {
+        let (root, base) = (tmp("store-moved"), tmp("game-moved"));
+        let old = vec![ct("maps", "maps", &["bsp"])];
+        write(&base.join("maps/ctf_2fort.bsp"), b"stock");
+        let info = backup(&root, &base, &old, KIND_MANUAL, None).unwrap();
+        let manifest = read_manifest(&root.join(&info.id)).unwrap();
+        assert_eq!(manifest.info.category_folders.get("maps").map(String::as_str), Some("maps"));
+
+        // The registry now syncs TF2's download/maps instead.
+        let now = vec![ct("maps", "download/maps", &["bsp"])];
+        write(&base.join("download/maps/custom.bsp"), b"downloaded");
+        let r = restore_inner(&root, &info.id, &manifest, &base, &now, true, &mut |_, _, _| {});
+        assert_eq!(r.error, None);
+        assert_eq!((r.restored, r.removed, r.missing), (0, 0, 1));
+        assert!(base.join("download/maps/custom.bsp").exists(), "exact restore of the old folder must not clean the new one");
+        assert!(!base.join("download/maps/ctf_2fort.bsp").exists());
+
+        // Old backups without recorded folders: the known moves count as moved.
+        let mut legacy = manifest.clone();
+        legacy.info.category_folders.clear();
+        legacy.info.game = "tf2".into();
+        let r = restore_inner(&root, &info.id, &legacy, &base, &now, true, &mut |_, _, _| {});
+        assert_eq!((r.restored, r.removed), (0, 0));
+        assert!(base.join("download/maps/custom.bsp").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restores_skip_files_the_game_no_longer_syncs() {
+        let (root, base) = (tmp("store-excl"), tmp("game-excl"));
+        let before = vec![ct("mods", "Data", &["esm", "esp"])];
+        write(&base.join("Data/Skyrim.esm"), b"base game");
+        write(&base.join("Data/SkyUI_SE.esp"), b"mod");
+        let info = backup(&root, &base, &before, KIND_MANUAL, None).unwrap();
+        let manifest = read_manifest(&root.join(&info.id)).unwrap();
+        std::fs::remove_file(base.join("Data/Skyrim.esm")).unwrap();
+        std::fs::remove_file(base.join("Data/SkyUI_SE.esp")).unwrap();
+
+        let mut after = before.clone();
+        after[0].exclude_patterns = vec!["Skyrim.esm".into()];
+        let r = restore_inner(&root, &info.id, &manifest, &base, &after, false, &mut |_, _, _| {});
+        assert_eq!((r.restored, r.missing), (1, 1));
+        assert!(base.join("Data/SkyUI_SE.esp").exists());
+        assert!(!base.join("Data/Skyrim.esm").exists(), "the game's own file isn't put back");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

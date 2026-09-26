@@ -146,11 +146,14 @@ pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), 
     }
     let len = json.len() as u32;
     let timed_out = || "Connection timed out writing message".to_string();
-    tokio::time::timeout(SEND_TIMEOUT, stream.write_all(&len.to_be_bytes()))
-        .await
-        .map_err(|_| timed_out())?
-        .map_err(|e| e.to_string())?;
-    for chunk in json.chunks(READ_STEP) {
+    // Length and body in one buffer: two writes per message (4 bytes, then
+    // the body) is the write-write-read pattern that Nagle + delayed ACKs
+    // stall by up to 200 ms, once per file request.
+    let mut frame = Vec::with_capacity(4 + json.len());
+    frame.extend_from_slice(&len.to_be_bytes());
+    frame.extend_from_slice(&json);
+    drop(json);
+    for chunk in frame.chunks(READ_STEP) {
         tokio::time::timeout(SEND_TIMEOUT, stream.write_all(chunk))
             .await
             .map_err(|_| timed_out())?

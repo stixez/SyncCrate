@@ -151,8 +151,12 @@ pub fn drop_foreign(remote: &mut FileManifest, content_types: &[ContentType]) ->
 /// every sync, and stay-in-sync retried them every minute. Returns their paths.
 pub fn drop_unreceivable(remote: &mut FileManifest) -> Vec<String> {
     let mut dropped = Vec::new();
-    remote.files.retain(|path, _| {
-        let ok = !crate::utils::is_dangerous_extension(path) && crate::utils::validate_relative(path).is_ok();
+    remote.files.retain(|path, info| {
+        // Files over the transfer limit are refused on arrival anyway, and
+        // requesting one used to wreck every later file in the sync.
+        let ok = !crate::utils::is_dangerous_extension(path)
+            && crate::utils::validate_relative(path).is_ok()
+            && info.size <= crate::network::transfer::MAX_FILE_SIZE;
         if !ok {
             dropped.push(path.clone());
         }
@@ -561,10 +565,11 @@ mod tests {
             make_file("Mods/run.vbs", "h", 1),
             make_file("Mods/CON.package", "h", 1),
             make_file("Mods/trailing.", "h", 1),
+            make_file("Data/Huge - Textures.ba2", "h", crate::network::transfer::MAX_FILE_SIZE + 1),
         ]);
         let dropped = drop_unreceivable(&mut m);
         assert_eq!(m.files.keys().collect::<Vec<_>>(), vec!["Mods/ok.package"]);
-        assert_eq!(dropped.len(), 4);
+        assert_eq!(dropped.len(), 5, "including the file over the transfer limit");
     }
 
     #[test]

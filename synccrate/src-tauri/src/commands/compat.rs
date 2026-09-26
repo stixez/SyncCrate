@@ -34,12 +34,20 @@ pub(crate) async fn check_compat_inner(state: &Arc<Mutex<AppState>>, game: &str)
             out.extend(compat::check_sims4(&manifest, ini.as_deref(), zip_has_package));
         }
         if compat::PARADOX_DESCRIPTOR_GAMES.contains(&def.id.as_str()) {
-            out.extend(compat::check_paradox(&manifest, |rel| read_descriptor(&base, rel), |p| Path::new(p).is_dir()));
+            out.extend(compat::check_paradox(&manifest, |rel| read_descriptor(&base, rel), |p, folder| descriptor_target(&base, p, folder)));
         }
         Ok(out)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Whether an absolute descriptor path is this game's own `mod/<folder>`
+/// (same folder once resolved), missing here, or some other folder.
+fn descriptor_target(base: &str, path: &str, folder: &str) -> compat::DescriptorTarget {
+    let Ok(target) = std::fs::canonicalize(path) else { return compat::DescriptorTarget::Missing };
+    let ours = std::fs::canonicalize(Path::new(base).join("mod").join(folder));
+    if ours.is_ok_and(|o| o == target) { compat::DescriptorTarget::ThisModFolder } else { compat::DescriptorTarget::Elsewhere }
 }
 
 fn read_descriptor(base: &str, rel: &str) -> Option<String> {
@@ -94,7 +102,7 @@ async fn fix_paradox_paths(state: &Arc<Mutex<AppState>>, game: &str) -> Result<(
     };
     let game = game.to_string();
     tokio::task::spawn_blocking(move || {
-        let (own, _) = compat::absolute_descriptors(&manifest, |rel| read_descriptor(&base, rel), |p| Path::new(p).is_dir());
+        let (own, _) = compat::absolute_descriptors(&manifest, |rel| read_descriptor(&base, rel), |p, folder| descriptor_target(&base, p, folder));
         if own.is_empty() {
             return Ok(());
         }
@@ -115,7 +123,10 @@ async fn fix_paradox_paths(state: &Arc<Mutex<AppState>>, game: &str) -> Result<(
             let res = (|| -> Result<(), String> {
                 let path = crate::utils::safe_join(&base, rel)?;
                 let text = read_descriptor(&base, rel).ok_or("couldn't read it")?;
-                let tmp = path.with_extension("mod.synccrate-tmp");
+                // A name scans already skip (`is_synccrate_temp`), so a
+                // crash between write and rename can't get it synced.
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let tmp = path.with_file_name(format!(".{name}.synccrate-restore.tmp"));
                 std::fs::write(&tmp, compat::relative_descriptor(&text, folder)).map_err(|e| e.to_string())?;
                 std::fs::rename(&tmp, &path).map_err(|e| {
                     let _ = std::fs::remove_file(&tmp);
@@ -202,7 +213,7 @@ scriptmodsenabled = 0
         fix_compat_issue_inner(&state, "hearts_of_iron_4", compat::FIX_PARADOX_RELATIVE_PATHS).await.unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("mod/Mine.mod")).unwrap(), "name=\"Mine\"\r\npath=\"mod/Mine\"\r\n");
         assert!(std::fs::read_to_string(dir.join("mod/Theirs.mod")).unwrap().contains("someone-else"), "a host's descriptor is left for the host to fix");
-        assert!(!dir.join("mod/Mine.mod.synccrate-tmp").exists());
+        assert!(!dir.join("mod/.Mine.mod.synccrate-restore.tmp").exists());
         assert!(fix_compat_issue_inner(&state, "sims4", compat::FIX_PARADOX_RELATIVE_PATHS).await.is_err(), "Paradox games only");
         let _ = std::fs::remove_dir_all(&dir);
     }
