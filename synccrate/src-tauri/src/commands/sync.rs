@@ -161,30 +161,72 @@ pub(crate) async fn compute_sync_plan_inner(
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
+    // Snapshot under the lock, compute without it: cloning, diffing and
+    // filtering 150k files held the AppState mutex for about a second, which
+    // froze every other command and the host loop's 250 ms polls.
+    let snapshot = {
+        let app_state = state.lock().await;
+        // A sync may have started while we were scanning; replacing its plan
+        // now would desync the progress UI from what's actually running.
+        if app_state.is_any_syncing() {
+            return Err(SYNC_RUNNING.to_string());
+        }
+        let resolved_id = app_state.resolve_peer_id(peer_id)?;
+        let active_game = app_state.active_game.clone();
+        let base_path = app_state.active_game_path()?;
+        let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &active_game)
+            .map(|g| g.content_types.clone())
+            .ok_or_else(|| format!("Game '{}' not found in registry", active_game))?;
+        let conn = app_state.connections.get(&resolved_id).ok_or("Peer not found")?;
+        let remote = conn
+            .remote_manifest
+            .clone()
+            .ok_or("No remote manifest available. Connect to a peer first.")?;
+        PlanInputs {
+            resolved_id,
+            active_game,
+            base_path,
+            content_types,
+            host_game: conn.info.game_id.clone(),
+            remote,
+            local: app_state.local_manifest.clone(),
+            permissions: app_state.folder_permissions.clone(),
+        }
+    };
+    let resolved_id = snapshot.resolved_id.clone();
+    let plan = tokio::task::spawn_blocking(move || build_plan(snapshot)).await.map_err(|e| e.to_string())?;
+
     let mut app_state = state.lock().await;
-    // A sync may have started while we were scanning; replacing its plan now
-    // would desync the progress UI from what's actually running.
     if app_state.is_any_syncing() {
         return Err(SYNC_RUNNING.to_string());
     }
-
-    let resolved_id = app_state.resolve_peer_id(peer_id)?;
-    let active_game = app_state.active_game.clone();
-    let base_path = app_state.active_game_path()?;
-    let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &active_game)
-        .map(|g| g.content_types.clone())
-        .ok_or_else(|| format!("Game '{}' not found in registry", active_game))?;
-
+    if app_state.active_game != plan.game_id {
+        return Err("The active game changed while comparing. Compare again.".to_string());
+    }
+    // Store plan on the peer connection
     let conn = app_state
         .connections
-        .get(&resolved_id)
-        .ok_or("Peer not found")?;
+        .get_mut(&resolved_id)
+        .ok_or("Peer disconnected")?;
+    conn.sync_plan = Some(plan.clone());
+    Ok(plan)
+}
 
-    let mut remote = conn
-        .remote_manifest
-        .clone()
-        .ok_or("No remote manifest available. Connect to a peer first.")?;
-    let host_game = conn.info.game_id.clone();
+/// What `build_plan` needs, copied out of AppState.
+struct PlanInputs {
+    resolved_id: String,
+    active_game: String,
+    base_path: String,
+    content_types: Vec<crate::registry::ContentType>,
+    host_game: Option<String>,
+    remote: crate::state::FileManifest,
+    local: crate::state::FileManifest,
+    permissions: crate::state::SyncFolderPermissions,
+}
+
+/// The sync plan for a snapshot (no locks; runs on a blocking thread).
+fn build_plan(input: PlanInputs) -> SyncPlan {
+    let PlanInputs { resolved_id, active_game, base_path, content_types, host_game, mut remote, local, permissions } = input;
 
     // Never plan downloads outside this game's content folders, whatever the
     // host sends (hosts older than 0.5.6 don't say which game they share).
@@ -192,7 +234,9 @@ pub(crate) async fn compute_sync_plan_inner(
     let skipped_foreign = diff::drop_foreign(&mut remote, &content_types);
     let unreceivable = diff::drop_unreceivable(&mut remote);
 
-    let mut plan = diff::compute_diff(&app_state.local_manifest, &remote);
+    let mut plan = diff::compute_diff(&local, &remote);
+    drop(local);
+    drop(remote);
     plan.game_id = active_game;
     plan.base_path = base_path;
     plan.skipped_foreign = skipped_foreign;
@@ -218,62 +262,43 @@ pub(crate) async fn compute_sync_plan_inner(
 
     // Filter out actions for content types disabled by folder permissions.
     // Permissions are keyed by content type ID; map each file through its
-    // path + file_type (see AppState::is_file_info_allowed).
-    {
-        let app_state_ref = &*app_state;
-        plan.actions.retain(|action| match action {
-            SyncAction::SendToRemote(f) => app_state_ref.is_file_info_allowed(f),
-            SyncAction::ReceiveFromRemote(f) => app_state_ref.is_file_info_allowed(f),
-            SyncAction::Conflict { remote, .. } => app_state_ref.is_file_info_allowed(remote),
-            SyncAction::Delete(_) => true,
-        });
-    }
-
-    // Recalculate total_bytes after filtering
-    plan.total_bytes = plan.actions.iter().map(|action| match action {
-        SyncAction::SendToRemote(f) => f.size,
-        SyncAction::ReceiveFromRemote(f) => f.size,
-        SyncAction::Conflict { local, remote } => local.size.max(remote.size),
-        SyncAction::Delete(_) => 0,
-    }).sum();
+    // path + file_type (same rule as AppState::is_file_info_allowed).
+    let allowed = |f: &crate::state::FileInfo| {
+        permissions.is_empty()
+            || crate::state::content_id_for_file(&f.relative_path, &f.file_type, &content_types)
+                .map_or(true, |id| crate::state::is_file_allowed(&permissions, &id))
+    };
+    plan.actions.retain(|action| match action {
+        SyncAction::SendToRemote(f) => allowed(f),
+        SyncAction::ReceiveFromRemote(f) => allowed(f),
+        SyncAction::Conflict { remote, .. } => allowed(remote),
+        SyncAction::Delete(_) => true,
+    });
 
     // Apply stored exclude patterns to pre-populate excluded list
     let patterns = read_exclude_patterns();
     if !patterns.is_empty() {
-        let mut excluded = Vec::new();
-        for action in &plan.actions {
-            let path = match action {
-                SyncAction::SendToRemote(f) => &f.relative_path,
-                SyncAction::ReceiveFromRemote(f) => &f.relative_path,
-                SyncAction::Conflict { local, .. } => &local.relative_path,
-                SyncAction::Delete(p) => p,
-            };
-            if patterns.iter().any(|pat| glob_matches(pat, path)) {
-                excluded.push(path.clone());
-            }
-        }
-        plan.excluded = excluded;
-
-        // Recalculate total_bytes to exclude excluded files
-        let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
-        plan.total_bytes = plan.actions.iter()
-            .filter(|action| {
-                let path = match action {
-                    SyncAction::SendToRemote(f) => &f.relative_path,
-                    SyncAction::ReceiveFromRemote(f) => &f.relative_path,
-                    SyncAction::Conflict { local, .. } => &local.relative_path,
-                    SyncAction::Delete(p) => p,
-                };
-                !excluded.contains(path.as_str())
-            })
-            .map(|action| match action {
-                SyncAction::SendToRemote(f) => f.size,
-                SyncAction::ReceiveFromRemote(f) => f.size,
-                SyncAction::Conflict { local, remote } => local.size.max(remote.size),
-                SyncAction::Delete(_) => 0,
-            })
-            .sum();
+        plan.excluded = plan
+            .actions
+            .iter()
+            .map(action_path)
+            .filter(|path| patterns.iter().any(|pat| glob_matches(pat, path)))
+            .map(str::to_string)
+            .collect();
     }
+    let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
+    plan.total_bytes = plan
+        .actions
+        .iter()
+        .filter(|action| !excluded.contains(action_path(action)))
+        .map(|action| match action {
+            SyncAction::SendToRemote(f) => f.size,
+            SyncAction::ReceiveFromRemote(f) => f.size,
+            SyncAction::Conflict { local, remote } => local.size.max(remote.size),
+            SyncAction::Delete(_) => 0,
+        })
+        .sum();
+    drop(excluded);
 
     // Hash of the full plan, before conflict resolution. It is stored on the
     // plan and reused by run_sync for the checkpoint, so a conflict-resolved
@@ -294,31 +319,29 @@ pub(crate) async fn compute_sync_plan_inner(
             && checkpoint.plan_hash == plan_hash
             && !checkpoint.completed_files.is_empty()
         {
-            let completed: std::collections::HashSet<&str> =
-                checkpoint.completed_files.iter().map(|s| s.as_str()).collect();
+            let completed: HashSet<&str> = checkpoint.completed_files.iter().map(|s| s.as_str()).collect();
             resumed_files = plan
                 .actions
                 .iter()
-                .filter(|a| match a {
-                    SyncAction::ReceiveFromRemote(f) => completed.contains(f.relative_path.as_str()),
-                    _ => false,
-                })
+                .filter(|a| matches!(a, SyncAction::ReceiveFromRemote(f) if completed.contains(f.relative_path.as_str())))
                 .count() as u64;
             log::info!("Resuming sync: {} files may already be complete", resumed_files);
         } else {
             delete_checkpoint();
         }
     }
-
     plan.resumed_files = resumed_files;
+    plan
+}
 
-    // Store plan on the peer connection
-    let conn = app_state
-        .connections
-        .get_mut(&resolved_id)
-        .ok_or("Peer disconnected")?;
-    conn.sync_plan = Some(plan.clone());
-    Ok(plan)
+/// The path an action is about (for exclusions and totals).
+fn action_path(action: &SyncAction) -> &str {
+    match action {
+        SyncAction::SendToRemote(f) => &f.relative_path,
+        SyncAction::ReceiveFromRemote(f) => &f.relative_path,
+        SyncAction::Conflict { local, .. } => &local.relative_path,
+        SyncAction::Delete(p) => p,
+    }
 }
 
 #[tauri::command]
