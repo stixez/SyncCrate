@@ -1384,6 +1384,9 @@ async fn client_message_loop(
     let mut disconnect_reason = String::new();
     let mut last_ping = std::time::Instant::now();
     let mut last_chat = std::time::Instant::now() - CHAT_POLL;
+    // The host's rate limit held lines back: wait for the normal poll instead
+    // of re-sending them every ~200 ms (the outbox stays non-empty).
+    let mut chat_held = false;
     let mut last_offer = std::time::Instant::now() - OFFER_POLL;
 
     loop {
@@ -1402,7 +1405,7 @@ async fn client_message_loop(
         // taking it while holding the stream could deadlock.
         let mut chat_req = if chat {
             let st = state.lock().await;
-            let due = last_chat.elapsed() >= CHAT_POLL || !st.chat.outbox.is_empty() || st.chat.pending_synced.is_some();
+            let due = last_chat.elapsed() >= CHAT_POLL || (!chat_held && !st.chat.outbox.is_empty()) || st.chat.pending_synced.is_some();
             due.then(|| {
                 let out: Vec<String> = st.chat.outbox.iter().take(crate::chat::MAX_OUTGOING).cloned().collect();
                 (st.chat.last_seq(), out, st.chat.pending_synced)
@@ -1474,7 +1477,9 @@ async fn client_message_loop(
             let (batch, accepted) = batch;
             // Lines past the host's rate limit weren't posted: keep them
             // queued for the next poll instead of dropping them silently.
-            let sent = accepted.map_or(sent, |a| a.min(sent));
+            let posted = accepted.map_or(sent, |a| a.min(sent));
+            chat_held = posted < sent;
+            let sent = posted;
             let mut st = state.lock().await;
             let n = sent.min(st.chat.outbox.len());
             st.chat.outbox.drain(..n);

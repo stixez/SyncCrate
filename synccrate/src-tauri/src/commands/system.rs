@@ -195,6 +195,36 @@ pub async fn is_elevated() -> Result<bool, String> {
     }
 }
 
+/// A copy started by `restart_as_admin` (`--wait-pid N`) waits for N to exit
+/// (up to 10 s) before starting.
+pub fn wait_for_previous_instance() {
+    #[cfg(windows)]
+    {
+        let mut args = std::env::args();
+        let Some(pid) = args.position(|a| a == "--wait-pid").and_then(|_| args.next()).and_then(|p| p.parse::<u32>().ok()) else {
+            return;
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline && process_alive(pid) {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+}
+
+#[cfg(windows)]
+fn process_alive(pid: u32) -> bool {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let Ok(out) = std::process::Command::new(crate::utils::windows_system_exe("tasklist.exe"))
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    else {
+        return false;
+    };
+    String::from_utf8_lossy(&out.stdout).contains(&format!("\"{pid}\""))
+}
+
 /// Relaunch SyncCrate elevated (needed to write into protected install folders
 /// such as `C:\Program Files\...\The Sims 4\Game\Bin` for ReShade/GShade).
 #[tauri::command]
@@ -202,9 +232,13 @@ pub async fn restart_as_admin(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let exe = current_exe_string()?;
+        // The copy waits for this one to exit (`wait_for_previous_instance`):
+        // otherwise the single-instance check could hand it to this window,
+        // which then quit too.
         let script = format!(
-            "try {{ Start-Process -FilePath {} -Verb RunAs; exit 0 }} catch {{ exit 1223 }}",
-            win::ps_quote(&exe)
+            "try {{ Start-Process -FilePath {} -ArgumentList '--wait-pid','{}' -Verb RunAs; exit 0 }} catch {{ exit 1223 }}",
+            win::ps_quote(&exe),
+            std::process::id()
         );
         let output = tokio::task::spawn_blocking(move || win::powershell(&script))
             .await
