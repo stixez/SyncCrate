@@ -622,6 +622,23 @@ pub fn windows_system_exe(name: &str) -> PathBuf {
 /// Plain-language text for the OS errors players actually hit during a sync
 /// ("Access is denied. (os error 5)" -> what to do about it). Anything else is
 /// returned unchanged. The frontend's `friendlyError` does the same for toasts.
+/// Clear the read-only flag of an existing file that's about to be replaced
+/// (after every "did it change?" check). Windows refuses to rename onto a
+/// read-only file, so a read-only save failed "use theirs" on every sync and
+/// stopped restores part-way. Anything but a plain file is left alone.
+pub fn make_replaceable(path: &std::path::Path) {
+    let Ok(meta) = std::fs::symlink_metadata(path) else { return };
+    if !meta.is_file() {
+        return;
+    }
+    let mut perms = meta.permissions();
+    if perms.readonly() {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        let _ = std::fs::set_permissions(path, perms);
+    }
+}
+
 pub fn plain_io_error(msg: &str) -> String {
     let code = msg
         .rsplit_once("(os error ")
@@ -721,6 +738,23 @@ pub fn sanitize_id(id: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_only_files_can_be_replaced() {
+        let dir = std::env::temp_dir().join(format!("synccrate-ro-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dest = dir.join("save.sav");
+        std::fs::write(&dest, b"old").unwrap();
+        let mut p = std::fs::metadata(&dest).unwrap().permissions();
+        p.set_readonly(true);
+        std::fs::set_permissions(&dest, p).unwrap();
+        std::fs::write(dir.join("new.tmp"), b"new").unwrap();
+        make_replaceable(&dest);
+        std::fs::rename(dir.join("new.tmp"), &dest).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        make_replaceable(&dir.join("missing"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn unsafe_windows_names_and_dangerous_types_are_refused() {

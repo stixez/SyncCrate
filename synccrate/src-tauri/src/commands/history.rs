@@ -355,6 +355,7 @@ fn restore(root: &Path, game: &str, base: &str, id: &str, now: u64) -> Result<Fi
         if let Some(ms) = v.mtime_ms {
             let _ = backup::set_mtime(&tmp, ms);
         }
+        crate::utils::make_replaceable(&dest);
         std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
     });
     if let Err(e) = copied {

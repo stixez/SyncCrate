@@ -2128,6 +2128,7 @@ pub async fn receive_file(
     }
 
     // Rename temp file to final destination
+    crate::utils::make_replaceable(&dest_path);
     if let Err(e) = tokio::fs::rename(&tmp_path, &dest_path).await {
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(e.to_string());
