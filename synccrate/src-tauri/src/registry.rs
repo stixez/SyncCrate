@@ -191,6 +191,15 @@ pub struct ContentType {
     /// File names (case-insensitive) never included, e.g. `ReShade.ini`.
     #[serde(default)]
     pub exclude_files: Vec<String>,
+    /// Wildcard patterns (`*`, `?`, case-insensitive) for files that are
+    /// never included. Without a `/` a pattern matches the file name
+    /// (`cc???sse*`); with one, the path inside `folder`
+    /// (`SquadExpansion/*`). For the game's own files that sit in the mods
+    /// folder: Bethesda's `Data` holds the base game, DLC and paid Creation
+    /// Club content, and syncing it copied paid content to friends who don't
+    /// own it (or replaced base files across game versions).
+    #[serde(default)]
+    pub exclude_patterns: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -525,6 +534,34 @@ mod tests {
                     .unwrap_or(0);
                 assert!(strategies > 0, "{} auto-detects but has no detection strategy", game.id);
             }
+        }
+    }
+
+    /// The game's own files in a mods folder never sync: syncing Bethesda's
+    /// `Data` copied the base game, DLC and paid Creation Club content to
+    /// friends (and KSP's paid DLC sits in `GameData`).
+    #[test]
+    fn official_game_files_are_not_synced() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        let cts = |id: &str| &registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}")).content_types;
+        let cases: &[(&str, &[&str], &str)] = &[
+            ("skyrim_se", &["Data/Skyrim.esm", "Data/Dragonborn.esm", "Data/Skyrim - Textures3.bsa", "Data/ccBGSSSE025-AdvDSGS.esm", "Data/_ResourcePack.bsa"], "Data/SkyUI_SE.esp"),
+            ("skyrim_le", &["Data/Skyrim.esm", "Data/Dawnguard.bsa", "Data/HighResTexturePack01.bsa"], "Data/SkyUI.esp"),
+            ("fallout4", &["Data/Fallout4.esm", "Data/DLCNukaWorld.esm", "Data/DLCRobot - Main.ba2", "Data/ccBGSFO4044-HellfirePowerArmor.esl", "Data/Fallout4 - Textures1.ba2"], "Data/ArmorKeywords.esm"),
+            ("fallout_new_vegas", &["Data/FalloutNV.esm", "Data/DeadMoney.esm", "Data/Fallout - Textures.bsa"], "Data/YUP - Base Game + All DLC.esm"),
+            ("oblivion", &["Data/Oblivion.esm", "Data/DLCShiveringIsles.esp", "Data/Knights.bsa"], "Data/Unofficial Oblivion Patch.esp"),
+            ("morrowind", &["Data Files/Morrowind.esm", "Data Files/Bloodmoon.bsa"], "Data Files/Patch for Purists.esm"),
+            ("starfield", &["Data/Starfield.esm", "Data/Constellation.esm", "Data/ShatteredSpace.esm", "Data/SFBGS003.esm"], "Data/StarUI Inventory.esp"),
+            ("kerbal_space_program", &["GameData/Squad/Parts/Engine/x.cfg", "GameData/SquadExpansion/Serenity/y.cfg"], "GameData/MechJeb2/Parts/z.cfg"),
+            ("bannerlord", &["Modules/Native/SubModule.xml", "Modules/NavalDLC/SubModule.xml", "Modules/SandBox/bin/x.dll"], "Modules/Bannerlord.Harmony/SubModule.xml"),
+            ("mount_blade_warband", &["Modules/Native/module.ini"], "Modules/Floris/module.ini"),
+        ];
+        for (id, official, modded) in cases {
+            for f in *official {
+                assert!(!path_accepted_by(cts(id), f), "{id}: {f} is the game's own file and must not sync");
+            }
+            assert!(path_accepted_by(cts(id), modded), "{id}: {modded} is a mod and must still sync");
         }
     }
 }

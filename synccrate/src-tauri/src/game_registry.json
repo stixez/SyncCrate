@@ -2788,7 +2788,7 @@
       },
       "validation": {
         "check_dirs": [
-          "Mods"
+          "FactoryGame"
         ]
       },
       "content_types": [
@@ -2797,11 +2797,8 @@
           "label": "Mods (SMM)",
           "icon": "package",
           "color": "text-orange-500",
-          "folder": "Mods",
-          "extensions": [
-            "zip",
-            "dll"
-          ],
+          "folder": "FactoryGame/Mods",
+          "extensions": [],
           "file_type": "Mod",
           "syncable": true
         }
@@ -3176,7 +3173,8 @@
       },
       "validation": {
         "check_dirs": [
-          "Pal/Content/Paks/LogicMods"
+          "Pal/Content/Paks/LogicMods",
+          "Pal/Content/Paks/~mods"
         ]
       },
       "content_types": [
@@ -3192,6 +3190,16 @@
             "utoc",
             "zip"
           ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-sky-400",
+          "folder": "Pal/Content/Paks/~mods",
+          "extensions": ["pak", "ucas", "utoc"],
           "file_type": "Mod",
           "syncable": true
         }
@@ -3475,6 +3483,7 @@
           "icon": "package",
           "color": "text-green-400",
           "folder": "GameData",
+          "exclude_patterns": ["Squad/*", "SquadExpansion/*"],
           "extensions": [
             "cfg",
             "dll",
@@ -3625,6 +3634,7 @@
           "icon": "package",
           "color": "text-slate-300",
           "folder": "Data",
+          "exclude_patterns": ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm", "Skyrim - *.bsa", "_ResourcePack.*", "cc???sse*"],
           "extensions": [
             "esm",
             "esp",
@@ -3695,6 +3705,7 @@
           "icon": "package",
           "color": "text-amber-400",
           "folder": "Modules",
+          "exclude_patterns": ["Native/*", "SandBox/*", "SandBoxCore/*", "StoryMode/*", "CustomBattle/*", "BirthAndDeath/*", "Multiplayer/*", "NavalDLC/*"],
           "extensions": [
             "dll",
             "xml",
@@ -3849,6 +3860,7 @@
           "icon": "package",
           "color": "text-green-400",
           "folder": "Data",
+          "exclude_patterns": ["Fallout4.esm", "Fallout4 - *.ba2", "DLC*.esm", "DLC* - *.ba2", "cc???fo4*"],
           "extensions": [
             "esm",
             "esp",
@@ -3929,6 +3941,7 @@
           "icon": "package",
           "color": "text-amber-500",
           "folder": "Data",
+          "exclude_patterns": ["FalloutNV.esm", "Fallout - *.bsa", "Update.bsa", "DeadMoney*", "HonestHearts*", "OldWorldBlues*", "LonesomeRoad*", "GunRunnersArsenal*", "CaravanPack*", "ClassicPack*", "MercenaryPack*", "TribalPack*"],
           "extensions": [
             "esm",
             "esp",
@@ -3997,6 +4010,7 @@
           "icon": "package",
           "color": "text-stone-400",
           "folder": "Data",
+          "exclude_patterns": ["Skyrim.esm", "Update.esm", "Update.bsa", "Dawnguard.*", "HearthFires.*", "Dragonborn.*", "Skyrim - *.bsa", "HighResTexturePack0*"],
           "extensions": [
             "esm",
             "esp",
@@ -4074,6 +4088,7 @@
           "icon": "package",
           "color": "text-amber-300",
           "folder": "Data",
+          "exclude_patterns": ["Oblivion.esm", "Oblivion - *.bsa", "DLC*.esp", "DLC*.bsa", "Knights.*"],
           "extensions": [
             "esm",
             "esp",
@@ -4150,6 +4165,7 @@
           "icon": "package",
           "color": "text-stone-500",
           "folder": "Data Files",
+          "exclude_patterns": ["Morrowind.*", "Tribunal.*", "Bloodmoon.*"],
           "extensions": [
             "esm",
             "esp",
@@ -4419,6 +4435,7 @@
           "icon": "package",
           "color": "text-indigo-400",
           "folder": "Data",
+          "exclude_patterns": ["Starfield.esm", "Starfield - *.ba2", "Constellation*", "OldMars*", "BlueprintShips-Starfield*", "ShatteredSpace*", "SFBGS*"],
           "extensions": [
             "esm",
             "esp",
@@ -4625,6 +4642,7 @@
           "icon": "package",
           "color": "text-orange-600",
           "folder": "Modules",
+          "exclude_patterns": ["Native/*", "Napoleonic Wars/*", "Viking Conquest/*"],
           "extensions": [],
           "file_type": "Mod",
           "syncable": true

@@ -136,7 +136,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 | **Conan Exiles** | Mods |
 | **Don't Starve** | Mods |
 | **Don't Starve Together** | Mods |
-| **Palworld** | Mods |
+| **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
 | **Subnautica** | Mods (QMods), Save Files |
 | **V Rising** | Plugins (BepInEx), Mod Configs |
@@ -359,6 +359,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Disabling that sticks.** The game loads mods from subfolders, so disabled mods are renamed to `.disabled` instead of moved. Mods left in an old `_Disabled` folder are fixed in one click.
 - **Outdated script mods** are flagged after a game patch.
 
+**Bethesda games, KSP and Mount & Blade:** only mods sync. The game's own files in `Data`, `GameData` or `Modules` (the base game, DLC and Creation Club content) are skipped, so a sync never copies paid content to someone who doesn't own it or replaces base files across game versions. Paid Creations that don't follow Bethesda's `cc…` naming can't be told apart from mods yet. The load order (`plugins.txt`) is outside the game folder and isn't synced either.
+
 **LAN party tips:** run the host on wired Ethernet, click **Fix Windows Firewall** on the host before people arrive, and let friends sync in waves (everyone shares the host's upload). Friends can also sync at home the night before using the join code.
 
 ## FAQ
@@ -454,7 +456,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`). Content type folders must not overlap (one nested in another), which a test checks. Set `"disable_method": "rename"` if the game loads mods from subfolders (disabling then renames to `.disabled`), `"none"` if mods are whole folders that can't be toggled per file, and `"duplicate_finder": true` only if identical files in different mod folders are genuinely a problem for the game.
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`). Content type folders must not overlap (one nested in another), which a test checks. If the game keeps its own files next to the mods (Bethesda's `Data`, KSP's `GameData`), add `"exclude_patterns"` to the content type so they never sync: `*` and `?` wildcards, a file name without `/` (`"cc???sse*"`) or a path inside the folder with one (`"SquadExpansion/*"`). Set `"disable_method": "rename"` if the game loads mods from subfolders (disabling then renames to `.disabled`), `"none"` if mods are whole folders that can't be toggled per file, and `"duplicate_finder": true` only if identical files in different mod folders are genuinely a problem for the game.
 
 ### Building from Source
 

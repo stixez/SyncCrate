@@ -598,6 +598,7 @@ export interface ContentTypeDefinition {
   recursive?: boolean;
   must_contain?: string | null;
   exclude_files?: string[];
+  exclude_patterns?: string[];
 }
 
 export interface VersionDetection {
