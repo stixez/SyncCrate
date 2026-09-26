@@ -623,6 +623,44 @@ pub fn windows_system_exe(name: &str) -> PathBuf {
 /// (after every "did it change?" check). Windows refuses to rename onto a
 /// read-only file, so a read-only save failed "use theirs" on every sync and
 /// stopped restores part-way. Anything but a plain file is left alone.
+/// Write `value` as JSON next to `path` and rename it into place, so a crash
+/// or power cut mid-write can't leave a truncated file (which then loaded as
+/// "no settings" and was saved over the real ones).
+pub fn write_json_atomic<T: serde::Serialize>(path: &std::path::Path, value: &T) -> Result<(), String> {
+    let data = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension(format!("{}.tmp", path.extension().and_then(|e| e.to_str()).unwrap_or("json")));
+    std::fs::write(&tmp, data).map_err(|e| format!("Couldn't save {}: {e}", file_label(path)))?;
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("Couldn't save {}: {e}", file_label(path))
+    })
+}
+
+/// Load a JSON state file. Missing: `Ok(None)`. Damaged: set aside as
+/// `<name>.damaged` (kept for recovery) and `Ok(None)`. Any other read error
+/// (a file held by antivirus or OneDrive): `Err`, so the caller doesn't save
+/// defaults over data it just couldn't read.
+pub fn read_json_strict<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Result<Option<T>, String> {
+    let data = match std::fs::read(path) {
+        Ok(d) => d,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("Couldn't read {}: {e}", file_label(path))),
+    };
+    match serde_json::from_slice(&data) {
+        Ok(v) => Ok(Some(v)),
+        Err(e) => {
+            let aside = path.with_extension(format!("{}.damaged", path.extension().and_then(|e| e.to_str()).unwrap_or("json")));
+            log::warn!("{} is damaged ({e}); kept it as {}", path.display(), aside.display());
+            std::fs::rename(path, &aside).map_err(|e| format!("Couldn't set the damaged {} aside: {e}", file_label(path)))?;
+            Ok(None)
+        }
+    }
+}
+
+fn file_label(path: &std::path::Path) -> String {
+    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
+}
+
 pub fn make_replaceable(path: &std::path::Path) {
     let Ok(meta) = std::fs::symlink_metadata(path) else { return };
     if !meta.is_file() {
@@ -973,5 +1011,30 @@ mod tests {
 "#;
         let libs = parse_steam_library_vdf(legacy);
         assert_eq!(libs, vec![std::path::PathBuf::from(r"E:\Games\Steam")]);
+    }
+}
+
+#[cfg(test)]
+mod state_file_tests {
+    use super::*;
+
+    #[test]
+    fn state_files_are_written_whole_and_damaged_ones_set_aside() {
+        let dir = crate::testutil::temp_dir("state-file");
+        let path = dir.join("settings.json");
+        assert_eq!(read_json_strict::<Vec<u32>>(&path).unwrap(), None, "missing");
+        write_json_atomic(&path, &vec![1u32, 2]).unwrap();
+        assert_eq!(read_json_strict::<Vec<u32>>(&path).unwrap(), Some(vec![1, 2]));
+        assert!(!dir.join("settings.json.tmp").exists());
+
+        std::fs::write(&path, b"[1, 2").unwrap();
+        assert_eq!(read_json_strict::<Vec<u32>>(&path).unwrap(), None, "damaged");
+        assert!(!path.exists());
+        assert_eq!(std::fs::read(dir.join("settings.json.damaged")).unwrap(), b"[1, 2", "kept for recovery");
+
+        // Not a file we can read (here: a folder): an error, never "empty".
+        std::fs::create_dir_all(&path).unwrap();
+        assert!(read_json_strict::<Vec<u32>>(&path).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

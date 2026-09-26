@@ -1498,9 +1498,7 @@ fn load_schedule(root: &Path) -> Schedule {
 }
 
 fn save_schedule(root: &Path, schedule: &Schedule) {
-    if let Ok(data) = serde_json::to_string_pretty(schedule) {
-        let _ = std::fs::write(root.join(SCHEDULE_FILE), data);
-    }
+    let _ = utils::write_json_atomic(&root.join(SCHEDULE_FILE), schedule);
 }
 
 /// Whether a game's scheduled backup is due. 0 = never. A timestamp in the

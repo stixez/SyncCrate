@@ -80,16 +80,20 @@ pub struct GameConfig {
     pub hidden_games: Vec<String>,
 }
 
+/// Set when the config couldn't be read at startup (held by antivirus or
+/// OneDrive): the defaults this run started with must not be saved over the
+/// user's folders, library and hidden games.
+static CONFIG_UNREADABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub fn load_game_config() -> GameConfig {
-    let path = utils::game_config_path();
-    if path.exists() {
-        if let Ok(data) = std::fs::read_to_string(&path) {
-            if let Ok(config) = serde_json::from_str::<GameConfig>(&data) {
-                return config;
-            }
+    match utils::read_json_strict::<GameConfig>(&utils::game_config_path()) {
+        Ok(config) => config.unwrap_or_default(),
+        Err(e) => {
+            log::warn!("{e}; not saving game settings this session");
+            CONFIG_UNREADABLE.store(true, std::sync::atomic::Ordering::SeqCst);
+            GameConfig::default()
         }
     }
-    GameConfig::default()
 }
 
 /// The persisted paths, kept in memory so saving the active game or library
@@ -134,9 +138,11 @@ pub(crate) fn save_game_config(app_state: &AppState) {
             hidden_games: app_state.hidden_games.clone(),
         }
     };
-    let path = utils::game_config_path();
-    if let Ok(data) = serde_json::to_string_pretty(&config) {
-        let _ = std::fs::write(&path, data);
+    if CONFIG_UNREADABLE.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    if let Err(e) = utils::write_json_atomic(&utils::game_config_path(), &config) {
+        log::warn!("{e}");
     }
 }
 

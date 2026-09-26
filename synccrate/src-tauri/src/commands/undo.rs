@@ -80,17 +80,20 @@ fn record_path(game: &str) -> PathBuf {
 }
 
 pub(crate) fn read_record(game: &str) -> Option<SyncRecord> {
-    let data = std::fs::read_to_string(record_path(game)).ok()?;
-    serde_json::from_str(&data).ok()
+    read_record_strict(game).ok().flatten()
+}
+
+/// `read_record`, telling "no record" from "couldn't read it": a record that
+/// is only extended (auto-pull, resumed sync) must not be replaced because a
+/// read failed, or the last real sync can't be undone any more.
+pub(crate) fn read_record_strict(game: &str) -> Result<Option<SyncRecord>, String> {
+    crate::utils::read_json_strict(&record_path(game))
 }
 
 /// Overwrite `game`'s record. Only one sync's worth is ever kept.
 pub(crate) fn write_record(record: &SyncRecord) {
-    let path = record_path(&record.game);
-    let Ok(data) = serde_json::to_string_pretty(record) else { return };
-    let tmp = path.with_extension("json.tmp");
-    if std::fs::write(&tmp, data).is_ok() {
-        let _ = std::fs::rename(&tmp, &path);
+    if let Err(e) = crate::utils::write_json_atomic(&record_path(&record.game), record) {
+        log::warn!("Undo for this sync won't be available: {e}");
     }
 }
 

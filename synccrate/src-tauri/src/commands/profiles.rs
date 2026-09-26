@@ -110,9 +110,7 @@ pub async fn save_profile(
     };
 
     let dir = utils::profiles_dir();
-    let path = dir.join(format!("{}.json", profile.id));
-    let data = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    utils::write_json_atomic(&dir.join(format!("{}.json", profile.id)), &profile)?;
 
     Ok(profile)
 }
@@ -236,9 +234,7 @@ pub async fn import_profile(
     if dir.join(format!("{}.json", profile.id)).exists() {
         profile.id = Uuid::new_v4().to_string();
     }
-    let dest = dir.join(format!("{}.json", profile.id));
-    let out = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    std::fs::write(&dest, out).map_err(|e| e.to_string())?;
+    utils::write_json_atomic(&dir.join(format!("{}.json", profile.id)), &profile)?;
 
     Ok(profile)
 }

@@ -60,10 +60,8 @@ fn read_checkpoint() -> Option<SyncCheckpoint> {
 }
 
 fn write_checkpoint(checkpoint: &SyncCheckpoint) {
-    let path = checkpoint_path();
-    if let Ok(data) = serde_json::to_string(checkpoint) {
-        let _ = std::fs::write(&path, data);
-    }
+    // Atomic: a half-written checkpoint lost the resume.
+    let _ = utils::write_json_atomic(&checkpoint_path(), checkpoint);
 }
 
 /// Writes the resume checkpoint at most every `EVERY` seconds (plus once
@@ -931,15 +929,21 @@ async fn run_sync(
             }
         }
     }
+    let mut keep_record = false;
     if plan.auto_pull {
         // A stay-in-sync pull only adds files. Replacing the record would make
         // the user's last real sync (its replacements, deletions and presync
         // backup) impossible to undo; extend it instead.
-        if let Some(prev) = crate::commands::undo::read_record(&undo_record.game) {
-            undo_record = merge_auto_pull_record(prev, undo_record);
+        match crate::commands::undo::read_record_strict(&undo_record.game) {
+            Ok(Some(prev)) => undo_record = merge_auto_pull_record(prev, undo_record),
+            Ok(None) => {}
+            Err(e) => {
+                log::warn!("{e}; keeping the previous undo record");
+                keep_record = true;
+            }
         }
     }
-    if !undo_record.is_empty() {
+    if !undo_record.is_empty() && !keep_record {
         crate::commands::undo::write_record(&undo_record);
     }
 
@@ -1304,15 +1308,20 @@ impl Default for SyncConfig {
 }
 
 pub fn read_sync_config() -> SyncConfig {
+    utils::read_json_strict(&utils::sync_config_path()).ok().flatten().unwrap_or_default()
+}
+
+/// Change the saved settings. One change at a time (two setters used to each
+/// read the old file, and one change was lost), and never from defaults
+/// standing in for a file that couldn't be read: flipping one toggle then
+/// wiped the exclude patterns, backup schedule and every other setting.
+pub(crate) fn update_sync_config(change: impl FnOnce(&mut SyncConfig)) -> Result<(), String> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = utils::sync_config_path();
-    if path.exists() {
-        if let Ok(data) = std::fs::read_to_string(&path) {
-            if let Ok(config) = serde_json::from_str::<SyncConfig>(&data) {
-                return config;
-            }
-        }
-    }
-    SyncConfig::default()
+    let mut config: SyncConfig = utils::read_json_strict(&path)?.unwrap_or_default();
+    change(&mut config);
+    utils::write_json_atomic(&path, &config)
 }
 
 pub(crate) fn read_exclude_patterns() -> Vec<String> {
@@ -1381,11 +1390,9 @@ pub async fn set_exclude_patterns(patterns: Vec<String>) -> Result<(), String> {
         }
     }
 
-    let mut config = read_sync_config();
-    config.exclude_patterns = patterns;
-    let path = utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    update_sync_config(|config| {
+        config.exclude_patterns = patterns;
+    })
 }
 
 #[tauri::command]
@@ -1813,15 +1820,12 @@ pub async fn set_auto_backup_config(
         return Err("Max count must be 1-20".to_string());
     }
 
-    let mut config = read_sync_config();
-    config.auto_backup_before_sync = before_sync;
-    config.auto_backup_scheduled = scheduled;
-    config.auto_backup_interval_hours = interval_hours;
-    config.auto_backup_max_count = max_count;
-
-    let path = crate::utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    update_sync_config(|config| {
+        config.auto_backup_before_sync = before_sync;
+        config.auto_backup_scheduled = scheduled;
+        config.auto_backup_interval_hours = interval_hours;
+        config.auto_backup_max_count = max_count;
+    })
 }
 
 // --- Transfer speed limit ---
@@ -1833,11 +1837,9 @@ pub async fn get_transfer_speed_limit() -> Result<u64, String> {
 
 #[tauri::command]
 pub async fn set_transfer_speed_limit(limit: u64) -> Result<(), String> {
-    let mut config = read_sync_config();
-    config.transfer_speed_limit = limit;
-    let path = crate::utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    update_sync_config(|config| {
+        config.transfer_speed_limit = limit;
+    })
 }
 
 #[tauri::command]
@@ -1847,11 +1849,9 @@ pub async fn get_clear_cache_after_sync() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn set_clear_cache_after_sync(enabled: bool) -> Result<(), String> {
-    let mut config = read_sync_config();
-    config.clear_cache_after_sync = enabled;
-    let path = crate::utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    update_sync_config(|config| {
+        config.clear_cache_after_sync = enabled;
+    })
 }
 
 #[tauri::command]
@@ -1861,11 +1861,9 @@ pub async fn get_keep_file_history() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn set_keep_file_history(enabled: bool) -> Result<(), String> {
-    let mut config = read_sync_config();
-    config.keep_file_history = enabled;
-    let path = crate::utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    update_sync_config(|config| {
+        config.keep_file_history = enabled;
+    })
 }
 
 /// Read the current transfer speed limit (called from transfer layer).
@@ -1898,21 +1896,20 @@ fn sync_history_path() -> std::path::PathBuf {
 
 pub fn append_sync_history(entry: SyncHistoryEntry) {
     let path = sync_history_path();
-    let mut history: Vec<SyncHistoryEntry> = if path.exists() {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|data| serde_json::from_str(&data).ok())
-            .unwrap_or_default()
-    } else {
-        Vec::new()
+    let mut history: Vec<SyncHistoryEntry> = match utils::read_json_strict(&path) {
+        Ok(h) => h.unwrap_or_default(),
+        Err(e) => {
+            log::warn!("{e}; not adding to the sync history");
+            return;
+        }
     };
     history.push(entry);
     // Keep last 100 entries
     if history.len() > 100 {
         history = history.split_off(history.len() - 100);
     }
-    if let Ok(data) = serde_json::to_string_pretty(&history) {
-        let _ = std::fs::write(&path, data);
+    if let Err(e) = utils::write_json_atomic(&path, &history) {
+        log::warn!("{e}");
     }
 }
 
