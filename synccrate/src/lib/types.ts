@@ -61,6 +61,8 @@ export interface PeerInfo {
   addresses?: string[];
   /** Host's iroh node id (hex), for recognising crew members; absent before 0.6.0. */
   node_id?: string | null;
+  /** Host side: the friend's last sync as they reported it (unix seconds). */
+  last_sync?: { files: number; failed: number; at: number } | null;
 }
 
 export interface SessionInfo {

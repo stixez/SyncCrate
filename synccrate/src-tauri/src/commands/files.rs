@@ -1137,6 +1137,22 @@ pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: St
     Ok(())
 }
 
+/// "Save" on the Activity log: a text file where the user picked in the save
+/// dialog (text only, and not huge).
+#[tauri::command]
+pub async fn save_text_file(dest: String, content: String) -> Result<(), String> {
+    let lower = dest.to_lowercase();
+    if !(lower.ends_with(".txt") || lower.ends_with(".log")) {
+        return Err("Save it as a .txt or .log file.".into());
+    }
+    if content.len() > 20 * 1024 * 1024 {
+        return Err("That's too much text to save.".into());
+    }
+    std::fs::write(&dest, content).map_err(|e| e.to_string())?;
+    allow_open_export_dir(std::path::Path::new(&dest));
+    Ok(())
+}
+
 /// Folders the user saved an export into this run (a pack or profile file,
 /// wherever they picked): "Show in folder" may open those too.
 static EXPORT_DIRS: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());

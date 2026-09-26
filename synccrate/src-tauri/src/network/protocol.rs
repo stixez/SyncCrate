@@ -87,6 +87,10 @@ pub enum Message {
         /// Files our last sync received; the host announces it.
         #[serde(default)]
         synced_files: Option<u64>,
+        /// Files that last sync couldn't get (with `synced_files`). Older
+        /// hosts ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sync_failed: Option<u64>,
     },
     /// Client → host (only if the host lists `offers::FEATURE`): our offer's
     /// file list (the first time), or just a status poll.
@@ -275,6 +279,15 @@ pub const MAX_CREW_WELCOME_BYTES: usize = MAX_MESSAGE_SIZE - 64 * 1024;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chat_poll_carries_the_sync_report_and_older_ones_still_parse() {
+        let old: Message = serde_json::from_str(r#"{"ChatSync":{"since":3,"outgoing":[],"synced_files":12}}"#).unwrap();
+        assert!(matches!(old, Message::ChatSync { synced_files: Some(12), sync_failed: None, .. }));
+        let new = Message::ChatSync { since: 0, outgoing: vec![], synced_files: Some(5), sync_failed: Some(2) };
+        let back: Message = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
+        assert!(matches!(back, Message::ChatSync { synced_files: Some(5), sync_failed: Some(2), .. }));
+    }
 
     #[test]
     fn games_conflict_only_when_both_known_and_different() {

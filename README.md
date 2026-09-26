@@ -74,7 +74,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`synccrate://join/…`): clicking it opens SyncCrate with the code filled in for the right game (or offers to switch games). Nothing connects or syncs until the friend clicks Join and confirms the plan.
 - **Stay in sync.** Turn it on while you're connected and SyncCrate pulls the host's new mods by itself, every minute. It only ever adds files: anything that would replace or delete one of yours, and script mods, still wait for you to review. It pauses while the game is running.
 - **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
-- **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync.
+- **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync, and see who's connected, what each friend is downloading, when they finished ("synced 42 files, 2 failed"), and whether someone is on a different game patch.
 
 **Mods**
 - **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install (each file goes to the folder its type belongs in), pack/DLC detection and a duplicate finder for games where duplicate packages cause trouble (The Sims 2/3/4, Euro/American Truck Simulator, Farming Simulator). Handles 20,000+ files smoothly.
@@ -106,6 +106,9 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 - **Hardened against bad peers.** A host can only write into the game's content folders, never executables or shortcut-style files; downloads must match the sizes and hashes in the host's file list; session PINs are on by default, five digits, and lock out guessers (three tries, then a growing wait). The PIN stays the same between sessions, so friends' saved join codes and Reconnect keep working; **New PIN** on the host's Dashboard retires it.
 
 **Yours**
+- **Activity log.** Search it, filter to problems, copy or save it as a text file for a bug report; sync history shows each sync's speed, duration and errors, with a weekly summary.
+- **Storage.** Settings → Storage shows how much SyncCrate keeps per game (backups and file history) and clears a game's file history.
+- **Tray and sidebar.** The tray names the game you're in a session with and copies your join code; pin your games to the top of the sidebar, or search a long library.
 - **Built-in guide.** The **Guide** page in the sidebar explains every feature one task at a time (first sync, LAN and internet play, undo, file history, modpacks, crews, Sims 4 tips, troubleshooting), with search and a button that takes you to the right page.
 - **Appearance.** Any accent color (or each game's own), dark/light/system theme, UI scale, compact rows, and effects off for a calmer look.
 

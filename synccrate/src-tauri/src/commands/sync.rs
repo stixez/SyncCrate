@@ -985,9 +985,12 @@ async fn run_sync(
         if !plan.auto_pull {
             delete_checkpoint();
         }
-        if files_received > 0 {
-            // Announced in the session chat on the next poll.
-            state.lock().await.chat.pending_synced = Some(files_received as u64);
+        if files_received > 0 || !sync_errors.is_empty() {
+            // Announced in the session chat on the next poll, and the host
+            // shows it next to this friend (with any failures).
+            let mut st = state.lock().await;
+            st.chat.pending_synced = Some(files_received as u64);
+            st.chat.pending_failed = sync_errors.len() as u64;
         }
     }
 

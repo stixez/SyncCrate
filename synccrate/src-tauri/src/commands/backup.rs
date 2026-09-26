@@ -638,6 +638,79 @@ fn gc_objects(root: &Path) -> Result<usize, String> {
     Ok(removed)
 }
 
+#[derive(Debug, Serialize)]
+pub struct GameStorage {
+    pub game: String,
+    pub backups: usize,
+    /// Sum of the backups' sizes (unchanged files are stored once, so the
+    /// disk use can be lower).
+    pub backup_bytes: u64,
+    pub history_versions: usize,
+    pub history_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StorageUsage {
+    /// SyncCrate's data folder.
+    pub folder: String,
+    /// What that folder takes on disk (backups, file history, art, settings).
+    pub on_disk: u64,
+    pub games: Vec<GameStorage>,
+}
+
+fn dir_size(path: &Path) -> u64 {
+    walkdir::WalkDir::new(path)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum()
+}
+
+/// Settings → Storage: nothing showed how much SyncCrate keeps, per game.
+#[tauri::command]
+pub async fn storage_usage() -> Result<StorageUsage, String> {
+    tokio::task::spawn_blocking(|| {
+        let root = utils::backups_dir();
+        let mut games: HashMap<String, GameStorage> = HashMap::new();
+        for b in read_infos(&root) {
+            let g = games.entry(b.game.clone()).or_insert_with(|| GameStorage { game: b.game.clone(), backups: 0, backup_bytes: 0, history_versions: 0, history_bytes: 0 });
+            g.backups += 1;
+            g.backup_bytes += b.total_size;
+        }
+        for (game, n, bytes) in crate::commands::history::usage(&root) {
+            let g = games.entry(game.clone()).or_insert_with(|| GameStorage { game, backups: 0, backup_bytes: 0, history_versions: 0, history_bytes: 0 });
+            g.history_versions += n;
+            g.history_bytes += bytes;
+        }
+        let folder = utils::config_root().join("synccrate");
+        let mut games: Vec<GameStorage> = games.into_values().collect();
+        games.sort_by(|a, b| (b.backup_bytes + b.history_bytes).cmp(&(a.backup_bytes + a.history_bytes)));
+        StorageUsage { on_disk: dir_size(&folder), folder: folder.to_string_lossy().into_owned(), games }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Delete a game's file history (Settings → Storage) and the stored objects
+/// nothing else uses. Returns how many versions were removed.
+#[tauri::command]
+pub async fn clear_file_history(game_id: String) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        let root = utils::backups_dir();
+        let _guard = store_lock();
+        let removed = crate::commands::history::clear(&root, &game_id)?;
+        if removed > 0 {
+            gc_logged(&root);
+        }
+        Ok(removed)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub(crate) fn gc_logged(root: &Path) {
     match gc_objects(root) {
         Ok(n) if n > 0 => log::info!("Backup store: removed {} unreferenced object(s)", n),

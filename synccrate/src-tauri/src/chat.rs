@@ -56,6 +56,9 @@ pub struct ChatLog {
     /// Client side: files the last sync received, reported on the next poll.
     #[serde(skip)]
     pub pending_synced: Option<u64>,
+    /// With `pending_synced`: files that sync couldn't get.
+    #[serde(skip)]
+    pub pending_failed: u64,
     #[serde(skip)]
     next_seq: u64,
 }

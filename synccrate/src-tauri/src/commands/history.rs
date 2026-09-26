@@ -104,6 +104,39 @@ fn save(root: &Path, game: &str, h: &HistoryFile) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
+/// Per game (as stored): versions kept and their total size, for Settings →
+/// Storage. Unreadable indexes are left out.
+pub(crate) fn usage(root: &Path) -> Vec<(String, usize, u64)> {
+    let Ok(dir) = std::fs::read_dir(root.join(HISTORY_DIR)) else { return Vec::new() };
+    let mut out: Vec<(String, usize, u64)> = dir
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let p = e.path();
+            let game = p.file_stem()?.to_str()?.to_string();
+            (p.extension()? == "json").then_some(())?;
+            let h = load(root, &game).ok()?;
+            let kept: Vec<&FileVersion> = h.entries.iter().filter(|v| v.pending.is_none()).collect();
+            Some((game, kept.len(), kept.iter().map(|v| v.size).sum()))
+        })
+        .filter(|(_, n, _)| *n > 0)
+        .collect();
+    out.sort();
+    out
+}
+
+/// Forget every kept version of `game` (a sync still capturing keeps its
+/// entries). The caller runs the object GC under the store lock.
+pub(crate) fn clear(root: &Path, game: &str) -> Result<usize, String> {
+    let mut h = load(root, game)?;
+    let before = h.entries.len();
+    h.entries.retain(|e| e.pending.is_some());
+    let removed = before - h.entries.len();
+    if removed > 0 {
+        save(root, game, &h)?;
+    }
+    Ok(removed)
+}
+
 /// Every object hash any history index references (for `backup::gc_objects`).
 /// An unreadable index is an error: better to skip a GC than delete versions.
 pub(crate) fn referenced_hashes(root: &Path) -> Result<HashSet<String>, String> {
@@ -455,6 +488,22 @@ pub(crate) async fn restore_file_version_inner(state: &Arc<Mutex<AppState>>, gam
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clearing_a_games_history_keeps_in_flight_captures_and_other_games() {
+        let root = crate::testutil::temp_dir("history-clear");
+        let v = |id: &str, size: u64, pending: Option<&str>| FileVersion {
+            id: id.into(), path: format!("Mods/{id}.package"), hash: "a".repeat(64), size, mtime_ms: None, at: 1,
+            reason: REASON_REPLACED.into(), peer: String::new(), pending: pending.map(str::to_string),
+        };
+        save(&root, "sims4", &HistoryFile { version: FORMAT_VERSION, entries: vec![v("a", 10, None), v("b", 5, None), v("c", 7, Some("cap"))] }).unwrap();
+        save(&root, "valheim", &HistoryFile { version: FORMAT_VERSION, entries: vec![v("d", 3, None)] }).unwrap();
+        assert_eq!(usage(&root), vec![("sims4".to_string(), 2, 15), ("valheim".to_string(), 1, 3)]);
+        assert_eq!(clear(&root, "sims4").unwrap(), 2);
+        assert_eq!(load(&root, "sims4").unwrap().entries.len(), 1, "the running capture's entry stays");
+        assert_eq!(usage(&root), vec![("valheim".to_string(), 1, 3)]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     fn v(path: &str, hash: &str, size: u64, at: u64) -> FileVersion {
         FileVersion { id: uuid::Uuid::new_v4().to_string(), path: path.into(), hash: hash.into(), size, mtime_ms: None, at, reason: REASON_REPLACED.into(), peer: String::new(), pending: None }
