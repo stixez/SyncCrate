@@ -15,6 +15,7 @@ const PAGE_LABELS: Record<string, string> = {
   modpacks: "Modpacks",
   crews: "Crews",
   activity: "Activity Log",
+  guide: "Guide",
   settings: "Settings",
   "game-browser": "Game Browser",
 };
@@ -47,7 +48,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, [accentSource]);
 
   const isConnected = session && session.session_type !== "None";
-  const isGlobal = page === "activity" || page === "settings" || page === "game-browser" || page === "crews" || !selectedGame;
+  const isGlobal = page === "activity" || page === "settings" || page === "game-browser" || page === "crews" || page === "guide" || !selectedGame;
   const crumbGame = !isGlobal && selectedGame ? getGameDef(selectedGame)?.label ?? selectedGame : null;
 
   return (

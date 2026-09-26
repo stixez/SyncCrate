@@ -4,6 +4,7 @@ import {
   FolderOpen,
   Archive,
   Activity,
+  BookOpen,
   Settings,
   Sun,
   Moon,
@@ -336,6 +337,7 @@ export default function Sidebar() {
           <p className="hud-label px-4 pb-2"><b>//</b> System</p>
           {globalLink("crews", "Crews", Users)}
           {globalLink("activity", "Activity Log", Activity)}
+          {globalLink("guide", "Guide", BookOpen)}
           {globalLink("settings", "Settings", Settings)}
         </div>
       </div>
