@@ -1006,12 +1006,7 @@ pub(crate) fn undo_apply(
     }
 
     let Some(backup_id) = &record.presync_backup_id else {
-        for f in &record.replaced {
-            result.skipped.push(format!("{} (no backup was made for this sync)", f.relative_path));
-        }
-        for p in &record.deleted {
-            result.skipped.push(format!("{} (no backup was made for this sync)", p));
-        }
+        undo_from_history(record, &utils::backups_dir(), &base_str, &mut result);
         return result;
     };
 
@@ -1072,6 +1067,52 @@ pub(crate) fn undo_apply(
         }
     }
     result
+}
+
+/// Undo's fallback without a presync backup: put back the versions file
+/// history kept of the replaced and deleted files, with the same checks as
+/// the backup path (untouched since the sync / still absent). Runs under the
+/// store lock (held by `undo_apply`).
+fn undo_from_history(record: &crate::commands::undo::SyncRecord, root: &Path, base_str: &str, result: &mut UndoResult) {
+    let by_path: HashMap<String, &crate::commands::undo::KeptVersion> =
+        record.history_versions.iter().map(|v| (crate::sync::diff::match_key(&v.path), v)).collect();
+    let mut targets: Vec<(String, bool)> = Vec::new();
+    for f in &record.replaced {
+        if file_matches(base_str, f) {
+            targets.push((f.relative_path.clone(), true));
+        } else {
+            result.skipped.push(format!("{} (changed since the sync)", f.relative_path));
+        }
+    }
+    for p in &record.deleted {
+        if utils::safe_join(base_str, p).map_or(true, |abs| !abs.exists()) {
+            targets.push((p.clone(), false));
+        } else {
+            result.skipped.push(format!("{} (recreated since the sync)", p));
+        }
+    }
+    for (rel, _) in targets {
+        let Some(v) = by_path.get(&crate::sync::diff::match_key(&rel)) else {
+            result.skipped.push(format!("{} (no backup or kept version for this sync)", rel));
+            continue;
+        };
+        let object = object_path(root, &v.hash);
+        if !is_valid_hash(&v.hash) || !object.is_file() {
+            result.skipped.push(format!("{} (the kept version is gone)", rel));
+            continue;
+        }
+        let Ok(dest) = utils::safe_join(base_str, &rel) else {
+            result.skipped.push(format!("{} (invalid path)", rel));
+            continue;
+        };
+        match restore_file(&object, &dest, v.mtime_ms) {
+            Ok(()) => result.restored += 1,
+            Err(e) => {
+                result.skipped.push(format!("{}: {}", rel, e));
+                result.interrupted = true;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1780,6 +1821,40 @@ mod tests {
         out.sort();
         assert_eq!(out, vec!["a".to_string(), "b".to_string()], "only \"c\" (truly newest) should survive");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn undo_without_a_presync_backup_uses_file_history() {
+        use crate::commands::undo::{KeptVersion, RecordedFile, SyncRecord};
+        let (root, base) = (tmp("store-undo"), tmp("game-undo"));
+        // The versions history kept before the sync.
+        write(&base.join("Mods/r.package"), b"old");
+        write(&base.join("Mods/d.package"), b"deleted-one");
+        let (old_hash, _, _) = store_object(&root, &base.join("Mods/r.package")).unwrap();
+        let (del_hash, _, _) = store_object(&root, &base.join("Mods/d.package")).unwrap();
+        // The sync replaced one and deleted the other.
+        write(&base.join("Mods/r.package"), b"theirs");
+        std::fs::remove_file(base.join("Mods/d.package")).unwrap();
+        let meta = std::fs::metadata(base.join("Mods/r.package")).unwrap();
+        let now_hash = crate::commands::files::compute_file_hash(&base.join("Mods/r.package")).unwrap();
+        let record = SyncRecord {
+            sync_id: "s".into(), created_at: 1, game: "g".into(), base_path: base.to_string_lossy().into(),
+            presync_backup_id: None, added: vec![],
+            replaced: vec![RecordedFile { relative_path: "Mods/r.package".into(), size: meta.len(), mtime_ms: mtime_ms(&meta).unwrap(), hash: now_hash }],
+            deleted: vec!["Mods/d.package".into(), "Mods/unkept.package".into()],
+            history_versions: vec![
+                KeptVersion { path: "Mods/r.package".into(), hash: old_hash, mtime_ms: None },
+                KeptVersion { path: "Mods/d.package".into(), hash: del_hash, mtime_ms: None },
+            ],
+        };
+        let mut r = UndoResult::default();
+        undo_from_history(&record, &root, &base.to_string_lossy(), &mut r);
+        assert_eq!(r.restored, 2);
+        assert_eq!(std::fs::read(base.join("Mods/r.package")).unwrap(), b"old");
+        assert_eq!(std::fs::read(base.join("Mods/d.package")).unwrap(), b"deleted-one");
+        assert!(r.skipped.iter().any(|s| s.contains("unkept.package")), "no version kept: reported, not guessed");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -38,6 +38,21 @@ pub(crate) struct SyncRecord {
     pub(crate) replaced: Vec<RecordedFile>,
     /// Files this sync deleted — undone by restoring the presync backup's copy.
     pub(crate) deleted: Vec<String>,
+    /// The old versions file history kept of the replaced/deleted files. Undo
+    /// uses them when there's no presync backup ("back up before sync" is off
+    /// by default): it used to say "no backup was made" although history had
+    /// every one of them.
+    #[serde(default)]
+    pub(crate) history_versions: Vec<KeptVersion>,
+}
+
+/// One file's pre-sync version in the object store (via file history).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct KeptVersion {
+    pub(crate) path: String,
+    pub(crate) hash: String,
+    #[serde(default)]
+    pub(crate) mtime_ms: Option<i64>,
 }
 
 impl SyncRecord {
@@ -217,7 +232,7 @@ mod tests {
     fn is_empty_true_only_with_no_files_at_all() {
         let mut r = SyncRecord {
             sync_id: "s".into(), created_at: 0, game: "g".into(), base_path: "b".into(),
-            presync_backup_id: None, added: vec![], replaced: vec![], deleted: vec![],
+            presync_backup_id: None, added: vec![], replaced: vec![], deleted: vec![], history_versions: vec![],
         };
         assert!(r.is_empty());
         r.added.push(file("Mods/a.package"));
@@ -236,7 +251,7 @@ mod tests {
         let record = SyncRecord {
             sync_id: "abc".into(), created_at: 123, game: "sims4".into(), base_path: "C:/Game".into(),
             presync_backup_id: Some("bkp1".into()), added: vec![file("Mods/new.package")],
-            replaced: vec![], deleted: vec!["Mods/gone.package".into()],
+            replaced: vec![], deleted: vec!["Mods/gone.package".into()], history_versions: vec![],
         };
         write_record(&record);
         let read = read_record("sims4").expect("record round-trips");

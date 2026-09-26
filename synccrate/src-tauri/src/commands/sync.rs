@@ -857,6 +857,7 @@ async fn run_sync(
     // Only overwrite the last-sync record if this sync actually changed a
     // file — a no-op sync (e.g. everything failed, or there was nothing to
     // do) leaves whatever's undoable from before alone.
+    let mut history_versions = Vec::new();
     if let Some(capture_id) = history_capture {
         let replaced: Vec<String> = undo_replaced.iter().map(|f| f.relative_path.clone()).collect();
         let deleted = undo_deleted.clone();
@@ -865,8 +866,9 @@ async fn run_sync(
             crate::commands::history::finish(&root, &game, &capture_id, &replaced, &deleted, crate::utils::timestamp_now())
         })
         .await;
-        if let Ok(Err(e)) | Err(e) = done.map_err(|e| e.to_string()) {
-            log::warn!("File history: {}", e);
+        match done.map_err(|e| e.to_string()) {
+            Ok(Ok(kept)) => history_versions = kept,
+            Ok(Err(e)) | Err(e) => log::warn!("File history: {}", e),
         }
     }
 
@@ -879,6 +881,7 @@ async fn run_sync(
         added: undo_added,
         replaced: undo_replaced,
         deleted: undo_deleted,
+        history_versions,
     };
     if plan.auto_pull {
         // A stay-in-sync pull only adds files. Replacing the record would make
@@ -1370,7 +1373,7 @@ mod tests {
         let f = |p: &str| RecordedFile { relative_path: p.into(), size: 1, mtime_ms: 1, hash: "h".into() };
         let rec = |id: &str, base: &str, added: Vec<RecordedFile>, replaced: Vec<RecordedFile>| SyncRecord {
             sync_id: id.into(), created_at: 1, game: "sims4".into(), base_path: base.into(),
-            presync_backup_id: Some("b".into()), added, replaced, deleted: vec!["Mods/gone.package".into()],
+            presync_backup_id: Some("b".into()), added, replaced, deleted: vec!["Mods/gone.package".into()], history_versions: vec![],
         };
         let prev = rec("manual", "C:/g", vec![f("Mods/a.package")], vec![f("Mods/r.package")]);
         let new = rec("auto", "C:/g", vec![f("Mods/a.package"), f("Mods/b.package")], vec![]);
