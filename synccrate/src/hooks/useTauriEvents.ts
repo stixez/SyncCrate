@@ -84,6 +84,7 @@ export function useTauriEvents() {
   useEffect(() => {
     let cancelled = false;
     const unlisteners: UnlistenFn[] = [];
+    const backupFailureShown = new Set<string>();
 
     function cancelRetry() {
       useAppStore.getState().setReconnecting(null);
@@ -99,9 +100,17 @@ export function useTauriEvents() {
       retryRef.current.active = true;
 
       const { lastHostIp, lastHostPort, lastHostCode } = useAppStore.getState();
+      useAppStore.getState().setReconnecting({ host: hostName, attempt: 1, max: MAX_RETRIES });
+      // "Stop trying" on the dashboard clears `reconnecting`; checked after
+      // every await, and never set again once cleared (a click during an
+      // attempt used to be overwritten by the next round).
+      const stopped = () => {
+        if (!useAppStore.getState().reconnecting) retryRef.current.active = false;
+        return !retryRef.current.active || cancelled;
+      };
 
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        if (!retryRef.current.active || cancelled) return;
+        if (stopped()) return;
 
         const delay = RETRY_DELAYS[attempt] || 8000;
         addLog(`Reconnecting in ${delay / 1000}s... (attempt ${attempt + 1}/${MAX_RETRIES})`, "info");
@@ -111,9 +120,7 @@ export function useTauriEvents() {
           retryRef.current.timer = setTimeout(resolve, delay);
         });
 
-        // The dashboard's Cancel clears `reconnecting`.
-        if (!useAppStore.getState().reconnecting) retryRef.current.active = false;
-        if (!retryRef.current.active || cancelled) return;
+        if (stopped()) return;
 
         // A join code reaches the host on the LAN or over the internet
         if (lastHostCode) {
@@ -135,6 +142,7 @@ export function useTauriEvents() {
           } catch {
             // Fall through to the other methods
           }
+          if (stopped()) return;
         }
 
         // Try direct IP reconnect (works over VPN/Tailscale)
@@ -161,6 +169,7 @@ export function useTauriEvents() {
           } catch {
             addLog("Direct IP reconnect failed, trying network scan...", "info");
           }
+          if (stopped()) return;
         }
 
         // Fallback: mDNS scan (works on same LAN)
@@ -187,7 +196,7 @@ export function useTauriEvents() {
               return;
             }
             // Still handshaking or failed: peer-connected / the next attempt decide.
-            if (!retryRef.current.active) return;
+            if (stopped()) return;
             continue;
           }
           addLog(`Host "${hostName}" not found on network`, "warning");
@@ -360,7 +369,7 @@ export function useTauriEvents() {
                 const problems = event.payload.errors?.length ?? 0;
                 toastAction(
                   cancelled
-                    ? `Sync cancelled after ${files_synced} file${files_synced !== 1 ? "s" : ""}.`
+                    ? `Sync cancelled after ${files_synced} file${files_synced !== 1 ? "s" : ""}. Compare again to resume.`
                     : problems ? `Sync finished, but ${problems} file${problems !== 1 ? "s" : ""} couldn't be synced (see Activity).` : "Sync complete.",
                   "Undo",
                   () => {
@@ -376,7 +385,9 @@ export function useTauriEvents() {
                 // Nothing arrived, so no Undo toast: say what happened instead.
                 const n = event.payload.errors.length;
                 toastError(`${n} file${n !== 1 ? "s" : ""} couldn't be synced. The Activity log has the details.`);
-              } else if (!cancelled) {
+              } else if (cancelled) {
+                toastInfo("Sync cancelled. Compare again to resume.");
+              } else {
                 // useSync no longer toasts on its own (it doubled this one).
                 toastSuccess("Sync complete.");
               }
@@ -464,6 +475,15 @@ export function useTauriEvents() {
         // BackupList; logging every event flooded the activity log.
         listen<BackupProgress>("backup-progress", (event) => {
           useAppStore.getState().setBackupProgress(event.payload);
+        }),
+        listen<{ game: string; error: string }>("backup-failed", (event) => {
+          // Retried every 30 min: say it once per game per run, not each time.
+          const { game, error } = event.payload;
+          addLog(`Scheduled backup failed: ${error}`, "error");
+          if (!backupFailureShown.has(game)) {
+            backupFailureShown.add(game);
+            toastError(`A scheduled backup failed and will be retried: ${error}`);
+          }
         }),
         listen<BackupProgress>("restore-progress", (event) => {
           useAppStore.getState().setBackupProgress(event.payload);

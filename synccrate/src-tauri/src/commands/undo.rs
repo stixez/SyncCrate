@@ -187,7 +187,11 @@ pub(crate) async fn undo_last_sync_inner(
         .await
         .map_err(|e| e.to_string())?;
 
-    delete_record(&game_id);
+    // Retrying is safe (removed files are already gone, restored ones match),
+    // so an interrupted undo keeps its record instead of losing the way back.
+    if !result.interrupted {
+        delete_record(&game_id);
+    }
     // Any plan on screen was computed against the files as they were.
     for conn in state.lock().await.connections.values_mut() {
         conn.sync_plan = None;

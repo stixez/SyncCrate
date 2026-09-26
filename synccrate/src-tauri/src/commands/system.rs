@@ -145,9 +145,12 @@ pub async fn fix_firewall() -> Result<FirewallStatus, String> {
             base64::engine::general_purpose::STANDARD.encode(utf16)
         };
         let outer = format!(
-            "try {{ $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden \
+            "try {{ $p = Start-Process -FilePath {} -Verb RunAs -Wait -PassThru -WindowStyle Hidden \
              -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','{}'; exit $p.ExitCode }} \
              catch {{ exit 1223 }}",
+            // By full path: a bare name let a same-named file in the working
+            // directory get the elevated run (see `windows_system_exe`).
+            win::ps_quote(&crate::utils::windows_system_exe("powershell.exe").to_string_lossy()),
             inner_encoded
         );
         let output = tokio::task::spawn_blocking(move || win::powershell(&outer))

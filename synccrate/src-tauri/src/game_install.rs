@@ -98,8 +98,9 @@ fn vdf_value(contents: &str, key: &str) -> Option<String> {
 }
 
 /// App ids with an `appmanifest_<id>.acf` in any of the given `steamapps`
-/// dirs. When the manifest names an `installdir`, that folder must exist too
-/// (a stale manifest alone isn't proof).
+/// dirs whose `installdir` exists. A stale or unreadable manifest alone
+/// isn't proof: one without a readable `installdir` counted as installed,
+/// which showed games as "Detected" that weren't there.
 pub fn steam_installed_app_ids(steamapps_dirs: &[PathBuf]) -> HashSet<u32> {
     let mut ids = HashSet::new();
     for dir in steamapps_dirs {
@@ -116,11 +117,8 @@ pub fn steam_installed_app_ids(steamapps_dirs: &[PathBuf]) -> HashSet<u32> {
             let installdir = std::fs::read_to_string(entry.path())
                 .ok()
                 .and_then(|c| vdf_value(&c, "installdir"));
-            match installdir {
-                Some(d) if !d.is_empty() && !dir.join("common").join(&d).exists() => {}
-                _ => {
-                    ids.insert(id);
-                }
+            if installdir.is_some_and(|d| !d.is_empty() && dir.join("common").join(&d).is_dir()) {
+                ids.insert(id);
             }
         }
     }
@@ -376,6 +374,12 @@ mod tests {
             steamapps.join("appmanifest_730.acf"),
             "\"AppState\"\n{\n\t\"installdir\"\t\t\"Counter-Strike Global Offensive\"\n}\n",
         ).unwrap();
+        // No installdir at all: not proof either.
+        std::fs::write(steamapps.join("appmanifest_4000.acf"), "\"AppState\"
+{
+	\"appid\"		\"4000\"
+}
+").unwrap();
         std::fs::write(steamapps.join("libraryfolders.vdf"), "").unwrap();
 
         let ids = steam_installed_app_ids(&[steamapps.clone(), lib.join("missing")]);

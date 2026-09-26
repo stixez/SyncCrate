@@ -43,6 +43,17 @@ pub(crate) fn store_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 /// True while a restore rewrites a game folder (syncs and scheduled backups wait).
+/// For commands that change game files or share them: a restore rewrites
+/// the folder, and hosting, installing, toggling or deleting in the middle
+/// of it served friends a half-restored folder (or had the exact-restore
+/// cleanup delete a file dropped in meanwhile).
+pub fn refuse_during_restore() -> Result<(), String> {
+    if restore_in_progress() {
+        return Err("A restore is running. Wait for it to finish, then try again.".to_string());
+    }
+    Ok(())
+}
+
 pub fn restore_in_progress() -> bool {
     RESTORING.load(Ordering::SeqCst)
 }
@@ -453,8 +464,11 @@ fn create_backup_inner(
     let (files, new_bytes) = match store_sources(root, &sources, &reuse, progress) {
         Ok(v) => v,
         Err(e) => {
-            // Objects already stored are collected by the next GC.
+            // Collect the objects already stored now: GC otherwise only runs
+            // after a prune or delete, so on a full disk the space stayed
+            // used. Callers hold the store lock.
             let _ = std::fs::remove_dir_all(&dir);
+            gc_logged(root);
             return Err(e);
         }
     };
@@ -669,7 +683,7 @@ fn twin_paths(dest: &Path, dest_base: &Path, mods_dir: Option<&Path>, rel: &str)
 /// `x.package` next to a disabled `x.package.disabled` (or `_Disabled/x`)
 /// silently re-enabled a mod the user had turned off, as a duplicate; the
 /// reverse for a backed-up `x.disabled` next to an enabled `x`.
-fn disabled_twin(dest: &Path, dest_base: &Path, mods_dir: Option<&Path>, rel: &str) -> Option<String> {
+pub(crate) fn disabled_twin(dest: &Path, dest_base: &Path, mods_dir: Option<&Path>, rel: &str) -> Option<String> {
     let twins = twin_paths(dest, dest_base, mods_dir, rel);
     if let Some(t) = twins.first().filter(|t| t.exists()) {
         return t.file_name().map(|n| n.to_string_lossy().to_string());
@@ -836,6 +850,9 @@ pub struct UndoResult {
     /// Left alone, with why: changed or recreated since the sync, or no
     /// backup available for that file.
     pub skipped: Vec<String>,
+    /// The restore stopped part-way (e.g. disk full). The undo record is kept
+    /// so it can be retried (and the presync backup stays protected).
+    pub interrupted: bool,
 }
 
 /// Whether the file at `base`/`rel` is exactly what a sync wrote: same size,
@@ -976,6 +993,7 @@ pub(crate) fn undo_apply(
         }
         if let Some(e) = r.error {
             result.skipped.push(format!("restore stopped: {}", e));
+            result.interrupted = true;
         }
     }
     result
@@ -1454,6 +1472,9 @@ fn run_due_backup(
         }
         Err(e) => {
             log::warn!("Scheduled backup of {} failed: {}", c.game, e);
+            // Only logged before: the user believed backups were running
+            // while one locked file failed every attempt.
+            let _ = app.emit("backup-failed", serde_json::json!({ "game": &c.game, "error": &e }));
             false
         }
     };

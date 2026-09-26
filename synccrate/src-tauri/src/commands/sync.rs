@@ -21,7 +21,13 @@ struct SyncCheckpoint {
 
 /// Set by `cancel_sync`; checked between files in `run_sync`. Only one sync
 /// runs at a time in practice (clients pull from a single host).
-static CANCEL_SYNC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static CANCEL_SYNC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether Cancel was clicked, without consuming it (`run_sync` does that
+/// between files).
+pub(crate) fn cancel_requested() -> bool {
+    CANCEL_SYNC.load(std::sync::atomic::Ordering::SeqCst)
+}
 
 /// Ask the running sync to stop after the current file. Never interrupts a
 /// file mid-transfer (the peer stream must stay in sync); the resume
@@ -191,14 +197,13 @@ pub(crate) async fn compute_sync_plan_inner(
     plan.game_id = active_game;
     plan.base_path = base_path;
     plan.skipped_foreign = skipped_foreign;
-    plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total).or_else(|| {
-        (!unreceivable.is_empty()).then(|| {
-            format!(
-                "{} of the host's files can't be saved on this PC (blocked file types or names Windows can't use) and were skipped, e.g. {}.",
-                unreceivable.len(),
-                unreceivable[0]
-            )
-        })
+    plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total);
+    plan.notice = (!unreceivable.is_empty()).then(|| {
+        format!(
+            "{} of the host's files can't be saved on this PC (blocked file types or names Windows can't use) and were skipped, e.g. {}.",
+            unreceivable.len(),
+            unreceivable[0]
+        )
     });
     if !unreceivable.is_empty() {
         log::warn!("Skipped {} host file(s) this PC can't write: {:?}", unreceivable.len(), &unreceivable[..unreceivable.len().min(10)]);
