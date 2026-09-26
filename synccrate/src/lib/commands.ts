@@ -199,6 +199,18 @@ export async function toggleMod(
   return invoke("toggle_mod", { gameId, relativePath, enabled });
 }
 
+export interface ToggleOutcome {
+  path: string;
+  /** Where the file is now (the same path if it was already in that state). */
+  new_path: string | null;
+  error: string | null;
+}
+
+/** `toggleMod` for many files in one call. */
+export async function toggleMods(gameId: string, paths: string[], enabled: boolean): Promise<ToggleOutcome[]> {
+  return invoke("toggle_mods", { gameId, paths, enabled });
+}
+
 // --- Game Registry & Library ---
 
 export async function getGameRegistryCmd(): Promise<GameDefinition[]> {

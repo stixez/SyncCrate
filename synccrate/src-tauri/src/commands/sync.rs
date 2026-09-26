@@ -842,17 +842,23 @@ async fn run_sync(
             SyncAction::SendToRemote(file_info) => {
                 files_done += 1;
                 bytes_done += file_info.size;
-                let _ = app.emit(
-                    "sync-progress",
-                    serde_json::json!({
-                        "file": file_info.relative_path,
-                        "bytes_sent": bytes_done,
-                        "bytes_total": plan.total_bytes,
-                        "files_done": files_done,
-                        "files_total": total_files,
-                        "peer_id": peer_id,
-                    }),
-                );
+                // Throttled like receives: nothing is transferred here, so a
+                // plan of thousands of sends fired thousands of events at once.
+                let due = last_progress.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(100));
+                if due || files_done as usize >= total_files as usize {
+                    last_progress = Some(std::time::Instant::now());
+                    let _ = app.emit(
+                        "sync-progress",
+                        serde_json::json!({
+                            "file": file_info.relative_path,
+                            "bytes_sent": bytes_done,
+                            "bytes_total": plan.total_bytes,
+                            "files_done": files_done,
+                            "files_total": total_files,
+                            "peer_id": peer_id,
+                        }),
+                    );
+                }
             }
             SyncAction::Delete(path) if !diff::path_accepted_by(&content_types, path) => {
                 files_done += 1;

@@ -97,9 +97,22 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
 
   const excluded = useMemo(() => new Set(plan.excluded || []), [plan.excluded]);
 
-  const deleteCount = plan.actions.filter((a) => a.Delete).length;
-  const receiveCount = plan.actions.filter((a) => a.ReceiveFromRemote).length;
-  const conflictCount = plan.actions.filter((a) => a.Conflict).length;
+  // Counted once per plan, not on every progress event (5 passes over
+  // thousands of actions each time).
+  const { deleteCount, receiveCount, conflictCount, modConflicts, saveConflicts } = useMemo(() => {
+    const c = { deleteCount: 0, receiveCount: 0, conflictCount: 0, modConflicts: 0, saveConflicts: 0 };
+    for (const a of plan.actions) {
+      if (a.Delete) c.deleteCount++;
+      if (a.ReceiveFromRemote) c.receiveCount++;
+      if (a.Conflict) {
+        c.conflictCount++;
+        const t = a.Conflict.local.file_type;
+        if (t === "Mod" || t === "CustomContent") c.modConflicts++;
+        if (t === "Save") c.saveConflicts++;
+      }
+    }
+    return c;
+  }, [plan.actions]);
 
   let speedText = "";
   let etaText = "";
@@ -118,12 +131,6 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
 
   const setPage = useAppStore((s) => s.setPage);
 
-  const modConflicts = plan.actions.filter(
-    (a) => a.Conflict && (a.Conflict.local.file_type === "Mod" || a.Conflict.local.file_type === "CustomContent"),
-  ).length;
-  const saveConflicts = plan.actions.filter(
-    (a) => a.Conflict && a.Conflict.local.file_type === "Save",
-  ).length;
 
   const toggleExclusion = useCallback(
     async (path: string) => {

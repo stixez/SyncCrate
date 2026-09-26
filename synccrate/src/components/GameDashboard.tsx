@@ -14,6 +14,7 @@ import { formatBytes, plural } from "../lib/utils";
 import { toastSuccess, toastError } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
+import { manifestIsFresh } from "../lib/manifestFresh";
 import { saveGamePath } from "../lib/gamePath";
 import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
@@ -53,7 +54,9 @@ export default function GameDashboard({ gameId }: Props) {
   const setPinPrompt = useAppStore((s) => s.setPinPrompt);
   const gameSwitchPrompt = useAppStore((s) => s.gameSwitchPrompt);
   const setGameSwitchPrompt = useAppStore((s) => s.setGameSwitchPrompt);
-  const syncProgress = useAppStore((s) => s.syncProgress);
+  // Only whether a sync runs: the whole progress object re-rendered this page
+  // on every progress event.
+  const syncProgress = useAppStore((s) => !!s.syncProgress);
   const { host, join, connectTo, connectByIp, connectByCode, retryWithPin, retryAttempt, leave, isLoading } = useSession();
   const { computePlan, executeSync, resolveAll, isLoading: isSyncLoading, isStarting: isSyncStarting, loadingPhase } = useSync();
   // Any sync, including a Stay-in-sync pull the banner doesn't show, or one
@@ -306,7 +309,7 @@ export default function GameDashboard({ gameId }: Props) {
   }, [gameId, setIsScanning, setManifest, addLog]);
 
   useEffect(() => {
-    handleScan(false);
+    if (!manifestIsFresh(gameId)) handleScan(false);
   }, [gameId]);
 
   const hasPacks = !!gameDef?.packs;

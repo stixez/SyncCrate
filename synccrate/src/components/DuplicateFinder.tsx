@@ -24,6 +24,8 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [keep, setKeep] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<{ paths: string[]; keep: Record<string, string>; bytes: number } | null>(null);
+  // Capped: every radio click re-rendered all groups (thousands of rows).
+  const [limit, setLimit] = useState(50);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,13 +64,13 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
     setBusy(true);
     let ok = 0;
     const errors: string[] = [];
-    for (const p of paths) {
-      try {
-        await cmd.toggleMod(gameId, p, false);
-        ok++;
-      } catch (e) {
-        errors.push(`${p}: ${e}`);
+    try {
+      for (const o of await cmd.toggleMods(gameId, paths, false)) {
+        if (o.new_path != null) ok++;
+        else errors.push(`${o.path}: ${o.error}`);
       }
+    } catch (e) {
+      errors.push(`${e}`);
     }
     setBusy(false);
     if (ok) toastSuccess(`Disabled ${ok} duplicate${ok !== 1 ? "s" : ""}`);
@@ -163,7 +165,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim">No duplicates. Every file is unique.</p>
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-          {(groups ?? []).map((g) => (
+          {(groups ?? []).slice(0, limit).map((g) => (
             <div key={g.hash} className="bg-bg border border-border">
               <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border">
                 <span className="font-mono text-[11px] text-txt-dim">
@@ -206,6 +208,11 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
               </div>
             </div>
           ))}
+          {(groups?.length ?? 0) > limit && (
+            <Button size="sm" variant="ghost" block onClick={() => setLimit((n) => n + 50)}>
+              Show more ({(groups?.length ?? 0) - limit} more groups)
+            </Button>
+          )}
         </div>
       )}
     </Panel>

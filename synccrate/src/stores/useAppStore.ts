@@ -73,6 +73,9 @@ interface AppState {
 
   manifest: FileManifest | null;
   setManifest: (manifest: FileManifest | null) => void;
+  /** Game the manifest was scanned for (the selected game at the time) and when. */
+  manifestGame: string | null;
+  manifestAt: number;
 
   session: SessionStatus | null;
   setSession: (session: SessionStatus | null) => void;
@@ -250,7 +253,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveGame: (game) => set({ activeGame: game }),
 
   manifest: null,
-  setManifest: (manifest) => set({ manifest }),
+  // A rescan that found nothing new keeps the old object: every list,
+  // count and backend lookup keyed on the manifest re-ran on each identical
+  // rescan (30k files: the watcher's rescan after every toggle, every visit).
+  setManifest: (manifest) =>
+    set((s) => ({
+      manifest: manifest && s.manifest && s.manifestGame === s.selectedGame && sameFiles(s.manifest, manifest) ? s.manifest : manifest,
+      manifestGame: manifest ? s.selectedGame : null,
+      manifestAt: manifest ? Date.now() : 0,
+    })),
+  manifestGame: null,
+  manifestAt: 0,
 
   session: null,
   setSession: (session) => set({ session }),
@@ -391,8 +404,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       page: page ?? "dashboard",
       // Clear stale data when switching to a different game
       ...(state.selectedGame !== gameId
-        ? { manifest: null, activeContentTab: null, modCompatibility: [] }
+        ? { manifest: null, manifestGame: null, manifestAt: 0, activeContentTab: null, modCompatibility: [] }
         : {}),
     })),
   navigateToGlobal: (page) => set({ page, selectedGame: null }),
 }));
+
+/** Same files with the same size, date, hash and type. */
+function sameFiles(a: FileManifest, b: FileManifest): boolean {
+  const ka = Object.keys(a.files);
+  if (ka.length !== Object.keys(b.files).length) return false;
+  for (const k of ka) {
+    const x = a.files[k], y = b.files[k];
+    if (!y || x.size !== y.size || x.modified !== y.modified || x.hash !== y.hash || x.file_type !== y.file_type || x.relative_path !== y.relative_path) return false;
+  }
+  return true;
+}
