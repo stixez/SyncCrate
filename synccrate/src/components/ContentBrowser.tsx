@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type CSSProperties, type ReactNode } from "react";
 import {
   Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles,
   ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift,
@@ -400,12 +400,18 @@ export default function ContentBrowser({ gameId }: Props) {
     return keys;
   }, [isModLike, tabStats]);
 
+  // Deferred: with 100k+ files, filtering, counting and sorting on every
+  // keystroke made typing lag by seconds. React renders the typed text
+  // first and catches the list up.
+  const deferredSearch = useDeferredValue(search);
+  const lowerPaths = useMemo(() => new Map(tabFiles.map((f) => [f.relative_path, f.relative_path.toLowerCase()])), [tabFiles]);
+  const names = useMemo(() => new Map(tabFiles.map((f) => [f.relative_path, fileName(f.relative_path)])), [tabFiles]);
   const searched = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return q
-      ? tabFiles.filter((f) => f.relative_path.toLowerCase().includes(q) || !!metaFor(f.relative_path)?.name.toLowerCase().includes(q))
+      ? tabFiles.filter((f) => (lowerPaths.get(f.relative_path) ?? "").includes(q) || !!metaFor(f.relative_path)?.name.toLowerCase().includes(q))
       : tabFiles;
-  }, [tabFiles, search, metaFor]);
+  }, [tabFiles, deferredSearch, metaFor, lowerPaths]);
 
   // OR within a chip group, AND across groups.
   const matchStatus = useCallback(
@@ -451,10 +457,10 @@ export default function ContentBrowser({ gameId }: Props) {
           case "date": return b.modified - a.modified;
           case "status": return getSyncStatus(a.relative_path).localeCompare(getSyncStatus(b.relative_path)) || a.relative_path.localeCompare(b.relative_path);
           // By file name (not path) so the flat view isn't just folder order again.
-          default: return collator.compare(fileName(a.relative_path), fileName(b.relative_path)) || a.relative_path.localeCompare(b.relative_path);
+          default: return collator.compare(names.get(a.relative_path) ?? "", names.get(b.relative_path) ?? "") || a.relative_path.localeCompare(b.relative_path);
         }
       });
-  }, [searched, matchStatus, matchTags, matchKind, sortBy, getSyncStatus]);
+  }, [searched, matchStatus, matchTags, matchKind, sortBy, getSyncStatus, names]);
 
   const filtersActive = search.trim() !== "" || statusFilter.size > 0 || tagFilter.size > 0 || kindFilter.size > 0;
   const clearFilters = () => {

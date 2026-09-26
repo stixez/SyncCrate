@@ -64,8 +64,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel) · 
 
 **Sync**
 - **Only what changed.** SHA-256 diffing, zstd compression (50–80% less data), 100–900 MB/s peer-to-peer on LAN.
-- **You decide.** Review the plan with size and time estimate, exclude files or glob patterns, and resolve conflicts per file: keep yours, use theirs, keep both, or keep newer.
-- **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done.
+- **You decide.** Review the plan with size and time estimate, exclude files or patterns (`*.ts4script`, `Mods/WickedWhims/*`, or just a file name; case doesn't matter), and resolve conflicts per file: keep yours, use theirs, keep both, or keep newer.
+- **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done. Files over 2 GB are listed as skipped instead of breaking the rest of the sync.
 
 **Connect**
 - **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`synccrate://join/…`): clicking it opens SyncCrate with the code filled in for the right game (or offers to switch games). Nothing connects or syncs until the friend clicks Join and confirms the plan.
