@@ -62,8 +62,9 @@ export function useSync() {
       }
     } catch (e: any) {
       // Early backend errors return before `sync-complete` fires; don't leave
-      // the progress bar stuck.
+      // the progress bar (or a failed presync backup's counts) stuck.
       useAppStore.getState().setSyncProgress(null);
+      if (useAppStore.getState().backupProgress?.phase === "presync") useAppStore.getState().setBackupProgress(null);
       if (String(e).includes("Game folder changed")) {
         // The backend dropped the stale plan; don't offer to run it again.
         setSyncPlan(null);

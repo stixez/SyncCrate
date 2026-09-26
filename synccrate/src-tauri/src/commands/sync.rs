@@ -245,6 +245,14 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
     let unreceivable = diff::drop_unreceivable(&mut remote);
 
     let mut plan = diff::compute_diff(&local, &remote);
+    plan.delete_hashes = plan
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            SyncAction::Delete(p) => local.files.get(p).filter(|f| !f.hash.is_empty()).map(|f| (p.clone(), f.hash.clone())),
+            _ => None,
+        })
+        .collect();
     drop(local);
     drop(remote);
     plan.game_id = active_game;
@@ -671,26 +679,20 @@ async fn run_sync(
             path.map_or(true, |p| !excluded.contains(p.as_str()))
         })
         .count() as u64;
-    // What each file to delete looked like when the plan was made (the
-    // compare's hashed scan): replacements were checked against it, deletes
-    // weren't, so a file edited after Compare was deleted anyway.
-    let planned_hashes: HashMap<String, String> = {
-        let st = state.lock().await;
-        plan.actions
-            .iter()
-            .filter_map(|a| match a {
-                SyncAction::Delete(p) => st.local_manifest.files.get(p).map(|f| (p.clone(), f.hash.clone())),
-                _ => None,
-            })
-            .collect()
-    };
+    // What each file to delete looked like at Compare (recorded in the plan):
+    // replacements were checked against it, deletes weren't, so a file
+    // edited after Compare was deleted anyway.
+    let planned_hashes: &HashMap<String, String> = &plan.delete_hashes;
     let mut files_done = 0u64;
     // One progress event per file re-rendered the dashboard hundreds of times
     // a second on folders of small files; ~10 a second (and the last file
     // always) looks the same.
     let mut last_progress: Option<std::time::Instant> = None;
     let mut bytes_done = 0u64;
-    let mut sync_errors: Vec<String> = history_not_kept
+    let mut sync_errors: Vec<String> = Vec::new();
+    // Not failures (every file may have synced): reported separately, so a
+    // fully successful sync isn't called failed.
+    let sync_warnings: Vec<String> = history_not_kept
         .iter()
         .map(|p| format!("{p}: couldn't keep the old version in file history before replacing it"))
         .collect();
@@ -953,6 +955,7 @@ async fn run_sync(
             "files_synced": files_done,
             "total_bytes": plan.total_bytes,
             "errors": sync_errors,
+            "warnings": sync_warnings,
             "peer_id": peer_id,
             "cancelled": cancelled,
         }),

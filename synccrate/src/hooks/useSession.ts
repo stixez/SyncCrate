@@ -60,6 +60,9 @@ export function useSession() {
     const label = useAppStore.getState().discoveredPeers.find((p) => p.id === peerId)?.name ?? "host";
     setLastConnectAttempt({ kind: "peer", peerId, label, pin });
     setPinPrompt(null);
+    // The user's own attempt wins over a running auto-reconnect (whose "Stop
+    // trying" would otherwise cancel this handshake).
+    useAppStore.getState().setReconnecting(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog("Connecting to host...", "info");
@@ -77,6 +80,9 @@ export function useSession() {
   const connectByIp = async (ip: string, port: number, name: string, pin?: string, label?: string) => {
     setLastConnectAttempt({ kind: "ip", ip, port, name, label: label ?? `${ip}:${port}`, pin });
     setPinPrompt(null);
+    // The user's own attempt wins over a running auto-reconnect (whose "Stop
+    // trying" would otherwise cancel this handshake).
+    useAppStore.getState().setReconnecting(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog(`Connecting to ${ip}:${port}...`, "info");
@@ -94,6 +100,9 @@ export function useSession() {
   const connectByCode = async (code: string, name: string, pin?: string) => {
     setLastConnectAttempt({ kind: "code", code, name, label: "host", pin });
     setPinPrompt(null);
+    // The user's own attempt wins over a running auto-reconnect (whose "Stop
+    // trying" would otherwise cancel this handshake).
+    useAppStore.getState().setReconnecting(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog("Connecting with join code...", "info");
@@ -113,6 +122,9 @@ export function useSession() {
   const connectCrew = async (crewId: string, nodeId: string | undefined, name: string, label: string, pin?: string) => {
     setLastConnectAttempt({ kind: "crew", crewId, nodeId, name, label, pin });
     setPinPrompt(null);
+    // The user's own attempt wins over a running auto-reconnect (whose "Stop
+    // trying" would otherwise cancel this handshake).
+    useAppStore.getState().setReconnecting(null);
     setIsLoading(true);
     setIsConnecting(true);
     addLog(`Connecting to ${label}...`, "info");
