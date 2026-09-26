@@ -330,7 +330,20 @@ pub async fn confirm_install_duplicate(
                 }
                 (root, id, rel)
             });
-            let copied = std::fs::copy(source_path, &dest).map_err(|e| e.to_string());
+            // Through a temp file: copying straight over the old one left it
+            // truncated when the copy failed (disk full), and the kept
+            // version was then dropped as "nothing replaced".
+            let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let tmp = dest.with_file_name(format!(".{}.{}.synccrate-restore.tmp", name, uuid::Uuid::new_v4()));
+            let copied = std::fs::copy(source_path, &tmp)
+                .and_then(|_| {
+                    crate::utils::make_replaceable(&dest);
+                    std::fs::rename(&tmp, &dest)
+                })
+                .map_err(|e| {
+                    let _ = std::fs::remove_file(&tmp);
+                    e.to_string()
+                });
             if let Some((root, id, rel)) = capture {
                 // On failure nothing was replaced: finishing with no paths drops the pending copy.
                 let changed = if copied.is_ok() { vec![(rel, crate::commands::history::REASON_INSTALL_REPLACED)] } else { Vec::new() };

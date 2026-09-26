@@ -59,9 +59,21 @@ mod win {
             .map_err(|e| format!("Failed to run PowerShell: {}", e))
     }
 
-    /// PowerShell single-quoted string literal.
+    /// PowerShell single-quoted string literal. PowerShell also ends a
+    /// single-quoted string at the curly quotes U+2018..U+201B, so an install
+    /// path like `C:\Users\O’Brien\...` broke (or could inject into) the
+    /// elevated firewall script. Each quote is escaped by doubling it.
     pub fn ps_quote(s: &str) -> String {
-        format!("'{}'", s.replace('\'', "''"))
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('\'');
+        for c in s.chars() {
+            if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+                out.push(c);
+            }
+            out.push(c);
+        }
+        out.push('\'');
+        out
     }
 
     pub fn is_elevated() -> bool {
@@ -304,5 +316,6 @@ mod tests {
     #[test]
     fn ps_quote_escapes_single_quotes() {
         assert_eq!(win::ps_quote("C:\\it's\\a.exe"), "'C:\\it''s\\a.exe'");
+        assert_eq!(win::ps_quote("C:\\O\u{2019}Brien"), "'C:\\O\u{2019}\u{2019}Brien'", "curly quotes end PowerShell strings too");
     }
 }

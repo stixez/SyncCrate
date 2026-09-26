@@ -4,7 +4,7 @@ use crate::network::transfer;
 use crate::state::{AppState, ConflictPair, FileInfo, ReplaceTarget, Resolution, SyncAction, SyncPlan};
 use crate::sync::diff;
 use crate::utils;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -460,6 +460,8 @@ pub(crate) async fn execute_sync_inner(
     // Keep the versions this sync will replace or delete (best-effort; see
     // `commands::history`). Only the ones it really changes are kept after.
     let mut history_capture: Option<String> = None;
+    // Files the capture couldn't keep: reported with the sync's problems.
+    let mut history_not_kept: Vec<String> = Vec::new();
     if read_sync_config().keep_file_history {
         let targets = crate::commands::backup::presync_targets(&plan);
         if !targets.is_empty() {
@@ -474,19 +476,22 @@ pub(crate) async fn execute_sync_inner(
                     // into the store: index those objects instead of reading
                     // and hashing every file a second time.
                     Some(backup_id) => crate::commands::history::begin_capture_from_backup(&root, &game, &base, &backup_id, &cts, &targets, &peer, &id, now),
-                    None => crate::commands::history::begin_capture(&root, &game, &base, &targets, &peer, &id, now),
+                    None => crate::commands::history::begin_capture_detailed(&root, &game, &base, &targets, &peer, &id, now),
                 }
             })
             .await;
             match captured {
-                Ok(Ok(_)) => history_capture = Some(capture_id),
+                Ok(Ok((_, failed))) => {
+                    history_capture = Some(capture_id);
+                    history_not_kept = failed;
+                }
                 Ok(Err(e)) => log::warn!("File history capture failed: {}", e),
                 Err(e) => log::warn!("File history capture failed: {}", e),
             }
         }
     }
 
-    let result = run_sync(state, &events, &plan, &base_path, &resolved_id, presync_backup_id, history_capture).await;
+    let result = run_sync(state, &events, &plan, &base_path, &resolved_id, presync_backup_id, history_capture, history_not_kept).await;
 
     {
         let mut app_state = state.lock().await;
@@ -613,6 +618,7 @@ async fn run_sync(
     peer_id: &str,
     presync_backup_id: Option<String>,
     history_capture: Option<String>,
+    history_not_kept: Vec<String>,
 ) -> Result<(), String> {
     // A set: `Vec::contains` per action was quadratic with big selections.
     let excluded: HashSet<&str> = plan.excluded.iter().map(String::as_str).collect();
@@ -627,13 +633,29 @@ async fn run_sync(
             path.map_or(true, |p| !excluded.contains(p.as_str()))
         })
         .count() as u64;
+    // What each file to delete looked like when the plan was made (the
+    // compare's hashed scan): replacements were checked against it, deletes
+    // weren't, so a file edited after Compare was deleted anyway.
+    let planned_hashes: HashMap<String, String> = {
+        let st = state.lock().await;
+        plan.actions
+            .iter()
+            .filter_map(|a| match a {
+                SyncAction::Delete(p) => st.local_manifest.files.get(p).map(|f| (p.clone(), f.hash.clone())),
+                _ => None,
+            })
+            .collect()
+    };
     let mut files_done = 0u64;
     // One progress event per file re-rendered the dashboard hundreds of times
     // a second on folders of small files; ~10 a second (and the last file
     // always) looks the same.
     let mut last_progress: Option<std::time::Instant> = None;
     let mut bytes_done = 0u64;
-    let mut sync_errors: Vec<String> = Vec::new();
+    let mut sync_errors: Vec<String> = history_not_kept
+        .iter()
+        .map(|p| format!("{p}: couldn't keep the old version in file history before replacing it"))
+        .collect();
     let mut files_received = 0u64;
     let started = std::time::Instant::now();
     let state_arc = state.clone();
@@ -801,7 +823,19 @@ async fn run_sync(
             SyncAction::Delete(path) => {
                 match crate::utils::safe_join(base_path, path) {
                     Ok(full_path) => {
-                        if let Err(e) = tokio::fs::remove_file(&full_path).await {
+                        let want = planned_hashes.get(path).filter(|h| !h.is_empty()).cloned();
+                        let changed = match want {
+                            Some(want) => {
+                                let p = full_path.clone();
+                                tokio::task::spawn_blocking(move || crate::commands::files::compute_file_hash(&p).is_ok_and(|h| h != want))
+                                    .await
+                                    .unwrap_or(true)
+                            }
+                            None => false,
+                        };
+                        if changed {
+                            sync_errors.push(format!("Delete {}: changed since you compared, so it was left alone", path));
+                        } else if let Err(e) = tokio::fs::remove_file(&full_path).await {
                             sync_errors.push(format!("Delete {}: {}", path, crate::utils::plain_io_error(&e.to_string())));
                         } else {
                             checkpoint_writer.file_done(&mut checkpoint, path);

@@ -40,6 +40,9 @@ pub const REASON_DUPLICATE_REMOVED: &str = "duplicate-removed";
 pub const REASON_REMOVED: &str = "removed";
 /// Replaced by dropping a file with the same name and choosing "Overwrite".
 pub const REASON_INSTALL_REPLACED: &str = "install-replaced";
+/// Captured by a sync that never finished (the app crashed or was killed):
+/// the file may or may not have been replaced, so the old copy stays.
+pub const REASON_INTERRUPTED: &str = "interrupted";
 /// Rewritten by a health-check fix (a Paradox descriptor's path made portable).
 pub const REASON_PATH_FIXED: &str = "path-fixed";
 
@@ -118,18 +121,25 @@ pub(crate) fn referenced_hashes(root: &Path) -> Result<HashSet<String>, String> 
     Ok(out)
 }
 
-/// Retention, newest first wins: stale pending entries go, then anything past
-/// the age limit, then past the per-file count, then the oldest versions
-/// until the game's unique bytes fit. Keeps `entries` oldest-first (append
-/// order breaks ties, since several versions can share a second). Returns
-/// whether anything was removed.
-fn prune(entries: &mut Vec<FileVersion>, now: u64) -> bool {
+/// Retention, newest first wins: anything past the age limit, then past the
+/// per-file count, then the oldest versions until the game's unique bytes
+/// fit. Stale pending entries (a sync that crashed mid-way) are kept as
+/// "interrupted": dropping them lost the only old copy of files that sync
+/// had already replaced. `protected` ids (versions saved by the call that's
+/// pruning) are never evicted for space: a big sync used to throw away the
+/// versions it had just saved. Keeps `entries` oldest-first (append order
+/// breaks ties, since several versions can share a second). Returns whether
+/// anything was removed.
+fn prune(entries: &mut Vec<FileVersion>, now: u64, protected: &HashSet<String>) -> bool {
     let before = entries.len();
     entries.sort_by_key(|e| e.at);
-    entries.retain(|e| match &e.pending {
-        Some(_) => now.saturating_sub(e.at) < PENDING_TTL_SECS,
-        None => now.saturating_sub(e.at) < MAX_AGE_SECS,
-    });
+    for e in entries.iter_mut() {
+        if e.pending.is_some() && now.saturating_sub(e.at) >= PENDING_TTL_SECS {
+            e.pending = None;
+            e.reason = REASON_INTERRUPTED.into();
+        }
+    }
+    entries.retain(|e| e.pending.is_some() || now.saturating_sub(e.at) < MAX_AGE_SECS);
     let mut keep = vec![true; entries.len()];
     let mut per_file: HashMap<String, usize> = HashMap::new();
     let mut seen = HashSet::new();
@@ -145,7 +155,7 @@ fn prune(entries: &mut Vec<FileVersion>, now: u64) -> bool {
             bytes += e.size;
         }
         // The newest version always stays, even if it alone is over the cap.
-        if bytes > MAX_BYTES_PER_GAME && i + 1 != entries.len() {
+        if bytes > MAX_BYTES_PER_GAME && i + 1 != entries.len() && !protected.contains(&e.id) {
             keep[i] = false;
         }
     }
@@ -158,9 +168,16 @@ fn prune(entries: &mut Vec<FileVersion>, now: u64) -> bool {
 /// them as pending under `capture_id`. Files that don't exist (or aren't
 /// regular files) are skipped. Blocking; call via `spawn_blocking`.
 pub(crate) fn begin_capture(root: &Path, game: &str, base: &str, targets: &[String], peer: &str, capture_id: &str, now: u64) -> Result<usize, String> {
+    begin_capture_detailed(root, game, base, targets, peer, capture_id, now).map(|(n, _)| n)
+}
+
+/// `begin_capture` that also returns the files it couldn't keep (disk full,
+/// locked): a sync used to replace them with no old copy and never say so.
+pub(crate) fn begin_capture_detailed(root: &Path, game: &str, base: &str, targets: &[String], peer: &str, capture_id: &str, now: u64) -> Result<(usize, Vec<String>), String> {
     let _lock = backup::store_lock();
     let mut h = load(root, game)?;
     let mut n = 0;
+    let mut failed = Vec::new();
     let mut seen = HashSet::new();
     for rel in targets {
         if !seen.insert(rel.to_lowercase()) {
@@ -186,13 +203,16 @@ pub(crate) fn begin_capture(root: &Path, game: &str, base: &str, targets: &[Stri
                 });
                 n += 1;
             }
-            Err(e) => log::warn!("File history: couldn't keep {}: {}", rel, e),
+            Err(e) => {
+                log::warn!("File history: couldn't keep {}: {}", rel, e);
+                failed.push(rel.replace('\\', "/"));
+            }
         }
     }
     if n > 0 {
         save(root, game, &h)?;
     }
-    Ok(n)
+    Ok((n, failed))
 }
 
 /// `begin_capture` when "back up before sync" just stored exactly these files:
@@ -209,7 +229,7 @@ pub(crate) fn begin_capture_from_backup(
     peer: &str,
     capture_id: &str,
     now: u64,
-) -> Result<usize, String> {
+) -> Result<(usize, Vec<String>), String> {
     let (n, missing) = {
         let _lock = backup::store_lock();
         let objects = backup::backup_objects(root, backup_id, cts)?;
@@ -247,9 +267,10 @@ pub(crate) fn begin_capture_from_backup(
         (n, missing)
     };
     if missing.is_empty() {
-        return Ok(n);
+        return Ok((n, Vec::new()));
     }
-    Ok(n + begin_capture(root, game, base, &missing, peer, capture_id, now)?)
+    let (copied, failed) = begin_capture_detailed(root, game, base, &missing, peer, capture_id, now)?;
+    Ok((n + copied, failed))
 }
 
 /// After the sync: keep the pending versions of files it really replaced or
@@ -273,6 +294,7 @@ fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &
     let _lock = backup::store_lock();
     let mut h = load(root, game)?;
     let before = h.entries.len();
+    let mut settled = HashSet::new();
     h.entries.retain_mut(|e| {
         if e.pending.as_deref() != Some(capture_id) {
             return true;
@@ -280,13 +302,14 @@ fn settle(root: &Path, game: &str, capture_id: &str, reasons: &HashMap<String, &
         let Some(reason) = reasons.get(&e.path.to_lowercase()) else { return false };
         e.reason = reason.to_string();
         e.pending = None;
+        settled.insert(e.id.clone());
         true
     });
     // Versions the sync didn't replace after all (cancelled, or refused as
     // changed locally) were dropped above; their objects need GC too, or they
     // leaked for anyone without backups (the only other GC trigger).
     let dropped = h.entries.len() < before;
-    let pruned = prune(&mut h.entries, now);
+    let pruned = prune(&mut h.entries, now, &settled);
     save(root, game, &h)?;
     // GC must run under the store lock, like every other caller: unlocked,
     // it would delete a concurrent backup's objects/tmp files and objects no
@@ -344,6 +367,10 @@ fn restore(root: &Path, game: &str, base: &str, id: &str, now: u64) -> Result<Fi
             peer: String::new(),
             pending: None,
         });
+        // Saved before the file is replaced: if saving failed afterwards, the
+        // before-restore copy's object was unreferenced and the next GC
+        // deleted the user's file as it was before the restore.
+        save(root, game, &h)?;
     }
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -362,7 +389,7 @@ fn restore(root: &Path, game: &str, base: &str, id: &str, now: u64) -> Result<Fi
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("Couldn't restore {}: {}", v.path, e));
     }
-    let pruned = prune(&mut h.entries, now);
+    let pruned = prune(&mut h.entries, now, &HashSet::new());
     save(root, game, &h)?;
     if pruned {
         backup::gc_logged(root);
@@ -437,9 +464,10 @@ mod tests {
         let live = FileVersion { pending: Some("live".into()), ..v("q", "hq", 1, now) };
         e.push(stale);
         e.push(live);
-        assert!(prune(&mut e, now));
+        assert!(prune(&mut e, now, &HashSet::new()));
         assert!(!e.iter().any(|x| x.path == "a"), "past the age limit");
-        assert!(!e.iter().any(|x| x.path == "p"), "a pending entry from a crashed sync");
+        let p = e.iter().find(|x| x.path == "p").expect("a crashed sync's pending entry is kept");
+        assert!(p.pending.is_none() && p.reason == REASON_INTERRUPTED);
         assert!(e.iter().any(|x| x.path == "q"), "a running sync's pending entry stays");
         let x: Vec<_> = e.iter().filter(|x| x.path == "Mods/X.package").collect();
         assert_eq!(x.len(), MAX_VERSIONS_PER_FILE);
@@ -448,9 +476,14 @@ mod tests {
         // Byte cap: shared hashes count once; the oldest go first.
         let big = MAX_BYTES_PER_GAME / 2 + 1;
         let mut e = vec![v("a", "A", big, 30), v("b", "A", big, 20), v("c", "C", big, 10)];
-        prune(&mut e, 40);
+        prune(&mut e, 40, &HashSet::new());
         let paths: Vec<_> = e.iter().map(|x| x.path.as_str()).collect();
         assert_eq!(paths, vec!["b", "a"], "a and b share one object; c would pass the cap");
+        // Versions the pruning call just saved aren't evicted for space.
+        let mut e = vec![v("a", "A", big, 30), v("b", "A", big, 20), v("c", "C", big, 10)];
+        let just_saved: HashSet<String> = [e[2].id.clone()].into_iter().collect();
+        prune(&mut e, 40, &just_saved);
+        assert!(e.iter().any(|x| x.path == "c"));
     }
 
     fn setup() -> (PathBuf, PathBuf, String) {

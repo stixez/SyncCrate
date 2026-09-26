@@ -90,7 +90,9 @@ fn clean_version(s: &str) -> Option<String> {
 fn clean_url(s: &str) -> Option<String> {
     let s = s.trim();
     let lower = s.to_ascii_lowercase();
-    let ok = (lower.starts_with("https://") || lower.starts_with("http://")) && s.len() <= 300 && !s.chars().any(|c| c.is_whitespace() || c.is_control());
+    // https only: these come from mod files (a friend's, via sync) and open
+    // in the browser on one click.
+    let ok = lower.starts_with("https://") && s.len() <= 300 && !s.chars().any(|c| c.is_whitespace() || c.is_control());
     ok.then(|| s.to_string())
 }
 
