@@ -189,6 +189,7 @@ pub async fn export_profile(id: String, dest: String) -> Result<(), String> {
     };
 
     std::fs::write(&dest_path, data).map_err(|e| e.to_string())?;
+    crate::commands::files::allow_open_export_dir(std::path::Path::new(&dest_path));
     Ok(())
 }
 

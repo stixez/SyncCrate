@@ -215,7 +215,7 @@ pub fn detect_game_version(game_id: &str, game_path: &str) -> Option<String> {
 /// The Sims 4 install folder, where the pack folders (EP01, GP01, ...) are:
 /// the folder SyncCrate syncs is the one in Documents, which has none, so no
 /// pack was ever detected. Found the way the ReShade entry finds Game\Bin.
-fn sims4_install_dir() -> Option<std::path::PathBuf> {
+pub(crate) fn sims4_install_dir() -> Option<std::path::PathBuf> {
     let reg = crate::registry::load_registry();
     let def = reg.games.iter().find(|g| g.id == "sims4-reshade")?;
     let bin = crate::utils::detect_game_path_from_def(def)?;

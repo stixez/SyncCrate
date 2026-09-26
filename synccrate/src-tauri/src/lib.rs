@@ -473,6 +473,8 @@ pub fn run() {
             commands::sync::get_clear_cache_after_sync,
             commands::sync::set_clear_cache_after_sync,
             commands::game_state::check_game_running,
+            commands::game_state::can_launch_game,
+            commands::game_state::launch_game,
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,

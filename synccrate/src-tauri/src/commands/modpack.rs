@@ -196,7 +196,9 @@ pub async fn save_pack(pack: ModPack, dest: String) -> Result<(), String> {
     validate_pack(&pack)?;
     let dest = if dest.to_lowercase().ends_with(".scpack") { dest } else { format!("{}.scpack", dest) };
     let data = serde_json::to_string_pretty(&pack).map_err(|e| e.to_string())?;
-    std::fs::write(&dest, data).map_err(|e| e.to_string())
+    std::fs::write(&dest, data).map_err(|e| e.to_string())?;
+    crate::commands::files::allow_open_export_dir(std::path::Path::new(&dest));
+    Ok(())
 }
 
 /// Base64 of the pack's compact JSON, for pasting or a `synccrate://pack/`
