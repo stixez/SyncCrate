@@ -293,25 +293,10 @@ pub fn run() {
                 drop(app_state);
 
                 // Start file watcher for active game's content type folders
-                let watcher_result = if let Some(base_path) = game_paths.get(&active_game) {
-                    let game_def = game_registry.games.iter().find(|g| g.id == active_game);
-                    let watch_paths: Vec<String> = game_def
-                        .map(|def| {
-                            def.content_types
-                                .iter()
-                                .map(|ct| {
-                                    std::path::PathBuf::from(base_path)
-                                        .join(&ct.folder)
-                                        .to_string_lossy()
-                                        .to_string()
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    Some(watcher::file_watcher::start_watching(&watch_paths, handle))
-                } else {
-                    None
-                };
+                let watcher_result = game_paths.get(&active_game).map(|base_path| {
+                    let cts = game_registry.games.iter().find(|g| g.id == active_game).map(|d| d.content_types.as_slice()).unwrap_or_default();
+                    watcher::file_watcher::start_watching(watcher::file_watcher::watch_spec(base_path, cts), handle)
+                });
 
                 // Auto-detect packs for all detected games
                 let mut game_info_map = std::collections::HashMap::new();
