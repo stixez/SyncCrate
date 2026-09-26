@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { friendlyError } from "../lib/errors";
+import { manifestIsCurrent } from "../lib/manifest";
 import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SyncFolderPermissions, GameInfo, ContentTypeDefinition } from "../lib/types";
@@ -303,7 +304,7 @@ export default function GameDashboard({ gameId }: Props) {
   }, [gameId, setIsScanning, setManifest, addLog]);
 
   useEffect(() => {
-    handleScan(false);
+    if (!manifestIsCurrent(gameId)) handleScan(false);
   }, [gameId]);
 
   const hasPacks = !!gameDef?.packs;
