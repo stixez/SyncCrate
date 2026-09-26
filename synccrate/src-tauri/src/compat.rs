@@ -10,6 +10,9 @@
 //!   deep, `.package` more than five folders deep (both silently ignored by
 //!   the game), and `.zip` archives holding `.package` files (never loaded;
 //!   they need extracting).
+//! - Paradox games: `mod/<name>.mod` descriptors whose `path=` is an
+//!   absolute path. The launcher writes those, and once synced they point at
+//!   a folder on the host's PC; `path="mod/<folder>"` works everywhere.
 use crate::registry::GameDefinition;
 use crate::state::FileManifest;
 use serde::Serialize;
@@ -19,6 +22,12 @@ use std::path::Path;
 const MAX_PATHS: usize = 50;
 const MAX_ZIPS_INSPECTED: usize = 500;
 pub const FIX_SIMS4_ENABLE_MODS: &str = "sims4_enable_mods";
+pub const FIX_PARADOX_RELATIVE_PATHS: &str = "paradox_relative_mod_paths";
+/// Games whose launcher finds local mods through `mod/<name>.mod`
+/// descriptors with a `path=` line (Victoria 3 uses metadata.json instead).
+pub const PARADOX_DESCRIPTOR_GAMES: &[&str] = &["crusader_kings_3", "europa_universalis_4", "hearts_of_iron_4", "stellaris"];
+/// Descriptors are a few lines; anything bigger isn't one.
+pub const MAX_DESCRIPTOR_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct CompatIssue {
@@ -194,6 +203,106 @@ pub fn check_sims4(manifest: &FileManifest, options_ini: Option<&str>, zip_has_p
     out
 }
 
+/// The `path="..."` value of a Paradox descriptor, and the line it's on.
+fn descriptor_path_line(text: &str) -> Option<(usize, String)> {
+    text.lines().enumerate().find_map(|(i, line)| {
+        let rest = line.trim_start().strip_prefix("path")?.trim_start().strip_prefix('=')?.trim();
+        let value = rest.trim_matches('"');
+        (!value.is_empty()).then(|| (i, value.to_string()))
+    })
+}
+
+/// A path the launcher wrote for this PC: `C:/...`, `C:\...`, `/home/...`, `~/...`.
+fn is_absolute_mod_path(p: &str) -> bool {
+    let b = p.as_bytes();
+    p.starts_with('/') || p.starts_with('\\') || p.starts_with('~') || (b.len() > 2 && b[1] == b':' && b[0].is_ascii_alphabetic())
+}
+
+/// The mod folder a descriptor path ends in.
+fn mod_folder_name(p: &str) -> Option<&str> {
+    p.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().filter(|s| !s.is_empty() && *s != "." && *s != "..")
+}
+
+/// Descriptors (`mod/<name>.mod`) whose path is absolute, split into the
+/// ones pointing at a folder that exists on this PC (fixable here) and ones
+/// that came from someone else's PC. Only descriptors whose mod folder is
+/// really in `mod/` here count; `(descriptor, folder)` pairs.
+pub fn absolute_descriptors(
+    manifest: &FileManifest,
+    read: impl Fn(&str) -> Option<String>,
+    dir_exists: impl Fn(&str) -> bool,
+) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    let (mut own, mut foreign) = (Vec::new(), Vec::new());
+    for key in manifest.files.keys() {
+        let lower = key.to_ascii_lowercase();
+        let Some(name) = lower.strip_prefix("mod/") else { continue };
+        if name.contains('/') || !name.ends_with(".mod") || name.starts_with("ugc_") {
+            continue;
+        }
+        let Some((_, path)) = read(key).as_deref().and_then(descriptor_path_line) else { continue };
+        if !is_absolute_mod_path(&path) {
+            continue;
+        }
+        let Some(folder) = mod_folder_name(&path) else { continue };
+        let prefix = format!("mod/{}/", folder.to_ascii_lowercase());
+        if !manifest.files.keys().any(|k| k.to_ascii_lowercase().starts_with(&prefix)) {
+            continue; // the mod itself isn't here: a different problem
+        }
+        let entry = (key.clone(), folder.to_string());
+        if dir_exists(&path) { own.push(entry) } else { foreign.push(entry) }
+    }
+    own.sort();
+    foreign.sort();
+    (own, foreign)
+}
+
+/// The descriptor with its `path=` line changed to `path="mod/<folder>"`,
+/// everything else (line endings included) untouched.
+pub fn relative_descriptor(text: &str, folder: &str) -> String {
+    let Some((idx, _)) = descriptor_path_line(text) else { return text.to_string() };
+    let mut out = String::with_capacity(text.len());
+    for (i, line) in text.split_inclusive('\n').enumerate() {
+        if i == idx {
+            let indent = &line[..line.len() - line.trim_start().len()];
+            let ending = if line.ends_with("\r\n") { "\r\n" } else if line.ends_with('\n') { "\n" } else { "" };
+            out.push_str(&format!("{indent}path=\"mod/{folder}\"{ending}"));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Paradox checks: descriptors with absolute paths, here or from another PC.
+pub fn check_paradox(manifest: &FileManifest, read: impl Fn(&str) -> Option<String>, dir_exists: impl Fn(&str) -> bool) -> Vec<CompatIssue> {
+    let (own, foreign) = absolute_descriptors(manifest, read, dir_exists);
+    let plural = |n: usize| if n == 1 { "" } else { "s" };
+    let mut out = Vec::new();
+    if !own.is_empty() {
+        let n = own.len();
+        let mut i = issue(
+            "paradox_absolute_paths",
+            "warn",
+            format!("{n} mod{} only work on this PC", plural(n)),
+            "Their descriptors point at the mod folder by its full path on this PC, so friends who sync them get a path that doesn't exist on their PC. SyncCrate can switch them to path=\"mod/<folder>\", which works on every PC. The old versions stay in File history.",
+            own.into_iter().map(|(d, _)| d).collect(),
+        );
+        i.fix = Some(FIX_PARADOX_RELATIVE_PATHS.into());
+        out.push(i);
+    }
+    if !foreign.is_empty() {
+        let n = foreign.len();
+        out.push(issue(
+            "paradox_foreign_paths",
+            "warn",
+            format!("{n} mod{} point at another PC's folder", plural(n)),
+            "These descriptors came with a full path to a folder on someone else's PC, so the launcher can't find the mods. Ask whoever hosts to run this health check and let SyncCrate fix their mod paths, then sync again.",
+            foreign.into_iter().map(|(d, _)| d).collect(),
+        ));
+    }
+    out
+}
+
 /// Whether the archive at `path` has a `.package` entry. Unreadable → false.
 pub fn zip_contains_package(path: &Path) -> bool {
     // Same bounds as mod metadata: the archive may come from a friend.
@@ -214,6 +323,39 @@ mod tests {
             m.files.insert(p.to_string(), FileInfo { relative_path: p.to_string(), size: 1, hash: String::new(), modified: 0, file_type: ft.into() });
         }
         m
+    }
+
+    #[test]
+    fn paradox_descriptors_with_absolute_paths() {
+        let m = manifest(&[
+            "mod/Mine.mod", "mod/Mine/descriptor.mod", "mod/Mine/common/x.txt",
+            "mod/Theirs.mod", "mod/Theirs/descriptor.mod",
+            "mod/Portable.mod", "mod/Portable/descriptor.mod",
+            "mod/Gone.mod",
+            "mod/ugc_123.mod",
+        ]);
+        let files: std::collections::HashMap<&str, &str> = [
+            ("mod/Mine.mod", "name=\"Mine\"\r\npath=\"C:/Users/me/Documents/Paradox Interactive/Hearts of Iron IV/mod/Mine\"\r\nsupported_version=\"1.14.*\"\r\n"),
+            ("mod/Theirs.mod", "name=\"Theirs\"\npath = \"C:/Users/alex/Documents/Paradox Interactive/Hearts of Iron IV/mod/Theirs\"\n"),
+            ("mod/Portable.mod", "name=\"Portable\"\npath=\"mod/Portable\"\n"),
+            ("mod/Gone.mod", "path=\"C:/Users/me/Documents/Paradox Interactive/Hearts of Iron IV/mod/Gone\"\n"),
+            ("mod/ugc_123.mod", "path=\"D:/Steam/steamapps/workshop/content/394360/123\"\n"),
+        ]
+        .into_iter()
+        .collect();
+        let read = |k: &str| files.get(k).map(|s| s.to_string());
+        let here = |p: &str| p.contains("/Users/me/");
+        let (own, foreign) = absolute_descriptors(&m, read, here);
+        assert_eq!(own, vec![("mod/Mine.mod".to_string(), "Mine".to_string())]);
+        assert_eq!(foreign, vec![("mod/Theirs.mod".to_string(), "Theirs".to_string())], "Gone has no folder here, ugc is the Workshop's");
+
+        let kinds: Vec<String> = check_paradox(&m, read, here).into_iter().map(|i| i.kind).collect();
+        assert_eq!(kinds, ["paradox_absolute_paths", "paradox_foreign_paths"]);
+
+        let fixed = relative_descriptor(files["mod/Mine.mod"], "Mine");
+        assert_eq!(fixed, "name=\"Mine\"\r\npath=\"mod/Mine\"\r\nsupported_version=\"1.14.*\"\r\n");
+        assert_eq!(relative_descriptor("name=\"x\"\n", "x"), "name=\"x\"\n", "no path line: unchanged");
+        assert!(is_absolute_mod_path("C:\\Users\\a\\mod\\x") && is_absolute_mod_path("/home/a/.local/share/x") && !is_absolute_mod_path("mod/x"));
     }
 
     fn registry_game(id: &str) -> GameDefinition {
