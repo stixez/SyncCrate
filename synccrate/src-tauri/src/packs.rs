@@ -212,6 +212,16 @@ pub fn detect_game_version(game_id: &str, game_path: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The Sims 4 install folder, where the pack folders (EP01, GP01, ...) are:
+/// the folder SyncCrate syncs is the one in Documents, which has none, so no
+/// pack was ever detected. Found the way the ReShade entry finds Game\Bin.
+fn sims4_install_dir() -> Option<std::path::PathBuf> {
+    let reg = crate::registry::load_registry();
+    let def = reg.games.iter().find(|g| g.id == "sims4-reshade")?;
+    let bin = crate::utils::detect_game_path_from_def(def)?;
+    std::path::Path::new(&bin).parent()?.parent().map(std::path::Path::to_path_buf)
+}
+
 /// Detect installed packs using a fallback chain of heuristics.
 pub fn detect_installed_packs(packs_key: &str, game_path: &str) -> Vec<PackInfo> {
     let registry = get_pack_registry(packs_key);
@@ -253,9 +263,13 @@ pub fn detect_installed_packs(packs_key: &str, game_path: &str) -> Vec<PackInfo>
     }
 
     // Strategy 3: Check for pack subdirectories (EP01/, GP01/, etc.)
+    let mut roots = vec![base.to_path_buf()];
+    if packs_key == "sims4" {
+        roots.extend(sims4_install_dir());
+    }
     let found: Vec<PackInfo> = registry
         .iter()
-        .filter(|p| base.join(&p.id.code).exists())
+        .filter(|p| roots.iter().any(|r| r.join(&p.id.code).is_dir()))
         .cloned()
         .collect();
     if !found.is_empty() {
