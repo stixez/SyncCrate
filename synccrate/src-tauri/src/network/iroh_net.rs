@@ -36,9 +36,19 @@ pub fn secret_key() -> SecretKey {
 
 fn load_or_create_key() -> SecretKey {
     let path = key_path();
-    if let Ok(bytes) = std::fs::read(&path) {
-        if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
-            return SecretKey::from_bytes(&arr);
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                return SecretKey::from_bytes(&arr);
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        // Held by antivirus at launch, say: a new saved key would change the
+        // internet id for good and break every join code friends kept. Use
+        // one for this session only.
+        Err(e) => {
+            log::warn!("Could not read the iroh key ({e}); using a temporary one this session");
+            return SecretKey::generate();
         }
     }
     let key = SecretKey::generate();

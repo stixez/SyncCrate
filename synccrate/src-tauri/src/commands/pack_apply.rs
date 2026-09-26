@@ -311,7 +311,10 @@ fn record_path(game: &str) -> PathBuf {
 }
 
 pub(crate) fn read_record(game: &str) -> Option<ApplyRecord> {
-    serde_json::from_str(&std::fs::read_to_string(record_path(game)).ok()?).ok()
+    utils::read_json_strict(&record_path(game)).unwrap_or_else(|e| {
+        log::warn!("{e}");
+        None
+    })
 }
 
 pub(crate) fn write_record(record: &ApplyRecord) -> Result<(), String> {

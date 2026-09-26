@@ -143,11 +143,9 @@ pub async fn get_close_to_tray() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn set_close_to_tray(enabled: bool) -> Result<(), String> {
-    let mut config = crate::commands::sync::read_sync_config();
-    config.close_to_tray = enabled;
-    let path = crate::utils::sync_config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    crate::commands::sync::update_sync_config(|config| {
+        config.close_to_tray = enabled;
+    })
 }
 
 #[cfg(test)]
