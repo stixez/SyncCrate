@@ -56,11 +56,17 @@ async fn a_crew_takes_turns_on_a_save_iroh() {
 
     let events = null_events();
     crate::commands::handoff::share_inner(&host_state, &events, &c.id, "sims4", UNIT).await.expect("share");
+    // A host that keeps saves out of normal syncs, with a backup the game
+    // wrote after the last scan: a take still gets all of it.
+    host_state.lock().await.folder_permissions.insert("saves".into(), false);
+    write_file(&host_dir, "Saves/Slot_00000001.save.ver1", b"HOST-UNSCANNED");
     assert!(crate::commands::handoff::share_inner(&host_state, &events, &c.id, "sims4", UNIT).await.is_err(), "already shared");
 
     // Take: the friend's copy becomes exactly the host's.
     let fetched = handoff_net::take(&client_state, &events, &c.id, "sims4", UNIT).await.expect("take");
-    assert_eq!(fetched, 2);
+    assert_eq!(fetched, 3);
+    assert_eq!(read_file(&client_dir, "Saves/Slot_00000001.save.ver1"), b"HOST-UNSCANNED");
+    assert!(host_state.lock().await.handoff_grants.is_empty(), "the grant ends with the take");
     assert_eq!(read_file(&client_dir, "Saves/Slot_00000001.save"), b"HOST-V1");
     assert_eq!(read_file(&client_dir, "Saves/Slot_00000001.save.ver0"), b"HOST-OLD");
     assert!(!file_exists(&client_dir, "Saves/Slot_00000001.save.ver4"), "a file the host's save doesn't have goes");

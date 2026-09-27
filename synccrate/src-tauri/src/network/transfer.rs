@@ -669,9 +669,13 @@ async fn handle_client(
                     let app_state = state.lock().await;
 
                     // Validate that the requested file is in an allowed folder
+                    // A take (`handoff_net`) lists its save from disk: files a scan
+                    // hasn't seen yet, and saves the host doesn't share in a
+                    // normal sync, still download for that friend.
                     let allowed = app_state.local_manifest.files.get(&path)
                         .map(|info| app_state.is_file_info_allowed(info))
-                        .unwrap_or(false);
+                        .unwrap_or(false)
+                        || app_state.handoff_grants.get(&peer_id).is_some_and(|g| g.contains(&path));
                     if !allowed {
                         Err("File not available".to_string())
                     } else {
@@ -1784,7 +1788,8 @@ async fn host_offer_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &s
                 f
             })
             .collect();
-        let valid = crate::offers::valid_offer(files, &cts, &st.local_manifest);
+        let shared = crate::handoff::shared_units(st.crews.crews.iter(), &st.active_game);
+        let valid = crate::offers::valid_offer(files, &cts, &st.local_manifest, &shared);
         let valid_paths: std::collections::HashSet<&str> = valid.iter().map(|v| v.relative_path.as_str()).collect();
         rejected = paths.into_iter().filter(|p| !valid_paths.contains(p.as_str())).collect();
         let count = valid.len();

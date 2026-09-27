@@ -886,7 +886,7 @@ function OutsideFolders({ gameId, gamePath }: { gameId: string; gamePath?: strin
     setBusy(true);
     try {
       setFolders(await cmd.setExtraFolder(gameId, ctId, path));
-      toastSuccess(path ? "Folder set. Its files show up after the next scan." : "SyncCrate finds the folder itself again.");
+      toastSuccess(path ? "Folder saved. Its files show up on the Content page after the next refresh." : "SyncCrate finds the folder itself again.");
     } catch (e) {
       toastError(friendlyError(e));
     } finally {
@@ -894,8 +894,12 @@ function OutsideFolders({ gameId, gamePath }: { gameId: string; gamePath?: strin
     }
   };
   const pick = async (f: ExtraFolder) => {
-    const chosen = await open({ directory: true, defaultPath: f.path ?? undefined, title: `${f.label} folder` });
-    if (typeof chosen === "string") await change(f.ct_id, chosen);
+    try {
+      const chosen = await open({ directory: true, defaultPath: f.path ?? undefined, title: `${f.label} folder` });
+      if (typeof chosen === "string") await change(f.ct_id, chosen);
+    } catch (e) {
+      toastError(friendlyError(e));
+    }
   };
   if (folders.length === 0) return null;
   return (
@@ -903,14 +907,14 @@ function OutsideFolders({ gameId, gamePath }: { gameId: string; gamePath?: strin
       <p className="text-xs text-txt-dim">Kept outside the game folder, and synced like the rest:</p>
       {folders.map((f) => (
         <div key={f.ct_id} className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12.5px] font-semibold w-20 shrink-0">{f.label}</span>
+          <span className="text-[12.5px] font-semibold min-w-20 shrink-0">{f.label}</span>
           {f.path ? (
             <span className="font-mono text-[11px] text-txt-muted truncate min-w-0 flex-1" title={f.path}>{f.path}</span>
           ) : (
             <span className="text-[11.5px] text-amber flex-1">Not found yet. Start the game once, or pick the folder.</span>
           )}
-          {f.custom && <Badge tone="neutral">Picked</Badge>}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => pick(f)} icon={<FolderOpen size={12} />}>
+          {f.custom && <Badge tone="neutral">Set by you</Badge>}
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => pick(f)} icon={<FolderOpen size={12} />} aria-label={`${f.path ? "Change" : "Pick"} the ${f.label} folder`}>
             {f.path ? "Change" : "Pick"}
           </Button>
           {f.custom && (

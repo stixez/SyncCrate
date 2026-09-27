@@ -4,6 +4,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useAppStore } from "../stores/useAppStore";
 import { Banner, Button } from "./ui";
 import * as cmd from "../lib/commands";
+import { friendlyError } from "../lib/errors";
 import { toastError, toastSuccess } from "../lib/toast";
 import type { CompatIssue } from "../lib/types";
 
@@ -52,7 +53,7 @@ export default function CompatIssues({ gameId, summary }: { gameId: string; summ
       toastSuccess(done ?? "Fixed. Start the game again for it to take effect.");
       load();
     } catch (e) {
-      toastError(`${e}`);
+      toastError(friendlyError(e));
     } finally {
       setFixing(false);
     }

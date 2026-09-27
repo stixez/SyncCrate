@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
-import { demoSharedSaves, isDemoMode } from "./demoData";
+import { demoCompatIssues, demoExtraFolders, demoSharedSaves, isDemoMode } from "./demoData";
 import type {
   ExtraFolder,
   SharedSavesView,
@@ -657,7 +657,7 @@ export async function getWorkshopModCount(game: string): Promise<number> {
 
 /** Problems that stop the active game's mods from loading (missing loader, Sims 4 settings/placement). */
 export async function checkCompat(game: string): Promise<CompatIssue[]> {
-  if (isDemoMode()) return [];
+  if (isDemoMode()) return demoCompatIssues(game);
   return invoke("check_compat", { game });
 }
 
@@ -712,7 +712,7 @@ export async function giveSave(crew: string, game: string, unit: string): Promis
 }
 
 export async function getExtraFolders(game: string): Promise<ExtraFolder[]> {
-  if (isDemoMode()) return [];
+  if (isDemoMode()) return demoExtraFolders(game);
   return invoke("get_extra_folders", { game });
 }
 

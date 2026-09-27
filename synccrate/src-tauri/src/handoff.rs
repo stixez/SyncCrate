@@ -148,8 +148,12 @@ pub struct PendingGive {
 /// `base v1.1` and `base v1.2` into one save.
 fn save_stem(file: &str) -> &str {
     let f = file.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(file);
+    // `get`, not slicing: an extension like `.größe` isn't cut at a char
+    // boundary, and a friend's file name could panic the host.
     let is_backup = |tail: &str| {
-        tail.eq_ignore_ascii_case("bak") || tail.eq_ignore_ascii_case("old") || (tail.len() > 3 && tail[..3].eq_ignore_ascii_case("ver") && tail[3..].bytes().all(|b| b.is_ascii_digit()))
+        tail.eq_ignore_ascii_case("bak")
+            || tail.eq_ignore_ascii_case("old")
+            || (tail.get(..3).is_some_and(|v| v.eq_ignore_ascii_case("ver")) && tail.get(3..).is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit())))
     };
     let f = match f.rsplit_once('.') {
         Some((head, tail)) if !head.is_empty() && is_backup(tail) => head,
@@ -257,7 +261,7 @@ pub fn merge(saves: &mut Vec<SharedSave>, incoming: SharedSave) -> bool {
             true
         }
         Some(_) => false,
-        None if room_for(saves, &incoming) => {
+        None if make_room(saves, &incoming) => {
             saves.push(incoming);
             true
         }
@@ -267,6 +271,16 @@ pub fn merge(saves: &mut Vec<SharedSave>, incoming: SharedSave) -> bool {
 
 pub fn room_for(saves: &[SharedSave], incoming: &SharedSave) -> bool {
     saves.len() < MAX_RECORDS_PER_CREW && (incoming.removed || saves.iter().filter(|s| !s.removed).count() < MAX_SAVES_PER_CREW)
+}
+
+/// `room_for`, first dropping the oldest removed records when the list is
+/// full of them: they'd otherwise block every new share for good.
+pub fn make_room(saves: &mut Vec<SharedSave>, incoming: &SharedSave) -> bool {
+    while saves.len() >= MAX_RECORDS_PER_CREW && !incoming.removed {
+        let Some(i) = saves.iter().enumerate().filter(|(_, s)| s.removed).min_by_key(|(_, s)| s.updated_at).map(|(i, _)| i) else { break };
+        saves.remove(i);
+    }
+    room_for(saves, incoming)
 }
 
 /// Merge `sender`'s records for one crew (validated); true if anything
@@ -423,6 +437,23 @@ mod tests {
         let next = saves[1].bumped(50, |s| s.playing = true);
         assert!(next.version == 2 && next.playing && !next.claimed && next.updated_at == saves[1].updated_at);
         assert_eq!(SharedSave { version: MAX_VERSION, ..rec("saves/x", NODE_A, 1) }.bumped(1, |_| {}).version, MAX_VERSION);
+    }
+
+    #[test]
+    fn odd_extensions_never_panic() {
+        let cts = vec![ct("saves", "Saves", "Save", Some(0))];
+        for name in ["Saves/x.ab€", "Saves/x.größe", "Saves/x.ve", "Saves/x.ver", "Saves/.ver1", "Saves/ü.verü"] {
+            let _ = unit_of(&cts, name);
+        }
+        assert_eq!(unit_of(&cts, "Saves/w.save.ver12").as_deref(), Some("saves/w"));
+    }
+
+    #[test]
+    fn tombstones_make_way_for_new_shares() {
+        let mut saves: Vec<SharedSave> = (0..MAX_RECORDS_PER_CREW).map(|i| SharedSave { removed: true, updated_at: i as u64, ..rec(&format!("saves/s{i}"), NODE_A, 1) }).collect();
+        assert!(merge(&mut saves, rec("saves/new", NODE_A, 1)));
+        assert_eq!(saves.len(), MAX_RECORDS_PER_CREW);
+        assert!(!saves.iter().any(|s| s.unit == "saves/s0"), "the oldest tombstone went");
     }
 
     #[test]

@@ -122,6 +122,18 @@ pub async fn start_host(
 ) -> Result<SessionInfo, String> {
     let name = sanitize_name(&name)?;
     crate::commands::backup::refuse_during_restore()?;
+    {
+        let st = state.lock().await;
+        if let (Ok(base), Some(def)) = (st.active_game_path(), crate::commands::files::get_game_def(&st.game_registry, &st.active_game)) {
+            let cts = def.content_types.clone();
+            tokio::task::spawn_blocking(move || {
+                let n = crate::network::handoff_net::sweep_staging(&base, &cts);
+                if n > 0 {
+                    log::info!("Removed {n} leftover save handover file(s)");
+                }
+            });
+        }
+    }
 
     // Validate and read state, then drop lock before async bind
     let (port, mod_count, game_version, game_id) = {
@@ -612,12 +624,20 @@ pub async fn check_host_updates(
         }
     };
 
-    let remote = crate::network::transfer::refresh_remote_manifest(state.inner(), &peer_id).await?;
+    let mut remote = crate::network::transfer::refresh_remote_manifest(state.inner(), &peer_id).await?;
     let patterns = crate::commands::sync::read_exclude_patterns();
     let app_state = state.lock().await;
     let content_types = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
         .map(|g| g.content_types.clone())
         .unwrap_or_default();
+    // What a plan leaves out doesn't count as new either (the badge stayed
+    // while Compare showed nothing): shared saves, and files for a folder
+    // outside the game this PC doesn't have.
+    let shared = crate::handoff::shared_units(app_state.crews.crews.iter(), &app_state.active_game);
+    let base = app_state.active_game_path().unwrap_or_default();
+    remote.files.retain(|p, _| {
+        !crate::handoff::is_shared(&content_types, &shared, p) && (!crate::registry::is_external_path(p) || crate::utils::content_path(&base, p).is_some())
+    });
     Ok(count_new_host_files(
         &app_state.local_manifest,
         &remote,

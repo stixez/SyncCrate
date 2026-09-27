@@ -1,6 +1,6 @@
 import { AlertTriangle, Clock, Sparkles } from "lucide-react";
 import type { FileInfo, Resolution } from "../lib/types";
-import { formatBytes, formatDate } from "../lib/utils";
+import { displayPath, formatBytes, formatDate } from "../lib/utils";
 import { Button, cx } from "./ui";
 
 interface ConflictResolverProps {
@@ -39,7 +39,7 @@ export default function ConflictResolver({ localFile, remoteFile, onResolve }: C
         <div className="flex items-center gap-2.5 mb-3 min-w-0">
           <AlertTriangle size={15} className="text-amber shrink-0" />
           <span className="hud-label text-amber shrink-0">Conflict</span>
-          <span className="text-sm font-medium truncate" title={localFile.relative_path}>{name}</span>
+          <span className="text-sm font-medium truncate" title={displayPath(localFile.relative_path)}>{name}</span>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <VersionCard who="// Your version" file={localFile} newer={localNewer} />

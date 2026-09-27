@@ -18,12 +18,13 @@ use tokio::sync::Mutex;
 
 /// How often an idle client exchanges records with the host.
 pub const POLL: std::time::Duration = std::time::Duration::from_secs(5);
-/// A take or commit hashes the whole save and may copy it into File
-/// history first: wait for it like a manifest request.
-const REQUEST_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+/// A take or commit hashes the whole save (cached where unchanged) and may
+/// copy it into File history first; a big world takes a while. Like the
+/// wait for a file header.
+const REQUEST_WAIT: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// Why handoff isn't offered on a LAN connection.
-pub const NOT_PROVEN: &str = "Save handoff works when you join through your crew (Crews, then Join): that connection proves who's who. A LAN connection can't.";
+pub const NOT_PROVEN: &str = "To take or give a save, join the host from Crews (click Join on your crew). Joining over the local network or by IP won't work for this.";
 
 /// Crews both we and `other` (a node id) are active members of.
 fn common_crews<'a>(st: &'a AppState, other: &str) -> Vec<&'a crate::crews::Crew> {
@@ -62,7 +63,7 @@ pub fn put(st: &mut AppState, crew: &str, next: SharedSave) -> Result<(), String
     let c = st.crews.get_mut(crew).ok_or("That crew is gone.")?;
     match c.saves.iter().position(|s| s.is(&next.game, &next.unit)) {
         Some(i) => c.saves[i] = next,
-        None if handoff::room_for(&c.saves, &next) => c.saves.push(next),
+        None if handoff::make_room(&mut c.saves, &next) => c.saves.push(next),
         None => return Err(format!("A crew can share up to {} saves.", handoff::MAX_SAVES_PER_CREW)),
     }
     crate::crews::persist(st);
@@ -75,6 +76,7 @@ pub fn record(st: &AppState, crew: &str, game: &str, unit: &str) -> Option<Share
 
 /// A friend's give ends (done, failed, or they left): delete what it staged.
 pub fn drop_pending(st: &mut AppState, peer_id: &str) {
+    st.handoff_grants.remove(peer_id);
     if let Some(p) = st.handoff_in.remove(peer_id) {
         for tmp in p.staged.values() {
             let _ = std::fs::remove_file(tmp);
@@ -128,13 +130,19 @@ pub(crate) async fn fresh_files(state: &Arc<Mutex<AppState>>, unit: &str) -> Res
     };
     let (b, u) = (base.clone(), unit.to_string());
     let files = tokio::task::spawn_blocking(move || -> Result<Vec<FileInfo>, String> {
+        // Unchanged files reuse the scan's hash: re-reading a whole world on
+        // every step of a handover outlasted the reply wait.
+        let cache = crate::commands::files::hash_lookup();
         unit_files_on_disk(&b, &cts, &u)?
             .into_iter()
             .map(|rel| {
                 let path = crate::utils::safe_join(&b, &rel)?;
                 let meta = std::fs::metadata(&path).map_err(|e| format!("{rel}: {e}"))?;
                 let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
-                let hash = crate::commands::files::compute_file_hash(&path)?;
+                let hash = match cache.get(&path, meta.len(), modified) {
+                    Some(h) => h,
+                    None => crate::commands::files::compute_file_hash(&path)?,
+                };
                 Ok(FileInfo { relative_path: rel, size: meta.len(), hash, modified, file_type: "Save".into() })
             })
             .collect()
@@ -222,12 +230,16 @@ async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str,
             // complete (`TakeDone`). Moving it here left a friend whose
             // download failed "holding" a broken copy they could then give.
             match fresh_files(state, &unit).await {
-                Ok((_, f)) if !f.is_empty() => HandoffReply::Granted { files: f },
+                Ok((_, f)) if !f.is_empty() => {
+                    state.lock().await.handoff_grants.insert(peer_id.to_string(), f.iter().map(|x| x.relative_path.clone()).collect());
+                    HandoffReply::Granted { files: f }
+                }
                 Ok(_) => refused("The host doesn't have this save's files."),
                 Err(e) => refused(format!("The host couldn't read the save: {e}")),
             }
         }
         HandoffRequest::TakeDone { files, .. } => {
+            state.lock().await.handoff_grants.remove(peer_id);
             if current.holder != me || current.playing {
                 return refused(format!("The save changed hands meanwhile: {} has it now.", current.holder_name));
             }
@@ -316,6 +328,11 @@ async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str,
                     cleanup(&pending);
                     return refused(format!("The host couldn't read its copy: {e}"));
                 }
+            };
+            // Files are replaced now: no restore, undo or sync alongside.
+            let Some(_replacing) = crate::commands::backup::try_begin_restoring() else {
+                cleanup(&pending);
+                return refused("The host is restoring a backup. Try again when it's done.");
             };
             let (who, g) = (peer_name.to_string(), game.clone());
             let applied = tokio::task::spawn_blocking(move || apply_give(&base, &g, &who, &pending, &host_files)).await.map_err(|e| e.to_string()).and_then(|r| r);
@@ -570,6 +587,11 @@ pub async fn take(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
     };
     handoff::check_files(&content_types(state, game).await, unit, &files)?;
     let (peer_id, _, _) = host_of(state).await?;
+    // Our copy is replaced now: no restore, undo or sync alongside (they all
+    // check this flag), and a Cancel left over from an earlier sync must not
+    // stop the downloads.
+    let _replacing = crate::commands::backup::try_begin_restoring().ok_or("A restore is running. Wait for it to finish, then take the save.")?;
+    crate::commands::sync::CANCEL_SYNC.store(false, std::sync::atomic::Ordering::SeqCst);
     let (base, ours) = fresh_files(state, unit).await?;
     let (fetch, delete) = handoff::diff_save(&ours, &files);
     let by_key: std::collections::HashMap<String, &FileInfo> = ours.iter().map(|f| (crate::sync::diff::match_key(&f.relative_path), f)).collect();
@@ -640,6 +662,23 @@ pub async fn take(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
         HandoffReply::Refused { message } => Err(message),
         _ => Err("The host didn't answer.".into()),
     }
+}
+
+/// Staged uploads a host left behind (it crashed or was closed before a
+/// commit): scans hide them, so nothing else would ever remove them. Run
+/// when hosting starts, before any give can be staged.
+pub fn sweep_staging(base: &str, cts: &[ContentType]) -> usize {
+    let mut removed = 0;
+    for ct in cts.iter().filter(|c| c.save_unit_depth.is_some()) {
+        let Some(dir) = crate::utils::ct_dir(base, ct) else { continue };
+        for e in walkdir::WalkDir::new(&dir).follow_links(false).max_depth(8).into_iter().flatten() {
+            let name = e.file_name().to_string_lossy();
+            if e.file_type().is_file() && name.contains(".synccrate-handoff-") && name.ends_with(".tmp") && std::fs::remove_file(e.path()).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
 }
 
 /// The idle loop's poll input: our records, if the host shares a crew with us.

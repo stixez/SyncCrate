@@ -6,7 +6,7 @@ import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/type
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS } from "../lib/modMeta";
 import { ModIcon } from "./ModItem";
-import { formatBytes, formatDate, isDisabledPath, renameInManifest } from "../lib/utils";
+import { displayPath, formatBytes, formatDate, isDisabledPath, renameInManifest } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
@@ -162,7 +162,7 @@ export default function ModDetailsPanel({
               </>
             )}
             <Row label="Path">
-              <span className="block font-mono text-[11px] text-txt-dim break-all">{file.relative_path}</span>
+              <span className="block font-mono text-[11px] text-txt-dim break-all">{outside ? resolved || displayPath(file.relative_path) : file.relative_path}</span>
             </Row>
             <Row label="Size"><span className="font-mono text-xs tabular">{formatBytes(file.size)}</span></Row>
             <Row label="Modified"><span className="font-mono text-xs">{formatDate(file.modified)}</span></Row>

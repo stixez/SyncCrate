@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { ArrowUp, ArrowDown, AlertTriangle, Trash2, Puzzle, Save, Palette } from "lucide-react";
 import type { SyncAction } from "../lib/types";
-import { formatBytes } from "../lib/utils";
+import { displayPath, formatBytes } from "../lib/utils";
 import { cx } from "./ui";
 
 interface SyncActionItemProps {
@@ -55,8 +55,10 @@ export default memo(function SyncActionItem({ action, excluded, onToggle, disabl
   const info = getActionInfo(action);
   if (!info) return null;
 
-  const fileName = info.path.split(/[/\\]/).pop() || info.path;
-  const folder = info.path.slice(0, Math.max(0, info.path.length - fileName.length - 1));
+  // `@worlds/...` (a folder outside the game) reads as its inner path.
+  const shownPath = displayPath(info.path);
+  const fileName = shownPath.split(/[/\\]/).pop() || shownPath;
+  const folder = shownPath.slice(0, Math.max(0, shownPath.length - fileName.length - 1));
 
   return (
     <label
@@ -67,7 +69,7 @@ export default memo(function SyncActionItem({ action, excluded, onToggle, disabl
         excluded && "opacity-45",
       )}
     >
-      <input type="checkbox" checked={!excluded} onChange={() => onToggle(info.path)} disabled={disabled} aria-label={`Include ${info.path}`} className="check" />
+      <input type="checkbox" checked={!excluded} onChange={() => onToggle(info.path)} disabled={disabled} aria-label={`Include ${shownPath}`} className="check" />
       {info.direction === "upload" && <ArrowUp size={12} className="text-neon shrink-0" aria-label="Upload" />}
       {info.direction === "download" && <ArrowDown size={12} className="text-accent-light shrink-0" aria-label="Download" />}
       {info.direction === "conflict" && <AlertTriangle size={12} className="text-amber shrink-0" aria-label="Conflict" />}
@@ -79,7 +81,7 @@ export default memo(function SyncActionItem({ action, excluded, onToggle, disabl
       ) : (
         <Palette size={12} className="text-txt-muted shrink-0" />
       )}
-      <span className="text-xs truncate flex-1 min-w-0" title={info.path}>
+      <span className="text-xs truncate flex-1 min-w-0" title={shownPath}>
         <span className={cx("text-txt", excluded && "line-through")}>{fileName}</span>
         {folder && <span className="font-mono text-[10px] text-txt-muted ml-2">{folder}</span>}
       </span>

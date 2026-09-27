@@ -10,6 +10,7 @@ import { runPackApply } from "../lib/packApply";
 import { loadDisplayName } from "../lib/prefs";
 import { sendNotification } from "../lib/notify";
 import { friendlyError } from "../lib/errors";
+import { displayPath } from "../lib/utils";
 
 // One rescan at a time: a change during a scan queues exactly one more.
 let scanInFlight = false;
@@ -579,7 +580,7 @@ export function useTauriEvents() {
         }),
         listen<{ peer_id: string; path: string; error: string }>("host-send-error", (event) => {
           const who = peerName(event.payload.peer_id) ?? "A friend";
-          addLog(`Couldn't send ${event.payload.path} to ${who}: ${friendlyError(event.payload.error)}`, "warning");
+          addLog(`Couldn't send ${displayPath(event.payload.path)} to ${who}: ${friendlyError(event.payload.error)}`, "warning");
           if (Date.now() - lastSendErrorToast > 30_000) {
             lastSendErrorToast = Date.now();
             toastWithLog(`Couldn't send a file to ${who}: ${friendlyError(event.payload.error)}`, "error");
@@ -605,7 +606,7 @@ export function useTauriEvents() {
           useAppStore.getState().bumpCrewsVersion();
         }),
         listen<{ name: string; save: string }>("handoff-approval", (event) => {
-          const msg = `${event.payload.name} wants to give you ${event.payload.save}. If their copy is the newest, click Accept under Shared saves on the Dashboard.`;
+          const msg = `${event.payload.name} wants to give you ${event.payload.save}. If their copy is the newest, click "Accept ${event.payload.name}'s copy" under Shared saves on the Dashboard.`;
           toastInfo(msg);
           sendNotification("SyncCrate", msg);
         }),
