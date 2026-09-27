@@ -224,6 +224,8 @@ export interface CompatIssue {
   count: number;
   paths: string[];
   fix?: string;
+  /** Button text when "Fix it" doesn't say what happens ("Move to Tray"). */
+  fix_label?: string;
   url?: string;
 }
 

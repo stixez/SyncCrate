@@ -48,8 +48,8 @@ export default function CompatIssues({ gameId, summary }: { gameId: string; summ
     if (!i.fix) return;
     setFixing(true);
     try {
-      await cmd.fixCompatIssue(gameId, i.fix);
-      toastSuccess("Fixed. Start the game again for it to take effect.");
+      const done = await cmd.fixCompatIssue(gameId, i.fix);
+      toastSuccess(done ?? "Fixed. Start the game again for it to take effect.");
       load();
     } catch (e) {
       toastError(`${e}`);
@@ -70,7 +70,7 @@ export default function CompatIssues({ gameId, summary }: { gameId: string; summ
             <>
               {i.fix && (
                 <Button size="sm" variant="primary" onClick={() => fix(i)} disabled={fixing} icon={<Wrench size={12} />}>
-                  Fix it
+                  {i.fix_label ?? "Fix it"}
                 </Button>
               )}
               {i.url && (
