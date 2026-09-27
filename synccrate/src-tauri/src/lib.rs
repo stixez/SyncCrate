@@ -35,6 +35,8 @@ mod history_e2e_tests;
 mod stay_in_sync_e2e_tests;
 #[cfg(test)]
 mod handoff_e2e_tests;
+#[cfg(test)]
+mod extra_folders_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -82,6 +84,12 @@ pub fn run() {
         .filter(|(id, _)| saved.user_set.contains(*id))
         .map(|(id, p)| (id.clone(), p.clone()))
         .collect();
+    // Keyed by current ids like the paths (a legacy id would never match).
+    saved.extra = saved_config
+        .extra_folders
+        .iter()
+        .filter_map(|(k, v)| Some((registry::resolve_game_id(k, &registry_map, &legacy_map)?, v.clone())))
+        .collect();
     commands::files::set_saved_paths(saved);
 
     // Auto-detect games without a saved path, but only adopt a folder with
@@ -95,6 +103,14 @@ pub fn run() {
                     game_paths.insert(game_def.id.clone(), path);
                 }
             }
+        }
+    }
+
+    // Content outside the game folders (Valheim worlds, Stardew saves): known
+    // before anything resolves a path, not only after the first scan.
+    for game_def in &game_registry.games {
+        if let Some(path) = game_paths.get(&game_def.id) {
+            commands::files::refresh_extra_roots(game_def, path);
         }
     }
 
@@ -386,6 +402,9 @@ pub fn run() {
             commands::files::scan_files,
             commands::files::get_game_path,
             commands::files::set_game_path,
+            commands::files::get_extra_folders,
+            commands::files::set_extra_folder,
+            commands::files::resolve_content_path,
             commands::files::get_active_game,
             commands::files::set_active_game,
             commands::files::get_all_game_paths,

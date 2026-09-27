@@ -210,7 +210,8 @@ fn content_walker(dir: &Path, ct: Option<&ContentType>) -> WalkDir {
 fn collect_full(base: &Path, cts: &[ContentType]) -> Result<Vec<SourceFile>, String> {
     let mut out = Vec::new();
     for ct in cts {
-        let dir = base.join(&ct.folder);
+        // An external folder (`ContentType::roots`) this PC doesn't have is skipped.
+        let Some(dir) = utils::ct_dir(&base.to_string_lossy(), ct) else { continue };
         if !dir.is_dir() {
             continue;
         }
@@ -510,7 +511,7 @@ fn create_backup_inner(
         auto: req.kind == KIND_AUTO || req.kind == KIND_PRESYNC,
         kind: req.kind.to_string(),
         category_counts,
-        category_folders: req.cts.iter().map(|ct| (ct.id.clone(), ct.folder.clone())).collect(),
+        category_folders: req.cts.iter().map(|ct| (ct.id.clone(), ct.rel_folder())).collect(),
         new_bytes: Some(new_bytes),
     };
     let manifest = BackupManifest { version: MANIFEST_VERSION, info: info.clone(), files };
@@ -771,7 +772,7 @@ fn same_folder(a: &str, b: &str) -> bool {
 /// `ct` uses now.
 fn category_moved(info: &BackupInfo, ct: &ContentType) -> bool {
     match info.category_folders.get(&ct.id) {
-        Some(folder) => !same_folder(folder, &ct.folder),
+        Some(folder) => !same_folder(folder, &ct.rel_folder()),
         None => MOVED_BEFORE_FOLDERS_WERE_RECORDED.contains(&(info.game.as_str(), ct.id.as_str())),
     }
 }
@@ -858,7 +859,8 @@ fn restore_inner(
     progress: &mut dyn FnMut(usize, usize, &str),
 ) -> RestoreResult {
     let backup_dir = root.join(backup_id);
-    let mods_dir = cts.first().map(|ct| base.join(&ct.folder));
+    let base_str = base.to_string_lossy().to_string();
+    let mods_dir = cts.first().and_then(|ct| utils::ct_dir(&base_str, ct));
     let mut result = RestoreResult::default();
     let mut keep: HashSet<String> = HashSet::new();
     let mut unsafe_skipped = 0usize;
@@ -874,7 +876,8 @@ fn restore_inner(
             result.missing += 1;
             continue;
         };
-        let under_base_check = if ct.folder == "." { entry.relative_path.clone() } else { format!("{}/{}", ct.folder, entry.relative_path) };
+        let folder = ct.rel_folder();
+        let under_base_check = if folder == "." { entry.relative_path.clone() } else { format!("{}/{}", folder, entry.relative_path) };
         // Files the game's folders no longer sync (a Bethesda game's own
         // Data files in an old backup) aren't put back: restoring them can
         // downgrade base files after a patch.
@@ -886,8 +889,11 @@ fn restore_inner(
         // ADS ':' names, and no escaping through a junction placed in the
         // folder after the backup was made. (`dest` itself keeps the plain
         // spelling: exact restore compares it with scanned paths.)
-        let under_base = if ct.folder == "." { entry.relative_path.clone() } else { format!("{}/{}", ct.folder, entry.relative_path) };
-        let dest_base = base.join(&ct.folder);
+        let under_base = under_base_check.clone();
+        let Some(dest_base) = utils::ct_dir(&base_str, ct) else {
+            result.skipped.push(format!("{} (its folder isn't on this PC)", entry.relative_path));
+            continue;
+        };
         let dest = dest_base.join(&entry.relative_path);
         // Kept even when it can't be written: an exact restore must never
         // delete a file the backup has.
@@ -1039,7 +1045,7 @@ pub(crate) fn backup_objects(root: &Path, backup_id: &str, cts: &[ContentType]) 
 
 fn entry_game_root_path(cts: &[ContentType], entry: &BackupFileEntry) -> Option<String> {
     let ct = resolve_ct(cts, &entry.category)?;
-    let folder = ct.folder.replace('\\', "/");
+    let folder = ct.rel_folder().replace('\\', "/");
     let folder = folder.trim_end_matches('/').trim_start_matches("./");
     Some(if folder.is_empty() || folder == "." {
         entry.relative_path.clone()
@@ -1208,8 +1214,11 @@ fn restore_kept_versions(rels: &[String], record: &crate::commands::undo::SyncRe
             result.skipped.push(format!("{} (not in this game's folders any more)", rel));
             continue;
         };
-        let dest_base = Path::new(base_str).join(&ct.folder);
-        let mods_dir = cts.first().map(|c| Path::new(base_str).join(&c.folder));
+        let Some(dest_base) = utils::ct_dir(base_str, ct) else {
+            result.skipped.push(format!("{} (its folder isn't on this PC)", rel));
+            continue;
+        };
+        let mods_dir = cts.first().and_then(|c| utils::ct_dir(base_str, c));
         if let Some(twin) = disabled_twin(&dest_base.join(&inner), &dest_base, mods_dir.as_deref(), &inner) {
             result.skipped.push(format!("{} ({} exists)", rel, twin));
             continue;
@@ -1862,6 +1871,35 @@ mod tests {
         assert_eq!((r.restored, r.unchanged), (0, 1));
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn folders_outside_the_game_are_backed_up_and_restored() {
+        let (root, base, worlds) = (tmp("store"), tmp("game"), tmp("worlds"));
+        let external = ContentType { roots: vec!["%NOWHERE%/worlds".into()], recursive: false, file_type: "Save".into(), ..ct("worlds", ".", &[]) };
+        let cts = vec![ct("mods", "Mods", &[]), external];
+        crate::utils::pin_extra_roots(&base.to_string_lossy(), HashMap::from([("@worlds".to_string(), worlds.clone())]));
+        write(&base.join("Mods/a.dll"), b"mod");
+        write(&worlds.join("Midgard.db"), b"world");
+        let info = backup(&root, &base, &cts, KIND_MANUAL, None).unwrap();
+        assert_eq!(info.category_counts.get("worlds"), Some(&1));
+        assert_eq!(info.category_folders.get("worlds").map(String::as_str), Some("@worlds"));
+
+        write(&worlds.join("Midgard.db"), b"broken");
+        let manifest = read_manifest(&root.join(&info.id)).unwrap();
+        let r = restore_inner(&root, &info.id, &manifest, &base, &cts, false, &mut |_, _, _| {});
+        assert_eq!(r.restored, 1, "{:?}", r.skipped);
+        assert_eq!(std::fs::read(worlds.join("Midgard.db")).unwrap(), b"world");
+        assert!(!base.join("@worlds").exists(), "restored where the folder is, not under the prefix");
+
+        // On a PC without that folder the file is skipped, not misplaced.
+        let elsewhere = tmp("game2");
+        crate::utils::pin_extra_roots(&elsewhere.to_string_lossy(), HashMap::new());
+        let r = restore_inner(&root, &info.id, &manifest, &elsewhere, &cts, false, &mut |_, _, _| {});
+        assert!(r.skipped.iter().any(|s| s.contains("isn't on this PC")), "{:?}", r.skipped);
+        for d in [&root, &base, &worlds, &elsewhere] {
+            let _ = std::fs::remove_dir_all(d);
+        }
     }
 
     #[test]

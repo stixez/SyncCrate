@@ -142,13 +142,14 @@ pub struct PendingGive {
 // Which save a file belongs to
 
 /// `Slot_00000002.save.ver1` → `Slot_00000002`, `My.World.wld` →
-/// `My.World`, `base v1.2.zip` → `base v1.2`: rotated-backup suffixes
-/// (`.verN`, `.bak`), then one extension. Splitting at the first dot merged
+/// `My.World`, `base v1.2.zip` → `base v1.2`, Valheim's `Midgard.db.old` →
+/// `Midgard`: rotated-backup suffixes (`.verN`, `.bak`, `.old`), then one
+/// extension. Splitting at the first dot merged
 /// `base v1.1` and `base v1.2` into one save.
 fn save_stem(file: &str) -> &str {
     let f = file.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(file);
     let is_backup = |tail: &str| {
-        tail.eq_ignore_ascii_case("bak") || (tail.len() > 3 && tail[..3].eq_ignore_ascii_case("ver") && tail[3..].bytes().all(|b| b.is_ascii_digit()))
+        tail.eq_ignore_ascii_case("bak") || tail.eq_ignore_ascii_case("old") || (tail.len() > 3 && tail[..3].eq_ignore_ascii_case("ver") && tail[3..].bytes().all(|b| b.is_ascii_digit()))
     };
     let f = match f.rsplit_once('.') {
         Some((head, tail)) if !head.is_empty() && is_backup(tail) => head,
@@ -346,7 +347,7 @@ mod tests {
         ContentType {
             id: id.into(), label: id.into(), folder: folder.into(), extensions: vec![], file_type: file_type.into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: depth,
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: depth, roots: vec![],
         }
     }
 

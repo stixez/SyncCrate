@@ -108,7 +108,8 @@ pub fn content_type_for<'a>(content_types: &'a [ContentType], rel: &str) -> Opti
     let rel = rel.trim_start_matches("./");
     let file_name = rel.rsplit('/').next().unwrap_or(rel);
     content_types.iter().find_map(|ct| {
-        let folder = ct.folder.replace('\\', "/");
+        // `@<id>/...` for content outside the game folder (`ContentType::roots`).
+        let folder = ct.rel_folder().replace('\\', "/");
         let folder = folder.trim_end_matches('/').trim_start_matches("./");
         let rest = if folder.is_empty() || folder == "." {
             rel
@@ -488,7 +489,7 @@ mod tests {
         let cts = vec![crate::registry::ContentType {
             id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None,
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
         }];
         let mut m = FileManifest::default();
         let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
@@ -539,6 +540,7 @@ mod tests {
             exclude_files: vec!["ReShade.ini".to_string()],
             exclude_patterns: vec!["cc???sse*".to_string(), "Skyrim - *.bsa".to_string(), "SquadExpansion/*".to_string()],
             save_unit_depth: None,
+            roots: vec![],
         }
     }
 

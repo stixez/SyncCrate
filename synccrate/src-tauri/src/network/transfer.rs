@@ -379,15 +379,16 @@ async fn handle_client(
 
     // Only an iroh peer's id is proven (QUIC handshake); over TCP it's a claim.
     let authenticated_node = stream.lock().await.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
-    let (peer_name, peer_version, peer_pin, peer_game, peer_node, peer_crews) = match msg {
-        Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews, .. } => {
+    let (peer_name, peer_version, peer_pin, peer_game, peer_node, peer_crews, peer_roots) = match msg {
+        Message::Hello { name, version, pin, supports_compression, game_id, node_id, crews, features } => {
             // Sanitize: truncate and strip control characters
             let sanitized = clean_peer_text(&name, MAX_PEER_NAME_LEN);
             let peer_supports_compression = supports_compression;
             use_compression = peer_supports_compression;
             // A node id claimed over TCP is display data only (see crews docs).
             let node = authenticated_node.clone().or(node_id.filter(|n| crate::crews::is_valid_node_id(n)));
-            (sanitized, clean_peer_text(&version, 32), pin, game_id, node, crews)
+            let roots = features.iter().any(|f| f == crate::registry::EXTERNAL_FOLDERS_FEATURE);
+            (sanitized, clean_peer_text(&version, 32), pin, game_id, node, crews, roots)
         }
         _ => return Err("Expected Hello message".to_string()),
     };
@@ -479,7 +480,7 @@ async fn handle_client(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string(), crate::registry::EXTERNAL_FOLDERS_FEATURE.to_string()],
             },
         )
         .await?;
@@ -640,7 +641,7 @@ async fn handle_client(
                 let manifest = {
                     let app_state = state.lock().await;
                     let mut filtered = app_state.local_manifest.clone();
-                    filtered.files.retain(|_, info| app_state.is_file_info_allowed(info));
+                    filtered.files.retain(|path, info| app_state.is_file_info_allowed(info) && (peer_roots || !crate::registry::is_external_path(path)));
                     filtered
                 };
                 let mut s = stream.lock().await;
@@ -1249,7 +1250,7 @@ pub(crate) async fn run_client_session(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string(), crate::registry::EXTERNAL_FOLDERS_FEATURE.to_string()],
             },
         )
         .await?;

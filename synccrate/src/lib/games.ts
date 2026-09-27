@@ -16,6 +16,13 @@ export function getGameRegistry(): GameDefinition[] {
 }
 
 /** Lookup a single game definition by ID. */
+/** The folder a content type's manifest paths start with: `@<id>` when it
+ * lives outside the game folder (backend `ContentType::rel_folder`). */
+export function relFolder(ct: { id: string; folder: string; roots?: string[] }): string {
+  if (!ct.roots?.length) return ct.folder;
+  return ct.folder === "." || ct.folder === "" ? `@${ct.id}` : `@${ct.id}/${ct.folder}`;
+}
+
 export function getGameDef(id: string): GameDefinition | undefined {
   return _map.get(id);
 }

@@ -250,6 +250,17 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
     let remote_total = remote.files.len();
     let skipped_foreign = diff::drop_foreign(&mut remote, &content_types);
     let unreceivable = diff::drop_unreceivable(&mut remote);
+    // Saves outside the game folder (`ContentType::roots`) whose folder this
+    // PC doesn't have yet: every download would fail.
+    let homeless: Vec<String> = remote
+        .files
+        .keys()
+        .filter(|p| crate::registry::is_external_path(p) && crate::utils::content_path(&base_path, p).is_none())
+        .cloned()
+        .collect();
+    for p in &homeless {
+        remote.files.remove(p);
+    }
 
     let mut plan = diff::compute_diff(&local, &remote);
     plan.delete_hashes = plan
@@ -266,13 +277,23 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
     plan.base_path = base_path;
     plan.skipped_foreign = skipped_foreign;
     plan.warning = diff::foreign_warning(host_game.as_deref(), skipped_foreign, remote_total);
-    plan.notice = (!unreceivable.is_empty()).then(|| {
+    let blocked = (!unreceivable.is_empty()).then(|| {
         format!(
             "{} of the host's files can't be saved on this PC (blocked file types, names Windows can't use, or files over 2 GB) and were skipped, e.g. {}.",
             unreceivable.len(),
             unreceivable[0]
         )
     });
+    let no_folder = (!homeless.is_empty()).then(|| {
+        format!(
+            "{} of the host's files go in a folder outside the game that this PC doesn't have yet (usually saves), so they were skipped. Start the game once, or set the folder in Settings, then compare again.",
+            homeless.len()
+        )
+    });
+    plan.notice = match (blocked, no_folder) {
+        (Some(a), Some(b)) => Some(format!("{a} {b}")),
+        (a, b) => a.or(b),
+    };
     if !unreceivable.is_empty() {
         log::warn!("Skipped {} host file(s) this PC can't write: {:?}", unreceivable.len(), &unreceivable[..unreceivable.len().min(10)]);
     }
@@ -527,11 +548,7 @@ pub(crate) async fn execute_sync_inner(
 fn recover_keep_temps(base: &str, content_types: &[crate::registry::ContentType]) -> usize {
     let mut restored = 0;
     for ct in content_types {
-        let dir = if ct.folder.is_empty() || ct.folder == "." {
-            std::path::PathBuf::from(base)
-        } else {
-            std::path::Path::new(base).join(&ct.folder)
-        };
+        let Some(dir) = crate::utils::ct_dir(base, ct) else { continue };
         if !dir.is_dir() {
             continue;
         }

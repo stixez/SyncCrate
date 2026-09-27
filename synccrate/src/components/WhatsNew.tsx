@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { getGameDef } from "../lib/games";
+import { getGameDef, relFolder } from "../lib/games";
 import { metaLookup } from "../lib/modMeta";
 import { fileName, formatRelative } from "../lib/utils";
 import * as cmd from "../lib/commands";
@@ -30,7 +30,7 @@ export default function WhatsNew({ gameId }: { gameId: string }) {
 
   const groups = useMemo(() => {
     if (!mine) return null;
-    const folders = (getGameDef(gameId)?.content_types ?? []).map((c) => c.folder.replace(/\/$/, "") + "/").filter((f) => f !== "./");
+    const folders = (getGameDef(gameId)?.content_types ?? []).map((c) => relFolder(c).replace(/\/$/, "") + "/").filter((f) => f !== "./");
     const metaFor = metaLookup(metas);
     const group = (paths: string[]) => {
       const names = new Map<string, number>();

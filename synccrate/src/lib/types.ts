@@ -583,6 +583,8 @@ export interface InstallResult {
 export interface GameDefinition {
   id: string;
   label: string;
+  /** The catch when handing this game's saves around (Stardew's main farmer). */
+  handoff_note?: string;
   family: string;
   icon: string;
   color: string;
@@ -652,6 +654,17 @@ export interface ContentTypeDefinition {
   exclude_patterns?: string[];
   /** Save handoff: folder levels that name one save (unset: not supported). */
   save_unit_depth?: number;
+  /** Where this content lives outside the game folder (its paths start with `@<id>/`). */
+  roots?: string[];
+}
+
+/** A content folder outside the game folder (Settings). */
+export interface ExtraFolder {
+  ct_id: string;
+  label: string;
+  /** Where it is on this PC; null until the game has run (or it's set by hand). */
+  path: string | null;
+  custom: boolean;
 }
 
 export interface VersionDetection {

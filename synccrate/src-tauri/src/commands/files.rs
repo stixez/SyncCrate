@@ -78,6 +78,10 @@ pub struct GameConfig {
     /// configured (folder, backups), just not listed.
     #[serde(default)]
     pub hidden_games: Vec<String>,
+    /// Folders the user picked for content outside the game folder
+    /// (`ContentType::roots`): game id -> content type id -> folder.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub extra_folders: HashMap<String, HashMap<String, String>>,
 }
 
 /// Set when the config couldn't be read at startup (held by antivirus or
@@ -103,12 +107,45 @@ pub fn load_game_config() -> GameConfig {
 pub(crate) struct SavedPaths {
     pub paths: HashMap<String, String>,
     pub user_set: std::collections::HashSet<String>,
+    pub extra: HashMap<String, HashMap<String, String>>,
 }
 
 static SAVED_PATHS: std::sync::LazyLock<std::sync::Mutex<SavedPaths>> = std::sync::LazyLock::new(|| {
     let c = load_game_config();
-    std::sync::Mutex::new(SavedPaths { paths: c.game_paths, user_set: c.user_set_paths.into_iter().collect() })
+    std::sync::Mutex::new(SavedPaths { paths: c.game_paths, user_set: c.user_set_paths.into_iter().collect(), extra: c.extra_folders })
 });
+
+/// Folders the user picked for `game_id`'s external content types.
+pub(crate) fn extra_folder_overrides(game_id: &str) -> HashMap<String, String> {
+    saved_paths_lock().extra.get(game_id).cloned().unwrap_or_default()
+}
+
+/// Remember (or with None forget) the user's folder for one external
+/// content type; the caller saves the config.
+pub(crate) fn set_extra_folder_override(game_id: &str, ct_id: &str, folder: Option<String>) {
+    let mut s = saved_paths_lock();
+    let per_game = s.extra.entry(game_id.to_string()).or_default();
+    match folder {
+        Some(f) => {
+            per_game.insert(ct_id.to_string(), f);
+        }
+        None => {
+            per_game.remove(ct_id);
+        }
+    }
+    if per_game.is_empty() {
+        s.extra.remove(game_id);
+    }
+}
+
+/// Find (again) where this game's external content folders are and make
+/// `utils::safe_join` / the scanners use them. Run on every scan: a save
+/// folder appears the first time the game runs.
+pub(crate) fn refresh_extra_roots(def: &GameDefinition, base: &str) {
+    if def.content_types.iter().any(|ct| ct.is_external()) {
+        utils::set_extra_roots(base, utils::resolve_roots(&def.content_types, &extra_folder_overrides(&def.id)));
+    }
+}
 
 fn saved_paths_lock() -> std::sync::MutexGuard<'static, SavedPaths> {
     SAVED_PATHS.lock().unwrap_or_else(|e| e.into_inner())
@@ -136,6 +173,7 @@ pub(crate) fn save_game_config(app_state: &AppState) {
             user_library: app_state.user_library.clone(),
             user_set_paths: user_set,
             hidden_games: app_state.hidden_games.clone(),
+            extra_folders: saved.extra.clone(),
         }
     };
     if CONFIG_UNREADABLE.load(std::sync::atomic::Ordering::SeqCst) {
@@ -321,6 +359,8 @@ fn scan_directory(
     filter: &ScanFilter,
     compute_hashes: bool,
     hash_cache: &HashCache,
+    // `@<id>` when `base_path` is an external content folder (`ContentType::roots`).
+    rel_prefix: Option<&str>,
 ) -> HashMap<String, FileInfo> {
     // "." (only allowed for non-recursive content types) means the game folder itself.
     let dir = if sub_dir == "." || sub_dir.is_empty() {
@@ -378,6 +418,10 @@ fn scan_directory(
                 .to_string_lossy()
                 .to_string()
                 .replace('\\', "/");
+            let relative = match rel_prefix {
+                Some(p) => format!("{p}/{relative}"),
+                None => relative,
+            };
 
             // WalkDir's metadata (cached from the listing on Windows) rather than
             // a fresh stat per file.
@@ -489,6 +533,7 @@ pub async fn scan_files_inner(
         }
     };
     let scanned_base = base_path.clone();
+    refresh_extra_roots(&game_def, &base_path);
 
     // A just-auto-detected path bypasses set_game_path, which is where the game's
     // expected content folders normally get created. Mirror that here so, e.g.,
@@ -514,9 +559,19 @@ pub async fn scan_files_inner(
             let classify = ct.classify_by_extension.clone();
             let default_ft = ct.file_type.clone();
             let exts = ct.extensions.clone();
+            // Outside the game folder: scanned from where it is on this PC,
+            // skipped when it isn't here (the game never ran).
+            let prefix = ct.root_prefix();
+            let scan_base = match &prefix {
+                Some(p) => match utils::extra_root(&base_path, p) {
+                    Some(root) => root.to_string_lossy().to_string(),
+                    None => continue,
+                },
+                None => base_path.clone(),
+            };
 
             let files = scan_directory(
-                &base_path,
+                &scan_base,
                 &ct.folder,
                 move |ext| {
                     classify.get(ext).cloned().unwrap_or_else(|| default_ft.clone())
@@ -525,6 +580,7 @@ pub async fn scan_files_inner(
                 &ScanFilter::from_ct(ct),
                 compute_hashes,
                 &hash_cache,
+                prefix.as_deref(),
             );
             all_files.extend(files);
         }
@@ -533,16 +589,19 @@ pub async fn scan_files_inner(
         // to other games/folders — replacing the whole cache with just this
         // scan threw away every other game's cached hashes on each game switch.
         if compute_hashes {
-            let base_prefix = format!(
-                "{}/",
-                base_path.replace('\\', "/").trim_end_matches('/')
-            );
+            // The game folder and its external folders: this scan owns their
+            // cache entries.
+            let owned: Vec<String> = std::iter::once(base_path.clone())
+                .chain(game_def.content_types.iter().filter_map(|ct| utils::extra_root(&base_path, &ct.root_prefix()?)).map(|r| r.to_string_lossy().to_string()))
+                .map(|p| format!("{}/", p.replace('\\', "/").trim_end_matches('/')))
+                .collect();
+            let is_owned = |k: &String| owned.iter().any(|p| k.starts_with(p.as_str()));
             let fresh: Vec<(String, HashCacheEntry)> = all_files
                 .values()
                 .filter(|info| !info.hash.is_empty())
                 .map(|info| {
-                    let abs_path = std::path::PathBuf::from(&base_path)
-                        .join(&info.relative_path)
+                    let abs_path = utils::content_path(&base_path, &info.relative_path)
+                        .unwrap_or_else(|| std::path::PathBuf::from(&base_path).join(&info.relative_path))
                         .to_string_lossy()
                         .replace('\\', "/");
                     // Kept from the cache when reused, this scan's start when hashed now.
@@ -555,13 +614,13 @@ pub async fn scan_files_inner(
                 .collect();
             // The cache holds every game's folders in one file; rewriting it
             // (tens of MB) after a scan that changed nothing was pure waste.
-            let old_here = hash_cache.keys().filter(|k| k.starts_with(&base_prefix)).count();
+            let old_here = hash_cache.keys().filter(|k| is_owned(k)).count();
             let unchanged = old_here == fresh.len()
                 && fresh.iter().all(|(k, e)| hash_cache.get(k).is_some_and(|o| o.size == e.size && o.mtime == e.mtime && o.hash == e.hash && o.hashed_at == e.hashed_at));
             if !unchanged {
                 let mut new_cache: HashCache = hash_cache
                     .into_iter()
-                    .filter(|(k, _)| !k.starts_with(&base_prefix))
+                    .filter(|(k, _)| !is_owned(k))
                     .collect();
                 new_cache.extend(fresh);
                 save_hash_cache(&new_cache);
@@ -697,6 +756,96 @@ fn check_game_folder(
     Ok(())
 }
 
+/// A content folder outside the game folder (`ContentType::roots`), for Settings.
+#[derive(Debug, serde::Serialize)]
+pub struct ExtraFolder {
+    pub ct_id: String,
+    pub label: String,
+    /// Where it is on this PC (None: not found; the game never ran here).
+    pub path: Option<String>,
+    /// The user picked it (else it was found automatically).
+    pub custom: bool,
+}
+
+pub(crate) fn extra_folders_of(app_state: &AppState, game_id: &str) -> Vec<ExtraFolder> {
+    let Some(def) = get_game_def(&app_state.game_registry, game_id) else { return Vec::new() };
+    let base = app_state.game_paths.get(game_id).cloned().unwrap_or_default();
+    let overrides = extra_folder_overrides(game_id);
+    def.content_types
+        .iter()
+        .filter(|ct| ct.is_external())
+        .map(|ct| ExtraFolder {
+            ct_id: ct.id.clone(),
+            label: ct.label.clone(),
+            path: utils::ct_dir(&base, ct).map(|p| p.to_string_lossy().to_string()),
+            custom: overrides.contains_key(&ct.id),
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub async fn get_extra_folders(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String) -> Result<Vec<ExtraFolder>, String> {
+    let app_state = state.lock().await;
+    let game_id = resolve_game(&app_state, &game)?;
+    Ok(extra_folders_of(&app_state, &game_id))
+}
+
+/// Where a manifest path of the active game is on disk (a `@<id>/` path is
+/// outside the game folder), for "Show in folder" and "Copy path".
+#[tauri::command]
+pub async fn resolve_content_path(state: tauri::State<'_, Arc<Mutex<AppState>>>, relative_path: String) -> Result<String, String> {
+    let base = state.lock().await.active_game_path()?;
+    utils::validate_relative(&relative_path)?;
+    utils::content_path(&base, &relative_path)
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "That folder isn't on this PC.".to_string())
+}
+
+/// Pick (or with None forget) where one of a game's outside-the-game
+/// folders is, like choosing the game folder itself.
+#[tauri::command]
+pub async fn set_extra_folder(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    app: tauri::AppHandle,
+    game: String,
+    ct_id: String,
+    path: Option<String>,
+) -> Result<Vec<ExtraFolder>, String> {
+    let mut app_state = state.lock().await;
+    let game_id = resolve_game(&app_state, &game)?;
+    set_extra_folder_inner(&mut app_state, &game_id, &ct_id, path)?;
+    if app_state.active_game == game_id {
+        crate::watcher::file_watcher::restart_for_active(&mut app_state, app);
+    }
+    Ok(extra_folders_of(&app_state, &game_id))
+}
+
+pub(crate) fn set_extra_folder_inner(app_state: &mut AppState, game_id: &str, ct_id: &str, path: Option<String>) -> Result<(), String> {
+    let label = app_state.game_label(game_id);
+    if app_state.active_game == game_id && app_state.session_type != crate::state::SessionType::None {
+        return Err(format!("Disconnect from the current session before changing {label}'s folders."));
+    }
+    let def = get_game_def(&app_state.game_registry, game_id).cloned().ok_or("Unknown game")?;
+    if !def.content_types.iter().any(|ct| ct.id == ct_id && ct.is_external()) {
+        return Err("That folder can't be changed.".into());
+    }
+    if let Some(p) = &path {
+        if !std::path::Path::new(p).is_dir() {
+            return Err(format!("{p} isn't a folder on this PC."));
+        }
+    }
+    set_extra_folder_override(game_id, ct_id, path);
+    if let Some(base) = app_state.game_paths.get(game_id).cloned() {
+        refresh_extra_roots(&def, &base);
+        if app_state.active_game == game_id {
+            // Its files' paths now point somewhere else.
+            app_state.local_manifest = FileManifest::default();
+        }
+    }
+    save_game_config(app_state);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_game_path(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -788,6 +937,9 @@ pub async fn set_game_path(
         let mut saved = saved_paths_lock();
         saved.paths.insert(game_id.clone(), new_path.clone());
         saved.user_set.insert(game_id.clone());
+    }
+    if let Some(def) = get_game_def(&app_state.game_registry, &game_id).cloned() {
+        refresh_extra_roots(&def, &new_path);
     }
     app_state.game_paths.insert(game_id, new_path);
     save_game_config(&app_state);
@@ -1125,7 +1277,11 @@ pub async fn reveal_file(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: St
     refuse_network_path(&path)?;
     let file = std::fs::canonicalize(&path).map_err(|_| "That file doesn't exist any more.".to_string())?;
     let parent = file.parent().ok_or("Invalid path")?.to_string_lossy().to_string();
-    let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
+    let mut roots: Vec<std::path::PathBuf> = {
+        let s = state.lock().await;
+        // Each game's folder and the folders it keeps outside it (worlds, saves).
+        s.game_paths.values().flat_map(|b| std::iter::once(std::path::PathBuf::from(b)).chain(utils::extra_roots_of(b))).collect()
+    };
     roots.push(utils::config_root().join("synccrate"));
     let dir = openable_folder(&parent, &roots)?;
     #[cfg(target_os = "windows")]
@@ -1196,7 +1352,11 @@ pub(crate) fn allow_open_export_dir(file: &std::path::Path) {
 
 #[tauri::command]
 pub async fn open_folder(state: tauri::State<'_, Arc<Mutex<AppState>>>, path: String) -> Result<(), String> {
-    let mut roots: Vec<std::path::PathBuf> = state.lock().await.game_paths.values().map(std::path::PathBuf::from).collect();
+    let mut roots: Vec<std::path::PathBuf> = {
+        let s = state.lock().await;
+        // Each game's folder and the folders it keeps outside it (worlds, saves).
+        s.game_paths.values().flat_map(|b| std::iter::once(std::path::PathBuf::from(b)).chain(utils::extra_roots_of(b))).collect()
+    };
     roots.push(utils::config_root().join("synccrate"));
     roots.extend(EXPORT_DIRS.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
     let dir = openable_folder(&path, &roots)?;
@@ -1763,7 +1923,7 @@ fn content_file_path(
     }
     let full_c = utils::clean_path(std::fs::canonicalize(&full).map_err(|e| e.to_string())?);
     let inside = cts.iter().any(|ct| {
-        let Ok(folder) = std::fs::canonicalize(std::path::Path::new(base).join(&ct.folder)) else {
+        let Some(Ok(folder)) = utils::ct_dir(base, ct).map(std::fs::canonicalize) else {
             return false;
         };
         let folder = utils::clean_path(folder);
@@ -2044,6 +2204,7 @@ mod tests {
             &ScanFilter::from_ct(&ct),
             false,
             &HashMap::new(),
+            None,
         );
         let keys: Vec<&String> = files.keys().collect();
         assert_eq!(keys, vec!["Cozy.ini"]);
@@ -2073,7 +2234,7 @@ mod tests {
             "exclude_patterns": ["Squad/*", "SquadExpansion/*", "cc???sse*"]
         }))
         .unwrap();
-        let files = scan_directory(&dir.to_string_lossy(), "GameData", |_| "Mod".to_string(), &ct.extensions, &ScanFilter::from_ct(&ct), false, &HashMap::new());
+        let files = scan_directory(&dir.to_string_lossy(), "GameData", |_| "Mod".to_string(), &ct.extensions, &ScanFilter::from_ct(&ct), false, &HashMap::new(), None);
         let mut keys: Vec<&String> = files.keys().collect();
         keys.sort();
         // Nested "GameData/Squad" inside a mod is the mod's own folder, as the

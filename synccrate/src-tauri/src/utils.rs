@@ -448,11 +448,134 @@ pub fn timestamp_now() -> u64 {
 
 /// Validate that a relative path does not escape the base directory.
 /// Rejects absolute paths, ".." components, and returns a canonical path
-/// to prevent TOCTOU symlink attacks.
+/// to prevent TOCTOU symlink attacks. A path starting with `@<id>/` is in a
+/// content folder outside the game folder (`ContentType::roots`): it's
+/// joined onto that folder instead, with the same checks against it.
 pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
     validate_relative(relative)?;
     let rel = std::path::Path::new(relative);
+    if let Some((root, rest)) = split_root(base, relative)? {
+        return safe_join_checked(&root.to_string_lossy(), std::path::Path::new(rest), relative);
+    }
     safe_join_checked(base, rel, relative)
+}
+
+// ---------------------------------------------------------------------------
+// Content folders outside the game folder (`ContentType::roots`)
+
+/// Per game folder: `@<content type id>` -> where that folder is on this PC.
+/// Set whenever a game's folder is (`set_extra_roots`); `safe_join` and the
+/// scanners read it, so every path that already went through them works.
+static EXTRA_ROOTS: std::sync::LazyLock<std::sync::RwLock<std::collections::HashMap<String, std::collections::HashMap<String, PathBuf>>>> =
+    std::sync::LazyLock::new(Default::default);
+
+fn roots_key(base: &str) -> String {
+    let b = base.replace('\\', "/");
+    let b = b.trim_end_matches('/');
+    if cfg!(target_os = "windows") { b.to_lowercase() } else { b.to_string() }
+}
+
+/// Where each external content folder of `cts` is on this PC: the user's
+/// choice (`overrides`, by content type id) or the first candidate that
+/// exists. Folders that aren't there are left out (the game never ran).
+pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::collections::HashMap<String, String>) -> std::collections::HashMap<String, PathBuf> {
+    cts.iter()
+        .filter_map(|ct| {
+            let prefix = ct.root_prefix()?;
+            let chosen = overrides.get(&ct.id).map(|p| PathBuf::from(p)).filter(|p| p.is_dir());
+            let found = chosen.or_else(|| ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute() && p.is_dir()))?;
+            Some((prefix, found))
+        })
+        .collect()
+}
+
+/// Tests: game folders whose external folders were set by hand and must not
+/// be re-resolved from this PC's real AppData (or another test's).
+#[cfg(test)]
+static PINNED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::LazyLock::new(Default::default);
+
+#[cfg(test)]
+pub fn pin_extra_roots(base: &str, roots: std::collections::HashMap<String, PathBuf>) {
+    PINNED.lock().unwrap().insert(roots_key(base));
+    let mut map = EXTRA_ROOTS.write().unwrap_or_else(|e| e.into_inner());
+    map.insert(roots_key(base), roots);
+}
+
+pub fn set_extra_roots(base: &str, roots: std::collections::HashMap<String, PathBuf>) {
+    #[cfg(test)]
+    if PINNED.lock().unwrap().contains(&roots_key(base)) {
+        return;
+    }
+    let mut map = EXTRA_ROOTS.write().unwrap_or_else(|e| e.into_inner());
+    if roots.is_empty() {
+        map.remove(&roots_key(base));
+    } else {
+        map.insert(roots_key(base), roots);
+    }
+}
+
+/// Every external content folder of the game at `base` (for "Show in folder").
+pub fn extra_roots_of(base: &str) -> Vec<PathBuf> {
+    let map = EXTRA_ROOTS.read().unwrap_or_else(|e| e.into_inner());
+    map.get(&roots_key(base)).map(|m| m.values().cloned().collect()).unwrap_or_default()
+}
+
+/// Where `@<id>` (`prefix`) of the game at `base` is on this PC.
+pub fn extra_root(base: &str, prefix: &str) -> Option<PathBuf> {
+    let map = EXTRA_ROOTS.read().unwrap_or_else(|e| e.into_inner());
+    map.get(&roots_key(base))?.iter().find(|(k, _)| k.eq_ignore_ascii_case(prefix)).map(|(_, v)| v.clone())
+}
+
+/// `@<id>/rest` -> (that folder, `rest`). None for a path in the game
+/// folder; an error for an external folder this PC doesn't have.
+fn split_root<'a>(base: &str, relative: &'a str) -> Result<Option<(PathBuf, &'a str)>, String> {
+    let rel = relative.trim_start_matches("./");
+    let (first, rest) = rel.split_once(['/', '\\']).unwrap_or((rel, ""));
+    if !first.starts_with('@') {
+        return Ok(None);
+    }
+    match extra_root(base, first) {
+        Some(root) => Ok(Some((root, rest))),
+        None => Err(format!("{relative}: that folder isn't on this PC (start the game once, or set it in Settings)")),
+    }
+}
+
+/// The content type's folder on this PC (None: an external one this PC
+/// doesn't have). Every scan, watch and backup goes through this instead of
+/// `base.join(ct.folder)`.
+pub fn ct_dir(base: &str, ct: &crate::registry::ContentType) -> Option<PathBuf> {
+    match ct.root_prefix() {
+        Some(prefix) => {
+            let root = extra_root(base, &prefix)?;
+            Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
+        }
+        None => Some(std::path::Path::new(base).join(&ct.folder)),
+    }
+}
+
+/// `safe_join` without the checks, for keys and display (the hash cache):
+/// where a manifest path is on disk. None: an external folder this PC
+/// doesn't have.
+pub fn content_path(base: &str, relative: &str) -> Option<PathBuf> {
+    match split_root(base, relative) {
+        Ok(Some((root, rest))) => Some(if rest.is_empty() { root } else { root.join(rest) }),
+        Ok(None) => Some(std::path::Path::new(base).join(relative)),
+        Err(_) => None,
+    }
+}
+
+/// The manifest path of a file on disk under `ct_dir(base, ct)`: relative
+/// to the game folder, or `@<id>/...` for an external folder.
+pub fn manifest_path(base: &str, ct: &crate::registry::ContentType, abs: &std::path::Path) -> Option<String> {
+    let rel = match ct.root_prefix() {
+        Some(prefix) => {
+            let root = extra_root(base, &prefix)?;
+            let inner = abs.strip_prefix(&root).ok()?.to_string_lossy().replace('\\', "/");
+            if inner.is_empty() { prefix } else { format!("{prefix}/{inner}") }
+        }
+        None => abs.strip_prefix(base).ok()?.to_string_lossy().replace('\\', "/"),
+    };
+    Some(rel)
 }
 
 /// The lexical half of `safe_join`: whether `relative` could be joined at
