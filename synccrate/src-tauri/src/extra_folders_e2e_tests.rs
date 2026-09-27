@@ -40,6 +40,20 @@ fn external_paths_resolve_through_safe_join() {
     let ct = def.content_types.iter().find(|c| c.id == "worlds").unwrap();
     assert_eq!(crate::utils::ct_dir(&base, ct).unwrap(), worlds);
     assert_eq!(crate::utils::manifest_path(&base, ct, &worlds.join("Midgard.fwl")).as_deref(), Some("@worlds/Midgard.fwl"));
+    // Spelled with backslashes and "./", the prefix still resolves (it was
+    // written into the game folder as a literal "@worlds" folder).
+    assert!(crate::utils::content_path(&base, ".\\@worlds\\Midgard.db").is_some_and(|p| p.starts_with(&worlds)));
+    assert!(crate::registry::is_external_path(".\\@worlds\\Midgard.db"));
+    // A picked folder that's gone (unplugged drive) is not swapped for another.
+    let picked = HashMap::from([("worlds".to_string(), worlds.join("gone").to_string_lossy().to_string())]);
+    let mut def_cts = def.content_types.clone();
+    for c in &mut def_cts {
+        if c.id == "worlds" {
+            c.roots = vec![worlds.to_string_lossy().to_string()];
+        }
+    }
+    assert!(crate::utils::resolve_roots(&def_cts, &picked).is_empty());
+    assert_eq!(crate::utils::resolve_roots(&def_cts, &HashMap::new()).get("@worlds"), Some(&worlds));
     // Other games' folders never resolve against this one.
     assert!(crate::utils::safe_join(&temp_dir("roots-other").to_string_lossy(), "@worlds/Midgard.db").is_err());
     let _ = std::fs::remove_dir_all(&game);
@@ -98,6 +112,36 @@ async fn worlds_outside_the_game_folder_sync_tcp() {
     for d in [&host_game, &host_worlds, &client_game, &client_worlds, &lonely_game] {
         let _ = std::fs::remove_dir_all(d);
     }
+}
+
+#[tokio::test]
+async fn a_picked_folder_must_be_a_save_folder() {
+    let _g = e2e_guard().await;
+    let (game, worlds) = valheim("roots-pick");
+    let state = make_state("valheim", &game);
+    let mut st = state.lock().await;
+    let pick = |st: &mut AppState, p: &Path| crate::commands::files::set_extra_folder_inner(st, "valheim", "worlds", Some(p.to_string_lossy().to_string()));
+    // The game folder, a folder inside it, or one holding it: scanned twice.
+    assert!(pick(&mut st, &game).unwrap_err().contains("overlaps"));
+    std::fs::create_dir_all(game.join("BepInEx")).unwrap();
+    assert!(pick(&mut st, &game.join("BepInEx")).unwrap_err().contains("overlaps"));
+    assert!(pick(&mut st, game.parent().unwrap()).unwrap_err().contains("overlaps"));
+    if let Some(home) = dirs::home_dir() {
+        assert!(pick(&mut st, &home).unwrap_err().contains("user folder"));
+    }
+    assert!(pick(&mut st, &game.join("nope")).unwrap_err().contains("isn't a folder"));
+    // A real worlds folder is fine (and remembered), and can be forgotten again.
+    pick(&mut st, &worlds).expect("a worlds folder");
+    assert!(crate::commands::files::extra_folder_overrides("valheim").contains_key("worlds"));
+    crate::commands::files::set_extra_folder_inner(&mut st, "valheim", "worlds", None).unwrap();
+    assert!(crate::commands::files::extra_folder_overrides("valheim").is_empty());
+    // Only external folders can be changed, and not mid-session.
+    assert!(crate::commands::files::set_extra_folder_inner(&mut st, "valheim", "plugins", Some(worlds.to_string_lossy().to_string())).is_err());
+    st.session_type = crate::state::SessionType::Host;
+    assert!(pick(&mut st, &worlds).unwrap_err().contains("Disconnect"));
+    drop(st);
+    let _ = std::fs::remove_dir_all(&game);
+    let _ = std::fs::remove_dir_all(&worlds);
 }
 
 /// The host's file list as a raw client with these Hello features sees it.

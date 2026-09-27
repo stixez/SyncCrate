@@ -33,8 +33,10 @@ pub struct WatchSpec {
 pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
     let mut folders: Vec<(String, bool)> = Vec::new();
     for ct in cts {
-        // An external folder (`ContentType::roots`) is watched where it is.
-        let Some(dir) = crate::utils::ct_dir(base, ct) else { continue };
+        // An external folder (`ContentType::roots`) is watched where it is,
+        // or where it will be: the game creates it on its first run, and the
+        // rescan that follows picks it up.
+        let Some(dir) = crate::utils::ct_dir(base, ct).or_else(|| crate::utils::expected_root(ct)) else { continue };
         let p = dir.to_string_lossy().to_string();
         match folders.iter_mut().find(|(f, _)| f.eq_ignore_ascii_case(&p)) {
             Some(entry) => entry.1 |= ct.recursive,

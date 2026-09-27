@@ -490,7 +490,11 @@ fn create_backup_inner(
         // Zero entries matter: they record which folders a full backup covered
         // (exact restore only cleans those).
         for ct in req.cts {
-            category_counts.insert(ct.id.clone(), 0);
+            // An outside folder this PC didn't have wasn't covered: exact
+            // restore would otherwise clean it (all worlds) once it exists.
+            if folder_record(&req.base.to_string_lossy(), ct).is_some() {
+                category_counts.insert(ct.id.clone(), 0);
+            }
         }
     }
     for f in &files {
@@ -511,7 +515,7 @@ fn create_backup_inner(
         auto: req.kind == KIND_AUTO || req.kind == KIND_PRESYNC,
         kind: req.kind.to_string(),
         category_counts,
-        category_folders: req.cts.iter().map(|ct| (ct.id.clone(), ct.rel_folder())).collect(),
+        category_folders: req.cts.iter().filter_map(|ct| Some((ct.id.clone(), folder_record(&req.base.to_string_lossy(), ct)?))).collect(),
         new_bytes: Some(new_bytes),
     };
     let manifest = BackupManifest { version: MANIFEST_VERSION, info: info.clone(), files };
@@ -768,12 +772,26 @@ fn same_folder(a: &str, b: &str) -> bool {
     n(a) == n(b)
 }
 
+/// How a backup records where a category came from: the folder for one in
+/// the game folder, `@<id>=<where it was>` for one outside it (its manifest
+/// spelling alone can't tell two AppData folders apart). None: an outside
+/// folder this PC doesn't have.
+fn folder_record(base: &str, ct: &ContentType) -> Option<String> {
+    if !ct.is_external() {
+        return Some(ct.folder.clone());
+    }
+    let dir = utils::ct_dir(base, ct)?;
+    Some(format!("{}={}", ct.rel_folder(), dir.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase()))
+}
+
 /// Whether a backup's `category` was taken from a different folder than
-/// `ct` uses now.
-fn category_moved(info: &BackupInfo, ct: &ContentType) -> bool {
-    match info.category_folders.get(&ct.id) {
-        Some(folder) => !same_folder(folder, &ct.rel_folder()),
-        None => MOVED_BEFORE_FOLDERS_WERE_RECORDED.contains(&(info.game.as_str(), ct.id.as_str())),
+/// `ct` uses now (an outside folder that's now elsewhere, or not here).
+fn category_moved(info: &BackupInfo, ct: &ContentType, base: &str) -> bool {
+    match (info.category_folders.get(&ct.id), folder_record(base, ct)) {
+        (Some(recorded), Some(now)) => !same_folder(recorded, &now),
+        (Some(_), None) => true,
+        (None, _) if ct.is_external() => true,
+        (None, _) => MOVED_BEFORE_FOLDERS_WERE_RECORDED.contains(&(info.game.as_str(), ct.id.as_str())),
     }
 }
 
@@ -872,7 +890,7 @@ fn restore_inner(
             result.missing += 1;
             continue;
         }
-        let Some(ct) = resolve_ct(cts, &entry.category).filter(|ct| !category_moved(&manifest.info, ct)) else {
+        let Some(ct) = resolve_ct(cts, &entry.category).filter(|ct| !category_moved(&manifest.info, ct, &base_str)) else {
             result.missing += 1;
             continue;
         };
@@ -957,7 +975,7 @@ fn restore_inner(
         let covered_ids: HashSet<String> = covered
             .iter()
             .filter_map(|c| resolve_ct(cts, c))
-            .filter(|ct| !category_moved(&manifest.info, ct))
+            .filter(|ct| !category_moved(&manifest.info, ct, &base_str))
             .map(|ct| ct.id.clone())
             .collect();
         let in_scope: Vec<ContentType> = cts.iter().filter(|c| covered_ids.contains(&c.id)).cloned().collect();
@@ -1883,7 +1901,7 @@ mod tests {
         write(&worlds.join("Midgard.db"), b"world");
         let info = backup(&root, &base, &cts, KIND_MANUAL, None).unwrap();
         assert_eq!(info.category_counts.get("worlds"), Some(&1));
-        assert_eq!(info.category_folders.get("worlds").map(String::as_str), Some("@worlds"));
+        assert!(info.category_folders.get("worlds").is_some_and(|f| f.starts_with("@worlds=")), "{:?}", info.category_folders);
 
         write(&worlds.join("Midgard.db"), b"broken");
         let manifest = read_manifest(&root.join(&info.id)).unwrap();
@@ -1892,11 +1910,27 @@ mod tests {
         assert_eq!(std::fs::read(worlds.join("Midgard.db")).unwrap(), b"world");
         assert!(!base.join("@worlds").exists(), "restored where the folder is, not under the prefix");
 
-        // On a PC without that folder the file is skipped, not misplaced.
+        // On a PC without that folder, or with it somewhere else, nothing is
+        // put back there, and an exact restore removes nothing from it.
         let elsewhere = tmp("game2");
         crate::utils::pin_extra_roots(&elsewhere.to_string_lossy(), HashMap::new());
         let r = restore_inner(&root, &info.id, &manifest, &elsewhere, &cts, false, &mut |_, _, _| {});
-        assert!(r.skipped.iter().any(|s| s.contains("isn't on this PC")), "{:?}", r.skipped);
+        assert_eq!(r.restored, 1, "only the mod");
+        assert!(elsewhere.join("Mods/a.dll").exists() && !elsewhere.join("@worlds").exists());
+        let other_worlds = tmp("worlds2");
+        write(&other_worlds.join("Valhalla.db"), b"mine");
+        crate::utils::pin_extra_roots(&base.to_string_lossy(), HashMap::from([("@worlds".to_string(), other_worlds.clone())]));
+        let r = restore_inner(&root, &info.id, &manifest, &base, &cts, true, &mut |_, _, _| {});
+        assert_eq!(r.removed, 0, "a moved outside folder isn't cleaned");
+        assert!(other_worlds.join("Valhalla.db").exists());
+        // A backup made before the folder existed didn't cover it either.
+        let fresh_base = tmp("game3");
+        crate::utils::pin_extra_roots(&fresh_base.to_string_lossy(), HashMap::new());
+        write(&fresh_base.join("Mods/a.dll"), b"mod");
+        let early = backup(&root, &fresh_base, &cts, KIND_MANUAL, None).unwrap();
+        assert!(!early.category_counts.contains_key("worlds"));
+        let _ = std::fs::remove_dir_all(&other_worlds);
+        let _ = std::fs::remove_dir_all(&fresh_base);
         for d in [&root, &base, &worlds, &elsewhere] {
             let _ = std::fs::remove_dir_all(d);
         }

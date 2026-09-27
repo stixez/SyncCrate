@@ -455,7 +455,7 @@ pub fn safe_join(base: &str, relative: &str) -> Result<PathBuf, String> {
     validate_relative(relative)?;
     let rel = std::path::Path::new(relative);
     if let Some((root, rest)) = split_root(base, relative)? {
-        return safe_join_checked(&root.to_string_lossy(), std::path::Path::new(rest), relative);
+        return safe_join_checked(&root.to_string_lossy(), std::path::Path::new(&rest), relative);
     }
     safe_join_checked(base, rel, relative)
 }
@@ -482,8 +482,12 @@ pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::coll
     cts.iter()
         .filter_map(|ct| {
             let prefix = ct.root_prefix()?;
-            let chosen = overrides.get(&ct.id).map(|p| PathBuf::from(p)).filter(|p| p.is_dir());
-            let found = chosen.or_else(|| ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute() && p.is_dir()))?;
+            // A folder the user picked is used or nothing: an unplugged drive
+            // silently swapped for the auto-found folder sent downloads there.
+            let found = match overrides.get(&ct.id) {
+                Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
+                None => ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute() && p.is_dir()),
+            }?;
             Some((prefix, found))
         })
         .collect()
@@ -527,17 +531,31 @@ pub fn extra_root(base: &str, prefix: &str) -> Option<PathBuf> {
 }
 
 /// `@<id>/rest` -> (that folder, `rest`). None for a path in the game
-/// folder; an error for an external folder this PC doesn't have.
-fn split_root<'a>(base: &str, relative: &'a str) -> Result<Option<(PathBuf, &'a str)>, String> {
-    let rel = relative.trim_start_matches("./");
-    let (first, rest) = rel.split_once(['/', '\\']).unwrap_or((rel, ""));
+/// folder; an error for an external folder this PC doesn't have. Spelled
+/// like `content_type_for` reads it (`\\` and a leading `./`): `.\@worlds\x`
+/// otherwise matched the external type there but was written into the game
+/// folder as a literal `@worlds` folder.
+fn split_root(base: &str, relative: &str) -> Result<Option<(PathBuf, String)>, String> {
+    let norm = relative.replace('\\', "/");
+    let mut rel = norm.as_str();
+    while let Some(r) = rel.strip_prefix("./") {
+        rel = r;
+    }
+    let (first, rest) = rel.split_once('/').unwrap_or((rel, ""));
     if !first.starts_with('@') {
         return Ok(None);
     }
     match extra_root(base, first) {
-        Some(root) => Ok(Some((root, rest))),
+        Some(root) => Ok(Some((root, rest.to_string()))),
         None => Err(format!("{relative}: that folder isn't on this PC (start the game once, or set it in Settings)")),
     }
+}
+
+/// Where an external content type's folder would be (its first candidate
+/// for this OS), for watching it before the game has created it.
+pub fn expected_root(ct: &crate::registry::ContentType) -> Option<PathBuf> {
+    let root = ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute())?;
+    Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
 /// The content type's folder on this PC (None: an external one this PC
@@ -558,7 +576,7 @@ pub fn ct_dir(base: &str, ct: &crate::registry::ContentType) -> Option<PathBuf> 
 /// doesn't have.
 pub fn content_path(base: &str, relative: &str) -> Option<PathBuf> {
     match split_root(base, relative) {
-        Ok(Some((root, rest))) => Some(if rest.is_empty() { root } else { root.join(rest) }),
+        Ok(Some((root, rest))) => Some(if rest.is_empty() { root } else { root.join(&rest) }),
         Ok(None) => Some(std::path::Path::new(base).join(relative)),
         Err(_) => None,
     }

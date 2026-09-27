@@ -820,6 +820,45 @@ pub async fn set_extra_folder(
     Ok(extra_folders_of(&app_state, &game_id))
 }
 
+/// A folder picked for outside-the-game content: every file type in it (and
+/// its subfolders, for Stardew) is scanned and shared, so never a user
+/// folder, AppData itself or a drive, and never overlapping a game folder or
+/// another such folder (the files would be scanned twice).
+fn check_extra_folder(app_state: &AppState, game_id: &str, ct_id: &str, picked: &str) -> Result<std::path::PathBuf, String> {
+    refuse_network_path(picked)?;
+    let canonical = std::fs::canonicalize(picked).map(utils::clean_path).map_err(|_| format!("{picked} isn't a folder on this PC."))?;
+    if !canonical.is_dir() {
+        return Err(format!("{picked} isn't a folder on this PC."));
+    }
+    let mut protected = utils::protected_folders();
+    for (d, what) in [(dirs::data_dir(), "your AppData folder"), (dirs::data_local_dir(), "your local AppData folder"), (dirs::config_dir(), "your settings folder")] {
+        if let Some(d) = d {
+            protected.push((std::fs::canonicalize(&d).map(utils::clean_path).unwrap_or(d), what));
+        }
+    }
+    let label = |ct: &str| get_game_def(&app_state.game_registry, game_id).and_then(|d| d.content_types.iter().find(|c| c.id == ct)).map_or("save", |c| c.label.as_str()).to_lowercase();
+    if let Some(reason) = utils::protected_folder_reason(&canonical, &protected) {
+        return Err(format!("{} is {reason}. Pick the {} folder itself.", canonical.display(), label(ct_id)));
+    }
+    let own_root = get_game_def(&app_state.game_registry, game_id)
+        .and_then(|d| d.content_types.iter().find(|c| c.id == ct_id).cloned())
+        .and_then(|ct| app_state.game_paths.get(game_id).and_then(|b| utils::ct_dir(b, &ct)));
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).map(utils::clean_path).unwrap_or_else(|_| p.to_path_buf());
+    let mut others: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for (id, base) in &app_state.game_paths {
+        others.push((app_state.game_label(id), canon(std::path::Path::new(base))));
+        for r in utils::extra_roots_of(base) {
+            if own_root.as_ref().is_none_or(|o| !utils::same_path(&canon(o), &canon(&r))) {
+                others.push((app_state.game_label(id), canon(&r)));
+            }
+        }
+    }
+    if let Some((who, p)) = others.iter().find(|(_, p)| utils::paths_overlap(&canonical, p)) {
+        return Err(format!("This folder overlaps a folder of {who} ({}). Pick the {} folder itself.", p.display(), label(ct_id)));
+    }
+    Ok(canonical)
+}
+
 pub(crate) fn set_extra_folder_inner(app_state: &mut AppState, game_id: &str, ct_id: &str, path: Option<String>) -> Result<(), String> {
     let label = app_state.game_label(game_id);
     if app_state.active_game == game_id && app_state.session_type != crate::state::SessionType::None {
@@ -829,11 +868,10 @@ pub(crate) fn set_extra_folder_inner(app_state: &mut AppState, game_id: &str, ct
     if !def.content_types.iter().any(|ct| ct.id == ct_id && ct.is_external()) {
         return Err("That folder can't be changed.".into());
     }
-    if let Some(p) = &path {
-        if !std::path::Path::new(p).is_dir() {
-            return Err(format!("{p} isn't a folder on this PC."));
-        }
-    }
+    let path = match path {
+        Some(p) => Some(check_extra_folder(app_state, game_id, ct_id, &p)?.to_string_lossy().to_string()),
+        None => None,
+    };
     set_extra_folder_override(game_id, ct_id, path);
     if let Some(base) = app_state.game_paths.get(game_id).cloned() {
         refresh_extra_roots(&def, &base);

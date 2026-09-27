@@ -231,7 +231,12 @@ pub const EXTERNAL_FOLDERS_FEATURE: &str = "roots";
 
 /// Whether a manifest path is in an external folder (`@<id>/...`).
 pub fn is_external_path(path: &str) -> bool {
-    path.trim_start_matches("./").starts_with('@')
+    let norm = path.replace('\\', "/");
+    let mut p = norm.as_str();
+    while let Some(r) = p.strip_prefix("./") {
+        p = r;
+    }
+    p.starts_with('@')
 }
 
 impl ContentType {
