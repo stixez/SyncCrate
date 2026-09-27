@@ -19,7 +19,7 @@ import type { Density, ThemeMode, UiScale } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
-import type { AutoBackupConfig } from "../lib/types";
+import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
   const gamePaths = useAppStore((s) => s.gamePaths);
@@ -298,7 +298,8 @@ export default function Settings() {
           <div className="space-y-3">
             {libraryGames.map((game) => {
               const gameDef = getGameDef(game.id);
-              const contentFolders = gameDef?.content_types.map((ct) => ct.folder).join(", ") ?? "";
+              const contentFolders = gameDef?.content_types.filter((ct) => !ct.roots?.length).map((ct) => ct.folder).join(", ") ?? "";
+              const hasOutside = gameDef?.content_types.some((ct) => ct.roots?.length) ?? false;
               return (
                 <Panel key={game.id} padded={false}>
                   <div className="px-5 py-4 space-y-3">
@@ -367,6 +368,7 @@ export default function Settings() {
                         Browse
                       </Button>
                     </div>
+                    {hasOutside && <OutsideFolders gameId={game.id} gamePath={gamePaths[game.id]} />}
                   </div>
                 </Panel>
               );
@@ -868,6 +870,56 @@ function SettingRow({ label, hint, children }: { label?: string; hint?: string; 
         {hint && <p className="text-xs text-txt-dim mt-0.5">{hint}</p>}
       </div>
       <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/** Folders a game keeps outside its own (Valheim worlds, Stardew saves),
+ * found automatically once the game has run, or picked here. */
+function OutsideFolders({ gameId, gamePath }: { gameId: string; gamePath?: string }) {
+  const [folders, setFolders] = useState<ExtraFolder[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    cmd.getExtraFolders(gameId).then(setFolders).catch(() => setFolders([]));
+  }, [gameId, gamePath]);
+  const change = async (ctId: string, path: string | null) => {
+    setBusy(true);
+    try {
+      setFolders(await cmd.setExtraFolder(gameId, ctId, path));
+      toastSuccess(path ? "Folder set. Its files show up after the next scan." : "SyncCrate finds the folder itself again.");
+    } catch (e) {
+      toastError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pick = async (f: ExtraFolder) => {
+    const chosen = await open({ directory: true, defaultPath: f.path ?? undefined, title: `${f.label} folder` });
+    if (typeof chosen === "string") await change(f.ct_id, chosen);
+  };
+  if (folders.length === 0) return null;
+  return (
+    <div className="border-t border-border pt-3 space-y-2">
+      <p className="text-xs text-txt-dim">Kept outside the game folder, and synced like the rest:</p>
+      {folders.map((f) => (
+        <div key={f.ct_id} className="flex items-center gap-2 flex-wrap">
+          <span className="text-[12.5px] font-semibold w-20 shrink-0">{f.label}</span>
+          {f.path ? (
+            <span className="font-mono text-[11px] text-txt-muted truncate min-w-0 flex-1" title={f.path}>{f.path}</span>
+          ) : (
+            <span className="text-[11.5px] text-amber flex-1">Not found yet. Start the game once, or pick the folder.</span>
+          )}
+          {f.custom && <Badge tone="neutral">Picked</Badge>}
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => pick(f)} icon={<FolderOpen size={12} />}>
+            {f.path ? "Change" : "Pick"}
+          </Button>
+          {f.custom && (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => change(f.ct_id, null)}>
+              Find it automatically
+            </Button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

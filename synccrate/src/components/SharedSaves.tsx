@@ -65,6 +65,7 @@ export default function SharedSaves({ gameId }: { gameId: string }) {
       <p className="text-xs text-txt-dim mb-3">
         A shared save moves only when someone takes it or gives it back, never in a normal sync, so nobody plays an old copy. Close the game before handing a save over.
       </p>
+      {getGameDef(gameId)?.handoff_note && <p className="text-xs text-txt-dim mb-3">{getGameDef(gameId)!.handoff_note}</p>}
       {isClient && !view.host_supports && <p className="text-xs text-amber mb-3">The host's SyncCrate is too old for save handoff. Ask them to update.</p>}
       {isClient && view.host_supports && !view.proven && <p className="text-xs text-amber mb-3">{LAN_NOTE}</p>}
 

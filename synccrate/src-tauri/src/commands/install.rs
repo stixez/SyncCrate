@@ -57,8 +57,9 @@ fn numbered_name(stem: &str, counter: u32, ext: &str) -> String {
 /// dropped `.wld` world ended up in Terraria's mods folder.
 fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a ContentType, String> {
     let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    // Folders outside the game dir (`%APPDATA%/...`) can't be joined onto it.
-    let usable = |ct: &ContentType| !ct.folder.contains('%') && !ct.folder.contains(':');
+    // Folders outside the game dir (`%APPDATA%/...`, `ContentType::roots`)
+    // can't be joined onto it; drops only install into the game folder.
+    let usable = |ct: &ContentType| !ct.folder.contains('%') && !ct.folder.contains(':') && !ct.is_external();
     if !ext.is_empty() {
         if let Some(ct) = def
             .content_types

@@ -1248,6 +1248,7 @@
       },
       "disable_method": "none",
       "label": "Stardew Valley",
+      "handoff_note": "Whoever loads a shared farm plays its main farmer. For a co-op farm, hand it to whoever hosts the farm next.",
       "family": "stardew",
       "icon": "sprout",
       "color": "text-lime-400",
@@ -1296,6 +1297,18 @@
           "extensions": [],
           "file_type": "Mod",
           "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Saves",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%APPDATA%/StardewValley/Saves", "~/.config/StardewValley/Saves"],
+          "extensions": [],
+          "file_type": "Save",
+          "exclude_files": ["steam_autocloud.vdf"],
+          "save_unit_depth": 1
         }
       ],
       "dangerous_script_extensions": [
@@ -1369,6 +1382,19 @@
           "extensions": ["cfg"],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "worlds",
+          "label": "Worlds",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%USERPROFILE%/AppData/LocalLow/IronGate/Valheim/worlds_local", "~/Library/Application Support/IronGate/Valheim/worlds_local", "~/.config/unity3d/IronGate/Valheim/worlds_local"],
+          "extensions": ["db", "fwl", "old"],
+          "file_type": "Save",
+          "recursive": false,
+          "exclude_patterns": ["*_backup_*"],
+          "save_unit_depth": 0
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -2469,6 +2495,18 @@
           "extensions": [],
           "file_type": "Mod",
           "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Saves",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%USERPROFILE%/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Saves", "~/Library/Application Support/RimWorld/Saves", "~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Saves"],
+          "extensions": ["rws"],
+          "file_type": "Save",
+          "recursive": false,
+          "save_unit_depth": 0
         }
       ],
       "dangerous_script_extensions": ["dll"],

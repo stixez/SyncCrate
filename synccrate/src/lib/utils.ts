@@ -69,6 +69,15 @@ export function fileName(relativePath: string): string {
   return relativePath.split(/[/\\]/).pop() || relativePath;
 }
 
+/** A manifest path as people read it: `@worlds/Midgard.db` (a folder outside
+ * the game folder, see `ContentType::roots`) shows as `Midgard.db`. */
+export function displayPath(relativePath: string): string {
+  const p = relativePath.replace(/\\/g, "/");
+  if (!p.startsWith("@")) return p;
+  const i = p.indexOf("/");
+  return i < 0 ? "" : p.slice(i + 1);
+}
+
 /** Directory part of a relative path with forward slashes ("" for top-level files). */
 export function dirOf(relativePath: string): string {
   const p = relativePath.replace(/\\/g, "/");

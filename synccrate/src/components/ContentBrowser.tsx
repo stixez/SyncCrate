@@ -18,7 +18,7 @@ import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
-import { dirOf, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
+import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
@@ -1311,9 +1311,11 @@ function FolderHeader({
   onDisableAll: () => void;
 }) {
   const n = group.files.length;
-  const slash = group.dir.lastIndexOf("/");
-  const parent = slash >= 0 ? group.dir.slice(0, slash + 1) : "";
-  const leaf = slash >= 0 ? group.dir.slice(slash + 1) : group.dir || "(top level)";
+  // `@worlds/...` is a folder outside the game (Valheim, Stardew): shown without the prefix.
+  const shown = displayPath(group.dir);
+  const slash = shown.lastIndexOf("/");
+  const parent = slash >= 0 ? shown.slice(0, slash + 1) : "";
+  const leaf = slash >= 0 ? shown.slice(slash + 1) : shown || "(top level)";
   const allSelected = selectedCount === n;
   const enabled = n - group.disabled;
   // A folder header names the mod only for folder mods (a jar's name is on its own row).

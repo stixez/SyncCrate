@@ -13,7 +13,6 @@ use crate::network::transfer;
 use crate::registry::ContentType;
 use crate::state::{AppState, FileInfo};
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -89,7 +88,8 @@ pub fn drop_pending(st: &mut AppState, peer_id: &str) {
 fn unit_files_on_disk(base: &str, cts: &[ContentType], unit: &str) -> Result<Vec<String>, String> {
     let (ct_id, name) = unit.split_once('/').ok_or("Not a save.")?;
     let ct = cts.iter().find(|c| c.id == ct_id && c.save_unit_depth.is_some()).ok_or("This game's saves can't be handed over.")?;
-    let root = Path::new(base).join(&ct.folder);
+    // Outside the game folder for Valheim or Stardew (`ContentType::roots`).
+    let root = crate::utils::ct_dir(base, ct).ok_or("This save's folder isn't on this PC. Start the game once, or set the folder in Settings.")?;
     let (walk_root, max_depth) = if ct.save_unit_depth == Some(0) {
         (root.clone(), 1)
     } else {
@@ -103,7 +103,7 @@ fn unit_files_on_disk(base: &str, cts: &[ContentType], unit: &str) -> Result<Vec
         if !e.file_type().is_file() {
             continue;
         }
-        let Some(rel) = e.path().strip_prefix(base).ok().map(|r| r.to_string_lossy().replace('\\', "/")) else { continue };
+        let Some(rel) = crate::utils::manifest_path(base, ct, e.path()) else { continue };
         if crate::sync::diff::is_disabled_path(&rel) || !crate::commands::files::content_type_accepts_in(ct, e.path(), Some(&root)) {
             continue;
         }

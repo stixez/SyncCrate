@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
 import { demoSharedSaves, isDemoMode } from "./demoData";
 import type {
+  ExtraFolder,
   SharedSavesView,
   IncomingOffer,
   OutgoingOfferView,
@@ -708,6 +709,21 @@ export async function takeSave(crew: string, game: string, unit: string): Promis
 
 export async function giveSave(crew: string, game: string, unit: string): Promise<void> {
   return invoke("give_save", { crew, game, unit });
+}
+
+export async function getExtraFolders(game: string): Promise<ExtraFolder[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_extra_folders", { game });
+}
+
+/** `path: null` goes back to finding the folder automatically. */
+export async function setExtraFolder(game: string, ctId: string, path: string | null): Promise<ExtraFolder[]> {
+  return invoke("set_extra_folder", { game, ctId, path });
+}
+
+/** Where a file of the active game really is (`@<id>/` paths are outside the game folder). */
+export async function resolveContentPath(relativePath: string): Promise<string> {
+  return invoke("resolve_content_path", { relativePath });
 }
 
 /** Host: trust a friend who says they have the newest copy. */

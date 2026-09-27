@@ -59,7 +59,8 @@ pub fn content_id_for_file(
         if !type_matches {
             continue;
         }
-        let folder = ct.folder.replace('\\', "/");
+        // `@<id>` for content outside the game folder (`ContentType::roots`).
+        let folder = ct.rel_folder().replace('\\', "/");
         let folder = folder.trim_end_matches('/');
         let depth = if folder.is_empty() || folder == "." {
             0
@@ -567,6 +568,7 @@ mod tests {
             exclude_files: Vec::new(),
             exclude_patterns: Vec::new(),
             save_unit_depth: None,
+            roots: vec![],
         }
     }
 

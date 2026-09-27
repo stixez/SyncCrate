@@ -13,6 +13,11 @@ pub struct GameRegistry {
 pub struct GameDefinition {
     pub id: String,
     pub label: String,
+    /// Shown with this game's shared saves (`crate::handoff`) when handing
+    /// one around has a catch (Stardew: whoever loads a farm plays its main
+    /// farmer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_note: Option<String>,
     pub family: String,
     #[serde(default)]
     pub icon: String,
@@ -209,6 +214,51 @@ pub struct ContentType {
     /// friend's other worlds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub save_unit_depth: Option<u8>,
+    /// Where this content lives when it isn't inside the game's folder
+    /// (Valheim worlds, Stardew saves: the user's AppData or ~/.config).
+    /// Candidates, tried in order (`%VAR%` and `~` expand; one per OS
+    /// usually); the first folder that exists wins, and `folder` is then
+    /// relative to it. Its files' paths start with `@<id>/` (`root_prefix`),
+    /// which `utils::safe_join` resolves: a game only ever had one folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roots: Vec<String>,
+}
+
+/// Hello/Welcome feature: this app understands `@<id>/` paths (content
+/// outside the game folder). An older friend would write them into the game
+/// folder as a literal `@worlds` folder, so a host leaves them out for it.
+pub const EXTERNAL_FOLDERS_FEATURE: &str = "roots";
+
+/// Whether a manifest path is in an external folder (`@<id>/...`).
+pub fn is_external_path(path: &str) -> bool {
+    let norm = path.replace('\\', "/");
+    let mut p = norm.as_str();
+    while let Some(r) = p.strip_prefix("./") {
+        p = r;
+    }
+    p.starts_with('@')
+}
+
+impl ContentType {
+    pub fn is_external(&self) -> bool {
+        !self.roots.is_empty()
+    }
+
+    /// `@<id>`: the first segment of this content type's paths when it
+    /// lives outside the game folder.
+    pub fn root_prefix(&self) -> Option<String> {
+        self.is_external().then(|| format!("@{}", self.id))
+    }
+
+    /// The folder its paths start with, as the manifest spells them:
+    /// `folder` for the game folder, `@<id>[/folder]` outside it.
+    pub fn rel_folder(&self) -> String {
+        match self.root_prefix() {
+            Some(p) if self.folder.is_empty() || self.folder == "." => p,
+            Some(p) => format!("{p}/{}", self.folder.trim_start_matches("./")),
+            None => self.folder.clone(),
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -374,13 +424,45 @@ mod tests {
 
     /// True if `inner`'s files would also be picked up by scanning `outer`.
     fn folder_covers(outer: &ContentType, inner: &ContentType) -> bool {
-        let (o, i) = (norm_folder(&outer.folder), norm_folder(&inner.folder));
+        // As the manifest spells them: a folder outside the game (`@<id>`)
+        // never covers one inside it, whatever its own `folder` is.
+        let (o, i) = (norm_folder(&outer.rel_folder()), norm_folder(&inner.rel_folder()));
         if o == i {
             return true;
         }
         // "." non-recursive only sees loose files in the game folder itself.
         let o_prefix = if o == "." { String::new() } else { format!("{}/", o) };
         outer.recursive && (o == "." || i.starts_with(&o_prefix))
+    }
+
+    #[test]
+    fn folders_outside_the_game_are_well_formed() {
+        let registry = load_registry();
+        let mut external = 0;
+        for g in &registry.games {
+            for ct in g.content_types.iter().filter(|c| c.is_external()) {
+                external += 1;
+                // `@<id>` is a path segment: the id must be a plain one.
+                assert!(ct.id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'), "{}/{}", g.id, ct.id);
+                for r in &ct.roots {
+                    assert!(r.starts_with('%') || r.starts_with("~/"), "{}/{}: {r} must start at a known folder", g.id, ct.id);
+                    assert!(!r.contains(".."), "{}/{}: {r}", g.id, ct.id);
+                }
+                assert!(!ct.folder.contains("..") && !ct.folder.contains(':'), "{}/{}", g.id, ct.id);
+                assert!(g.content_types.first().is_some_and(|f| !f.is_external()), "{}: the mods folder comes first", g.id);
+            }
+            // No folder in the game dir can be mistaken for an external one.
+            assert!(g.content_types.iter().filter(|c| !c.is_external()).all(|c| !c.folder.starts_with('@')), "{}", g.id);
+        }
+        assert!(external >= 3);
+        let valheim = registry.games.iter().find(|g| g.id == "valheim").unwrap();
+        let worlds = valheim.content_types.iter().find(|c| c.id == "worlds").unwrap();
+        assert_eq!(worlds.rel_folder(), "@worlds");
+        assert!(crate::handoff::unit_of(&valheim.content_types, "@worlds/Midgard.db.old").is_some_and(|u| u == "worlds/Midgard"));
+        assert!(crate::sync::diff::content_type_for(&valheim.content_types, "@worlds/Midgard_backup_auto-20240101.db").is_none(), "Valheim's own rolling backups stay local");
+        let stardew = registry.games.iter().find(|g| g.id == "stardew_valley").unwrap();
+        assert_eq!(crate::handoff::unit_of(&stardew.content_types, "@saves/Farm_123/Farm_123").as_deref(), Some("saves/Farm_123"));
+        assert!(stardew.handoff_note.is_some());
     }
 
     #[test]

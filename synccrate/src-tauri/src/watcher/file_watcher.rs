@@ -1,7 +1,7 @@
 use crate::registry::ContentType;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -33,7 +33,11 @@ pub struct WatchSpec {
 pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
     let mut folders: Vec<(String, bool)> = Vec::new();
     for ct in cts {
-        let p = PathBuf::from(base).join(&ct.folder).to_string_lossy().to_string();
+        // An external folder (`ContentType::roots`) is watched where it is,
+        // or where it will be: the game creates it on its first run, and the
+        // rescan that follows picks it up.
+        let Some(dir) = crate::utils::ct_dir(base, ct).or_else(|| crate::utils::expected_root(ct)) else { continue };
+        let p = dir.to_string_lossy().to_string();
         match folders.iter_mut().find(|(f, _)| f.eq_ignore_ascii_case(&p)) {
             Some(entry) => entry.1 |= ct.recursive,
             None => folders.push((p, ct.recursive)),
@@ -49,7 +53,8 @@ pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
     });
     let mut excluded: Vec<(String, HashSet<String>)> = Vec::new();
     for ct in cts {
-        let key = norm_path(&PathBuf::from(base).join(&ct.folder));
+        let Some(dir) = crate::utils::ct_dir(base, ct) else { continue };
+        let key = norm_path(&dir);
         let names = ct.exclude_files.iter().map(|n| n.to_lowercase());
         match excluded.iter_mut().find(|(k, _)| *k == key) {
             Some((_, set)) => set.extend(names),

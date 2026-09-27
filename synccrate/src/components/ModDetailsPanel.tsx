@@ -82,7 +82,17 @@ export default function ModDetailsPanel({
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useDialog(onClose);
 
-  const fullPath = basePath ? `${basePath}/${file.relative_path}` : "";
+  // A `@<id>/` path lives outside the game folder (Valheim worlds): ask
+  // where; gluing it onto the game folder named a folder that isn't there.
+  const outside = file.relative_path.startsWith("@");
+  const [resolved, setResolved] = useState("");
+  useEffect(() => {
+    if (!outside) return;
+    let live = true;
+    cmd.resolveContentPath(file.relative_path).then((p) => live && setResolved(p)).catch(() => live && setResolved(""));
+    return () => { live = false; };
+  }, [outside, file.relative_path]);
+  const fullPath = outside ? resolved : basePath ? `${basePath}/${file.relative_path}` : "";
   const handleReveal = () => {
     if (!fullPath) return;
     cmd.revealFile(fullPath).catch((e) => toastError(`Couldn't show the file: ${e}`));
