@@ -62,6 +62,7 @@ pub(crate) async fn create_crew_inner(state: &Arc<Mutex<AppState>>, name: &str, 
         sets: Default::default(),
         last_host: None,
         created_at: now,
+        saves: Vec::new(),
     };
     s.crews.crews.push(crew.clone());
     crews::persist(&s);
@@ -326,6 +327,7 @@ mod tests {
                 at: 1,
             }),
             created_at: 0,
+            saves: Vec::new(),
         }
     }
 

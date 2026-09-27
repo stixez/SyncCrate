@@ -190,6 +190,20 @@ export const GUIDE: GuideGroup[] = [
         go: { label: "Open Crews", page: "crews" },
       },
       {
+        id: "handoff",
+        title: "Take turns on a save",
+        summary: "Hand a shared save around your crew, so nobody plays an old copy.",
+        steps: [
+          "On the Dashboard, under **Shared saves**, pick a save and click **Share**. It now belongs to the crew and only moves when someone takes it or gives it back, never in a normal sync.",
+          "Join your host through the crew (**Crews**, then **Join**). If they have the save and aren't playing, click **Take it**: your copy becomes theirs.",
+          "Mark **I'm playing** so the others wait. When you're done, click **Give to** your host: their copy becomes yours.",
+          "Two friends hand a save over through whoever hosts: one gives it to the host, the other takes it.",
+        ],
+        tip: "Close the game before taking or giving a save. The old copy is kept in File history either way.",
+        keywords: "save handoff turns rotate legacy world share check out check in",
+        go: { label: "Open the Dashboard", page: "dashboard" },
+      },
+      {
         id: "offers",
         title: "Offer a mod to the host",
         summary: "Got a mod the host doesn't? Suggest it.",

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
-import { isDemoMode } from "./demoData";
+import { demoSharedSaves, isDemoMode } from "./demoData";
 import type {
+  SharedSavesView,
   IncomingOffer,
   OutgoingOfferView,
   UpdateReport,
@@ -677,6 +678,36 @@ export async function cancelOffer(): Promise<void> {
 export async function getOutgoingOffer(): Promise<OutgoingOfferView> {
   if (isDemoMode()) return { available: false, offer: null };
   return invoke("get_outgoing_offer");
+}
+
+export async function getSharedSaves(game: string): Promise<SharedSavesView> {
+  if (isDemoMode()) return demoSharedSaves(game);
+  return invoke("get_shared_saves", { game });
+}
+
+export async function shareSave(crew: string, game: string, unit: string): Promise<void> {
+  return invoke("share_save", { crew, game, unit });
+}
+
+export async function unshareSave(crew: string, game: string, unit: string): Promise<void> {
+  return invoke("unshare_save", { crew, game, unit });
+}
+
+export async function setSavePlaying(crew: string, game: string, unit: string, playing: boolean): Promise<void> {
+  return invoke("set_save_playing", { crew, game, unit, playing });
+}
+
+export async function takeOverSave(crew: string, game: string, unit: string): Promise<void> {
+  return invoke("take_over_save", { crew, game, unit });
+}
+
+/** Resolves to how many files were downloaded. */
+export async function takeSave(crew: string, game: string, unit: string): Promise<number> {
+  return invoke("take_save", { crew, game, unit });
+}
+
+export async function giveSave(crew: string, game: string, unit: string): Promise<void> {
+  return invoke("give_save", { crew, game, unit });
 }
 
 export async function getIncomingOffers(): Promise<IncomingOffer[]> {

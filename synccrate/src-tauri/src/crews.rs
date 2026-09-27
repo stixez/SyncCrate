@@ -97,6 +97,9 @@ pub struct Crew {
     pub last_host: Option<CrewHost>,
     #[serde(default)]
     pub created_at: u64,
+    /// Saves the crew takes turns on (`crate::handoff`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub saves: Vec<crate::handoff::SharedSave>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -557,6 +560,7 @@ pub fn crew_from_invite(inv: &CrewInvite, me: CrewMember, now: u64) -> Crew {
         sets: BTreeMap::new(),
         last_host: None,
         created_at: now,
+        saves: Vec::new(),
     }
 }
 
@@ -702,6 +706,7 @@ mod tests {
             sets: BTreeMap::new(),
             last_host: None,
             created_at: 1,
+            saves: Vec::new(),
         }
     }
 

@@ -416,6 +416,13 @@ pub struct AppState {
     /// Client side: our offer to the host, and whether the host takes offers.
     pub offer_out: Option<crate::offers::OutgoingOffer>,
     pub offers_available: bool,
+    /// Client: the host takes part in save handoff (`crate::handoff`).
+    pub handoff_available: bool,
+    /// Client: the host's node id is proven (we dialled it over iroh).
+    /// Handoff, like crew data, never trusts an id claimed over LAN TCP.
+    pub host_proven: bool,
+    /// Host: a friend's save being handed over, per peer id.
+    pub handoff_in: HashMap<String, crate::handoff::PendingGive>,
     /// Bumped whenever a session ends; see `transfer::still_hosting`.
     pub host_epoch: u64,
 }
@@ -528,6 +535,9 @@ impl Default for AppState {
             offers_in: HashMap::new(),
             offer_out: None,
             offers_available: false,
+            handoff_available: false,
+            host_proven: false,
+            handoff_in: HashMap::new(),
             host_epoch: 0,
         }
     }

@@ -1,5 +1,6 @@
 import pkg from "../../package.json";
 import type {
+  SharedSavesView,
   FileManifest,
   SessionStatus,
   SyncPlan,
@@ -675,4 +676,25 @@ export function demoOutdatedScripts(manifest: FileManifest | null): { patch_time
     .filter((f) => f.file_type === "Mod" && f.modified < patch && !f.relative_path.toLowerCase().endsWith(".disabled"))
     .map((f) => f.relative_path);
   return { patch_time: patch, paths };
+}
+
+/** Demo "Shared saves" panel: one save with a friend, one with you, one to share. */
+export function demoSharedSaves(game: string): SharedSavesView {
+  if (game !== "sims4") return { crews: [], rows: [], session: "none", host_name: null, host_supports: false, proven: false };
+  const rec = (unit: string, holder: string, holder_name: string, playing: boolean, ago: number) => ({
+    game, unit, holder, holder_name, playing, removed: false, version: 3, updated_at: now - ago,
+  });
+  const crew = { crew: "demo-crew", crew_name: "Sunday Sims Crew" };
+  return {
+    crews: [{ id: "demo-crew", name: "Sunday Sims Crew" }],
+    session: "client",
+    host_name: "Alex",
+    host_supports: true,
+    proven: true,
+    rows: [
+      { unit: "saves/Slot_00000002", name: "Slot_00000002", ...crew, record: rec("saves/Slot_00000002", "alex", "Alex", false, 2 * 86400), files: 6, bytes: 48_200_000, modified: now - 9 * 86400, holder_is_me: false, holder_connected: true },
+      { unit: "saves/Slot_00000005", name: "Slot_00000005", ...crew, record: rec("saves/Slot_00000005", "me", "You", true, 3600), files: 5, bytes: 31_700_000, modified: now - 1800, holder_is_me: true, holder_connected: false },
+      { unit: "saves/Slot_00000001", name: "Slot_00000001", crew: null, crew_name: null, record: null, files: 6, bytes: 22_400_000, modified: now - 30 * 86400, holder_is_me: false, holder_connected: false },
+    ],
+  };
 }

@@ -116,6 +116,21 @@ pub enum Message {
         #[serde(default)]
         accepted: Option<usize>,
     },
+    /// Client → host (feature `handoff`): our shared-save records for crews
+    /// we're in with the host, and maybe a take / give / commit.
+    HandoffSync {
+        #[serde(default)]
+        saves: Vec<crate::handoff::CrewSaves>,
+        #[serde(default)]
+        request: Option<crate::handoff::HandoffRequest>,
+    },
+    /// Host → client, only as the reply to `HandoffSync`.
+    HandoffStatus {
+        #[serde(default)]
+        saves: Vec<crate::handoff::CrewSaves>,
+        #[serde(default)]
+        reply: Option<crate::handoff::HandoffReply>,
+    },
 }
 
 /// Error a host sends when a client joins with a different game selected.

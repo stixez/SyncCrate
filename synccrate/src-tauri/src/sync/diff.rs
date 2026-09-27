@@ -424,7 +424,7 @@ pub fn keep_tmp_original(file_name: &str) -> Option<&str> {
 /// types they were then scanned, backed up, served to friends and auto-pulled.
 pub fn is_synccrate_temp(file_name: &str) -> bool {
     let Some(rest) = file_name.strip_suffix(".tmp") else { return false };
-    if rest.ends_with(".synccrate-restore") || rest.contains(".synccrate-offer-") || keep_tmp_original(file_name).is_some() {
+    if rest.ends_with(".synccrate-restore") || rest.contains(".synccrate-offer-") || rest.contains(".synccrate-handoff-") || keep_tmp_original(file_name).is_some() {
         return true;
     }
     // Download temps: a nanosecond timestamp (19 digits today) before ".tmp".
