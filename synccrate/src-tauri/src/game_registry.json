@@ -65,6 +65,7 @@
           "folder": "Saves",
           "extensions": [],
           "file_type": "Save",
+          "save_unit_depth": 0,
           "syncable": true
         },
         {
@@ -394,6 +395,7 @@
           "folder": "Saves",
           "extensions": [],
           "file_type": "Save",
+          "save_unit_depth": 1,
           "syncable": true
         },
         {
@@ -1082,6 +1084,7 @@
           "folder": "saves",
           "extensions": [],
           "file_type": "Save",
+          "save_unit_depth": 1,
           "syncable": true
         },
         {
@@ -1423,6 +1426,7 @@
             "twld"
           ],
           "file_type": "Save",
+          "save_unit_depth": 0,
           "syncable": true
         },
         {
@@ -1462,6 +1466,7 @@
             "twld"
           ],
           "file_type": "Save",
+          "save_unit_depth": 0,
           "syncable": true
         },
         {
@@ -2541,6 +2546,7 @@
             "crp"
           ],
           "file_type": "Save",
+          "save_unit_depth": 0,
           "syncable": true
         },
         {
@@ -2684,6 +2690,7 @@
           "folder": "saves",
           "extensions": ["zip"],
           "file_type": "Save",
+          "save_unit_depth": 0,
           "syncable": true
         },
         {
@@ -3085,6 +3092,7 @@
           "folder": "Saves",
           "extensions": [],
           "file_type": "Save",
+          "save_unit_depth": 2,
           "syncable": true
         }
       ],

@@ -395,12 +395,17 @@ pub(crate) async fn execute_sync_inner(
             return Err("A backup is being restored. Sync again when it's done.".to_string());
         }
 
+        let shared = crate::handoff::shared_units(app_state.crews.crews.iter(), &active_game);
         let conn = app_state
             .connections
             .get_mut(&resolved_id)
             .ok_or("Peer not found")?;
 
-        let plan = conn.sync_plan.take().ok_or("No sync plan computed.")?;
+        let mut plan = conn.sync_plan.take().ok_or("No sync plan computed.")?;
+        // A save shared after Compare: this sync must not move it either.
+        if !shared.is_empty() {
+            plan.actions.retain(|a| !crate::handoff::is_shared(&content_types, &shared, crate::handoff::action_path(a)));
+        }
 
         // The plan was computed against one game folder; the active game or its
         // path may have changed since. Drop the plan rather than run it here.

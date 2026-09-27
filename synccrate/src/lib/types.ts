@@ -240,6 +240,8 @@ export interface SharedSave {
   removed: boolean;
   version: number;
   updated_at: number;
+  /** The holder only has their own word for it: a host accepts their copy first. */
+  claimed: boolean;
 }
 
 export interface SharedSaveRow {
@@ -648,6 +650,8 @@ export interface ContentTypeDefinition {
   must_contain?: string | null;
   exclude_files?: string[];
   exclude_patterns?: string[];
+  /** Save handoff: folder levels that name one save (unset: not supported). */
+  save_unit_depth?: number;
 }
 
 export interface VersionDetection {

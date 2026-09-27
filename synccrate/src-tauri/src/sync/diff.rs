@@ -488,7 +488,7 @@ mod tests {
         let cts = vec![crate::registry::ContentType {
             id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None,
         }];
         let mut m = FileManifest::default();
         let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
@@ -538,6 +538,7 @@ mod tests {
             must_contain: None,
             exclude_files: vec!["ReShade.ini".to_string()],
             exclude_patterns: vec!["cc???sse*".to_string(), "Skyrim - *.bsa".to_string(), "SquadExpansion/*".to_string()],
+            save_unit_depth: None,
         }
     }
 

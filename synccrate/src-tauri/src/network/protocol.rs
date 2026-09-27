@@ -119,6 +119,9 @@ pub enum Message {
     /// Client → host (feature `handoff`): our shared-save records for crews
     /// we're in with the host, and maybe a take / give / commit.
     HandoffSync {
+        /// Echoed in the reply, so a late answer is never taken for another.
+        #[serde(default)]
+        id: u64,
         #[serde(default)]
         saves: Vec<crate::handoff::CrewSaves>,
         #[serde(default)]
@@ -126,6 +129,8 @@ pub enum Message {
     },
     /// Host → client, only as the reply to `HandoffSync`.
     HandoffStatus {
+        #[serde(default)]
+        id: u64,
         #[serde(default)]
         saves: Vec<crate::handoff::CrewSaves>,
         #[serde(default)]

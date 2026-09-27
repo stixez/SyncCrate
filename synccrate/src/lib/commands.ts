@@ -710,6 +710,11 @@ export async function giveSave(crew: string, game: string, unit: string): Promis
   return invoke("give_save", { crew, game, unit });
 }
 
+/** Host: trust a friend who says they have the newest copy. */
+export async function acceptSaveCopy(crew: string, game: string, unit: string): Promise<void> {
+  return invoke("accept_save_copy", { crew, game, unit });
+}
+
 export async function getIncomingOffers(): Promise<IncomingOffer[]> {
   if (isDemoMode()) return [];
   return invoke("get_incoming_offers");

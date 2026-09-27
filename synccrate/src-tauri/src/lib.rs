@@ -461,6 +461,7 @@ pub fn run() {
             commands::handoff::take_over_save,
             commands::handoff::take_save,
             commands::handoff::give_save,
+            commands::handoff::accept_save_copy,
             commands::files::get_hidden_games,
             commands::files::set_game_hidden,
             commands::files::get_workshop_mod_count,

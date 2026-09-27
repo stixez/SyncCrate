@@ -169,6 +169,9 @@ pub(crate) async fn share_inner(state: &Arc<Mutex<AppState>>, app: &crate::event
         return Err("This save is already shared.".into());
     }
     let cts = crate::commands::files::get_game_def(&st.game_registry, game).map(|g| g.content_types.clone()).unwrap_or_default();
+    if !handoff::game_supports(&cts) {
+        return Err("This game's saves can't be handed over yet.".into());
+    }
     if handoff::files_of(&cts, st.local_manifest.files.values(), unit).is_empty() {
         return Err("This save isn't on this PC.".into());
     }
@@ -183,7 +186,7 @@ pub(crate) async fn share_inner(state: &Arc<Mutex<AppState>>, app: &crate::event
             s.holder_name = name.clone();
             s.playing = false;
         }),
-        None => SharedSave { game: game.into(), unit: unit.into(), holder: me, holder_name: name, playing: false, removed: false, version: 1, updated_at: now },
+        None => SharedSave { game: game.into(), unit: unit.into(), holder: me, holder_name: name, playing: false, removed: false, version: 1, updated_at: now, claimed: false },
     };
     handoff_net::put(&mut st, crew, next)?;
     let _ = app.emit("handoff-updated", serde_json::json!({}));
@@ -228,6 +231,23 @@ pub async fn take_over_save(state: tauri::State<'_, Arc<Mutex<AppState>>>, app: 
         s.playing = false;
     })
     .await
+}
+
+/// Host: trust a friend who says they hold a save (they took it over, or
+/// got it in a session this PC wasn't in), so their copy may replace ours.
+pub(crate) async fn accept_copy_inner(state: &Arc<Mutex<AppState>>, app: &crate::event_sink::Events, crew: &str, game: &str, unit: &str) -> Result<(), String> {
+    let mut st = state.lock().await;
+    let mut rec = handoff_net::record(&st, crew, game, unit).ok_or("That save isn't shared any more.")?;
+    // Local only (no new version): whether to trust is this PC's call.
+    rec.claimed = false;
+    handoff_net::put(&mut st, crew, rec)?;
+    let _ = app.emit("handoff-updated", serde_json::json!({}));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn accept_save_copy(state: tauri::State<'_, Arc<Mutex<AppState>>>, app: tauri::AppHandle, crew: String, game: String, unit: String) -> Result<(), String> {
+    accept_copy_inner(state.inner(), &crate::event_sink::from_app(&app), &crew, &game, &unit).await
 }
 
 /// Before a take or give: nothing else may be moving files, and the game

@@ -1,24 +1,30 @@
 //! Save handoff on the wire (`crate::handoff` has the rules). The client
 //! starts every exchange: a `HandoffSync` poll carries both sides' records,
-//! and a take / give rides on it. Uploads for a give reuse the offer upload
-//! (`FileHeader` + chunks, answered by `OfferResult`), but land in temp files
-//! next to their destination and only replace the host's save on `Commit`,
-//! all together, with the old files kept in File history.
+//! and a take / give rides on it; each reply echoes its request's id, so a
+//! late answer is never taken for the next one's. Uploads for a give reuse
+//! the offer upload (`FileHeader` + chunks, answered by `OfferResult`), but
+//! land in temp files next to their destination and only replace the host's
+//! save on `Commit`, all together, with the old files kept in File history.
 use crate::event_sink::Events;
 use crate::handoff::{self, CrewSaves, HandoffReply, HandoffRequest, PendingGive, SharedSave};
 use crate::network::protocol::{self, Message};
 use crate::network::stream::PeerStream;
 use crate::network::transfer;
+use crate::registry::ContentType;
 use crate::state::{AppState, FileInfo};
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Why handoff isn't offered on a LAN connection.
-pub const NOT_PROVEN: &str = "Save handoff works when you join through your crew (Crews, then Join): that connection proves who's who. A LAN connection can't.";
-
 /// How often an idle client exchanges records with the host.
 pub const POLL: std::time::Duration = std::time::Duration::from_secs(5);
+/// A take or commit hashes the whole save and may copy it into File
+/// history first: wait for it like a manifest request.
+const REQUEST_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Why handoff isn't offered on a LAN connection.
+pub const NOT_PROVEN: &str = "Save handoff works when you join through your crew (Crews, then Join): that connection proves who's who. A LAN connection can't.";
 
 /// Crews both we and `other` (a node id) are active members of.
 fn common_crews<'a>(st: &'a AppState, other: &str) -> Vec<&'a crate::crews::Crew> {
@@ -43,7 +49,7 @@ pub fn merge_from(st: &mut AppState, other: &str, incoming: Vec<CrewSaves>) -> b
             continue;
         }
         if let Some(crew) = st.crews.get_mut(&cs.crew) {
-            changed |= handoff::receive(&mut crew.saves, cs.saves, |g| known.contains(g), now);
+            changed |= handoff::receive(&mut crew.saves, other, cs.saves, |g| known.contains(g), now);
         }
     }
     if changed {
@@ -52,12 +58,12 @@ pub fn merge_from(st: &mut AppState, other: &str, incoming: Vec<CrewSaves>) -> b
     changed
 }
 
-/// Replace one record (a local change: take, give, playing, share).
+/// Replace one record (a change made on this PC).
 pub fn put(st: &mut AppState, crew: &str, next: SharedSave) -> Result<(), String> {
     let c = st.crews.get_mut(crew).ok_or("That crew is gone.")?;
     match c.saves.iter().position(|s| s.is(&next.game, &next.unit)) {
         Some(i) => c.saves[i] = next,
-        None if c.saves.len() < handoff::MAX_SAVES_PER_CREW => c.saves.push(next),
+        None if handoff::room_for(&c.saves, &next) => c.saves.push(next),
         None => return Err(format!("A crew can share up to {} saves.", handoff::MAX_SAVES_PER_CREW)),
     }
     crate::crews::persist(st);
@@ -77,25 +83,59 @@ pub fn drop_pending(st: &mut AppState, peer_id: &str) {
     }
 }
 
-/// The save's files on this PC, hashed now (a quick scan leaves hashes
-/// empty, and a stale hash would hand over the wrong version).
+/// A save's files as they are on disk now: the game may have just written
+/// new ones (Minecraft region files) that no scan has seen, and a give
+/// without them left the host an incomplete world.
+fn unit_files_on_disk(base: &str, cts: &[ContentType], unit: &str) -> Result<Vec<String>, String> {
+    let (ct_id, name) = unit.split_once('/').ok_or("Not a save.")?;
+    let ct = cts.iter().find(|c| c.id == ct_id && c.save_unit_depth.is_some()).ok_or("This game's saves can't be handed over.")?;
+    let root = Path::new(base).join(&ct.folder);
+    let (walk_root, max_depth) = if ct.save_unit_depth == Some(0) {
+        (root.clone(), 1)
+    } else {
+        if name.split('/').any(|p| p.is_empty() || p == "." || p == ".." || p.contains(['\\', ':'])) {
+            return Err("Not a save.".into());
+        }
+        (root.join(name), 64)
+    };
+    let mut out = Vec::new();
+    for e in walkdir::WalkDir::new(&walk_root).follow_links(false).max_depth(max_depth).into_iter().flatten() {
+        if !e.file_type().is_file() {
+            continue;
+        }
+        let Some(rel) = e.path().strip_prefix(base).ok().map(|r| r.to_string_lossy().replace('\\', "/")) else { continue };
+        if crate::sync::diff::is_disabled_path(&rel) || !crate::commands::files::content_type_accepts_in(ct, e.path(), Some(&root)) {
+            continue;
+        }
+        if handoff::unit_of(cts, &rel).is_some_and(|u| u.eq_ignore_ascii_case(unit)) {
+            out.push(rel);
+            if out.len() > handoff::MAX_SAVE_FILES {
+                return Err("That save has too many files to hand over.".into());
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// The save's files on this PC, hashed now (a stale hash would hand over
+/// the wrong version).
 pub(crate) async fn fresh_files(state: &Arc<Mutex<AppState>>, unit: &str) -> Result<(String, Vec<FileInfo>), String> {
-    let (base, files) = {
+    let (base, cts) = {
         let st = state.lock().await;
         let cts = crate::commands::files::get_game_def(&st.game_registry, &st.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
-        (st.active_game_path()?, handoff::files_of(&cts, st.local_manifest.files.values(), unit))
+        (st.active_game_path()?, cts)
     };
-    let b = base.clone();
+    let (b, u) = (base.clone(), unit.to_string());
     let files = tokio::task::spawn_blocking(move || -> Result<Vec<FileInfo>, String> {
-        files
+        unit_files_on_disk(&b, &cts, &u)?
             .into_iter()
-            .filter(|f| !crate::sync::diff::is_disabled_path(&f.relative_path))
-            .map(|mut f| {
-                let path = crate::utils::safe_join(&b, &f.relative_path)?;
-                let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", f.relative_path))?;
-                f.size = meta.len();
-                f.hash = crate::commands::files::compute_file_hash(&path)?;
-                Ok(f)
+            .map(|rel| {
+                let path = crate::utils::safe_join(&b, &rel)?;
+                let meta = std::fs::metadata(&path).map_err(|e| format!("{rel}: {e}"))?;
+                let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+                let hash = crate::commands::files::compute_file_hash(&path)?;
+                Ok(FileInfo { relative_path: rel, size: meta.len(), hash, modified, file_type: "Save".into() })
             })
             .collect()
     })
@@ -112,6 +152,11 @@ async fn game_running(state: &Arc<Mutex<AppState>>) -> bool {
     crate::commands::game_state::is_game_running(&procs).await.unwrap_or(false)
 }
 
+async fn content_types(state: &Arc<Mutex<AppState>>, game: &str) -> Vec<ContentType> {
+    let st = state.lock().await;
+    crate::commands::files::get_game_def(&st.game_registry, game).map(|g| g.content_types.clone()).unwrap_or_default()
+}
+
 fn refused(message: impl Into<String>) -> HandoffReply {
     HandoffReply::Refused { message: message.into() }
 }
@@ -120,15 +165,14 @@ fn refused(message: impl Into<String>) -> HandoffReply {
 // Host side
 
 /// One `HandoffSync` from a friend: merge their records for crews we're
-/// both in, answer the request, reply with our records.
-/// `proven`: the friend's node id as the iroh connection proved it (None
-/// over LAN TCP, where handoff isn't offered).
-pub async fn host_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str, proven: Option<String>, saves: Vec<CrewSaves>, request: Option<HandoffRequest>) -> Message {
+/// both in, answer the request, reply with our records. `proven`: the
+/// friend's node id as the iroh connection proved it (None over LAN TCP).
+pub async fn host_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str, proven: Option<String>, id: u64, saves: Vec<CrewSaves>, request: Option<HandoffRequest>) -> Message {
     let (node, peer_name) = {
         let mut st = state.lock().await;
         let Some((node, name)) = proven.and_then(|n| Some((n, st.connections.get(peer_id)?.info.name.clone()))) else {
             let reply = request.map(|_| refused(NOT_PROVEN));
-            return Message::HandoffStatus { saves: Vec::new(), reply };
+            return Message::HandoffStatus { id, saves: Vec::new(), reply };
         };
         if merge_from(&mut st, &node, saves) {
             let _ = app.emit("handoff-updated", serde_json::json!({}));
@@ -140,12 +184,15 @@ pub async fn host_sync(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str
         None => None,
     };
     let saves = records_for(&*state.lock().await, &node);
-    Message::HandoffStatus { saves, reply }
+    Message::HandoffStatus { id, saves, reply }
 }
 
 async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str, node: &str, peer_name: &str, r: HandoffRequest) -> HandoffReply {
     let (crew, game, unit) = match &r {
-        HandoffRequest::Take { crew, game, unit } | HandoffRequest::Give { crew, game, unit, .. } | HandoffRequest::Commit { crew, game, unit } => (crew.clone(), game.clone(), unit.clone()),
+        HandoffRequest::Take { crew, game, unit }
+        | HandoffRequest::TakeDone { crew, game, unit, .. }
+        | HandoffRequest::Give { crew, game, unit, .. }
+        | HandoffRequest::Commit { crew, game, unit } => (crew.clone(), game.clone(), unit.clone()),
     };
     let (me, my_name, current) = {
         let st = state.lock().await;
@@ -162,24 +209,37 @@ async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str,
     let now = crate::utils::timestamp_now();
     match r {
         HandoffRequest::Take { .. } => {
-            // Also when the friend already holds it: their download failed
-            // and they're fetching it again.
-            if current.holder != me && current.holder != node {
+            if current.holder != me {
                 return refused(format!("{} has this save, not the host.", current.holder_name));
             }
-            if current.holder == me && current.playing {
+            if current.playing {
                 return refused(format!("{my_name} is playing it right now."));
             }
             if game_running(state).await {
                 return refused("The host has the game open. Ask them to close it first, so the save is complete.");
             }
-            let files = match fresh_files(state, &unit).await {
-                Ok((_, f)) if !f.is_empty() => f,
-                Ok(_) => return refused("The host doesn't have this save's files."),
+            // Only a list: the save changes hands once the friend's copy is
+            // complete (`TakeDone`). Moving it here left a friend whose
+            // download failed "holding" a broken copy they could then give.
+            match fresh_files(state, &unit).await {
+                Ok((_, f)) if !f.is_empty() => HandoffReply::Granted { files: f },
+                Ok(_) => refused("The host doesn't have this save's files."),
+                Err(e) => refused(format!("The host couldn't read the save: {e}")),
+            }
+        }
+        HandoffRequest::TakeDone { files, .. } => {
+            if current.holder != me || current.playing {
+                return refused(format!("The save changed hands meanwhile: {} has it now.", current.holder_name));
+            }
+            if game_running(state).await {
+                return refused("The host has the game open. Ask them to close it first.");
+            }
+            match fresh_files(state, &unit).await {
+                Ok((_, host_files)) if handoff::same_save(&host_files, &files) => {}
+                Ok(_) => return refused("The host's copy changed while you were downloading. Take it again."),
                 Err(e) => return refused(format!("The host couldn't read the save: {e}")),
-            };
+            }
             let mut st = state.lock().await;
-            // It may have changed while we hashed.
             if record(&st, &crew, &game, &unit).as_ref() != Some(&current) {
                 return refused("The save changed hands just now. Try again.");
             }
@@ -192,23 +252,25 @@ async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str,
                 return refused(e);
             }
             let _ = app.emit("handoff-updated", serde_json::json!({}));
-            HandoffReply::Granted { files }
+            HandoffReply::Done
         }
         HandoffRequest::Give { files, .. } => {
             if current.holder != node {
                 return refused(format!("{} has this save, so only they can hand it over.", current.holder_name));
             }
+            // Only their own word that they hold it (they took it over, or
+            // it happened in a session we weren't in): the host decides.
+            if current.claimed {
+                let _ = app.emit("handoff-approval", serde_json::json!({ "name": peer_name, "save": handoff::unit_name(&unit) }));
+                return refused(format!("{my_name} needs to accept your copy first: they'll see a button under Shared saves. Then give it again."));
+            }
             if game_running(state).await {
                 return refused("The host has the game open. Ask them to close it first.");
             }
-            let cts = {
-                let st = state.lock().await;
-                crate::commands::files::get_game_def(&st.game_registry, &game).map(|g| g.content_types.clone()).unwrap_or_default()
-            };
-            let files = match handoff::check_give(&cts, &unit, files) {
-                Ok(f) => f,
-                Err(e) => return refused(e),
-            };
+            let cts = content_types(state, &game).await;
+            if let Err(e) = handoff::check_files(&cts, &unit, &files) {
+                return refused(e);
+            }
             let host_files = match fresh_files(state, &unit).await {
                 Ok((_, f)) => f,
                 Err(e) => return refused(format!("The host couldn't read its copy: {e}")),
@@ -240,7 +302,7 @@ async fn host_request(state: &Arc<Mutex<AppState>>, app: &Events, peer_id: &str,
                 cleanup(&pending);
                 return refused("Some of the save's files didn't arrive. Try again.");
             }
-            if current.holder != node {
+            if current.holder != node || current.claimed {
                 cleanup(&pending);
                 return refused(format!("{} has this save now.", current.holder_name));
             }
@@ -388,23 +450,43 @@ pub async fn host_receive(state: &Arc<Mutex<AppState>>, s: &mut PeerStream, peer
 // Client side
 
 /// One exchange with the host, stream lock held by the caller. Returns the
-/// host's records, its reply, and a message the loop must still act on.
+/// host's records, its reply, and a message the loop must still act on (the
+/// host's `Disconnect` or `GameInfoExchange`). A request waits long enough
+/// for the host to hash the save; giving up marks the stream so later polls
+/// allow for the answer still queued at the host.
 pub async fn round_trip(s: &mut PeerStream, saves: Vec<CrewSaves>, request: Option<HandoffRequest>) -> Result<(Vec<CrewSaves>, Option<HandoffReply>, Option<Message>), String> {
-    protocol::send_message(s, &Message::HandoffSync { saves, request }).await?;
+    let id = rand::random::<u64>();
+    let is_request = request.is_some();
+    protocol::send_message(s, &Message::HandoffSync { id, saves, request }).await?;
     let mut pending = None;
     loop {
-        let wait = transfer::poll_reply_wait(s);
-        let msg = protocol::try_recv_message(s, wait).await?.ok_or_else(|| "The host stopped answering".to_string())?;
+        let wait = if is_request { REQUEST_WAIT } else { transfer::poll_reply_wait(s) };
+        let Some(msg) = protocol::try_recv_message(s, wait).await? else {
+            s.mark_abandoned();
+            return Err("The host stopped answering".into());
+        };
         match msg {
-            Message::HandoffStatus { saves, reply } => return Ok((saves, reply, pending)),
-            Message::Disconnect => return Err("The host disconnected.".into()),
+            Message::HandoffStatus { id: got, saves, reply } if got == id => return Ok((saves, reply, pending)),
+            // A late answer to an earlier exchange we gave up on.
+            Message::HandoffStatus { .. } => {}
+            m @ Message::Disconnect => return Ok((Vec::new(), None, Some(m))),
             m @ Message::GameInfoExchange { .. } => pending = Some(m),
             other => log::debug!("Handoff poll: ignoring {:?}", other),
         }
     }
 }
 
-/// The host we're connected to: (peer id, node id).
+/// `round_trip` from a command: a host that disconnected is an error here
+/// (the message loop sees the closed connection and cleans up).
+async fn command_trip(s: &mut PeerStream, saves: Vec<CrewSaves>, request: HandoffRequest) -> Result<(Vec<CrewSaves>, HandoffReply), String> {
+    let (saves, reply, pending) = round_trip(s, saves, Some(request)).await?;
+    if matches!(pending, Some(Message::Disconnect)) {
+        return Err("The host disconnected.".into());
+    }
+    Ok((saves, reply.ok_or("The host didn't answer.")?))
+}
+
+/// The host we're connected to: (peer id, node id, stream).
 async fn host_of(state: &Arc<Mutex<AppState>>) -> Result<(String, String, Arc<Mutex<PeerStream>>), String> {
     let st = state.lock().await;
     if st.session_type != crate::state::SessionType::Client {
@@ -425,16 +507,17 @@ async fn host_of(state: &Arc<Mutex<AppState>>) -> Result<(String, String, Arc<Mu
 /// records and returns its reply.
 pub async fn request(state: &Arc<Mutex<AppState>>, app: &Events, req: HandoffRequest) -> Result<HandoffReply, String> {
     let (peer_id, node, stream) = host_of(state).await?;
+    // Read before taking the stream: elsewhere the AppState lock is taken
+    // first, so taking it while holding the stream could deadlock.
     let out = records_for(&*state.lock().await, &node);
     let (saves, reply) = {
         let mut s = transfer::lock_stream(&stream, state, &peer_id, false).await?;
-        let (saves, reply, _) = round_trip(&mut s, out, Some(req)).await?;
-        (saves, reply)
+        command_trip(&mut s, out, req).await?
     };
     if merge_from(&mut *state.lock().await, &node, saves) {
         let _ = app.emit("handoff-updated", serde_json::json!({}));
     }
-    reply.ok_or_else(|| "The host didn't answer.".into())
+    Ok(reply)
 }
 
 /// Hand our copy of a save to the host: tell it the files, upload the ones
@@ -446,15 +529,12 @@ pub async fn give(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
     if files.is_empty() {
         return Err("This save has no files on this PC.".into());
     }
-    // Read before taking the stream: elsewhere the AppState lock is taken
-    // first, so taking it while holding the stream could deadlock.
     let out = records_for(&*state.lock().await, &node);
     let mut s = transfer::lock_stream(&stream, state, &peer_id, false).await?;
     let req = HandoffRequest::Give { crew: crew.into(), game: game.into(), unit: unit.into(), files: files.clone() };
-    let (_, reply, _) = round_trip(&mut s, out.clone(), Some(req)).await?;
-    let paths = match reply {
-        Some(HandoffReply::Upload { paths }) => paths,
-        Some(HandoffReply::Refused { message }) => return Err(message),
+    let paths = match command_trip(&mut s, out.clone(), req).await?.1 {
+        HandoffReply::Upload { paths } => paths,
+        HandoffReply::Refused { message } => return Err(message),
         _ => return Err("The host didn't answer.".into()),
     };
     for path in &paths {
@@ -466,37 +546,32 @@ pub async fn give(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
         }
     }
     let commit = HandoffRequest::Commit { crew: crew.into(), game: game.into(), unit: unit.into() };
-    let (saves, reply, _) = round_trip(&mut s, out, Some(commit)).await?;
+    let (saves, reply) = command_trip(&mut s, out, commit).await?;
     drop(s);
     if merge_from(&mut *state.lock().await, &node, saves) {
         let _ = app.emit("handoff-updated", serde_json::json!({}));
     }
     match reply {
-        Some(HandoffReply::Done) => Ok(()),
-        Some(HandoffReply::Refused { message }) => Err(message),
+        HandoffReply::Done => Ok(()),
+        HandoffReply::Refused { message } => Err(message),
         _ => Err("The host didn't answer.".into()),
     }
 }
 
-/// The client's side of taking a save: after `Granted`, make our copy
-/// match the host's (downloads replace only files still as we hashed them;
-/// our old versions go to File history).
+/// Take a save: get the host's list, make our copy match it (downloads
+/// replace only files still as we hashed them; our old versions go to File
+/// history), check it, and only then ask the host to hand the save over. A
+/// failure anywhere leaves the save with the host, so "Take it" works again.
 pub async fn take(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: &str, unit: &str) -> Result<usize, String> {
     let files = match request(state, app, HandoffRequest::Take { crew: crew.into(), game: game.into(), unit: unit.into() }).await? {
         HandoffReply::Granted { files } => files,
         HandoffReply::Refused { message } => return Err(message),
         _ => return Err("The host didn't answer.".into()),
     };
+    handoff::check_files(&content_types(state, game).await, unit, &files)?;
     let (peer_id, _, _) = host_of(state).await?;
     let (base, ours) = fresh_files(state, unit).await?;
     let (fetch, delete) = handoff::diff_save(&ours, &files);
-    let cts = {
-        let st = state.lock().await;
-        crate::commands::files::get_game_def(&st.game_registry, game).map(|g| g.content_types.clone()).unwrap_or_default()
-    };
-    // The host's list is checked like a give: only this save's files, safe
-    // paths, real hashes.
-    handoff::check_give(&cts, unit, files.clone())?;
     let by_key: std::collections::HashMap<String, &FileInfo> = ours.iter().map(|f| (crate::sync::diff::match_key(&f.relative_path), f)).collect();
     let mut targets: Vec<String> = fetch.iter().filter_map(|f| by_key.get(&crate::sync::diff::match_key(&f.relative_path)).map(|o| o.relative_path.clone())).collect();
     targets.extend(delete.iter().cloned());
@@ -544,7 +619,7 @@ pub async fn take(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
         for rel in &delete {
             match crate::utils::safe_join(&base, rel).and_then(|p| std::fs::remove_file(p).map_err(|e| e.to_string())) {
                 Ok(()) => changed.push((rel.clone(), history::REASON_DELETED)),
-                Err(e) => log::warn!("Couldn't remove {rel} from the old save: {e}"),
+                Err(e) => result = Err(format!("Couldn't remove {rel} from your old copy: {e}")),
             }
         }
     }
@@ -554,7 +629,17 @@ pub async fn take(state: &Arc<Mutex<AppState>>, app: &Events, crew: &str, game: 
         }
     }
     let _ = crate::commands::files::scan_files_inner(state, None, true).await;
-    result.map(|()| fetch.len())
+    result.map_err(|e| format!("{e}. The save stays with the host; take it again."))?;
+    // Our copy must now be exactly the host's before it's ours.
+    let (_, now_ours) = fresh_files(state, unit).await?;
+    if !handoff::same_save(&now_ours, &files) {
+        return Err("Your copy doesn't match the host's after downloading. The save stays with the host; take it again.".into());
+    }
+    match request(state, app, HandoffRequest::TakeDone { crew: crew.into(), game: game.into(), unit: unit.into(), files }).await? {
+        HandoffReply::Done => Ok(fetch.len()),
+        HandoffReply::Refused { message } => Err(message),
+        _ => Err("The host didn't answer.".into()),
+    }
 }
 
 /// The idle loop's poll input: our records, if the host shares a crew with us.

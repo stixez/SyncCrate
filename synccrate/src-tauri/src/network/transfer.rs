@@ -951,10 +951,10 @@ async fn handle_client(
                 };
                 protocol::send_message(&mut *s, &reply).await?;
             }
-            Message::HandoffSync { saves, request } => {
+            Message::HandoffSync { id, saves, request } => {
                 // The proven id only: a LAN peer's claimed one could be anyone's.
                 let proven = stream.lock().await.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
-                let reply = crate::network::handoff_net::host_sync(&state, &app, &peer_id, proven, saves, request).await;
+                let reply = crate::network::handoff_net::host_sync(&state, &app, &peer_id, proven, id, saves, request).await;
                 let mut s = stream.lock().await;
                 protocol::send_message(&mut *s, &reply).await?;
             }

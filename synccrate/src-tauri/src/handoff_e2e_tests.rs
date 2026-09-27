@@ -82,11 +82,14 @@ async fn a_crew_takes_turns_on_a_save_iroh() {
     write_file(&client_dir, "Saves/Slot_00000001.save.ver1", b"ANN-VER1");
     std::fs::remove_file(client_dir.join("Saves/Slot_00000001.save.ver0")).unwrap();
     crate::commands::files::scan_files_inner(&client_state, None, true).await.unwrap();
+    // Written by the game after the last scan: a give still includes it.
+    write_file(&client_dir, "Saves/Slot_00000001.save.ver2", b"UNSCANNED");
 
     // Give: the host's copy becomes exactly the friend's.
     handoff_net::give(&client_state, &events, &c.id, "sims4", UNIT).await.expect("give");
     assert_eq!(read_file(&host_dir, "Saves/Slot_00000001.save"), b"ANN-PLAYED");
     assert_eq!(read_file(&host_dir, "Saves/Slot_00000001.save.ver1"), b"ANN-VER1");
+    assert_eq!(read_file(&host_dir, "Saves/Slot_00000001.save.ver2"), b"UNSCANNED");
     assert!(!file_exists(&host_dir, "Saves/Slot_00000001.save.ver0"));
     assert!(no_leftover_temp_files(&host_dir));
     let host_node = node_of(&host_state).await;
@@ -102,6 +105,34 @@ async fn a_crew_takes_turns_on_a_save_iroh() {
     }
     assert!(handoff_net::take(&client_state, &events, &c.id, "sims4", UNIT).await.unwrap_err().contains("playing"));
     assert_eq!(read_file(&client_dir, "Saves/Slot_00000001.save"), b"ANN-PLAYED", "a refused take changes nothing");
+    {
+        let mut st = host_state.lock().await;
+        let next = handoff_net::record(&st, &c.id, "sims4", UNIT).unwrap().bumped(crate::utils::timestamp_now(), |s| s.playing = false);
+        handoff_net::put(&mut st, &c.id, next).unwrap();
+    }
+
+    // The save only changes hands once the friend's copy matches the host's.
+    let wrong = vec![crate::state::FileInfo { relative_path: "Saves/Slot_00000001.save".into(), size: 3, hash: "a".repeat(64), modified: 0, file_type: "Save".into() }];
+    let reply = handoff_net::request(&client_state, &events, crate::handoff::HandoffRequest::TakeDone { crew: c.id.clone(), game: "sims4".into(), unit: UNIT.into(), files: wrong }).await.unwrap();
+    assert!(matches!(reply, crate::handoff::HandoffReply::Refused { .. }));
+    assert_eq!(record(&host_state, &c.id).await.holder, host_node);
+
+    // A friend who only says they hold it (a take over) can't replace the
+    // host's copy until the host accepts it.
+    {
+        let mut st = client_state.lock().await;
+        let next = handoff_net::record(&st, &c.id, "sims4", UNIT).unwrap().bumped(crate::utils::timestamp_now(), |s| {
+            s.holder = ann.clone();
+            s.holder_name = "Ann".into();
+        });
+        handoff_net::put(&mut st, &c.id, next).unwrap();
+    }
+    write_file(&client_dir, "Saves/Slot_00000001.save", b"ANN-TOOK-OVER");
+    assert!(handoff_net::give(&client_state, &events, &c.id, "sims4", UNIT).await.unwrap_err().contains("accept"));
+    assert_eq!(read_file(&host_dir, "Saves/Slot_00000001.save"), b"ANN-PLAYED");
+    crate::commands::handoff::accept_copy_inner(&host_state, &events, &c.id, "sims4", UNIT).await.unwrap();
+    handoff_net::give(&client_state, &events, &c.id, "sims4", UNIT).await.expect("give after accept");
+    assert_eq!(read_file(&host_dir, "Saves/Slot_00000001.save"), b"ANN-TOOK-OVER");
 
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_dir_all(&client_dir);

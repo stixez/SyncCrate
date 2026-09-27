@@ -200,6 +200,15 @@ pub struct ContentType {
     /// own it (or replaced base files across game versions).
     #[serde(default)]
     pub exclude_patterns: Vec<String>,
+    /// Save handoff (`crate::handoff`): how many folder levels under
+    /// `folder` name one save. 0: a file and its backups
+    /// (`Slot_00000002.save`, `.save.ver0`), 1: a world folder, 2: mode and
+    /// world (`Sandbox/MyTown`). Unset: this game's saves can't be handed
+    /// over. Only set it for a layout that's been checked: guessing lumped
+    /// saves together (`Saves/<steam id>/...`), and a take then deleted a
+    /// friend's other worlds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save_unit_depth: Option<u8>,
 }
 
 fn default_true() -> bool {

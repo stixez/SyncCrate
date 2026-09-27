@@ -21,7 +21,7 @@ export default function SharedSaves({ gameId }: { gameId: string }) {
   const [confirm, setConfirm] = useState<{ unit: string; what: "takeover" | "unshare" } | null>(null);
   const [pick, setPick] = useState("");
   const [crewPick, setCrewPick] = useState("");
-  const hasSaves = useMemo(() => getGameDef(gameId)?.content_types.some((ct) => ct.file_type === "Save") ?? false, [gameId]);
+  const hasSaves = useMemo(() => getGameDef(gameId)?.content_types.some((ct) => ct.file_type === "Save" && ct.save_unit_depth != null) ?? false, [gameId]);
 
   const load = () => {
     if (!hasSaves) return;
@@ -85,6 +85,7 @@ export default function SharedSaves({ gameId }: { gameId: string }) {
               onGive={() => run(r.unit, () => cmd.giveSave(r.crew!, gameId, r.unit), `${host} has ${r.name} now.`)}
               onTakeOver={() => run(r.unit, () => cmd.takeOverSave(r.crew!, gameId, r.unit), `You have ${r.name} now, as it is on this PC.`)}
               onUnshare={() => run(r.unit, () => cmd.unshareSave(r.crew!, gameId, r.unit), `${r.name} isn't shared any more.`)}
+              onAccept={() => run(r.unit, () => cmd.acceptSaveCopy(r.crew!, gameId, r.unit), `${r.record!.holder_name} can give you their copy now.`)}
             />
           ))}
         </ul>
@@ -127,6 +128,7 @@ function SaveItem({
   onGive,
   onTakeOver,
   onUnshare,
+  onAccept,
 }: {
   row: SharedSaveRow;
   isClient: boolean;
@@ -140,6 +142,7 @@ function SaveItem({
   onGive: () => void;
   onTakeOver: () => void;
   onUnshare: () => void;
+  onAccept: () => void;
 }) {
   const rec = r.record!;
   const who = rec.holder_name;
@@ -152,7 +155,12 @@ function SaveItem({
   ) : (
     <Badge tone="neutral">With {who}</Badge>
   );
-  const hint = r.holder_is_me
+  // Only their own word (a take over, or a session this PC wasn't in): as
+  // host, their give waits until we accept.
+  const needsAccept = !isClient && !r.holder_is_me && rec.claimed;
+  const hint = needsAccept
+    ? `${who} says they have the newest copy. Accept it if that's right; then they can give it to you.`
+    : r.holder_is_me
     ? isClient && !rec.playing && canMove ? `When you're done, give it to ${host}.` : null
     : withHost
       ? rec.playing ? `Wait until ${who} is done.` : null
@@ -203,6 +211,11 @@ function SaveItem({
             {withHost && canMove && (
               <Button size="sm" variant="primary" disabled={busy || rec.playing} icon={<Download size={12} />} onClick={onTake} title={rec.playing ? `${who} is playing it` : undefined}>
                 Take it
+              </Button>
+            )}
+            {needsAccept && (
+              <Button size="sm" variant="primary" disabled={busy} onClick={onAccept}>
+                Accept {who}'s copy
               </Button>
             )}
             {!r.holder_is_me && r.files > 0 && (

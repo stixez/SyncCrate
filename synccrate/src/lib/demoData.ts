@@ -682,7 +682,7 @@ export function demoOutdatedScripts(manifest: FileManifest | null): { patch_time
 export function demoSharedSaves(game: string): SharedSavesView {
   if (game !== "sims4") return { crews: [], rows: [], session: "none", host_name: null, host_supports: false, proven: false };
   const rec = (unit: string, holder: string, holder_name: string, playing: boolean, ago: number) => ({
-    game, unit, holder, holder_name, playing, removed: false, version: 3, updated_at: now - ago,
+    game, unit, holder, holder_name, playing, removed: false, version: 3, updated_at: now - ago, claimed: false,
   });
   const crew = { crew: "demo-crew", crew_name: "Sunday Sims Crew" };
   return {

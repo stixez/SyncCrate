@@ -566,6 +566,7 @@ mod tests {
             must_contain: None,
             exclude_files: Vec::new(),
             exclude_patterns: Vec::new(),
+            save_unit_depth: None,
         }
     }
 
