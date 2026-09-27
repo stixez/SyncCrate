@@ -70,7 +70,9 @@ impl OutgoingOffer {
 /// The subset of `files` that can be offered (client) or accepted as an
 /// offer (host): in a content folder, not a blocked type, a real hash, sane
 /// size, not something the other side already has, no duplicates. Capped.
-pub fn valid_offer(files: Vec<FileInfo>, cts: &[ContentType], already_there: &FileManifest) -> Vec<FileInfo> {
+/// `shared`: saves the crew takes turns on (`crate::handoff::shared_units`):
+/// their files only move by take and give, never slipped in as an offer.
+pub fn valid_offer(files: Vec<FileInfo>, cts: &[ContentType], already_there: &FileManifest, shared: &HashSet<String>) -> Vec<FileInfo> {
     let present: HashSet<String> = already_there.files.keys().map(|k| crate::sync::diff::match_key(k)).collect();
     let mut seen = HashSet::new();
     let mut total = 0u64;
@@ -86,6 +88,7 @@ pub fn valid_offer(files: Vec<FileInfo>, cts: &[ContentType], already_there: &Fi
             || f.size > crate::network::transfer::MAX_FILE_SIZE
             || total.saturating_add(f.size) > MAX_OFFER_BYTES
             || !crate::sync::diff::path_accepted_by(cts, &f.relative_path)
+            || crate::handoff::is_shared(cts, shared, &f.relative_path)
             || crate::utils::is_dangerous_extension(&f.relative_path)
             || present.contains(&key)
             || !seen.insert(key)
@@ -132,16 +135,26 @@ mod tests {
             f("Mods/empty.package", 0),         // empty
             FileInfo { hash: "zz".into(), ..f("Mods/badhash.package", 1) },
         ];
-        let ok = valid_offer(offer, &cts, &host);
+        let ok = valid_offer(offer, &cts, &host, &HashSet::new());
         assert_eq!(ok.iter().map(|x| x.relative_path.as_str()).collect::<Vec<_>>(), vec!["Mods/new.package"]);
+    }
+
+    #[test]
+    fn a_shared_save_is_never_offered() {
+        let saves = ContentType { save_unit_depth: Some(0), file_type: "Save".into(), ..ct("saves", "Saves") };
+        let cts = vec![ct("mods", "Mods"), saves];
+        let shared: HashSet<String> = ["saves/slot_1".to_string()].into();
+        let offer = vec![f("Saves/Slot_1.save.ver3", 5), f("Saves/Slot_2.save", 5), f("Mods/new.package", 5)];
+        let ok = valid_offer(offer, &cts, &FileManifest::default(), &shared);
+        assert_eq!(ok.iter().map(|x| x.relative_path.as_str()).collect::<Vec<_>>(), ["Saves/Slot_2.save", "Mods/new.package"]);
     }
 
     #[test]
     fn offers_are_capped() {
         let cts = vec![ct("mods", "Mods")];
         let many: Vec<FileInfo> = (0..MAX_OFFER_FILES + 20).map(|i| f(&format!("Mods/{i}.package"), 1)).collect();
-        assert_eq!(valid_offer(many, &cts, &FileManifest::default()).len(), MAX_OFFER_FILES);
+        assert_eq!(valid_offer(many, &cts, &FileManifest::default(), &HashSet::new()).len(), MAX_OFFER_FILES);
         let huge = vec![f("Mods/a.package", MAX_OFFER_BYTES), f("Mods/b.package", 1)];
-        assert!(valid_offer(huge, &cts, &FileManifest::default()).len() <= 1, "total size cap");
+        assert!(valid_offer(huge, &cts, &FileManifest::default(), &HashSet::new()).len() <= 1, "total size cap");
     }
 }

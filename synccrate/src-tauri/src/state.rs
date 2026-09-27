@@ -424,6 +424,9 @@ pub struct AppState {
     pub host_proven: bool,
     /// Host: a friend's save being handed over, per peer id.
     pub handoff_in: HashMap<String, crate::handoff::PendingGive>,
+    /// Host: files a friend's take may download (peer id -> paths). Served
+    /// even when they aren't in the file list or the shared folders.
+    pub handoff_grants: HashMap<String, std::collections::HashSet<String>>,
     /// Bumped whenever a session ends; see `transfer::still_hosting`.
     pub host_epoch: u64,
 }
@@ -539,6 +542,7 @@ impl Default for AppState {
             handoff_available: false,
             host_proven: false,
             handoff_in: HashMap::new(),
+            handoff_grants: HashMap::new(),
             host_epoch: 0,
         }
     }

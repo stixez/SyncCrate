@@ -41,6 +41,21 @@ fn load_hash_cache() -> HashCache {
     HashMap::new()
 }
 
+/// The scan's hashes, for reuse elsewhere (a save handover hashes whole
+/// worlds several times).
+pub(crate) struct HashLookup(HashCache);
+
+impl HashLookup {
+    pub(crate) fn get(&self, path: &std::path::Path, size: u64, mtime: u64) -> Option<String> {
+        let key = path.to_string_lossy().replace('\\', "/");
+        self.0.get(&key).filter(|c| cache_hit(c, size, mtime)).map(|c| c.hash.clone())
+    }
+}
+
+pub(crate) fn hash_lookup() -> HashLookup {
+    HashLookup(load_hash_cache())
+}
+
 fn save_hash_cache(cache: &HashCache) {
     let path = utils::hash_cache_path();
     if let Ok(data) = serde_json::to_string(cache) {

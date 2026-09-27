@@ -55,7 +55,8 @@ pub(crate) async fn offer_files_inner(state: &Arc<Mutex<AppState>>, paths: Vec<S
         .filter(|f| wanted.contains(&crate::sync::diff::match_key(&f.relative_path)))
         .cloned()
         .collect();
-    let valid = crate::offers::valid_offer(files, &cts, &host_manifest);
+    let shared = crate::handoff::shared_units(s.crews.crews.iter(), &s.active_game);
+    let valid = crate::offers::valid_offer(files, &cts, &host_manifest, &shared);
     if valid.is_empty() {
         return Err("None of these can be offered: the host already has them, or they aren't mod files in this game's folders.".into());
     }
