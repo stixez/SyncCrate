@@ -1,7 +1,7 @@
 import { memo, type CSSProperties } from "react";
 import { Save } from "lucide-react";
 import type { FileInfo } from "../lib/types";
-import { dirOf, fileName, formatBytes, formatDate, formatRelative } from "../lib/utils";
+import { dirOf, displayPath, fileName, formatBytes, formatDate, formatRelative } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import { COL } from "./ModItem";
 import { cx } from "./ui";
@@ -28,10 +28,10 @@ function SaveItem({ file, style, syncStatus = "local", showDir, indent }: SaveIt
       <div className="w-6 h-6 shrink-0 grid place-items-center border border-line-hi bg-bg text-txt-dim">
         <Save size={12} />
       </div>
-      <p className="flex-1 min-w-0 text-[13px] font-medium truncate text-txt" title={file.relative_path}>{name}</p>
+      <p className="flex-1 min-w-0 text-[13px] font-medium truncate text-txt" title={displayPath(file.relative_path)}>{name}</p>
       {showDir && (
-        <span className={cx(COL.dir, "font-mono text-[11px] text-txt-muted truncate")} title={dirOf(file.relative_path)}>
-          {dirOf(file.relative_path) || "/"}
+        <span className={cx(COL.dir, "font-mono text-[11px] text-txt-muted truncate")} title={dirOf(displayPath(file.relative_path))}>
+          {dirOf(displayPath(file.relative_path)) || "/"}
         </span>
       )}
       <span className={cx(COL.size, "font-mono text-[11px] text-txt-dim tabular")}>{formatBytes(file.size)}</span>

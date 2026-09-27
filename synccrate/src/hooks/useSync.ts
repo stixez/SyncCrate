@@ -6,6 +6,7 @@ import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
 import { friendlyError } from "../lib/errors";
+import { displayPath } from "../lib/utils";
 
 export function useSync() {
   const [isLoading, setIsLoading] = useState(false);
@@ -91,7 +92,7 @@ export function useSync() {
     try {
       const updatedPlan = await cmd.resolveConflict(path, resolution);
       setSyncPlan(updatedPlan);
-      addLog(`Resolved conflict for ${path}: ${resolution}`, "success");
+      addLog(`Resolved conflict for ${displayPath(path)}: ${resolution}`, "success");
     } catch (e: any) {
       addLog(`Failed to resolve conflict: ${e}`, "error");
       toastError(`Couldn't resolve the conflict: ${friendlyError(e)}`);

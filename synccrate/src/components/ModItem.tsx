@@ -2,7 +2,7 @@ import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { useModIcon } from "../lib/modMeta";
-import { dirOf, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
+import { dirOf, displayPath, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
 import { Badge, Toggle, cx } from "./ui";
@@ -136,7 +136,7 @@ function ModItem({
           }}
           aria-label={bulkMode ? `Select ${ownMeta ? ownMeta.name : name}` : undefined}
           className={cx("text-left text-[13px] font-medium truncate min-w-0", isDisabled ? "text-txt-muted line-through decoration-txt-muted/60" : "text-txt")}
-          title={ownMeta ? `${ownMeta.name} · ${file.relative_path}` : file.relative_path}
+          title={ownMeta ? `${ownMeta.name} · ${displayPath(file.relative_path)}` : displayPath(file.relative_path)}
         >
           {ownMeta ? ownMeta.name : name}
           {ownMeta?.version && <span className="font-mono text-[10.5px] text-txt-dim font-normal ml-1.5 no-underline">v{ownMeta.version.replace(/^v/i, "")}</span>}
@@ -157,8 +157,8 @@ function ModItem({
         )}
       </div>
       {showDir && (
-        <span className={cx(COL.dir, "font-mono text-[11px] text-txt-muted truncate")} title={dirOf(file.relative_path)}>
-          {dirOf(file.relative_path) || "/"}
+        <span className={cx(COL.dir, "font-mono text-[11px] text-txt-muted truncate")} title={dirOf(displayPath(file.relative_path))}>
+          {dirOf(displayPath(file.relative_path)) || "/"}
         </span>
       )}
       <span className={cx(COL.size, "font-mono text-[11px] text-txt-dim tabular")}>{formatBytes(file.size)}</span>

@@ -23,7 +23,7 @@ pub const POLL: std::time::Duration = std::time::Duration::from_secs(5);
 const REQUEST_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// Why handoff isn't offered on a LAN connection.
-pub const NOT_PROVEN: &str = "Save handoff works when you join through your crew (Crews, then Join): that connection proves who's who. A LAN connection can't.";
+pub const NOT_PROVEN: &str = "To take or give a save, join the host from Crews (click Join on your crew). Joining over the local network or by IP won't work for this.";
 
 /// Crews both we and `other` (a node id) are active members of.
 fn common_crews<'a>(st: &'a AppState, other: &str) -> Vec<&'a crate::crews::Crew> {

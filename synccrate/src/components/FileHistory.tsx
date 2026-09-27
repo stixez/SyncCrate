@@ -3,7 +3,7 @@ import { History, Loader2, RotateCcw } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Button, cx } from "./ui";
-import { fileName, formatBytes, formatDate } from "../lib/utils";
+import { displayPath, fileName, formatBytes, formatDate } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { toastError, toastSuccess } from "../lib/toast";
 import type { FileVersion } from "../lib/types";
@@ -50,7 +50,7 @@ export default function FileHistory({ gameId, path, limit, className }: { gameId
     setBusy(true);
     try {
       await cmd.restoreFileVersion(gameId, v.id);
-      addLog(`Restored the ${formatDate(v.at)} version of ${v.path}`, "success");
+      addLog(`Restored the ${formatDate(v.at)} version of ${displayPath(v.path)}`, "success");
       toastSuccess(`Restored ${fileName(v.path)}. The version it replaced is kept here too.`);
       setConfirm(null);
       if (gameId === activeGame) {

@@ -1,5 +1,7 @@
 import pkg from "../../package.json";
 import type {
+  CompatIssue,
+  ExtraFolder,
   SharedSavesView,
   FileManifest,
   SessionStatus,
@@ -697,4 +699,33 @@ export function demoSharedSaves(game: string): SharedSavesView {
       { unit: "saves/Slot_00000001", name: "Slot_00000001", crew: null, crew_name: null, record: null, files: 6, bytes: 22_400_000, modified: now - 30 * 86400, holder_is_me: false, holder_connected: false },
     ],
   };
+}
+
+/** `?demo&issues`: sample health-check problems and outside folders, for
+ * checking those screens (off by default so the regular demo looks healthy). */
+export function demoIssuesOn(): boolean {
+  return isDemoMode() && new URLSearchParams(window.location.search).has("issues");
+}
+
+export function demoCompatIssues(game: string): CompatIssue[] {
+  if (!demoIssuesOn() || game !== "sims4") return [];
+  return [
+    {
+      kind: "sims4_duplicate_scripts", severity: "error", title: "A script mod is installed twice",
+      detail: "These files hold the same script mod, so the game runs two versions of it at once, which usually breaks it. Keep the newest: SyncCrate turns the older copies off (you can turn them back on in the list).",
+      count: 2, paths: ["Mods/MCCC/mc_cmd_center.ts4script", "Mods/Old/mc_cmd_center_2023.ts4script"], fix: "sims4_disable_older_scripts", fix_label: "Turn off older copies",
+    },
+    {
+      kind: "sims4_tray_in_mods", severity: "warn", title: "3 Tray files are in the Mods folder",
+      detail: "Saved households, lots and rooms only show up in the gallery from the Tray folder. SyncCrate can move them there.",
+      count: 3, paths: ["Mods/Downloads/0x00000002!0x0a1b.trayitem", "Mods/Downloads/0x00000002!0x0a1b.hhi", "Mods/Downloads/0x00000002!0x0a1b.sgi"], fix: "sims4_move_tray_files", fix_label: "Move to Tray",
+    },
+  ];
+}
+
+export function demoExtraFolders(game: string): ExtraFolder[] {
+  if (!demoIssuesOn()) return [];
+  if (game === "valheim") return [{ ct_id: "worlds", label: "Worlds", path: "C:\\Users\\You\\AppData\\LocalLow\\IronGate\\Valheim\\worlds_local", custom: false }];
+  if (game === "stardew_valley") return [{ ct_id: "saves", label: "Saves", path: null, custom: false }];
+  return [];
 }
