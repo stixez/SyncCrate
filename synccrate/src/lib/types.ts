@@ -229,6 +229,43 @@ export interface CompatIssue {
   url?: string;
 }
 
+/** A save a crew takes turns on (src-tauri/src/handoff.rs). */
+export interface SharedSave {
+  game: string;
+  /** `<content type id>/<name>`. */
+  unit: string;
+  holder: string;
+  holder_name: string;
+  playing: boolean;
+  removed: boolean;
+  version: number;
+  updated_at: number;
+  /** The holder only has their own word for it: a host accepts their copy first. */
+  claimed: boolean;
+}
+
+export interface SharedSaveRow {
+  unit: string;
+  name: string;
+  crew: string | null;
+  crew_name: string | null;
+  record: SharedSave | null;
+  files: number;
+  bytes: number;
+  modified: number;
+  holder_is_me: boolean;
+  holder_connected: boolean;
+}
+
+export interface SharedSavesView {
+  crews: { id: string; name: string }[];
+  rows: SharedSaveRow[];
+  session: "host" | "client" | "none";
+  host_name: string | null;
+  host_supports: boolean;
+  proven: boolean;
+}
+
 /** An available mod update (src-tauri/src/mod_updates.rs). */
 export interface ModUpdate {
   /** ModMeta.key of the mod. */
@@ -613,6 +650,8 @@ export interface ContentTypeDefinition {
   must_contain?: string | null;
   exclude_files?: string[];
   exclude_patterns?: string[];
+  /** Save handoff: folder levels that name one save (unset: not supported). */
+  save_unit_depth?: number;
 }
 
 export interface VersionDetection {

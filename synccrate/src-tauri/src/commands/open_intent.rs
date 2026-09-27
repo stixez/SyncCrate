@@ -331,6 +331,7 @@ mod tests {
             sets: Default::default(),
             last_host: None,
             created_at: 0,
+            saves: Vec::new(),
         };
         let link = crate::crews::encode_invite(&crew, &from, "Host").unwrap();
         for raw in [link.clone(), format!("{link})."), format!("<{link}>"), format!("{link}/"), link.replacen("crew", "CREW", 1)] {

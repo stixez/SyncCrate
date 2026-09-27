@@ -4,6 +4,7 @@ mod compat;
 mod crews;
 mod event_sink;
 mod game_install;
+mod handoff;
 mod network;
 mod mod_meta;
 mod mod_updates;
@@ -32,6 +33,8 @@ mod chat_e2e_tests;
 mod history_e2e_tests;
 #[cfg(test)]
 mod stay_in_sync_e2e_tests;
+#[cfg(test)]
+mod handoff_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -451,6 +454,14 @@ pub fn run() {
             commands::open_intent::take_open_intents,
             commands::compat::check_compat,
             commands::compat::fix_compat_issue,
+            commands::handoff::get_shared_saves,
+            commands::handoff::share_save,
+            commands::handoff::unshare_save,
+            commands::handoff::set_save_playing,
+            commands::handoff::take_over_save,
+            commands::handoff::take_save,
+            commands::handoff::give_save,
+            commands::handoff::accept_save_copy,
             commands::files::get_hidden_games,
             commands::files::set_game_hidden,
             commands::files::get_workshop_mod_count,

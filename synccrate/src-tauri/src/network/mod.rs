@@ -1,4 +1,5 @@
 pub mod discovery;
+pub mod handoff_net;
 pub mod iroh_net;
 pub mod joincode;
 pub mod netutil;

@@ -424,7 +424,7 @@ pub fn keep_tmp_original(file_name: &str) -> Option<&str> {
 /// types they were then scanned, backed up, served to friends and auto-pulled.
 pub fn is_synccrate_temp(file_name: &str) -> bool {
     let Some(rest) = file_name.strip_suffix(".tmp") else { return false };
-    if rest.ends_with(".synccrate-restore") || rest.contains(".synccrate-offer-") || keep_tmp_original(file_name).is_some() {
+    if rest.ends_with(".synccrate-restore") || rest.contains(".synccrate-offer-") || rest.contains(".synccrate-handoff-") || keep_tmp_original(file_name).is_some() {
         return true;
     }
     // Download temps: a nanosecond timestamp (19 digits today) before ".tmp".
@@ -488,7 +488,7 @@ mod tests {
         let cts = vec![crate::registry::ContentType {
             id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None,
         }];
         let mut m = FileManifest::default();
         let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
@@ -538,6 +538,7 @@ mod tests {
             must_contain: None,
             exclude_files: vec!["ReShade.ini".to_string()],
             exclude_patterns: vec!["cc???sse*".to_string(), "Skyrim - *.bsa".to_string(), "SquadExpansion/*".to_string()],
+            save_unit_depth: None,
         }
     }
 

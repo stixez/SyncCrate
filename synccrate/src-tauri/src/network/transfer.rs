@@ -479,7 +479,7 @@ async fn handle_client(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string()],
             },
         )
         .await?;
@@ -942,8 +942,20 @@ async fn handle_client(
                 protocol::send_message(&mut *s, &reply).await?;
             }
             Message::FileHeader { path, size, hash } => {
+                let handoff = crate::network::handoff_net::expects_upload(&state, &peer_id, &path, size, &hash).await;
                 let mut s = stream.lock().await;
-                let reply = host_receive_offered(&state, &app, &mut s, &peer_id, path, size, hash).await?;
+                let reply = if handoff {
+                    crate::network::handoff_net::host_receive(&state, &mut s, &peer_id, path, size, hash).await
+                } else {
+                    host_receive_offered(&state, &app, &mut s, &peer_id, path, size, hash).await?
+                };
+                protocol::send_message(&mut *s, &reply).await?;
+            }
+            Message::HandoffSync { id, saves, request } => {
+                // The proven id only: a LAN peer's claimed one could be anyone's.
+                let proven = stream.lock().await.remote_node_id().map(|id| crate::crews::node_id_hex(&id));
+                let reply = crate::network::handoff_net::host_sync(&state, &app, &peer_id, proven, id, saves, request).await;
+                let mut s = stream.lock().await;
                 protocol::send_message(&mut *s, &reply).await?;
             }
             Message::ChatSync { since, outgoing, synced_files, sync_failed } => {
@@ -998,9 +1010,12 @@ async fn handle_client(
     // event. Its offer is ours to drop: left behind, a kicked friend's offer
     // stayed listed and could still be "accepted".
     if removed_externally {
-        if state.lock().await.offers_in.remove(&peer_id).is_some() {
+        let mut st = state.lock().await;
+        crate::network::handoff_net::drop_pending(&mut st, &peer_id);
+        if st.offers_in.remove(&peer_id).is_some() {
             let _ = app.emit("offers-updated", serde_json::json!({}));
         }
+        drop(st);
         // Kick skips its Disconnect while the stream is busy with a file;
         // without one the friend saw an unclean drop and auto-reconnected.
         if let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await {
@@ -1025,6 +1040,7 @@ async fn handle_client(
     {
         let mut app_state = state.lock().await;
         app_state.connections.remove(&peer_id);
+        crate::network::handoff_net::drop_pending(&mut app_state, &peer_id);
         if app_state.offers_in.remove(&peer_id).is_some() {
             let _ = app.emit("offers-updated", serde_json::json!({}));
         }
@@ -1233,7 +1249,7 @@ pub(crate) async fn run_client_session(
                 game_id: Some(our_game),
                 node_id: our_node,
                 crews,
-                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string()],
+                features: vec![crate::chat::FEATURE.to_string(), crate::offers::FEATURE.to_string(), crate::handoff::FEATURE.to_string()],
             },
         )
         .await?;
@@ -1269,7 +1285,7 @@ pub(crate) async fn run_client_session(
                         let _ = app.emit("crews-changed", serde_json::json!({}));
                     }
                 }
-                (name, clean_peer_text(&version, 32), supports_compression, game_id, host_node, (crate::chat::supports(&features), crate::offers::supports(&features)))
+                (name, clean_peer_text(&version, 32), supports_compression, game_id, host_node, (crate::chat::supports(&features), crate::offers::supports(&features), crate::handoff::supports(&features)))
             }
             // Shown to the user: a host must not be able to paste a novel into the UI.
             Message::Error { message } => return Err(clean_peer_text(&message, 300)),
@@ -1380,6 +1396,8 @@ pub(crate) async fn run_client_session(
         app_state.chat.clear();
         app_state.chat.available = host_chat.0;
         app_state.offers_available = host_chat.1;
+        app_state.handoff_available = host_chat.2;
+        app_state.host_proven = dialled_node.is_some();
         app_state.offer_out = None;
     }
 
@@ -1391,7 +1409,7 @@ pub(crate) async fn run_client_session(
 
     // Client message loop — keeps connection alive, handles host messages,
     // detects disconnects. Runs until the connection drops.
-    client_message_loop(state, app, stream, peer_id, host_name_for_loop, host_chat.0, host_chat.1).await;
+    client_message_loop(state, app, stream, peer_id, host_name_for_loop, host_chat.0, host_chat.1, host_chat.2).await;
 
     Ok(())
 }
@@ -1407,8 +1425,10 @@ async fn client_message_loop(
     host_name: String,
     chat: bool,
     offers: bool,
+    handoff: bool,
 ) {
     let mut clean_disconnect = false;
+    let mut last_handoff = std::time::Instant::now() - crate::network::handoff_net::POLL;
     let mut disconnect_reason = String::new();
     let mut last_ping = std::time::Instant::now();
     let mut last_chat = std::time::Instant::now() - CHAT_POLL;
@@ -1445,6 +1465,13 @@ async fn client_message_loop(
         // Same pattern for an offer to the host (`crate::offers`).
         let mut offer_req = if offers { offer_poll_request(&state, last_offer.elapsed() >= OFFER_POLL).await } else { None };
         let mut offer_outcome: Option<OfferOutcome> = None;
+        // Shared-save records (`crate::handoff`), both ways, every few seconds.
+        let mut handoff_req = if handoff && last_handoff.elapsed() >= crate::network::handoff_net::POLL {
+            crate::network::handoff_net::poll_input(&state, peer_id).await
+        } else {
+            None
+        };
+        let mut handoff_reply: Option<(String, Vec<crate::handoff::CrewSaves>)> = None;
 
         // Try to read from stream without blocking sync operations.
         // try_lock avoids holding the stream while a file transfer is in progress.
@@ -1469,7 +1496,20 @@ async fn client_message_loop(
                     }
                     None => None,
                 };
-                if let Some(early) = offer_early { early } else {
+                let handoff_early = match handoff_req.take().filter(|_| offer_early.is_none()) {
+                    Some((node, out)) => {
+                        last_handoff = std::time::Instant::now();
+                        match crate::network::handoff_net::round_trip(&mut s, out, None).await {
+                            Ok((saves, _, pending)) => {
+                                handoff_reply = Some((node, saves));
+                                pending.map(|m| Ok(Some(m)))
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    None => None,
+                };
+                if let Some(early) = offer_early.or(handoff_early) { early } else {
                 match chat_req.take() {
                     Some((since, outgoing, synced, report_seq)) => {
                         last_chat = std::time::Instant::now();
@@ -1499,6 +1539,9 @@ async fn client_message_loop(
 
         if let Some(outcome) = offer_outcome {
             apply_offer_outcome(&state, &app, outcome).await;
+        }
+        if let Some((node, saves)) = handoff_reply {
+            crate::network::handoff_net::poll_apply(&state, &app, &node, saves).await;
         }
 
         if let Some((batch, sent, reported)) = chat_reply {
@@ -1661,7 +1704,7 @@ async fn offer_round_trip(s: &mut PeerStream, req: OfferRequest) -> Result<(Offe
 
 /// Send one accepted file (the host checks it all again) and read the
 /// host's verdict. `Ok(Err(msg))` hands back a message the loop must act on.
-async fn upload_offered_file(s: &mut PeerStream, base: &str, f: &crate::state::FileInfo) -> Result<Result<(bool, String), Message>, String> {
+pub(crate) async fn upload_offered_file(s: &mut PeerStream, base: &str, f: &crate::state::FileInfo) -> Result<Result<(bool, String), Message>, String> {
     use tokio::io::AsyncReadExt;
     let path = match crate::utils::safe_join(base, &f.relative_path) {
         Ok(p) => p,
@@ -1905,14 +1948,14 @@ const CHAT_POLL: std::time::Duration = std::time::Duration::from_millis(1000);
 /// manifest request's allowance. Otherwise it's short: the poll holds the
 /// stream lock, and on a half-open link 120 s every time kept a Sync or an
 /// update check waiting (Cancel unanswered) and hid the dead host for 2 minutes.
-fn poll_reply_wait(s: &PeerStream) -> std::time::Duration {
+pub(crate) fn poll_reply_wait(s: &PeerStream) -> std::time::Duration {
     s.reply_wait(std::time::Duration::from_secs(20), std::time::Duration::from_secs(120))
 }
 
 /// Take a peer's stream lock in 1 s slices, stopping when the peer is gone
 /// (or, for a sync, on Cancel). A chat or offer poll can hold the lock for a
 /// while, and a plain `lock().await` ignored both until it finished.
-async fn lock_stream<'a>(
+pub(crate) async fn lock_stream<'a>(
     stream: &'a Mutex<PeerStream>,
     state: &Arc<Mutex<AppState>>,
     peer_id: &str,
@@ -2334,7 +2377,7 @@ pub async fn receive_file(
 /// the host's transfer has already ended (FileComplete / Error was consumed).
 /// The temp file handle is always closed before returning so it can be deleted
 /// on Windows.
-async fn receive_file_body(
+pub(crate) async fn receive_file_body(
     s: &mut PeerStream,
     tmp_path: &std::path::Path,
     expected_size: u64,
@@ -2407,7 +2450,7 @@ fn drain_budget(size: Option<u64>) -> u64 {
 /// Discard messages until the host finishes the current file. Gives up after
 /// a bounded number of messages / a read error (the connection is then
 /// unusable anyway and the loop will notice).
-async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
+pub(crate) async fn drain_until_file_end(s: &mut PeerStream, size: Option<u64>) {
     for _ in 0..drain_budget(size) {
         match protocol::recv_message(s).await {
             Ok(Message::FileComplete { .. }) | Ok(Message::Error { .. }) => return,

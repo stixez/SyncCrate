@@ -213,6 +213,7 @@ pub(crate) async fn plan_for_peer(
             remote,
             local: app_state.local_manifest.clone(),
             permissions: app_state.folder_permissions.clone(),
+            shared_saves: crate::handoff::shared_units(app_state.crews.crews.iter(), &app_state.active_game),
         }
     };
     let resolved_id = snapshot.resolved_id.clone();
@@ -230,11 +231,19 @@ struct PlanInputs {
     remote: crate::state::FileManifest,
     local: crate::state::FileManifest,
     permissions: crate::state::SyncFolderPermissions,
+    /// Saves the crew takes turns on: they only move by take and give.
+    shared_saves: std::collections::HashSet<String>,
 }
 
 /// The sync plan for a snapshot (no locks; runs on a blocking thread).
 fn build_plan(input: PlanInputs) -> SyncPlan {
-    let PlanInputs { resolved_id, active_game, base_path, content_types, host_game, mut remote, local, permissions } = input;
+    let PlanInputs { resolved_id, active_game, base_path, content_types, host_game, mut remote, mut local, permissions, shared_saves } = input;
+    // A shared save's host copy is often older than the holder's: "use
+    // theirs" here would overwrite the newer game.
+    if !shared_saves.is_empty() {
+        remote.files.retain(|p, _| !crate::handoff::is_shared(&content_types, &shared_saves, p));
+        local.files.retain(|p, _| !crate::handoff::is_shared(&content_types, &shared_saves, p));
+    }
 
     // Never plan downloads outside this game's content folders, whatever the
     // host sends (hosts older than 0.5.6 don't say which game they share).
@@ -386,12 +395,17 @@ pub(crate) async fn execute_sync_inner(
             return Err("A backup is being restored. Sync again when it's done.".to_string());
         }
 
+        let shared = crate::handoff::shared_units(app_state.crews.crews.iter(), &active_game);
         let conn = app_state
             .connections
             .get_mut(&resolved_id)
             .ok_or("Peer not found")?;
 
-        let plan = conn.sync_plan.take().ok_or("No sync plan computed.")?;
+        let mut plan = conn.sync_plan.take().ok_or("No sync plan computed.")?;
+        // A save shared after Compare: this sync must not move it either.
+        if !shared.is_empty() {
+            plan.actions.retain(|a| !crate::handoff::is_shared(&content_types, &shared, crate::handoff::action_path(a)));
+        }
 
         // The plan was computed against one game folder; the active game or its
         // path may have changed since. Drop the plan rather than run it here.

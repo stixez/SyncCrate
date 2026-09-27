@@ -600,6 +600,15 @@ export function useTauriEvents() {
         listen("crews-changed", () => {
           useAppStore.getState().bumpCrewsVersion();
         }),
+        // Shared saves live in the crew store.
+        listen("handoff-updated", () => {
+          useAppStore.getState().bumpCrewsVersion();
+        }),
+        listen<{ name: string; save: string }>("handoff-approval", (event) => {
+          const msg = `${event.payload.name} wants to give you ${event.payload.save}. If their copy is the newest, click Accept under Shared saves on the Dashboard.`;
+          toastInfo(msg);
+          sendNotification("SyncCrate", msg);
+        }),
         listen<{ files: string[] }>("caches-cleared", (event) => {
           addLog(`Cleared game caches after sync: ${event.payload.files.join(", ")}`, "info");
         }),

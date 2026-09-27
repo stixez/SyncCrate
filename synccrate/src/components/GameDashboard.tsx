@@ -19,6 +19,7 @@ import SyncBanner from "./SyncBanner";
 import PeerList from "./PeerList";
 import ChatPanel from "./ChatPanel";
 import OffersPanel from "./OffersPanel";
+import SharedSaves from "./SharedSaves";
 import CompatIssues from "./CompatIssues";
 import ConnectionGuide from "./ConnectionGuide";
 import UndoLastSync from "./UndoLastSync";
@@ -1028,6 +1029,8 @@ export default function GameDashboard({ gameId }: Props) {
       {isScanning && !manifest ? <ScanSkeleton /> : <StatCardGrid cards={statCards} />}
 
       <OffersPanel />
+
+      <SharedSaves gameId={gameId} />
 
       <ChatPanel />
 
