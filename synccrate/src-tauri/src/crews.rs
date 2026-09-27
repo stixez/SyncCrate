@@ -596,11 +596,12 @@ pub fn save_store(path: &Path, store: &CrewStore) -> Result<(), String> {
 }
 
 /// Persist the in-memory store if this `AppState` has a backing file (tests
-/// and a store that failed to load run without one).
+/// and a store that failed to load run without one). Written off the lock
+/// like the handshake saves: the crew commands call this with the AppState
+/// lock held, and serializing + flushing a big crew set there froze every
+/// other command (and the host loop) until the disk caught up.
 pub fn persist(state: &crate::state::AppState) {
-    if let Some(path) = &state.crews_path {
-        save_snapshot(path, &state.crews, next_save_seq());
-    }
+    persist_in_background(state);
 }
 
 /// Numbered while the AppState lock is held (both callers borrow it), so the
@@ -624,9 +625,10 @@ fn save_snapshot(path: &Path, store: &CrewStore, seq: u64) {
     }
 }
 
-/// For the connection handshakes, which run with the AppState lock held and
-/// change the store on every connection (last seen): writing the whole store
-/// there (crew sets of up to 150k files) stalled every other command.
+/// Clones the store (cheap next to serializing it) and writes it on a
+/// blocking thread; `save_snapshot`'s sequence check keeps an older snapshot
+/// from landing after a newer one. First used for the connection handshakes,
+/// which change the store on every connection (last seen).
 fn persist_in_background(state: &crate::state::AppState) {
     let Some(path) = state.crews_path.clone() else { return };
     let (store, seq) = (state.crews.clone(), next_save_seq());
@@ -723,6 +725,20 @@ mod tests {
         assert_eq!(back.crews[0].sets["sims4"].version, 1);
         assert_eq!(back.crews[0].sets["sims4"].pack.files.len(), 2);
         assert!(!dir.join("crews.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_late_background_save_never_overwrites_a_newer_one() {
+        let dir = crate::testutil::temp_dir("crews-seq");
+        let path = dir.join("crews.json");
+        let (older, newer) = (next_save_seq(), next_save_seq());
+        let mut store = CrewStore::default();
+        store.crews.push(crew());
+        save_snapshot(&path, &store, newer);
+        // The earlier snapshot's thread ran last: it must not win.
+        save_snapshot(&path, &CrewStore::default(), older);
+        assert_eq!(load_store(&path).unwrap().crews.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

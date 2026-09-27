@@ -311,8 +311,17 @@ pub async fn serve_incoming(
         log::warn!("Rejecting connection from {} — too many connections in progress", label);
         return;
     };
-    let Some(_source_slot) = SourceSlot::try_acquire(source_key(&label)) else {
+    let Some(source_slot) = SourceSlot::try_acquire(source_key(&label)) else {
         log::warn!("Rejecting connection from {} — too many connections from there", label);
+        // Without a reason the friend only saw the connection close. Bounded:
+        // a flood of these still holds a handshake slot while it's sent.
+        let mut stream = stream;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            let msg = Message::Error { message: "Too many connection attempts from your PC at once. Wait a minute and try again.".to_string() };
+            let _ = protocol::send_message(&mut stream, &msg).await;
+            stream.close_gracefully().await;
+        })
+        .await;
         return;
     };
     // Enforce connection limit
@@ -324,7 +333,7 @@ pub async fn serve_incoming(
             return;
         }
     }
-    if let Err(e) = handle_client(stream, state, app, label).await {
+    if let Err(e) = handle_client(stream, state, app, label, source_slot).await {
         log::error!("Client handler error: {}", e);
     }
 }
@@ -344,6 +353,7 @@ async fn handle_client(
     state: Arc<Mutex<AppState>>,
     app: Events,
     peer_label: String,
+    source_slot: SourceSlot,
 ) -> Result<(), String> {
     let epoch = {
         let app_state = state.lock().await;
@@ -474,6 +484,11 @@ async fn handle_client(
         )
         .await?;
     }
+    // The per-source limit is for handshakes that never finish. Held for the
+    // whole session, a friend whose old sessions were still timing out after
+    // a network blip (up to ~165 s of keepalive) was turned away on the
+    // fourth auto-reconnect. MAX_PEERS limits sessions from here on.
+    drop(source_slot);
 
     // A friend named like the host (or another friend) looked exactly like
     // them in chat and the peer list; give them a distinct name.
@@ -1627,7 +1642,8 @@ async fn offer_round_trip(s: &mut PeerStream, req: OfferRequest) -> Result<(Offe
     let sending = req.files.is_some();
     protocol::send_message(s, &Message::OfferSync { files: req.files }).await?;
     loop {
-        let msg = protocol::try_recv_message(s, POLL_REPLY_WAIT)
+        let wait = poll_reply_wait(s);
+        let msg = protocol::try_recv_message(s, wait)
             .await?
             .ok_or_else(|| "The host stopped answering".to_string())?;
         match msg {
@@ -1885,8 +1901,35 @@ const CHAT_POLL: std::time::Duration = std::time::Duration::from_millis(1000);
 /// How long a chat or offer poll waits for the host's reply. The host
 /// answers requests in order, so a reply can queue behind a big file it's
 /// still hashing for a request we already gave up on (a cancelled sync): 15 s
-/// ended the whole session then. Same allowance as a manifest request.
-const POLL_REPLY_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+/// ended the whole session then, so after an abandoned request it gets the
+/// manifest request's allowance. Otherwise it's short: the poll holds the
+/// stream lock, and on a half-open link 120 s every time kept a Sync or an
+/// update check waiting (Cancel unanswered) and hid the dead host for 2 minutes.
+fn poll_reply_wait(s: &PeerStream) -> std::time::Duration {
+    s.reply_wait(std::time::Duration::from_secs(20), std::time::Duration::from_secs(120))
+}
+
+/// Take a peer's stream lock in 1 s slices, stopping when the peer is gone
+/// (or, for a sync, on Cancel). A chat or offer poll can hold the lock for a
+/// while, and a plain `lock().await` ignored both until it finished.
+async fn lock_stream<'a>(
+    stream: &'a Mutex<PeerStream>,
+    state: &Arc<Mutex<AppState>>,
+    peer_id: &str,
+    cancellable: bool,
+) -> Result<tokio::sync::MutexGuard<'a, PeerStream>, String> {
+    loop {
+        if let Ok(guard) = tokio::time::timeout(std::time::Duration::from_secs(1), stream.lock()).await {
+            return Ok(guard);
+        }
+        if cancellable && crate::commands::sync::cancel_requested() {
+            return Err("Sync cancelled".to_string());
+        }
+        if !state.lock().await.connections.contains_key(peer_id) {
+            return Err("Disconnected from the host".to_string());
+        }
+    }
+}
 
 async fn chat_round_trip(
     s: &mut PeerStream,
@@ -1898,7 +1941,8 @@ async fn chat_round_trip(
     protocol::send_message(s, &Message::ChatSync { since, outgoing, synced_files, sync_failed }).await?;
     let mut pending = None;
     loop {
-        let msg = protocol::try_recv_message(s, POLL_REPLY_WAIT)
+        let wait = poll_reply_wait(s);
+        let msg = protocol::try_recv_message(s, wait)
             .await?
             .ok_or_else(|| "The host stopped answering".to_string())?;
         match msg {
@@ -1928,13 +1972,16 @@ pub async fn refresh_remote_manifest(
     };
 
     let manifest = {
-        let mut s = stream.lock().await;
+        let mut s = lock_stream(&stream, state, peer_id, false).await?;
         protocol::send_message(&mut *s, &Message::ManifestRequest).await?;
         loop {
             // The host may re-hash changed files before replying.
             let msg = match protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(120)).await? {
                 Some(m) => m,
-                None => return Err("Timed out waiting for host manifest".to_string()),
+                None => {
+                    s.mark_abandoned();
+                    return Err("Timed out waiting for host manifest".to_string());
+                }
             };
             match msg {
                 Message::ManifestResponse { manifest } => break manifest,
@@ -2180,7 +2227,7 @@ pub async fn receive_file(
     );
 
     // Hold stream lock for the entire file transfer to prevent message interleaving
-    let mut s = connection.lock().await;
+    let mut s = lock_stream(&connection, state, peer_id, true).await?;
 
     // Send file request
     protocol::send_message(&mut *s, &Message::FileRequest { path: req.remote_path.to_string() }).await?;
@@ -2201,12 +2248,14 @@ pub async fn receive_file(
             // as stale by the next request.
             let Some(msg) = protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(1)).await? else {
                 if crate::commands::sync::cancel_requested() {
+                    s.mark_abandoned();
                     return Err("Sync cancelled".to_string());
                 }
                 if !state.lock().await.connections.contains_key(peer_id) {
                     return Err("Disconnected from the host".to_string());
                 }
                 if started.elapsed() >= FILE_HEADER_WAIT {
+                    s.mark_abandoned();
                     return Err(format!("The host didn't start sending {} in time. Reconnect and try again.", req.remote_path));
                 }
                 continue;
