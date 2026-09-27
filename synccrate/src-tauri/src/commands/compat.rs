@@ -13,19 +13,23 @@ pub async fn check_compat(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: S
 }
 
 pub(crate) async fn check_compat_inner(state: &Arc<Mutex<AppState>>, game: &str) -> Result<Vec<CompatIssue>, String> {
-    let (def, base, manifest, is_client) = {
+    let (def, base, manifest, is_client, host_has_resource_cfg) = {
         let s = state.lock().await;
         if s.active_game != game {
             return Ok(Vec::new());
         }
         let def = s.game_registry.games.iter().find(|g| g.id == game).cloned().ok_or("Unknown game")?;
-        (def, s.active_game_path()?, s.local_manifest.clone(), s.session_type == crate::state::SessionType::Client)
+        let is_client = s.session_type == crate::state::SessionType::Client;
+        let host_cfg = is_client
+            && s.connections.values().filter_map(|c| c.remote_manifest.as_ref()).any(|m| m.files.keys().any(|k| k.eq_ignore_ascii_case("Mods/Resource.cfg")));
+        (def, s.active_game_path()?, s.local_manifest.clone(), is_client, host_cfg)
     };
     tokio::task::spawn_blocking(move || {
         let exists = |rel: &str| crate::utils::safe_join(&base, rel).is_ok_and(|p| p.is_file());
         let mut out: Vec<CompatIssue> = compat::check_loader(&def, &manifest, exists).into_iter().collect();
         if def.id == "sims4" {
-            let env = sims4_env(&def, &base, &manifest, is_client);
+            let mut env = sims4_env(&def, &base, &manifest, is_client);
+            env.host_has_resource_cfg = host_has_resource_cfg;
             let zip_has_package = |rel: &str| crate::utils::safe_join(&base, rel).is_ok_and(|p| compat::zip_contains_package(&p));
             out.extend(compat::check_sims4(&manifest, &env, zip_has_package));
         }
@@ -57,15 +61,17 @@ fn sims4_env(def: &crate::registry::GameDefinition, base: &str, manifest: &crate
         ),
         None => (None, root.join("Mods").is_dir()),
     };
+    let patch_time = crate::commands::files::patch_time_of(def, base);
     compat::Sims4Env {
         options_ini,
         resource_cfg,
         resource_cfg_missing,
         scripts: script_modules(base, manifest),
         tray_in_mods: tray_candidates(root),
-        reports: error_reports(root).into_iter().map(|(_, r)| r).collect(),
-        patch_time: crate::commands::files::patch_time_of(def, base),
+        reports: error_reports(root, patch_time.unwrap_or(0)),
+        patch_time,
         is_client,
+        host_has_resource_cfg: false,
     }
 }
 
@@ -75,6 +81,8 @@ const MAX_SCRIPTS_INSPECTED: usize = 2000;
 const MAX_WALK_ENTRIES: usize = 400_000;
 const MAX_REPORT_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_REPORTS: usize = 10;
+/// Read per check at most (the check runs after every scan).
+const MAX_REPORT_TOTAL_BYTES: u64 = 8 * 1024 * 1024;
 
 /// `Mods/Resource.cfg` in whatever case it was written.
 fn find_resource_cfg(root: &Path) -> Option<std::path::PathBuf> {
@@ -94,27 +102,47 @@ fn script_modules(base: &str, manifest: &crate::state::FileManifest) -> Vec<comp
         let p = f.relative_path.as_str();
         p.starts_with("Mods/") && !crate::sync::diff::is_disabled_path(p) && crate::commands::files::effective_extension(Path::new(p)) == "ts4script"
     });
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    let mut out = Vec::new();
-    for f in scripts.take(MAX_SCRIPTS_INSPECTED) {
-        let Ok(path) = crate::utils::safe_join(base, &f.relative_path) else { continue };
+    let files: Vec<(&crate::state::FileInfo, std::path::PathBuf)> =
+        scripts.take(MAX_SCRIPTS_INSPECTED).filter_map(|f| Some((f, crate::utils::safe_join(base, &f.relative_path).ok()?))).collect();
+    // Cache hits under the lock; the archives are opened without it, so a
+    // first check of 2000 scripts doesn't hold up every other check.
+    let mut known: HashMap<String, BTreeSet<String>> = {
+        let cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        files
+            .iter()
+            .filter_map(|(f, path)| {
+                let key = path.to_string_lossy().into_owned();
+                match cache.get(&key) {
+                    Some((size, modified, m)) if *size == f.size && *modified == f.modified => Some((key, m.clone())),
+                    _ => None,
+                }
+            })
+            .collect()
+    };
+    let mut fresh = Vec::new();
+    for (f, path) in &files {
         let key = path.to_string_lossy().into_owned();
-        let modules = match cache.get(&key) {
-            Some((size, modified, m)) if *size == f.size && *modified == f.modified => m.clone(),
-            _ => {
-                let m = crate::mod_meta::open_bounded_zip(&path, 256 * 1024 * 1024)
-                    .map(|z| compat::script_module_names(z.file_names()))
-                    .unwrap_or_default();
-                cache.insert(key, (f.size, f.modified, m.clone()));
-                m
-            }
-        };
-        out.push(compat::ScriptModules { path: f.relative_path.clone(), modified: f.modified, modules });
+        if !known.contains_key(&key) {
+            let m = crate::mod_meta::open_bounded_zip(path, 256 * 1024 * 1024).map(|z| compat::script_module_names(z.file_names())).unwrap_or_default();
+            fresh.push((key.clone(), (f.size, f.modified, m.clone())));
+            known.insert(key, m);
+        }
     }
-    if cache.len() > 4 * MAX_SCRIPTS_INSPECTED {
-        cache.clear();
+    if !fresh.is_empty() {
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.len() > 4 * MAX_SCRIPTS_INSPECTED {
+            cache.clear();
+        }
+        cache.extend(fresh);
     }
-    out
+    files
+        .into_iter()
+        .map(|(f, path)| compat::ScriptModules {
+            path: f.relative_path.clone(),
+            modified: f.modified,
+            modules: known.remove(path.to_string_lossy().as_ref()).unwrap_or_default(),
+        })
+        .collect()
 }
 
 /// Files under Mods with a Tray (or `.bpi`) extension, as `Mods/...` paths.
@@ -137,30 +165,32 @@ fn tray_candidates(root: &Path) -> Vec<String> {
 }
 
 /// The game's error reports (`lastException.txt`, `lastUIException_*.txt`,
-/// ...) in its folder, newest first.
-fn error_reports(root: &Path) -> Vec<(std::path::PathBuf, compat::ErrorReport)> {
+/// ...) in its folder written after `newer_than`, newest first. Older ones
+/// aren't even read: the check ignores them, and it runs after every scan.
+fn error_reports(root: &Path, newer_than: u64) -> Vec<compat::ErrorReport> {
     let Ok(dir) = std::fs::read_dir(root) else { return Vec::new() };
-    let mut found: Vec<(std::path::PathBuf, u64)> = dir
+    let mut found: Vec<(std::path::PathBuf, u64, u64)> = dir
         .flatten()
         .filter(|e| is_error_report(&e.file_name().to_string_lossy()))
         .filter_map(|e| {
             let meta = std::fs::symlink_metadata(e.path()).ok().filter(|m| m.is_file())?;
             let modified = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
-            Some((e.path(), modified))
+            (modified > newer_than && meta.len() <= MAX_REPORT_BYTES).then(|| (e.path(), modified, meta.len()))
         })
         .collect();
     found.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut budget = MAX_REPORT_TOTAL_BYTES;
     found
         .into_iter()
         .take(MAX_REPORTS)
-        .map(|(p, modified)| {
-            let text = std::fs::symlink_metadata(&p)
-                .ok()
-                .filter(|m| m.len() <= MAX_REPORT_BYTES)
-                .and_then(|_| std::fs::read(&p).ok())
-                .map(|b| String::from_utf8_lossy(&b).into_owned())
-                .unwrap_or_default();
-            (p, compat::ErrorReport { modified, text })
+        .take_while(|(_, _, len)| {
+            let fits = *len <= budget;
+            budget = budget.saturating_sub(*len);
+            fits
+        })
+        .filter_map(|(p, modified, _)| {
+            let text = String::from_utf8_lossy(&std::fs::read(&p).ok()?).into_owned();
+            Some(compat::ErrorReport { modified, text })
         })
         .collect()
 }
@@ -243,8 +273,9 @@ pub(crate) async fn fix_compat_issue_inner(state: &Arc<Mutex<AppState>>, game: &
     if fix == compat::FIX_SIMS4_MOVE_CC_TO_MODS && is_client {
         return Err("These came from your host: ask them to move the files into Mods, or the next sync brings them back.".into());
     }
+    let rescan = moves_files;
     let fix = fix.to_string();
-    tokio::task::spawn_blocking(move || {
+    let done = tokio::task::spawn_blocking(move || {
         let root = Path::new(&base);
         match fix.as_str() {
             compat::FIX_SIMS4_ENABLE_MODS => enable_mods_in(root).map(|()| None),
@@ -261,7 +292,15 @@ pub(crate) async fn fix_compat_issue_inner(state: &Arc<Mutex<AppState>>, game: &
         }
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    // The re-check right after reads the manifest: without this the moved
+    // files still showed as a problem, and a host served stale paths.
+    if rescan {
+        if let Err(e) = crate::commands::files::scan_files_inner(state, None, true).await {
+            log::warn!("Rescan after a health fix: {e}");
+        }
+    }
+    done
 }
 
 /// Turn off all but the newest copy of each duplicated script mod, the same
@@ -297,7 +336,12 @@ pub(crate) fn write_resource_cfg(root: &Path) -> Result<String, String> {
     std::fs::create_dir_all(&mods).map_err(|e| e.to_string())?;
     let target = match find_resource_cfg(root) {
         Some(existing) => {
-            std::fs::copy(&existing, mods.join("Resource.cfg.synccrate-backup")).map_err(|e| format!("Couldn't back up Resource.cfg: {e}"))?;
+            // Never over an earlier backup: that may be the player's own file.
+            let backup = (0..)
+                .map(|i| mods.join(if i == 0 { "Resource.cfg.synccrate-backup".to_string() } else { format!("Resource.cfg.{i}.synccrate-backup") }))
+                .find(|p| !p.exists())
+                .expect("unbounded");
+            std::fs::copy(&existing, &backup).map_err(|e| format!("Couldn't back up Resource.cfg: {e}"))?;
             existing
         }
         None => mods.join("Resource.cfg"),
@@ -545,6 +589,10 @@ scriptmodsenabled = 0
         assert_eq!(std::fs::read_to_string(dir.join("Mods/resource.cfg")).unwrap(), compat::SIMS4_RESOURCE_CFG);
         assert_eq!(std::fs::read(dir.join("Mods/Resource.cfg.synccrate-backup")).unwrap(), b"Priority 500\r\n");
         assert!(!dir.join("Mods/.Resource.cfg.synccrate-restore.tmp").exists());
+        // A second fix keeps the first backup.
+        write_resource_cfg(&dir).unwrap();
+        assert_eq!(std::fs::read(dir.join("Mods/Resource.cfg.synccrate-backup")).unwrap(), b"Priority 500\r\n");
+        assert!(dir.join("Mods/Resource.cfg.1.synccrate-backup").is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

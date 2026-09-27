@@ -191,6 +191,8 @@ pub struct Sims4Env {
     /// Connected to a host: files the host syncs mustn't be moved here, the
     /// next sync would just bring them back.
     pub is_client: bool,
+    /// The host's file list has a Mods/Resource.cfg (client only).
+    pub host_has_resource_cfg: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -207,17 +209,31 @@ pub struct ErrorReport {
 }
 
 /// Top-level Python modules in a `.ts4script` (a zip): `mc_cmd_center/x.pyc`
-/// → `mc_cmd_center`, a root `tool.pyc` → `tool`.
+/// → `mc_cmd_center`, a root `tool.pyc` → `tool`. A folder without its own
+/// `__init__` is a namespace one creator shares between mods
+/// (`creator/mod_a/...`), so it counts one level deeper: keyed by the top
+/// folder alone, two different mods of theirs looked like one mod twice.
 pub fn script_module_names<'a>(entries: impl Iterator<Item = &'a str>) -> std::collections::BTreeSet<String> {
-    entries
+    let py: Vec<String> = entries
+        .map(|e| e.to_ascii_lowercase().replace('\\', "/"))
+        .filter(|e| e.ends_with(".pyc") || e.ends_with(".py"))
+        .collect();
+    let packages: std::collections::HashSet<&str> = py
+        .iter()
+        .filter_map(|e| e.strip_suffix("/__init__.pyc").or_else(|| e.strip_suffix("/__init__.py")))
+        .filter(|top| !top.contains('/'))
+        .collect();
+    py.iter()
         .filter_map(|e| {
-            let e = e.to_ascii_lowercase().replace('\\', "/");
-            if !(e.ends_with(".pyc") || e.ends_with(".py")) {
-                return None;
-            }
-            let first = e.split('/').next()?;
-            let name = first.strip_suffix(".pyc").or_else(|| first.strip_suffix(".py")).unwrap_or(first);
-            (!name.is_empty() && !name.starts_with("__")).then(|| name.to_string())
+            let parts: Vec<&str> = e.split('/').collect();
+            let key = match parts.as_slice() {
+                [file] => file.strip_suffix(".pyc").or_else(|| file.strip_suffix(".py")).unwrap_or(file).to_string(),
+                [top, _] => top.to_string(),
+                [top, sub, ..] if !packages.contains(top) => format!("{top}/{sub}"),
+                [top, ..] => top.to_string(),
+                [] => return None,
+            };
+            (!key.is_empty() && !key.starts_with("__")).then_some(key)
         })
         .collect()
 }
@@ -226,9 +242,13 @@ pub fn script_module_names<'a>(entries: impl Iterator<Item = &'a str>) -> std::c
 /// which the game both runs. Each group newest first. (Same file name alone
 /// isn't enough: different creators' `main.ts4script` are different mods,
 /// and a renamed old version still conflicts.)
+///
+/// Only copies the game loads (at most one folder deep) take part: with a
+/// newer copy too deep to load, "turn off the older" turned off the one
+/// that worked. The too-deep one is reported on its own.
 pub fn duplicate_scripts(scripts: &[ScriptModules]) -> Vec<Vec<&ScriptModules>> {
     let mut by_modules: std::collections::BTreeMap<&std::collections::BTreeSet<String>, Vec<&ScriptModules>> = Default::default();
-    for s in scripts.iter().filter(|s| !s.modules.is_empty()) {
+    for s in scripts.iter().filter(|s| !s.modules.is_empty() && depth_under("Mods", &s.path).is_some_and(|d| d <= 1)) {
         by_modules.entry(&s.modules).or_default().push(s);
     }
     by_modules
@@ -317,36 +337,71 @@ pub fn cc_in_tray(manifest: &FileManifest) -> Vec<String> {
     out
 }
 
-/// Every `<name>.ts4script` in a (lowercase) report, the name running back
-/// to a path separator, quote or line start, so `a.ts4script` isn't found
-/// inside `data.ts4script`. One pass per report: searching it once per
-/// installed script was thousands of passes over up to 4 MB.
-fn script_names_in(text: &str) -> std::collections::HashSet<&str> {
+/// The script mods a (lowercase) report mentions: by path under Mods where
+/// it shows one (tracebacks do), else by bare file name. One pass per
+/// report: searching it once per installed script was thousands of passes
+/// over up to 4 MB.
+#[derive(Default)]
+struct ReportNames {
+    /// `folder/name.ts4script`, relative to Mods.
+    paths: std::collections::HashSet<String>,
+    /// Names seen without a Mods path, with every tail after a space or
+    /// slash (the name's start isn't marked in running text).
+    bare: std::collections::HashSet<String>,
+}
+
+fn script_names_in(text: &str) -> ReportNames {
     const EXT: &str = ".ts4script";
     let bytes = text.as_bytes();
-    text.match_indices(EXT)
-        .map(|(i, _)| {
-            let start = bytes[..i].iter().rposition(|b| matches!(b, b'/' | b'\\' | b'"' | b'\'' | b'\n' | b'\r' | b'>' | b'(')).map_or(0, |p| p + 1);
-            &text[start..i + EXT.len()]
-        })
-        .collect()
+    let mut out = ReportNames::default();
+    for (i, _) in text.match_indices(EXT) {
+        let start = bytes[..i].iter().rposition(|b| matches!(b, b'"' | b'\'' | b'\n' | b'\r' | b'\t' | b'>' | b'<' | b'(')).map_or(0, |p| p + 1);
+        let token = text[start..i + EXT.len()].replace('\\', "/");
+        // The game's own Mods folder first: a mod may have a "mods" folder too.
+        let under = token.rfind("/the sims 4/mods/").map(|p| p + "/the sims 4/mods/".len()).or_else(|| token.find("/mods/").map(|p| p + "/mods/".len()));
+        match under {
+            Some(p) => {
+                out.paths.insert(token[p..].to_string());
+            }
+            None => {
+                out.bare.insert(token.trim().to_string());
+                for (j, c) in token.char_indices() {
+                    if c == ' ' || c == '/' {
+                        out.bare.insert(token[j + 1..].to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Live script mods named in an error report written since the last game
 /// update and not updated since that report.
 pub fn scripts_in_reports(manifest: &FileManifest, reports: &[ErrorReport], patch_time: Option<u64>) -> Vec<String> {
-    let lowered: Vec<(u64, String)> = reports.iter().filter(|r| r.modified > patch_time.unwrap_or(0)).map(|r| (r.modified, r.text.to_ascii_lowercase())).collect();
-    let recent: Vec<(u64, std::collections::HashSet<&str>)> = lowered.iter().map(|(when, text)| (*when, script_names_in(text))).collect();
+    let recent: Vec<(u64, ReportNames)> =
+        reports.iter().filter(|r| r.modified > patch_time.unwrap_or(0)).map(|r| (r.modified, script_names_in(&r.text.to_ascii_lowercase()))).collect();
     if recent.is_empty() {
         return Vec::new();
     }
-    let mut out: Vec<String> = manifest
+    let scripts: Vec<&crate::state::FileInfo> = manifest
         .files
         .values()
         .filter(|f| f.relative_path.starts_with("Mods/") && !is_disabled(&f.relative_path) && ext(&f.relative_path) == "ts4script")
+        .collect();
+    let name_of = |f: &crate::state::FileInfo| f.relative_path.rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+    let mut name_count: std::collections::HashMap<String, usize> = Default::default();
+    for f in &scripts {
+        *name_count.entry(name_of(f)).or_default() += 1;
+    }
+    let mut out: Vec<String> = scripts
+        .iter()
         .filter(|f| {
-            let name = f.relative_path.rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
-            recent.iter().any(|(when, names)| f.modified < *when && names.contains(name.as_str()))
+            let rel = f.relative_path["Mods/".len()..].to_ascii_lowercase();
+            let name = name_of(f);
+            // A bare name only counts when one installed script has it:
+            // every creator's `main.ts4script` isn't broken because one is.
+            recent.iter().any(|(when, n)| f.modified < *when && (n.paths.contains(&rel) || (name_count[&name] == 1 && n.bare.contains(&name))))
         })
         .map(|f| f.relative_path.clone())
         .collect();
@@ -386,22 +441,35 @@ pub fn check_sims4(manifest: &FileManifest, env: &Sims4Env, zip_has_package: imp
     let in_subfolders = packages.iter().any(|p| depth_under("Mods", p).is_some_and(|d| d > 0));
     let cfg_patterns = env.resource_cfg.as_deref().map(packed_file_patterns);
     let cfg_empty = cfg_patterns.as_ref().is_some_and(|p| p.is_empty());
+    // The file syncs: a client whose host has one gets the host's, so a
+    // local fix would just turn into a conflict with it.
+    let from_host = env.is_client && env.host_has_resource_cfg;
+    let cfg_fix = |i: CompatIssue, label: &str, advice: &str| {
+        if from_host {
+            let mut i = i;
+            i.detail.push(' ');
+            i.detail.push_str(advice);
+            i
+        } else {
+            with_fix(i, FIX_SIMS4_RESOURCE_CFG, label)
+        }
+    };
     if cfg_empty && !packages.is_empty() {
-        out.push(with_fix(
+        out.push(cfg_fix(
             issue(
                 "sims4_resource_cfg_broken",
                 "error",
                 "Resource.cfg doesn't load any CC".into(),
-                "Mods/Resource.cfg tells the game which folders to load .package files from, and this one lists none, so no CC loads. SyncCrate can put the standard one back (the old file is kept as Resource.cfg.synccrate-backup).",
+                "Mods/Resource.cfg tells the game which folders to load .package files from, and this one lists none, so no CC loads. SyncCrate can put the standard one back (the old file is kept as a .synccrate-backup copy).",
                 vec![],
             ),
-            FIX_SIMS4_RESOURCE_CFG,
             "Restore it",
+            "This one comes from your host: ask them to fix theirs.",
         ));
     } else if env.resource_cfg_missing && env.options_ini.is_some() && in_subfolders {
         // Only once the game has run (Options.ini exists): a new Mods folder
         // gets its Resource.cfg on the first start.
-        out.push(with_fix(
+        out.push(cfg_fix(
             issue(
                 "sims4_resource_cfg_missing",
                 "warn",
@@ -409,8 +477,8 @@ pub fn check_sims4(manifest: &FileManifest, env: &Sims4Env, zip_has_package: imp
                 "It tells the game to load .package files from folders inside Mods. The game usually writes a new one when it starts, but until then CC in subfolders doesn't load. SyncCrate can create the standard one.",
                 vec![],
             ),
-            FIX_SIMS4_RESOURCE_CFG,
             "Create it",
+            "Your host has one: sync to get it.",
         ));
     }
 
@@ -786,6 +854,14 @@ mod tests {
         let i = check_sims4(&m, &e, |_| false);
         assert_eq!(kinds(&i), ["sims4_resource_cfg_broken"]);
         assert_eq!(i[0].fix.as_deref(), Some(FIX_SIMS4_RESOURCE_CFG));
+        // A client's file comes from the host: advice instead of a fix that
+        // would turn into a conflict.
+        let (mut client, mut hostless) = (Sims4Env { is_client: true, host_has_resource_cfg: true, ..env(Some(ON)) }, Sims4Env { is_client: true, ..env(Some(ON)) });
+        client.resource_cfg = Some("Priority 500\r\n".into());
+        hostless.resource_cfg = client.resource_cfg.clone();
+        let i = check_sims4(&m, &client, |_| false);
+        assert!(i[0].fix.is_none() && i[0].detail.contains("host"));
+        assert!(check_sims4(&m, &hostless, |_| false)[0].fix.is_some(), "a host without one can't bring it back");
         // Missing: only once the game has run, and only if a subfolder needs it.
         let missing = |ini: Option<&str>| Sims4Env { resource_cfg_missing: true, ..env(ini) };
         let mut e = missing(Some(ON));
@@ -824,6 +900,19 @@ mod tests {
         let i = check_sims4(&manifest(&["Mods/MCCC/mc_cmd_center.ts4script"]), &e, |_| false);
         assert_eq!(kinds(&i), ["sims4_duplicate_scripts"]);
         assert_eq!((i[0].title.as_str(), i[0].count), ("A script mod is installed twice", 2));
+
+        // A newer copy too deep to load isn't a duplicate: turning the older
+        // one off would leave none that works.
+        let deep = vec![script("Mods/MCCC/mc.ts4script", 100, &["mc_cmd_center"]), script("Mods/DL/MCCC/mc.ts4script", 200, &["mc_cmd_center"])];
+        assert!(duplicate_scripts(&deep).is_empty());
+        // One creator's namespace folder shared by two mods: different mods.
+        let a = script_module_names(["creator/mod_a/main.pyc", "creator/mod_a/x.pyc"].into_iter());
+        let b = script_module_names(["creator/mod_b/main.pyc"].into_iter());
+        assert_ne!(a, b);
+        assert_eq!(a.into_iter().collect::<Vec<_>>(), ["creator/mod_a"]);
+        // A real package (with __init__) stays one module.
+        let pkg = script_module_names(["mc_cmd_center/__init__.pyc", "mc_cmd_center/sub/x.pyc"].into_iter());
+        assert_eq!(pkg.into_iter().collect::<Vec<_>>(), ["mc_cmd_center"]);
     }
 
     #[test]
@@ -854,6 +943,14 @@ File "T:\Mods\data.ts4script\x.py" T:\Mods\New\FIXED.TS4SCRIPT\y.py</desyncdata>
         let report = |modified| ErrorReport { modified, text: text.into() };
         assert_eq!(scripts_in_reports(&m, &[report(500)], Some(400)), ["Mods/WW/wickedwhims.ts4script", "Mods/data.ts4script"], "a.ts4script isn't matched inside data.ts4script; fixed was updated since");
         assert!(scripts_in_reports(&m, &[report(300)], Some(400)).is_empty(), "from before the last game update");
+
+        // Same name in two folders: the report's path picks the right one;
+        // a bare name picks neither.
+        let m2 = manifest(&["Mods/A/main.ts4script", "Mods/B/main.ts4script", "Mods/solo.ts4script"]);
+        let traced = ErrorReport { modified: 500, text: r#"File "C:\Users\me\Documents\Electronic Arts\The Sims 4\Mods\A\main.ts4script\a\x.py""#.into() };
+        assert_eq!(scripts_in_reports(&m2, &[traced], None), ["Mods/A/main.ts4script"]);
+        let bare = ErrorReport { modified: 500, text: "Error in main.ts4script and in solo.ts4script\r\n".into() };
+        assert_eq!(scripts_in_reports(&m2, &[bare], None), ["Mods/solo.ts4script"]);
         let e = Sims4Env { reports: vec![report(500)], patch_time: Some(400), ..env(Some(ON)) };
         let i = check_sims4(&m, &e, |_| false);
         assert_eq!(kinds(&i), ["sims4_script_errors"]);
