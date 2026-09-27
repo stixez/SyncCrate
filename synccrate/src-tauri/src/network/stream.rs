@@ -26,7 +26,14 @@ pub struct PeerStream {
     inner: Transport,
     buf: Vec<u8>,
     pos: usize,
+    /// Until when the host may still be busy with a request we gave up on
+    /// (see `mark_abandoned`).
+    abandoned_until: Option<std::time::Instant>,
 }
+
+/// How long after an abandoned request the host may still be working on it
+/// (hashing a huge file first): `FILE_HEADER_WAIT` in transfer.rs.
+const ABANDONED_WINDOW: Duration = Duration::from_secs(600);
 
 impl PeerStream {
     pub fn tcp(stream: TcpStream) -> Self {
@@ -43,7 +50,21 @@ impl PeerStream {
     }
 
     fn from_transport(inner: Transport) -> Self {
-        Self { inner, buf: Vec::new(), pos: 0 }
+        Self { inner, buf: Vec::new(), pos: 0, abandoned_until: None }
+    }
+
+    /// We stopped waiting for a reply the host still owes (a cancelled or
+    /// timed-out request). The host answers in order, so for a while every
+    /// later reply can queue behind that work.
+    pub fn mark_abandoned(&mut self) {
+        self.abandoned_until = Some(std::time::Instant::now() + ABANDONED_WINDOW);
+    }
+
+    /// How long to wait for a poll's reply: `long` while an abandoned
+    /// request may still be in the host's queue, else `short` (a live host
+    /// answers a poll at once; a dead link is then noticed quickly).
+    pub fn reply_wait(&self, short: Duration, long: Duration) -> Duration {
+        pick_reply_wait(self.abandoned_until, std::time::Instant::now(), short, long)
     }
 
     /// "LAN" for TCP, "Internet" for iroh.
@@ -159,6 +180,13 @@ impl PeerStream {
     }
 }
 
+fn pick_reply_wait(abandoned_until: Option<std::time::Instant>, now: std::time::Instant, short: Duration, long: Duration) -> Duration {
+    match abandoned_until {
+        Some(t) if now < t => long,
+        _ => short,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +265,14 @@ mod tests {
         }
         drop(c);
         server.await.unwrap();
+    }
+
+    #[test]
+    fn polls_wait_long_only_while_an_abandoned_request_may_be_queued() {
+        let (short, long) = (Duration::from_secs(20), Duration::from_secs(120));
+        let now = std::time::Instant::now();
+        assert_eq!(pick_reply_wait(None, now, short, long), short);
+        assert_eq!(pick_reply_wait(Some(now + ABANDONED_WINDOW), now, short, long), long);
+        assert_eq!(pick_reply_wait(Some(now), now + Duration::from_secs(1), short, long), short);
     }
 }
