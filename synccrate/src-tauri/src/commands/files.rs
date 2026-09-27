@@ -1783,7 +1783,7 @@ fn content_file_path(
 // --- "May be outdated after a game patch" ---
 
 /// Unix time the game was last patched: mtime of its `version_detection.file`.
-fn patch_time_of(def: &GameDefinition, base: &str) -> Option<u64> {
+pub(crate) fn patch_time_of(def: &GameDefinition, base: &str) -> Option<u64> {
     let vd = def.version_detection.as_ref()?;
     let modified = std::fs::metadata(std::path::Path::new(base).join(&vd.file)).ok()?.modified().ok()?;
     modified.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs())

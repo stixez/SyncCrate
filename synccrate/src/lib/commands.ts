@@ -659,7 +659,8 @@ export async function checkCompat(game: string): Promise<CompatIssue[]> {
   return invoke("check_compat", { game });
 }
 
-export async function fixCompatIssue(game: string, fix: string): Promise<void> {
+/** Resolves to what was done (for the toast), or null for a plain "fixed". */
+export async function fixCompatIssue(game: string, fix: string): Promise<string | null> {
   return invoke("fix_compat_issue", { game, fix });
 }
 
