@@ -579,8 +579,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 100,
-            "expected at least 100 games, found {}",
+            registry.games.len() >= 123,
+            "expected at least 123 games, found {}",
             registry.games.len()
         );
 
@@ -599,9 +599,46 @@ mod tests {
             "balatro",
             "tabletop_simulator",
             "dragon_age_origins",
+            // added in 0.8.0
+            "elden_ring",
+            "dark_souls_3",
+            "payday_2",
+            "divinity_original_sin_2",
+            "civilization_7",
+            "europa_universalis_5",
+            "crusader_kings_2",
+            "football_manager_26",
+            "peak",
+            "content_warning",
+            "ready_or_not",
+            "monster_hunter_wilds",
+            "hogwarts_legacy",
+            "oblivion_remastered",
+            "fallout_3",
+            "grim_dawn",
+            "titan_quest_ae",
+            "heroes_3",
+            "neverwinter_nights_ee",
+            "kingdom_come_deliverance",
+            "hollow_knight_silksong",
+            "cult_of_the_lamb",
+            "the_long_dark",
         ] {
             assert!(ids.contains(&id), "missing game id {id}");
         }
+
+        // Unreal pak mods load from subfolders too (a _Disabled folder would
+        // still load), and Civ scans subfolders for .modinfo: these turn mods
+        // off by renaming.
+        for id in ["palworld", "ready_or_not", "hogwarts_legacy", "oblivion_remastered", "civilization_6", "civilization_7"] {
+            let g = registry.games.iter().find(|g| g.id == id).expect(id);
+            assert_eq!(g.disable_method.as_deref(), Some("rename"), "{id}");
+        }
+        // Paid content in a Data folder never syncs.
+        let obr = registry.games.iter().find(|g| g.id == "oblivion_remastered").expect("oblivion_remastered");
+        assert!(obr.content_types[0].exclude_patterns.iter().any(|p| p == "Altar*"), "Deluxe content must be excluded");
+        let fo3 = registry.games.iter().find(|g| g.id == "fallout_3").expect("fallout_3");
+        assert!(fo3.content_types[0].exclude_patterns.iter().any(|p| p == "BrokenSteel.esm"), "Fallout 3 DLC must be excluded");
 
         let mut unique = ids.clone();
         unique.sort_unstable();
