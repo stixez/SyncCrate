@@ -2815,7 +2815,8 @@
       "process_names": [
         "Palworld.exe",
         "Palworld-Win64-Shipping.exe"
-      ]
+      ],
+      "disable_method": "rename"
     },
     {
       "id": "l4d2",
@@ -4949,7 +4950,8 @@
       "path_correction": {
         "known_subfolders": ["Mods", "Saves"]
       },
-      "process_names": ["CivilizationVI.exe", "CivilizationVI_DX12.exe"]
+      "process_names": ["CivilizationVI.exe", "CivilizationVI_DX12.exe"],
+      "disable_method": "rename"
     },
     {
       "id": "beat_saber",
@@ -6795,6 +6797,1713 @@
         "known_subfolders": ["AddIns", "Characters", "packages"]
       },
       "process_names": ["daorigins.exe", "DAOriginsLauncher.exe"],
+      "disable_method": "rename"
+    },
+    {
+      "id": "elden_ring",
+      "label": "Elden Ring",
+      "family": "fromsoftware",
+      "icon": "swords",
+      "color": "text-amber-300",
+      "primary_color": "#fcd34d",
+      "genres": [
+        "action",
+        "rpg"
+      ],
+      "steam_app_id": 1245620,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "ELDEN RING/Game"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "SeamlessCoop",
+          "EasyAntiCheat"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "seamless",
+          "label": "Seamless Co-op",
+          "icon": "package",
+          "color": "text-amber-300",
+          "folder": "SeamlessCoop",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "exe"
+      ],
+      "process_names": [
+        "eldenring.exe"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "dark_souls_3",
+      "label": "Dark Souls III",
+      "family": "fromsoftware",
+      "icon": "flame",
+      "color": "text-stone-400",
+      "primary_color": "#a8a29e",
+      "genres": [
+        "action",
+        "rpg"
+      ],
+      "steam_app_id": 374320,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "DARK SOULS III/Game"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "SeamlessCoop"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "seamless",
+          "label": "Seamless Co-op",
+          "icon": "package",
+          "color": "text-stone-400",
+          "folder": "SeamlessCoop",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "exe"
+      ],
+      "process_names": [
+        "DarkSoulsIII.exe"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "payday_2",
+      "label": "Payday 2",
+      "family": "payday",
+      "icon": "crosshair",
+      "color": "text-red-600",
+      "primary_color": "#dc2626",
+      "genres": [
+        "shooter",
+        "action"
+      ],
+      "steam_app_id": 218620,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "PAYDAY 2"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "assets"
+        ],
+        "auto_create_dirs": [
+          "assets/mod_overrides"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (SuperBLT)",
+          "icon": "package",
+          "color": "text-red-600",
+          "folder": "mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true,
+          "exclude_patterns": [
+            "logs/*",
+            "downloads/*"
+          ]
+        },
+        {
+          "id": "overrides",
+          "label": "Mod Overrides",
+          "icon": "layers",
+          "color": "text-orange-400",
+          "folder": "assets/mod_overrides",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "maps",
+          "label": "Custom Heists",
+          "icon": "map",
+          "color": "text-sky-400",
+          "folder": "Maps",
+          "extensions": [],
+          "file_type": "Map",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "lua",
+        "dll"
+      ],
+      "process_names": [
+        "payday2_win32_release.exe"
+      ],
+      "mod_loader": {
+        "name": "SuperBLT",
+        "content_type": "mods",
+        "any_of": [
+          "WSOCK32.dll",
+          "IPHLPAPI.dll"
+        ],
+        "url": "https://superblt.znix.xyz/"
+      }
+    },
+    {
+      "id": "divinity_original_sin_2",
+      "label": "Divinity: Original Sin 2",
+      "family": "larian",
+      "icon": "sparkles",
+      "color": "text-violet-400",
+      "primary_color": "#a78bfa",
+      "genres": [
+        "rpg"
+      ],
+      "steam_app_id": 435150,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "Larian Studios",
+            "folders": [
+              "Divinity Original Sin 2 Definitive Edition"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [],
+              "macos": [
+                "~/Documents/Larian Studios/Divinity Original Sin 2 Definitive Edition"
+              ],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods",
+          "PlayerProfiles"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-violet-400",
+          "folder": "Mods",
+          "extensions": [
+            "pak"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "EoCApp.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "civilization_7",
+      "label": "Sid Meier's Civilization VII",
+      "family": "civilization",
+      "icon": "castle",
+      "color": "text-cyan-400",
+      "primary_color": "#22d3ee",
+      "genres": [
+        "strategy"
+      ],
+      "steam_app_id": 1295660,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "%LOCALAPPDATA%\\Firaxis Games\\Sid Meier's Civilization VII"
+              ],
+              "macos": [
+                "~/Library/Application Support/Civilization VII"
+              ],
+              "linux": [
+                "~/My Games/Sid Meier's Civilization VII"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Mods"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-cyan-400",
+          "folder": "Mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Civ7_Win64_DX12_FinalRelease.exe",
+        "Civ7_Win64_Vulkan_FinalRelease.exe",
+        "CivilizationVII"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "europa_universalis_5",
+      "label": "Europa Universalis V",
+      "family": "paradox",
+      "icon": "flag",
+      "color": "text-amber-500",
+      "primary_color": "#f59e0b",
+      "genres": [
+        "strategy"
+      ],
+      "steam_app_id": 3450310,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "Paradox Interactive",
+            "folders": [
+              "Europa Universalis V"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mod",
+          "save games"
+        ],
+        "auto_create_dirs": [
+          "mod"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-amber-500",
+          "folder": "mod",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "save games",
+          "extensions": [],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "eu5.exe"
+      ]
+    },
+    {
+      "id": "crusader_kings_2",
+      "label": "Crusader Kings II",
+      "family": "paradox",
+      "icon": "shield",
+      "color": "text-yellow-600",
+      "primary_color": "#ca8a04",
+      "genres": [
+        "strategy"
+      ],
+      "steam_app_id": 203770,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "Paradox Interactive",
+            "folders": [
+              "Crusader Kings II"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [],
+              "macos": [
+                "~/Documents/Paradox Interactive/Crusader Kings II"
+              ],
+              "linux": [
+                "~/.paradoxinteractive/Crusader Kings II"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "mod",
+          "save games"
+        ],
+        "auto_create_dirs": [
+          "mod"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-yellow-600",
+          "folder": "mod",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true,
+          "exclude_patterns": [
+            "ugc_*.mod"
+          ]
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "save games",
+          "extensions": [
+            "ck2"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "CK2game.exe",
+        "ck2"
+      ],
+      "steam_workshop_app_id": 203770
+    },
+    {
+      "id": "football_manager_26",
+      "label": "Football Manager 26",
+      "family": "footballmanager",
+      "icon": "target",
+      "color": "text-green-500",
+      "primary_color": "#22c55e",
+      "genres": [
+        "simulation"
+      ],
+      "steam_app_id": 3551340,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "Sports Interactive",
+            "folders": [
+              "Football Manager 26"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "%LOCALAPPDATA%\\Sports Interactive\\Football Manager 26"
+              ],
+              "macos": [
+                "~/Library/Application Support/Sports Interactive/Football Manager 26",
+                "~/Library/Application Support/Sports Interactive/Football Manager 2026"
+              ],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "graphics",
+          "editor data"
+        ],
+        "auto_create_dirs": [
+          "graphics"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "graphics",
+          "label": "Graphics (faces, logos, kits)",
+          "icon": "palette",
+          "color": "text-green-500",
+          "folder": "graphics",
+          "extensions": [],
+          "file_type": "CustomContent",
+          "syncable": true
+        },
+        {
+          "id": "editor",
+          "label": "Editor Data",
+          "icon": "layers",
+          "color": "text-txt-dim",
+          "folder": "editor data",
+          "extensions": [
+            "fmf",
+            "lnc",
+            "dbc",
+            "edt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "fm.exe",
+        "fm"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "peak",
+      "label": "Peak",
+      "family": "peak",
+      "icon": "pickaxe",
+      "color": "text-sky-400",
+      "primary_color": "#38bdf8",
+      "genres": [
+        "party",
+        "survival"
+      ],
+      "steam_app_id": 3527290,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "PEAK"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-sky-400",
+          "folder": "BepInEx/plugins",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "PEAK.exe"
+      ],
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
+      "disable_method": "rename",
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      }
+    },
+    {
+      "id": "content_warning",
+      "label": "Content Warning",
+      "family": "contentwarning",
+      "icon": "zap",
+      "color": "text-yellow-400",
+      "primary_color": "#facc15",
+      "genres": [
+        "horror",
+        "party"
+      ],
+      "steam_app_id": 2881650,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Content Warning"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-yellow-400",
+          "folder": "BepInEx/plugins",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "Content Warning.exe"
+      ],
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
+      "disable_method": "rename",
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      }
+    },
+    {
+      "id": "ready_or_not",
+      "label": "Ready or Not",
+      "family": "readyornot",
+      "icon": "shield",
+      "color": "text-blue-500",
+      "primary_color": "#3b82f6",
+      "genres": [
+        "shooter"
+      ],
+      "steam_app_id": 1144200,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Ready Or Not"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "ReadyOrNot"
+        ],
+        "auto_create_dirs": [
+          "ReadyOrNot/Content/Paks/~mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-blue-500",
+          "folder": "ReadyOrNot/Content/Paks/~mods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "ReadyOrNot.exe",
+        "ReadyOrNot-Win64-Shipping.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "monster_hunter_wilds",
+      "label": "Monster Hunter Wilds",
+      "family": "monsterhunter",
+      "icon": "swords",
+      "color": "text-amber-600",
+      "primary_color": "#d97706",
+      "genres": [
+        "action",
+        "rpg"
+      ],
+      "steam_app_id": 2246340,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "MonsterHunterWilds"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "natives",
+          "reframework"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "natives",
+          "label": "Loose File Mods (natives)",
+          "icon": "package",
+          "color": "text-amber-600",
+          "folder": "natives",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "reframework",
+          "label": "REFramework Scripts & Plugins",
+          "icon": "settings",
+          "color": "text-orange-400",
+          "folder": "reframework",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true,
+          "exclude_patterns": [
+            "*.log"
+          ]
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "lua"
+      ],
+      "process_names": [
+        "MonsterHunterWilds.exe"
+      ],
+      "mod_loader": {
+        "name": "REFramework",
+        "content_type": "natives",
+        "any_of": [
+          "dinput8.dll"
+        ],
+        "url": "https://github.com/praydog/REFramework-nightly/releases"
+      }
+    },
+    {
+      "id": "hogwarts_legacy",
+      "label": "Hogwarts Legacy",
+      "family": "hogwarts",
+      "icon": "sparkles",
+      "color": "text-indigo-400",
+      "primary_color": "#818cf8",
+      "genres": [
+        "rpg",
+        "action"
+      ],
+      "steam_app_id": 990080,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Hogwarts Legacy"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Phoenix"
+        ],
+        "auto_create_dirs": [
+          "Phoenix/Content/Paks/~mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-indigo-400",
+          "folder": "Phoenix/Content/Paks/~mods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "HogwartsLegacy.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "oblivion_remastered",
+      "label": "Oblivion Remastered",
+      "family": "bethesda",
+      "icon": "castle",
+      "color": "text-amber-700",
+      "primary_color": "#b45309",
+      "genres": [
+        "rpg"
+      ],
+      "steam_app_id": 2623190,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Oblivion Remastered"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "OblivionRemastered"
+        ],
+        "auto_create_dirs": [
+          "OblivionRemastered/Content/Paks/~mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (Data)",
+          "icon": "package",
+          "color": "text-amber-700",
+          "folder": "OblivionRemastered/Content/Dev/ObvData/Data",
+          "extensions": [
+            "esp",
+            "esm",
+            "bsa"
+          ],
+          "file_type": "Mod",
+          "syncable": true,
+          "exclude_patterns": [
+            "Oblivion.esm",
+            "Oblivion - *.bsa",
+            "DLC*",
+            "Knights*",
+            "Altar*",
+            "TamrielLevel*",
+            "Plugins.txt"
+          ]
+        },
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-orange-400",
+          "folder": "OblivionRemastered/Content/Paks/~mods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "obse",
+          "label": "OBSE Plugins",
+          "icon": "settings",
+          "color": "text-red-400",
+          "folder": "OblivionRemastered/Binaries/Win64/OBSE/Plugins",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "ue4ss",
+          "label": "UE4SS Mods",
+          "icon": "settings",
+          "color": "text-sky-400",
+          "folder": "OblivionRemastered/Binaries/Win64/ue4ss/Mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "lua"
+      ],
+      "process_names": [
+        "OblivionRemastered-Win64-Shipping.exe",
+        "OblivionRemastered.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "fallout_3",
+      "label": "Fallout 3",
+      "family": "bethesda",
+      "icon": "target",
+      "color": "text-lime-600",
+      "primary_color": "#65a30d",
+      "genres": [
+        "rpg",
+        "shooter"
+      ],
+      "steam_app_id": 22370,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Fallout 3 goty",
+              "Fallout 3"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Fallout 3 GOTY",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Fallout 3 GOTY",
+                "D:\\GOG Games\\Fallout 3 GOTY"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Data"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods & Plugins",
+          "icon": "package",
+          "color": "text-lime-600",
+          "folder": "Data",
+          "extensions": [
+            "esm",
+            "esp",
+            "bsa",
+            "dll",
+            "ini",
+            "json",
+            "toml",
+            "txt",
+            "xml",
+            "nif",
+            "dds",
+            "kf",
+            "wav",
+            "ogg",
+            "mp3",
+            "lip"
+          ],
+          "file_type": "Mod",
+          "syncable": true,
+          "exclude_patterns": [
+            "Fallout3.esm",
+            "Fallout - *.bsa",
+            "Anchorage.esm",
+            "Anchorage - *.bsa",
+            "ThePitt.esm",
+            "ThePitt - *.bsa",
+            "BrokenSteel.esm",
+            "BrokenSteel - *.bsa",
+            "PointLookout.esm",
+            "PointLookout - *.bsa",
+            "Zeta.esm",
+            "Zeta - *.bsa"
+          ]
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "Fallout3.exe",
+        "fose_loader.exe"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "Data"
+        ]
+      }
+    },
+    {
+      "id": "grim_dawn",
+      "label": "Grim Dawn",
+      "family": "grimdawn",
+      "icon": "skull",
+      "color": "text-red-700",
+      "primary_color": "#b91c1c",
+      "genres": [
+        "rpg",
+        "action"
+      ],
+      "steam_app_id": 219990,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Grim Dawn"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Grim Dawn",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Grim Dawn",
+                "D:\\GOG Games\\Grim Dawn"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "database",
+          "mods"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-red-700",
+          "folder": "mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Grim Dawn.exe"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "titan_quest_ae",
+      "label": "Titan Quest Anniversary Edition",
+      "family": "titanquest",
+      "icon": "shield",
+      "color": "text-amber-500",
+      "primary_color": "#f59e0b",
+      "genres": [
+        "rpg",
+        "action"
+      ],
+      "steam_app_id": 475150,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "My Games",
+            "folders": [
+              "Titan Quest - Immortal Throne"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "SaveData",
+          "CustomMaps",
+          "Settings"
+        ],
+        "auto_create_dirs": [
+          "CustomMaps"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "custommaps",
+          "label": "Custom Maps & Mods",
+          "icon": "map",
+          "color": "text-amber-500",
+          "folder": "CustomMaps",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "SaveData",
+          "extensions": [],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "TQ.exe"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "heroes_3",
+      "label": "Heroes of Might and Magic III",
+      "family": "heroes",
+      "icon": "castle",
+      "color": "text-orange-600",
+      "primary_color": "#ea580c",
+      "genres": [
+        "strategy"
+      ],
+      "steam_app_id": 297000,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Heroes of Might and Magic 3 Complete",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Heroes of Might and Magic 3 Complete",
+                "D:\\GOG Games\\Heroes of Might and Magic 3 Complete"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Maps",
+          "Data"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "maps",
+          "label": "Maps",
+          "icon": "map",
+          "color": "text-orange-600",
+          "folder": "Maps",
+          "extensions": [
+            "h3m",
+            "h3c"
+          ],
+          "file_type": "Map",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Games",
+          "extensions": [
+            "gm1",
+            "gm2",
+            "gm3",
+            "gm4",
+            "gm5",
+            "gm6",
+            "gm7",
+            "gm8",
+            "cgm"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "h3hota.exe",
+        "h3hota HD.exe",
+        "Heroes3.exe",
+        "Heroes3 HD.exe"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "neverwinter_nights_ee",
+      "label": "Neverwinter Nights: Enhanced Edition",
+      "family": "nwn",
+      "icon": "swords",
+      "color": "text-red-800",
+      "primary_color": "#991b1b",
+      "genres": [
+        "rpg"
+      ],
+      "steam_app_id": 704450,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "documents_relative",
+            "base": "",
+            "folders": [
+              "Neverwinter Nights"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [],
+              "macos": [
+                "~/Documents/Neverwinter Nights"
+              ],
+              "linux": [
+                "~/.local/share/Neverwinter Nights"
+              ]
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "modules",
+          "saves",
+          "hak"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "hak",
+          "label": "Hak Paks",
+          "icon": "package",
+          "color": "text-red-800",
+          "folder": "hak",
+          "extensions": [
+            "hak"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "override",
+          "label": "Override",
+          "icon": "layers",
+          "color": "text-orange-400",
+          "folder": "override",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "modules",
+          "label": "Modules",
+          "icon": "map",
+          "color": "text-sky-400",
+          "folder": "modules",
+          "extensions": [
+            "mod"
+          ],
+          "file_type": "Map",
+          "syncable": true
+        },
+        {
+          "id": "tlk",
+          "label": "Custom Talk Tables",
+          "icon": "layers",
+          "color": "text-txt-dim",
+          "folder": "tlk",
+          "extensions": [
+            "tlk"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "portraits",
+          "label": "Portraits",
+          "icon": "user",
+          "color": "text-pink-400",
+          "folder": "portraits",
+          "extensions": [
+            "tga",
+            "dds"
+          ],
+          "file_type": "CustomContent",
+          "syncable": true
+        },
+        {
+          "id": "localvault",
+          "label": "Characters (local vault)",
+          "icon": "user",
+          "color": "text-amber-400",
+          "folder": "localvault",
+          "extensions": [
+            "bic"
+          ],
+          "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "saves",
+          "extensions": [],
+          "file_type": "Save",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "nwmain.exe",
+        "nwmain"
+      ],
+      "disable_method": "none"
+    },
+    {
+      "id": "kingdom_come_deliverance",
+      "label": "Kingdom Come: Deliverance",
+      "family": "kcd",
+      "icon": "shield",
+      "color": "text-amber-700",
+      "primary_color": "#b45309",
+      "genres": [
+        "rpg",
+        "action"
+      ],
+      "steam_app_id": 379430,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "KingdomComeDeliverance"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Kingdom Come Deliverance",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Kingdom Come Deliverance",
+                "D:\\GOG Games\\Kingdom Come Deliverance"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Data",
+          "Mods"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods",
+          "icon": "package",
+          "color": "text-amber-700",
+          "folder": "Mods",
+          "extensions": [
+            "pak",
+            "xml",
+            "manifest",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "KingdomCome.exe"
+      ],
+      "path_correction": {
+        "known_subfolders": [
+          "Mods"
+        ]
+      }
+    },
+    {
+      "id": "hollow_knight_silksong",
+      "label": "Hollow Knight: Silksong",
+      "family": "hollowknight",
+      "icon": "sparkles",
+      "color": "text-rose-500",
+      "primary_color": "#f43f5e",
+      "genres": [
+        "platformer",
+        "action"
+      ],
+      "steam_app_id": 1030300,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Hollow Knight Silksong"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Hollow Knight Silksong",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Hollow Knight Silksong",
+                "D:\\GOG Games\\Hollow Knight Silksong"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-rose-500",
+          "folder": "BepInEx/plugins",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "Hollow Knight Silksong.exe",
+        "Hollow Knight Silksong"
+      ],
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
+      "disable_method": "rename",
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      }
+    },
+    {
+      "id": "cult_of_the_lamb",
+      "label": "Cult of the Lamb",
+      "family": "cultofthelamb",
+      "icon": "flame",
+      "color": "text-pink-500",
+      "primary_color": "#ec4899",
+      "genres": [
+        "roguelike",
+        "action"
+      ],
+      "steam_app_id": 1313140,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Cult of the Lamb"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\Cult of the Lamb",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\Cult of the Lamb",
+                "D:\\GOG Games\\Cult of the Lamb"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "BepInEx"
+        ],
+        "auto_create_dirs": [
+          "BepInEx/plugins"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "plugins",
+          "label": "Plugins (BepInEx)",
+          "icon": "package",
+          "color": "text-pink-500",
+          "folder": "BepInEx/plugins",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "Cult Of The Lamb.exe"
+      ],
+      "mod_loader": {
+        "name": "BepInEx",
+        "content_type": "plugins",
+        "any_of": [
+          "BepInEx/core/BepInEx.dll",
+          "BepInEx/core/BepInEx.Core.dll"
+        ],
+        "url": "https://github.com/BepInEx/BepInEx/releases"
+      },
+      "disable_method": "rename",
+      "path_correction": {
+        "known_subfolders": [
+          "BepInEx"
+        ]
+      }
+    },
+    {
+      "id": "the_long_dark",
+      "label": "The Long Dark",
+      "family": "thelongdark",
+      "icon": "trees",
+      "color": "text-teal-500",
+      "primary_color": "#14b8a6",
+      "genres": [
+        "survival"
+      ],
+      "steam_app_id": 305620,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "TheLongDark"
+            ]
+          },
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\GOG Games\\The Long Dark",
+                "C:\\Program Files (x86)\\GOG Galaxy\\Games\\The Long Dark",
+                "D:\\GOG Games\\The Long Dark"
+              ],
+              "macos": [],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "tld_Data",
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (MelonLoader)",
+          "icon": "package",
+          "color": "text-teal-500",
+          "folder": "Mods",
+          "extensions": [
+            "dll",
+            "modcomponent",
+            "json",
+            "txt"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "tld.exe",
+        "tld.x86_64"
+      ],
+      "mod_loader": {
+        "name": "MelonLoader",
+        "content_type": "mods",
+        "any_of": [
+          "MelonLoader"
+        ],
+        "url": "https://github.com/LavaGang/MelonLoader/releases"
+      },
       "disable_method": "rename"
     }
   ]

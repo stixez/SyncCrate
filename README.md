@@ -31,7 +31,7 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 - **Built for LAN parties.** One PC feeds the whole room at 100–900 MB/s. Hosts are found automatically, no internet needed.
 - **Or from anywhere.** At home, friends paste one join code. Peer-to-peer and encrypted, no port forwarding or VPN.
 - **Nothing breaks.** You see the plan before anything changes, conflicts are yours to decide, every file is verified and backups let you roll back.
-- **100 games, real box art.** Valheim, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
+- **123 games, real box art.** Valheim, Elden Ring, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
 
 <table>
   <tr>
@@ -83,7 +83,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Mod health check.** Catches what stops synced mods from loading: a missing mod loader (BepInEx, SMAPI), and for The Sims 4 mods or script mods switched off in the game's options (after most patches; one click turns them back on), script mods more than one folder deep, packages deeper than `Resource.cfg` allows (five folders as standard), a missing or empty `Resource.cfg` (one click writes the standard one), two copies of the same script mod (one click turns the older ones off), `.zip` files that were never extracted, Tray items saved into Mods and CC saved into Tray (one click moves them; never overwriting, and on a friend's PC only the Tray items, since the host's files would come back with the next sync), and script mods named in the game's own error report (`lastException`) that weren't updated since. Fixes wait until the game is closed. For Crusader Kings III, Europa Universalis IV, Hearts of Iron IV and Stellaris it finds mod descriptors whose path only exists on one PC (the launcher writes full paths) and makes them portable (`path="mod/<folder>"`) in one click on the host, keeping the old versions in File history. It shows on the Content page, with a note on the Dashboard.
 - **Find a broken mod.** The 50/50 method, done for you: SyncCrate turns half of your mods off, you check the game and say whether the problem is still there, and it halves again until one mod (or creator folder) is left, about a dozen rounds even for thousands of mods. Progress is saved between rounds, your own disabled mods are left alone, and at the end everything it turned off goes back on (or you keep the broken one off).
 - **Play.** The Dashboard's **Play** button starts the game once you're synced: through Steam when Steam has it, or The Sims 4's own launcher on EA app installs.
-- **Game browser.** 100 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
+- **Game browser.** 123 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord. Compare it with what's installed, and **Apply this loadout** opens it on the Modpacks page to get the missing files or make the game load exactly those mods (with one-click revert).
 
 **Share your setup**
@@ -121,7 +121,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 ## Supported Games
 
 <!-- GAMES:START -->
-**100 games across 67 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
+**123 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
 
 <details>
 <summary><strong>Life sim</strong> — 5 games</summary>
@@ -137,7 +137,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>Survival & co-op</strong> — 11 games</summary>
+<summary><strong>Survival & co-op</strong> — 12 games</summary>
 
 | Game | What syncs |
 |------|------------|
@@ -150,6 +150,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
 | **Subnautica** | Plugins (BepInEx), Save Files |
+| **The Long Dark** | Mods (MelonLoader) |
 | **V Rising** | Plugins (BepInEx), Mod Configs |
 | **Valheim** | Plugins (BepInEx), Mod Configs, Worlds |
 
@@ -181,24 +182,32 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>RPG</strong> — 15 games</summary>
+<summary><strong>RPG</strong> — 23 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **Baldur's Gate 3** | Mods, Mod Load Order, Save Files |
 | **Cyberpunk 2077** | Archive Mods, Redscript Mods, TweakXL Tweaks, Cyber Engine Tweaks Mods, RED4ext Plugins |
 | **Darkest Dungeon** | Mods |
+| **Divinity: Original Sin 2** | Mods |
 | **Dragon Age: Origins** | Override Mods, AddIns (DAZip), Save Files |
+| **Fallout 3** | Mods & Plugins |
 | **Fallout 4** | Mods & Plugins |
 | **Fallout: New Vegas** | Mods & Plugins |
+| **Grim Dawn** | Mods |
+| **Hogwarts Legacy** | Pak Mods |
 | **Kenshi** | Mods |
+| **Kingdom Come: Deliverance** | Mods |
 | **Kingdom Come: Deliverance II** | Mods |
+| **Neverwinter Nights: Enhanced Edition** | Hak Paks, Override, Modules, Custom Talk Tables, Portraits, Characters (local vault), Save Files |
+| **Oblivion Remastered** | Plugins (Data), Pak Mods, OBSE Plugins, UE4SS Mods |
 | **Skyrim (Legendary Edition)** | Mods & Plugins |
 | **Skyrim Special Edition** | Mods & Plugins |
 | **Starfield** | Mods & Plugins |
 | **The Elder Scrolls III: Morrowind** | Mods & Plugins |
 | **The Elder Scrolls IV: Oblivion** | Mods & Plugins |
 | **The Witcher 3: Wild Hunt** | Mods, Mod Menus |
+| **Titan Quest Anniversary Edition** | Custom Maps & Mods, Save Files |
 | **Torchlight II** | Mods, Save Files |
 
 </details>
@@ -219,17 +228,21 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>Strategy</strong> — 16 games</summary>
+<summary><strong>Strategy</strong> — 20 games</summary>
 
 | Game | What syncs |
 |------|------------|
+| **Crusader Kings II** | Mods, Save Files |
 | **Crusader Kings III** | Mods, Save Files |
 | **Europa Universalis IV** | Mods, Save Files |
+| **Europa Universalis V** | Mods, Save Files |
 | **Hearts of Iron IV** | Mods, Save Files |
+| **Heroes of Might and Magic III** | Maps, Save Files |
 | **Mount & Blade II: Bannerlord** | Modules |
 | **Mount & Blade: Warband** | Modules |
 | **RimWorld** | Mods, Saves |
 | **Sid Meier's Civilization VI** | Mods, Save Files |
+| **Sid Meier's Civilization VII** | Mods |
 | **Stellaris** | Mods, Save Files |
 | **Stronghold 2** | Custom Maps |
 | **Stronghold Crusader 2** | Custom Maps |
@@ -254,7 +267,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>Simulation</strong> — 7 games</summary>
+<summary><strong>Simulation</strong> — 8 games</summary>
 
 | Game | What syncs |
 |------|------------|
@@ -262,6 +275,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | **Euro Truck Simulator 2** | Mods, Profiles |
 | **Farming Simulator 22** | Mods |
 | **Farming Simulator 25** | Mods |
+| **Football Manager 26** | Graphics (faces, logos, kits), Editor Data |
 | **Kerbal Space Program** | Mods, Save Files |
 | **Oxygen Not Included** | Local Mods, Save Files |
 | **Stardew Valley** | SMAPI Mods, Saves |
@@ -269,7 +283,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>Shooters</strong> — 7 games</summary>
+<summary><strong>Shooters</strong> — 9 games</summary>
 
 | Game | What syncs |
 |------|------------|
@@ -279,38 +293,45 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | **Call of Duty 4: Modern Warfare** | Mods, Custom Maps |
 | **Counter-Strike 2** | Configs |
 | **Left 4 Dead 2** | Addons & Maps, Configs |
+| **Payday 2** | Mods (SuperBLT), Mod Overrides, Custom Heists |
+| **Ready or Not** | Pak Mods |
 | **Team Fortress 2** | Custom (HUDs, Skins, Sounds), Maps, Configs |
 
 </details>
 
 <details>
-<summary><strong>Action</strong> — 4 games</summary>
+<summary><strong>Action</strong> — 7 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **Blade & Sorcery** | Mods |
+| **Dark Souls III** | Seamless Co-op |
+| **Elden Ring** | Seamless Co-op |
 | **Grand Theft Auto V** | Scripts, OpenIV Mods Folder |
+| **Monster Hunter Wilds** | Loose File Mods (natives), REFramework Scripts & Plugins |
 | **Monster Hunter: World** | nativePC Mods |
 | **Red Dead Redemption 2** | Lenny's Mod Loader, Scripts |
 
 </details>
 
 <details>
-<summary><strong>Horror</strong> — 2 games</summary>
+<summary><strong>Horror</strong> — 3 games</summary>
 
 | Game | What syncs |
 |------|------------|
+| **Content Warning** | Plugins (BepInEx), Mod Configs |
 | **Lethal Company** | Plugins (BepInEx), Mod Configs |
 | **R.E.P.O.** | Plugins (BepInEx), Mod Configs |
 
 </details>
 
 <details>
-<summary><strong>Roguelikes</strong> — 4 games</summary>
+<summary><strong>Roguelikes</strong> — 5 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **Balatro** | Mods (Steamodded/Lovely), Save Profile 1, Save Profile 2, Save Profile 3 |
+| **Cult of the Lamb** | Plugins (BepInEx), Mod Configs |
 | **Noita** | Mods |
 | **Risk of Rain 2** | Plugins (BepInEx), Mod Configs |
 | **Slay the Spire** | Mods, Save Files, Preferences & Profiles |
@@ -331,21 +352,23 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>Platformers</strong> — 2 games</summary>
+<summary><strong>Platformers</strong> — 3 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **Celeste** | Mods (Everest), Save Files |
 | **Hollow Knight** | Mods |
+| **Hollow Knight: Silksong** | Plugins (BepInEx), Mod Configs |
 
 </details>
 
 <details>
-<summary><strong>Party</strong> — 2 games</summary>
+<summary><strong>Party</strong> — 3 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **Among Us** | Plugins (BepInEx), Mod Configs |
+| **Peak** | Plugins (BepInEx), Mod Configs |
 | **Tabletop Simulator** | Save Files, Workshop Mods |
 
 </details>
