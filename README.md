@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/icon.svg" width="72" height="72" alt="SyncCrate" />
+  <img src="assets/icon.svg" width="72" height="72" alt="SyncCrate" />
 </p>
 
 <h1 align="center">SyncCrate</h1>
@@ -16,11 +16,11 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><strong>Download</strong></a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://stixez.github.io/SyncCrate">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#get-started">Get started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#supported-games">Games</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#faq">FAQ</a>
+  <a href="../../releases/latest"><strong>Download</strong></a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://synccrate.app">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#get-started">Get started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#supported-games">Games</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#faq">FAQ</a>
 </p>
 
 <p align="center">
-  <img src="docs/social-preview.png" width="100%" alt="SyncCrate: Same mods. Every PC. No excuses." />
+  <img src="assets/social-preview.png" width="100%" alt="SyncCrate: Same mods. Every PC. No excuses." />
 </p>
 
 One mismatched mod and nobody can join. **SyncCrate makes every PC match the host by copying only the files that differ, straight from PC to PC.** No cloud, no accounts, no tracking.
@@ -35,12 +35,12 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dashboard.png" alt="Hosting a session: join code, PIN and sync plan" /></td>
-    <td width="50%"><img src="docs/screenshots/browser.png" alt="Game browser with box art and genre filters" /></td>
+    <td width="50%"><img src="assets/screenshots/dashboard.png" alt="Hosting a session: join code, PIN and sync plan" /></td>
+    <td width="50%"><img src="assets/screenshots/browser.png" alt="Game browser with box art and genre filters" /></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/content.png" alt="Content page: mods by folder, filters and per-mod toggles" /></td>
-    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance settings: accent colors, theme and scale" /></td>
+    <td width="50%"><img src="assets/screenshots/content.png" alt="Content page: mods by folder, filters and per-mod toggles" /></td>
+    <td width="50%"><img src="assets/screenshots/appearance.png" alt="Appearance settings: accent colors, theme and scale" /></td>
   </tr>
 </table>
 
