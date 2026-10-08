@@ -1973,7 +1973,10 @@ pub async fn get_transfer_speed_limit() -> Result<u64, String> {
 pub async fn set_transfer_speed_limit(limit: u64) -> Result<(), String> {
     update_sync_config(|config| {
         config.transfer_speed_limit = limit;
-    })
+    })?;
+    // Applies to the next chunk of every running upload, not just new ones.
+    crate::network::limiter::set_rate(limit);
+    Ok(())
 }
 
 #[tauri::command]

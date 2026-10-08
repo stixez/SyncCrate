@@ -2,6 +2,7 @@ pub mod discovery;
 pub mod handoff_net;
 pub mod iroh_net;
 pub mod joincode;
+pub mod limiter;
 pub mod netutil;
 pub mod pin_guard;
 pub mod protocol;

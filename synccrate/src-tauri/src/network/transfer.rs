@@ -585,7 +585,6 @@ async fn handle_client(
     let mut disconnect_reason = String::new();
     let mut peer_files_sent: u64 = 0;
     let mut chat_limiter = crate::chat::RateLimiter::default();
-    let speed_limit = crate::commands::sync::get_speed_limit();
     loop {
         let idle_since = std::time::Instant::now();
         let msg = loop {
@@ -810,11 +809,6 @@ async fn handle_client(
 
                         // Send file content (file is positioned at the start: either
                         // freshly opened with a cached hash, or rewound after hashing).
-                        // Throttling: track cumulative bytes since file start.
-                        // The expected/elapsed comparison handles multi-second windows
-                        // without needing periodic resets.
-                        let mut throttle_bytes = 0u64;
-                        let throttle_start = tokio::time::Instant::now();
                         // Progress at most ~10 times a second: one event per
                         // 64 KB chunk was thousands a second at LAN speed.
                         let mut last_progress = tokio::time::Instant::now();
@@ -850,6 +844,10 @@ async fn handle_client(
                                 (BASE64.encode(&buf[..n]), false)
                             };
 
+                            // The speed limit is one budget shared by every friend
+                            // (`network::limiter`). The stream lock stays held on
+                            // purpose for the whole file, so chunks never interleave.
+                            crate::network::limiter::before_send(n as u64).await;
                             protocol::send_message(
                                 &mut *s,
                                 &Message::FileChunk {
@@ -860,17 +858,6 @@ async fn handle_client(
                             )
                             .await?;
                             offset += n as u64;
-
-                            // Apply bandwidth throttle (stream lock is held intentionally
-                            // for the entire file send to prevent chunk interleaving)
-                            if speed_limit > 0 {
-                                throttle_bytes += n as u64;
-                                let elapsed = throttle_start.elapsed();
-                                let expected = std::time::Duration::from_secs_f64(throttle_bytes as f64 / speed_limit as f64);
-                                if expected > elapsed {
-                                    tokio::time::sleep(expected - elapsed).await;
-                                }
-                            }
 
                             // Emit chunk progress to frontend
                             if last_progress.elapsed() < std::time::Duration::from_millis(100) {

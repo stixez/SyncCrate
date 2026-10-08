@@ -515,16 +515,17 @@ export default function Settings() {
       <Section num="05" title="Transfer" description="Bandwidth and what happens after a sync finishes.">
         <Panel padded={false}>
           <div className="divide-y divide-border">
-            <SettingRow label="Max speed" hint="Limit transfer speed to avoid saturating your network. Unlimited is fastest.">
+            <SettingRow label="Max upload speed" hint="When you host: one limit shared by every friend syncing from you, so the rest of your internet keeps working. Changes apply right away. Unlimited is fastest.">
               <select
                 value={speedLimit}
                 onChange={(e) => {
                   saveSetting(Number(e.target.value), speedLimit, setSpeedLimit, cmd.setTransferSpeedLimit);
                 }}
-                aria-label="Transfer speed limit"
+                aria-label="Max upload speed"
                 className={selectClass}
               >
                 <option value={0}>Unlimited</option>
+                <option value={524288}>512 KB/s</option>
                 <option value={1048576}>1 MB/s</option>
                 <option value={2097152}>2 MB/s</option>
                 <option value={5242880}>5 MB/s</option>
