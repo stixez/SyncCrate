@@ -778,7 +778,7 @@ function AppearanceSection() {
               checked={effectsEnabled(appearance)}
               onChange={(v) => setAppearance({ effects: v })}
               label="Visual effects"
-              description="Grid backgrounds, scanlines and animations. Off by default when Windows is set to reduce motion."
+              description="Grid backgrounds, scanlines and animations. Off by default when your computer is set to reduce motion."
             />
           </SettingRow>
         </div>
