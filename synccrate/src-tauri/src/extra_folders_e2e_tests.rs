@@ -164,7 +164,7 @@ async fn host_manifest_for(port: u16, features: Vec<String>) -> Vec<String> {
     protocol::send_message(&mut s, &Message::ManifestRequest).await.unwrap();
     loop {
         let msg = tokio::time::timeout(std::time::Duration::from_secs(15), protocol::recv_message(&mut s)).await.expect("host answers").unwrap();
-        if let Message::ManifestResponse { manifest } = msg {
+        if let Message::ManifestResponse { manifest, .. } = msg {
             let _ = protocol::send_message(&mut s, &Message::Disconnect).await;
             let mut keys: Vec<String> = manifest.files.into_keys().collect();
             keys.sort();
@@ -209,7 +209,7 @@ async fn a_world_outside_the_game_folder_is_handed_over_iroh() {
         let s = host_state.lock().await;
         crews::encode_invite(s.crews.get(&c.id).unwrap(), s.local_node_id.as_deref().unwrap(), "Host").unwrap()
     };
-    let invite = crews::decode_invite(link.strip_prefix(crews::INVITE_PREFIX).unwrap(), |g| g == "valheim").unwrap();
+    let invite = crews::decode_invite(crews::invite_payload(&link), |g| g == "valheim").unwrap();
     crew::join_crew_inner(&client_state, invite, "Ann").await.expect("join");
     set_host(&host_state, "Host").await;
     scan(&host_state).await;

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { friendlyError } from "../lib/errors";
-import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
+import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar, MessageCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SyncFolderPermissions, GameInfo, ContentTypeDefinition } from "../lib/types";
 import { useAppStore } from "../stores/useAppStore";
@@ -8,8 +8,8 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
-import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
-import { formatBytes, plural } from "../lib/utils";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadDiscordPresence, saveDiscordPresence, loadDiscordHintShown, markDiscordHintShown } from "../lib/prefs";
+import { formatBytes, parseInviteLink, plural, webLink } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
@@ -25,6 +25,7 @@ import ConnectionGuide from "./ConnectionGuide";
 import UndoLastSync from "./UndoLastSync";
 import PlayButton from "./PlayButton";
 import WhatsNew from "./WhatsNew";
+import SourceLinksPanel from "./SourceLinksPanel";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
 import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
@@ -195,6 +196,29 @@ export default function GameDashboard({ gameId }: Props) {
     useAppStore.getState().setPendingJoinCode(null);
   }, [pendingJoinCode]);
 
+  // The first run said "I'm hosting" (point at Start Hosting) or "I'm
+  // joining" with a code: that click was the user's go-ahead, so join now.
+  const [hostSpotlight, setHostSpotlight] = useState(false);
+  const startHostingRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const intent = useAppStore.getState().firstRunIntent;
+    if (!intent) return;
+    useAppStore.getState().setFirstRunIntent(null);
+    if (intent.kind === "host") {
+      setHostSpotlight(true);
+      // After the panel has rendered.
+      requestAnimationFrame(() => {
+        startHostingRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+        startHostingRef.current?.focus({ preventScroll: true });
+      });
+    } else {
+      setJoinCode(intent.code);
+      if (isDemoMode()) toastInfo("Demo mode: nothing connects, but the code is in the join box.");
+      else connectByCode(intent.code, loadDisplayName().trim() || "Guest");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on the first-run hand-off
+  }, []);
+
   // Fetch the join code whenever we start hosting (port/PIN are baked into it).
   const hostingKey = session?.session_type === "Host" ? `${session.port}:${session.pin ?? ""}` : null;
   useEffect(() => {
@@ -208,6 +232,21 @@ export default function GameDashboard({ gameId }: Props) {
       .catch(() => { if (!cancelled && isDemoMode()) setHostJoinCode(demoJoinCode); });
     return () => { cancelled = true; };
   }, [hostingKey]);
+  // A pasted invite link fills the box with its code. One for another game
+  // also raises the same "Switch to <game> and join" prompt a clicked invite
+  // does (`useOpenIntents`); switching and joining still need a click.
+  const takeInviteLink = (text: string): boolean => {
+    const link = parseInviteLink(text);
+    if (!link) return false;
+    setJoinCode(link.code);
+    const { activeGame: current, setGameSwitchPrompt: prompt } = useAppStore.getState();
+    if (link.game && link.game !== current && getGameDef(link.game)) {
+      prompt({ hostGame: link.game, attempt: { kind: "code", code: link.code, name: loadDisplayName().trim() || "Guest", label: "host" } });
+    } else {
+      toastSuccess("Invite pasted. Click Join");
+    }
+    return true;
+  };
   // Paste a join code anywhere on the dashboard (outside text fields) to fill
   // the join box — people paste codes from chat, nobody types them.
   useEffect(() => {
@@ -216,6 +255,7 @@ export default function GameDashboard({ gameId }: Props) {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (takeInviteLink(text)) return;
       if (/^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/i.test(text)) {
         setJoinCode(text.toUpperCase());
         toastSuccess("Join code pasted. Click Join");
@@ -223,6 +263,7 @@ export default function GameDashboard({ gameId }: Props) {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- takeInviteLink only uses stable setters and the store
   }, [session]);
 
   const [manualIp, setManualIp] = useState("");
@@ -433,7 +474,13 @@ export default function GameDashboard({ gameId }: Props) {
         />
 
         <div className="grid grid-cols-2 gap-4 items-start">
-          <Panel label={<><b>01</b> &nbsp;Host</>} title="Host a session" icon={<Monitor size={16} className="text-neon" />}>
+          <Panel
+            label={<><b>01</b> &nbsp;Host</>}
+            title="Host a session"
+            icon={<Monitor size={16} className="text-neon" />}
+            tone={hostSpotlight ? "accent" : "default"}
+            brackets={hostSpotlight}
+          >
             <p className="text-txt-dim text-sm mb-5">Friends download a copy of your files; yours are never changed. You decide which folders are shared.</p>
             <Toggle
               checked={usePin}
@@ -456,11 +503,17 @@ export default function GameDashboard({ gameId }: Props) {
                 ))}
               </div>
             </div>
+            {hostSpotlight && (
+              <p className="text-[13px] text-txt mb-3 border-l-2 border-l-neon pl-2.5">
+                Next: click Start Hosting. You'll get a join code and an invite link to send your friends.
+              </p>
+            )}
             <Button
+              ref={startHostingRef}
               variant="primary"
               size="lg"
               block
-              onClick={() => host(hostName.trim() || "Host", usePin, folderPerms)}
+              onClick={() => { setHostSpotlight(false); host(hostName.trim() || "Host", usePin, folderPerms); }}
               disabled={isLoading || isConnecting}
             >
               {isLoading ? "Starting..." : "Start Hosting"}
@@ -468,12 +521,14 @@ export default function GameDashboard({ gameId }: Props) {
           </Panel>
 
           <Panel label={<><b>02</b> &nbsp;Join</>} title="Join a session" icon={<Users size={16} className="text-neon" />}>
-            <p className="text-txt-dim text-sm mb-4">Paste the code your friend sees after clicking Start Hosting (it starts with SC-), or scan for hosts on your Wi-Fi.</p>
+            <p className="text-txt-dim text-sm mb-4">Paste the code or invite link your friend sees after clicking Start Hosting (the code starts with SC-), or scan for hosts on your Wi-Fi.</p>
             <div className="flex items-stretch gap-2 mb-2">
               <input
                 type="text"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  if (!takeInviteLink(e.target.value)) setJoinCode(e.target.value.toUpperCase());
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && joinCode.trim() && !isLoading && !isConnecting) connectByCode(joinCode, hostName.trim() || "Guest");
                 }}
@@ -718,7 +773,7 @@ export default function GameDashboard({ gameId }: Props) {
   const copyInviteLink = () => {
     if (!hostJoinCode) return;
     const game = useAppStore.getState().activeGame;
-    navigator.clipboard.writeText(`synccrate://join/${hostJoinCode}?game=${encodeURIComponent(game)}`).then(() => {
+    navigator.clipboard.writeText(webLink(`join/${hostJoinCode}?game=${encodeURIComponent(game)}`)).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
     }, () => toastError("Couldn't copy to the clipboard. Select the code and copy it by hand."));
@@ -817,6 +872,8 @@ export default function GameDashboard({ gameId }: Props) {
         </Panel>
       )}
 
+      {isHost && !isDemoMode() && <DiscordHint />}
+
       {isHost && (hostJoinCode || session.pin) && (
         <Panel brackets padded={false} className="mx-1">
           <div className="grid lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -855,7 +912,7 @@ export default function GameDashboard({ gameId }: Props) {
                     variant="secondary"
                     onClick={copyInviteLink}
                     icon={inviteCopied ? <Check size={12} /> : <Link2 size={12} />}
-                    title="A synccrate:// link that opens SyncCrate with this code filled in"
+                    title="A link friends can click: it opens SyncCrate with this code filled in"
                   >
                     {inviteCopied ? "Copied" : "Copy invite link"}
                   </Button>
@@ -1014,12 +1071,22 @@ export default function GameDashboard({ gameId }: Props) {
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
         </section>
       )}
+      {syncPlan && !sessionGameMismatch && (syncPlan.source_links?.length ?? 0) > 0 && (
+        <SourceLinksPanel gameId={gameId} items={syncPlan.source_links!} />
+      )}
       {isClient && !syncProgress && <WhatsNew gameId={gameId} />}
       {isClient && !(syncPlan && syncPlan.actions.length > 0) && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
-        <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
-          You have everything the host shares. {stayInSync ? "Stay in sync will pull their new mods automatically." : "Turn on Stay in sync to get their new mods automatically."}
-        </Banner>
+        (syncPlan.source_links?.length ?? 0) > 0 ? (
+          // Nothing to download, but not "everything": the rest comes from the creators' pages.
+          <Banner tone="success" icon={<Check size={16} />} title="Nothing to download">
+            You have every file the host can send. Get the mods below from their creators.
+          </Banner>
+        ) : (
+          <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
+            You have everything the host shares. {stayInSync ? "Stay in sync will pull their new mods automatically." : "Turn on Stay in sync to get their new mods automatically."}
+          </Banner>
+        )
       )}
 
       {hasPacks && (
@@ -1039,7 +1106,43 @@ export default function GameDashboard({ gameId }: Props) {
   );
 }
 
-function StatCardGrid({ cards }: { cards: { label: string; value: string | number; color: string }[] }) {
+/** One-time offer, the first time the user hosts, to turn on the Discord
+ * status. It's off by default, so without this most hosts would never learn
+ * it exists. Marked as shown on first display so it never nags again. */
+function DiscordHint() {
+  const [visible, setVisible] = useState(() => !loadDiscordPresence() && !loadDiscordHintShown());
+  useEffect(() => {
+    if (visible) markDiscordHintShown();
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <Banner
+      tone="info"
+      icon={<MessageCircle size={16} />}
+      title="Show this session on your Discord profile?"
+      actions={
+        <>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              saveDiscordPresence(true);
+              setVisible(false);
+              toastSuccess("Discord status is on. Turn it off any time in Settings → Transfer.");
+            }}
+          >
+            Show on Discord
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setVisible(false)}>No thanks</Button>
+        </>
+      }
+    >
+      Only the game and how many friends are connected, never your code.
+    </Banner>
+  );
+}
+
+function StatCardGrid({ cards }:{ cards: { label: string; value: string | number; color: string }[] }) {
   return (
     <section aria-label="Local files">
       <p className="hud-label mb-2.5"><b>//</b> Local files</p>

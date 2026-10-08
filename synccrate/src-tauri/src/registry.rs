@@ -100,6 +100,22 @@ pub struct GameDefinition {
     /// or a registry dir `HKLM\Key::Value` whose directory must exist.
     #[serde(default)]
     pub install_markers: Vec<String>,
+    /// How CurseForge knows this game, for the games whose mods
+    /// `crate::curseforge` looks up there ("Check for updates" on the Content
+    /// page). The frontend reads it too, so the two never disagree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curseforge: Option<CurseForgeSupport>,
+}
+
+/// A game's place on CurseForge, as SyncCrate's lookup proxy takes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CurseForgeSupport {
+    /// The proxy's game key: `sims4`, `minecraft_java` or `wow`.
+    pub game: String,
+    /// WoW only: every client shares CurseForge's one WoW game, and the
+    /// flavour (`retail`, `classic`, ...) picks the builds made for this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flavor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -579,8 +595,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 123,
-            "expected at least 123 games, found {}",
+            registry.games.len() >= 124,
+            "expected at least 124 games, found {}",
             registry.games.len()
         );
 
@@ -748,6 +764,43 @@ mod tests {
             }
             assert!(path_accepted_by(cts(id), modded), "{id}: {modded} is a mod and must still sync");
         }
+    }
+
+    #[test]
+    fn curseforge_games_and_their_proxy_keys() {
+        let registry = load_registry();
+        let mut got: Vec<(&str, &str, Option<&str>)> = registry
+            .games
+            .iter()
+            .filter_map(|g| g.curseforge.as_ref().map(|c| (g.id.as_str(), c.game.as_str(), c.flavor.as_deref())))
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("minecraft_java", "minecraft_java", None),
+                ("sims4", "sims4", None),
+                ("wow_classic", "wow", Some("classic")),
+                ("wow_classic_era", "wow", Some("classic_era")),
+                ("wow_forever", "wow", Some("forever")),
+                ("wow_retail", "wow", Some("retail")),
+            ],
+            "private-server WoW clients aren't on CurseForge; WoW needs a flavour, nothing else has one"
+        );
+    }
+
+    /// WoW Forever launches on 4 Nov 2026 and Blizzard hasn't named its
+    /// executable yet. These follow the other clients (`WowClassic.exe`, with
+    /// `B`/`T` for beta and PTR builds) and are a guess until the launch: the
+    /// "game is running" guards (restore, pack apply, handoff, bisect...) need
+    /// some name, and an extra wrong one costs nothing. `install_markers`
+    /// stays empty on purpose, since a wrong marker would hide the game.
+    #[test]
+    fn wow_forever_process_names_are_unconfirmed_guesses() {
+        let registry = load_registry();
+        let g = registry.games.iter().find(|g| g.id == "wow_forever").unwrap();
+        assert_eq!(g.process_names, ["WowForever.exe", "WowForeverB.exe", "WowForeverT.exe", "World of Warcraft Forever"]);
+        assert!(g.install_markers.is_empty());
     }
 }
 

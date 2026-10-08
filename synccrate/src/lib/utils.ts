@@ -21,6 +21,56 @@ export function renameInManifest(m: FileManifest, moves: [string, string][]): Fi
   return { ...m, files };
 }
 
+/** A shareable link for a `synccrate://` path (`join/SC-...?game=sims4`).
+ * Chat apps only make http(s) links clickable, so this points at the
+ * website's open page, which hands the part after `#` to `synccrate://`.
+ * Mirrors `open_intent::web_link` in the backend. */
+export function webLink(path: string): string {
+  return `https://synccrate.app/open/#${path}`;
+}
+
+/** The join code (and game, when it names a plausible one) in a pasted invite
+ * link: `https://synccrate.app/open/#join/<code>?game=<id>` or
+ * `synccrate://join/<code>?game=<id>`. Null for anything else. Same reading
+ * as the backend's `open_intent::classify`; the code itself is checked when
+ * joining, like a typed one. */
+export function parseInviteLink(text: string): { code: string; game: string | null } | null {
+  const decode = (s: string) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+  let s = text.trim().replace(/^</, "").replace(/^"+|"+$/g, "");
+  if (s.length > 4096) return null;
+  // Some chat apps and link shorteners percent-encode the `#`.
+  const web = /^https?:\/\/(?:www\.)?synccrate\.app\/open\/?(?:#|%23)(.*)$/i.exec(s);
+  if (web) s = `synccrate://${web[1]}`;
+  // Chat apps and markdown glue punctuation onto links.
+  s = s.replace(/[\s)\]}>.,;:!?"'*|`]+$/, "");
+  const m = /^synccrate:\/*join\/+([^?]*)(?:\?(.*))?$/i.exec(s);
+  if (!m) return null;
+  const code = decode(m[1].replace(/\/+$/, "")).trim().toUpperCase();
+  if (!code || code.length > 256) return null;
+  const param = (m[2] ?? "")
+    .split("&")
+    .map((kv) => kv.split("="))
+    .find(([k, v]) => v !== undefined && k.toLowerCase() === "game");
+  // Browsers sometimes append a `/` to custom-scheme URLs.
+  const game = param ? decode(param[1]).trim().replace(/\/+$/, "").toLowerCase() : "";
+  return { code, game: /^[a-z0-9_]{1,64}$/.test(game) ? game : null };
+}
+
+/** What someone pasted into "join": an invite link (maybe naming the game)
+ * or a bare join code. Null when it's neither. */
+export function parseJoinInput(text: string): { code: string; game: string | null } | null {
+  const link = parseInviteLink(text);
+  if (link) return link;
+  const t = text.trim().toUpperCase();
+  return /^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/.test(t) ? { code: t, game: null } : null;
+}
+
 /** "1 file" / "3 files" (the "file(s)" style reads like an error message). */
 export function plural(n: number, word: string, many = `${word}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? word : many}`;
@@ -51,6 +101,38 @@ export function formatDateShort(ts: number): string {
 export function isDisabledPath(relativePath: string): boolean {
   const p = relativePath.replace(/\\/g, "/");
   return p.includes("_Disabled/") || p.toLowerCase().endsWith(".disabled");
+}
+
+/** Path as the backend matches it (`diff::match_key`): case-insensitive, with
+ * `.disabled`, a legacy `_Disabled/` folder and trailing dots/spaces seen through. */
+function linkKey(path: string): string {
+  const segs = path.replace(/\\/g, "/").split("/").filter((s) => s && s !== ".").map((s) => s.replace(/[. ]+$/, "").toLowerCase());
+  if (segs.length) segs[segs.length - 1] = segs[segs.length - 1].replace(/\.disabled$/, "").replace(/[. ]+$/, "");
+  const legacy = segs.slice(0, -1).indexOf("_disabled");
+  if (legacy >= 0) segs.splice(legacy, 1);
+  return segs.join("/");
+}
+
+/** Whether two link prefixes or paths name the same file or folder as the
+ * backend matches them. Compare these, not raw paths: a mod under a legacy
+ * `_Disabled/` folder has one more segment than its own file link, and was
+ * shown as covered by a folder link. */
+export function sameLinkTarget(a: string, b: string): boolean {
+  return linkKey(a) === linkKey(b);
+}
+
+/** The most specific "share as a link" entry covering `path` (a file link beats its folder's). */
+export function linkLookup<T extends { prefix: string }>(links: T[]): (path: string) => T | undefined {
+  if (links.length === 0) return () => undefined;
+  const keyed = links.map((l) => [linkKey(l.prefix), l] as const);
+  return (path: string) => {
+    const key = linkKey(path);
+    let best: readonly [string, T] | undefined;
+    for (const k of keyed) {
+      if (k[0] && (key === k[0] || key.startsWith(k[0] + "/")) && (!best || k[0].length > best[0].length)) best = k;
+    }
+    return best?.[1];
+  };
 }
 
 /** "3d ago" style age for dense tables; pair with formatDate in a title. */

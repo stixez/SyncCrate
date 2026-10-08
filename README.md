@@ -5,7 +5,7 @@
 <h1 align="center">SyncCrate</h1>
 
 <p align="center">
-  <strong>Same mods on every PC, for co-op squads and LAN parties.</strong>
+  <strong>Play modded games together: same mods, same saves, every PC.</strong>
 </p>
 
 <p align="center">
@@ -23,15 +23,15 @@
   <img src="assets/social-preview.png" width="100%" alt="SyncCrate: Same mods. Every PC. No excuses." />
 </p>
 
-One mismatched mod and nobody can join. **SyncCrate makes every PC match the host by copying only the files that differ, straight from PC to PC.** No cloud, no accounts, no tracking.
+One friend hosts. Everyone else gets an exact copy of their setup, straight from PC to PC.
 
 ## Why SyncCrate
 
-- **Everyone can join.** Friends pull the host's exact mods, configs and saves, so nobody is stuck on "version mismatch" in the lobby.
-- **Built for LAN parties.** One PC feeds the whole room at 100–900 MB/s. Hosts are found automatically, no internet needed.
-- **Or from anywhere.** At home, friends paste one join code. Peer-to-peer and encrypted, no port forwarding or VPN.
-- **Nothing breaks.** You see the plan before anything changes, conflicts are yours to decide, every file is verified and backups let you roll back.
-- **123 games, real box art.** Valheim, Elden Ring, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
+- **Play together.** Everyone gets the exact same mods, saves and configs, so nobody's stuck on "version mismatch" in the lobby. You see every change before it happens, and you can undo it.
+- **Share your setup.** Send a link to your exact setup. Friends see what they're missing and get it from you. Mods that have to come from their creator (Patreon, "no reupload") arrive as the creator's link instead.
+- **Keep it synced.** New mods reach everyone automatically. At a LAN party it works without internet; from anywhere, friends paste one join code.
+
+Works with the games you already mod: The Sims 4, Minecraft, Valheim, World of Warcraft, Stardew Valley and 120+ more. Free, open source, no accounts, no cloud.
 
 <table>
   <tr>
@@ -47,7 +47,7 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 ## Get Started
 
 1. **Download** SyncCrate for Windows, macOS or Linux from [Releases](../../releases/latest) and install it on every PC.
-2. **Add your game** in the Game Browser. Its folder is detected automatically, or set it manually.
+2. **Say whether you're hosting or joining.** The first run picks your game (its folder is found automatically) and takes you to **Start Hosting**, or joins your friend from their code or invite link. "Just look around" opens the Game Browser instead.
 3. **One friend clicks Start Hosting.** Everyone else picks the host under **Scan for Hosts** (same network) or pastes the join code (anywhere).
 4. **Click Compare & Sync**, check the plan, then **Sync Now**.
 
@@ -63,8 +63,10 @@ New to it? The **Guide** page in the app's sidebar walks through every feature.
 
 Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, macOS 11 Big Sur or newer) · Linux `.AppImage` / `.deb` / `.rpm`. The app updates itself.
 
+## Everything under the hood
+
 <details>
-<summary><strong>All features</strong></summary>
+<summary><strong>Show all features</strong></summary>
 
 **Sync**
 - **Only what changed.** SHA-256 diffing, zstd compression (50–80% less data), 100–900 MB/s peer-to-peer on LAN. Synced files keep the host's dates, so games that order mods by file date (Oblivion, New Vegas, Morrowind) load them in the same order.
@@ -73,29 +75,31 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Resumable.** Cancel or lose the connection mid-sync and it picks up where it left off. Desktop notification when done. Files over 2 GB are listed as skipped instead of breaking the rest of the sync.
 
 **Connect**
-- **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`synccrate://join/…`): clicking it opens SyncCrate with the code filled in for the right game (or offers to switch games). Nothing connects or syncs until the friend clicks Join and confirms the plan.
+- **Join codes that work anywhere.** The host shares one `SC-…` code and friends paste it, on the same Wi-Fi or across the internet. Reconnecting takes one click. Or send **Copy invite link** (`https://synccrate.app/open/#join/…`): it's a normal web link, so it's clickable in Discord and other chat apps, and it opens SyncCrate with the code filled in for the right game (or offers to switch games). Friends without SyncCrate get a download button instead. Pasting the link into the join box works too. Older `synccrate://` links still work. Nothing connects or syncs until the friend clicks Join and confirms the plan.
 - **Stay in sync.** Turn it on while you're connected and SyncCrate pulls the host's new mods by itself, every minute. It only ever adds files: anything that would replace or delete one of yours, and script mods, still wait for you to review. It pauses while the game is running.
 - **Auto-discovery.** Finds hosts via mDNS and UDP broadcast and tries every address a host has.
-- **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync, and see who's connected, what each friend is downloading, when they finished ("synced 42 files, 2 failed"), and whether someone is on a different game patch.
+- **Multi-peer.** One host, many friends, each syncing independently. Hosts choose which folders peers may sync, and see who's connected, what each friend is downloading, when they finished ("synced 42 files, 2 failed"), and whether someone is on a different game patch. **Settings → Transfer → Max upload speed** caps the host's total upload, shared by everyone syncing at once, so the rest of the household's internet keeps working.
 
 **Mods**
 - **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install (each file goes to the folder its type belongs in), pack/DLC detection and a duplicate finder for games where duplicate packages cause trouble (The Sims 2/3/4, Euro/American Truck Simulator, Farming Simulator). Handles 20,000+ files smoothly.
-- **Real mod names and icons.** The Content page reads the info mods ship with and shows each mod's name, version, author, description, website and icon instead of bare file names, and search finds mods by name. It works offline for Thunderstore/BepInEx packages (Valheim, Lethal Company, …), SMAPI mods (Stardew Valley), Minecraft Fabric, Quilt and Forge jars, Paradox mods, Bannerlord modules, RimWorld, Project Zomboid, Factorio, Darkest Dungeon and XCOM 2 mods, and WoW addons. **Sims 4 CC** shows the thumbnail stored inside each `.package` (click an item for a bigger preview), the object's catalog name, and the creator from the `[Creator]` tag in the file name; merged packages show how many items they hold. **Sims 3 CC** shows the thumbnail or icon stored in its `.package` too. Switch the view to **Grid** to browse mods and CC by picture. Mods without that info keep their file names. **Check for updates** asks Modrinth (Minecraft), Thunderstore (BepInEx games) and SMAPI (Stardew Valley) which mods have newer versions and links to each one; it only runs when you click it.
+- **Real mod names and icons.** The Content page reads the info mods ship with and shows each mod's name, version, author, description, website and icon instead of bare file names, and search finds mods by name. It works offline for Thunderstore/BepInEx packages (Valheim, Lethal Company, …), SMAPI mods (Stardew Valley), Minecraft Fabric, Quilt and Forge jars, Paradox mods, Bannerlord modules, RimWorld, Project Zomboid, Factorio, Darkest Dungeon and XCOM 2 mods, and WoW addons. **Sims 4 CC** shows the thumbnail stored inside each `.package` (click an item for a bigger preview), the object's catalog name, and the creator from the `[Creator]` tag in the file name; merged packages show how many items they hold. **Sims 3 CC** shows the thumbnail or icon stored in its `.package` too. Switch the view to **Grid** to browse mods and CC by picture. Mods without that info keep their file names. **Check for updates** asks Modrinth (Minecraft), Thunderstore (BepInEx games), SMAPI (Stardew Valley) and CurseForge (Sims 4, Minecraft and WoW addons) which mods have newer versions and links to each one, with a **What's new** link to the changelog for CurseForge updates; it only runs when you click it. For those games it also fills in names, authors and pictures from CurseForge for mods, CC and addons that don't carry their own, and flags mods whose required dependency is missing. CurseForge only gets each file's fingerprint (a number computed from its contents, not its name or the file), sent through synccrate.app, and nothing it returns is saved: it's gone when you leave the Content page.
 - **Saves outside the game folder.** Valheim worlds, Stardew Valley saves and RimWorld saves live in your user folder (AppData, `~/.config`, Application Support), not next to the mods. SyncCrate finds them once the game has run and syncs them with the mods; Settings shows where each is and lets you pick another folder. A friend whose PC doesn't have the folder yet is told to start the game once, and the mods still sync. Friends on an older SyncCrate get only the mods until they update.
 - **Mod health check.** Catches what stops synced mods from loading: a missing mod loader (BepInEx, SMAPI), and for The Sims 4 mods or script mods switched off in the game's options (after most patches; one click turns them back on), script mods more than one folder deep, packages deeper than `Resource.cfg` allows (five folders as standard), a missing or empty `Resource.cfg` (one click writes the standard one), two copies of the same script mod (one click turns the older ones off), `.zip` files that were never extracted, Tray items saved into Mods and CC saved into Tray (one click moves them; never overwriting, and on a friend's PC only the Tray items, since the host's files would come back with the next sync), and script mods named in the game's own error report (`lastException`) that weren't updated since. Fixes wait until the game is closed. For Crusader Kings III, Europa Universalis IV, Hearts of Iron IV and Stellaris it finds mod descriptors whose path only exists on one PC (the launcher writes full paths) and makes them portable (`path="mod/<folder>"`) in one click on the host, keeping the old versions in File history. It shows on the Content page, with a note on the Dashboard.
 - **Find a broken mod.** The 50/50 method, done for you: SyncCrate turns half of your mods off, you check the game and say whether the problem is still there, and it halves again until one mod (or creator folder) is left, about a dozen rounds even for thousands of mods. Progress is saved between rounds, your own disabled mods are left alone, and at the end everything it turned off goes back on (or you keep the broken one off).
 - **Play.** The Dashboard's **Play** button starts the game once you're synced: through Steam when Steam has it, or The Sims 4's own launcher on EA app installs.
-- **Game browser.** 123 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
+- **Game browser.** 124 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord. Compare it with what's installed, and **Apply this loadout** opens it on the Modpacks page to get the missing files or make the game load exactly those mods (with one-click revert).
 
 **Share your setup**
-- **Modpacks.** Export "my exact setup" as a tiny `.scpack` manifest — game, content types, and a file list (path, size, hash), no file contents, so it stays shareable-sized even for a big CC folder. A friend imports it (double-click the `.scpack` file, drag & drop, click a `synccrate://pack/…` link, or paste the link for small packs) and sees what they have, what's missing, and what differs, grouped like the Content page. Connect to whoever's sharing it and "Get missing files" pulls exactly the pack's files — differences become the normal conflict prompt, files the host doesn't have are reported rather than silently skipped, and nothing outside the pack is ever touched.
+- **Modpacks.** Export "my exact setup" as a tiny `.scpack` manifest — game, content types, and a file list (path, size, hash), no file contents, so it stays shareable-sized even for a big CC folder. A friend imports it (double-click the `.scpack` file, drag & drop, click a pack link (`https://synccrate.app/open/#pack/…`; older `synccrate://pack/…` links still work), or paste the link for small packs) and sees what they have, what's missing, and what differs, grouped like the Content page. Connect to whoever's sharing it and "Get missing files" pulls exactly the pack's files — differences become the normal conflict prompt, files the host doesn't have are reported rather than silently skipped, and nothing outside the pack is ever touched.
 - **Apply pack exactly.** When the whole group has to run the same mods, "Apply pack exactly" makes your game load just the pack's mods. It previews what it will download, which conflicts you'll resolve, and which mods it will re-enable or disable. Then it syncs, and only if the sync finishes cleanly does it re-enable pack files you had disabled and disable mods the pack doesn't list, using the game's normal disable method. Nothing is deleted, and saves and other content are never touched. "Revert pack apply" puts those files back with one click (downloads are undone with "Undo last sync"). It isn't available for games whose mods can't be disabled file by file, like Stardew Valley and KSP.
 
 **Play together**
 - **Friends can offer mods.** Got a mod the host doesn't? Select it on the Content page and **Offer to host**. The host sees the list on their Dashboard and picks what to take; nothing is copied until they accept, and each file is checked again when it arrives (same file, mod folders only, never replacing one of theirs). Everyone else then gets it from the host as usual.
+- **Share as a link.** Some creators don't allow re-uploads (Patreon early access, "no reupload" rules). Open the mod on the Content page, paste the creator's page under **Share as a link** (this file or its whole folder) and friends get that link instead of a copy, with "Not installed" or "Different version" next to it; the file never leaves your PC. Packs you export carry those links too, so a friend importing one sees **Open link** next to those files.
 - **Session chat.** Every session has a chat on the Dashboard, so you don't need Discord open next to it. The host keeps the conversation, and it works on the LAN and over the internet with no extra servers. It shows who joined or left and who finished syncing how many files. Your name is highlighted when someone writes `@you`, and you get a notification if SyncCrate is in the background. Messages last only for the session. While a sync is running, a friend's messages wait and arrive right after it. The host needs SyncCrate 0.6 or newer.
-- **Crews.** A crew remembers your group ("Sunday Sims Crew"): who's in it, which games you play, and the crew's mod set for each game. Start one on the Crews page and send **Copy invite** (`synccrate://crew/…`). Clicking the link adds the crew, and nothing connects or syncs.
+- **Discord status.** Off until you turn it on (SyncCrate offers it once, the first time you host, or use Settings → Transfer). While you host or sync, your Discord profile then shows it ("Hosting The Sims 4 · 2 friends connected") with a link to SyncCrate. It never shows your join code, PIN or friends' names.
+- **Crews.** A crew remembers your group ("Sunday Sims Crew"): who's in it, which games you play, and the crew's mod set for each game. Start one on the Crews page and send **Copy invite** (`https://synccrate.app/open/#crew/…`, a web link that opens SyncCrate; older `synccrate://crew/…` links still work). Clicking the link adds the crew, and nothing connects or syncs.
   - **Crew set.** Whoever hosts can "Publish my setup as the crew set", which is an ordinary modpack. Members get it the next time they connect to that host. The Crews page then says how many files you're behind, and **Catch up** opens the usual pack view ("Get missing files" or "Apply pack exactly").
   - **Take turns on a save.** Share a save with the crew from the Dashboard's **Shared saves**: a Sims 3 or Sims 4 save, a Valheim, Minecraft Java or Terraria (and tModLoader) world, a Stardew Valley farm, a RimWorld, Factorio, Cities: Skylines or Project Zomboid save. Everyone sees who has the newest copy and who's playing. A friend **takes** it from the host (the host's copy replaces theirs, and the save is theirs only once the copy is complete) and **gives** it back when they're done (their copy replaces the host's), so two friends hand a save over through whoever hosts. If a friend only says they have the newest copy (they took it over, or it changed hands in a session you weren't in), you **Accept** it before their copy can replace yours. A shared save never moves in a normal sync, taking and giving wait until the game is closed, and the replaced copy stays in File history. It needs a crew connection that proves who's who (**Join** from the Crews page), not a plain LAN one. Other games aren't covered yet: their saves are grouped in a way that hasn't been checked (Satisfactory and Palworld sort them by Steam account).
   - **No codes.** Once you've synced with someone in the crew, **Reconnect** or **Join** on a member reaches them by their SyncCrate id over the internet connection, which proves it's really them (a LAN address can be faked by anyone on the network). **Who's hosting?** shows members hosting on your LAN. On a LAN without internet, join with the host's code instead.
@@ -111,6 +115,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 **Yours**
 - **Activity log.** Search it, filter to problems, copy or save it as a text file for a bug report; sync history shows each sync's speed, duration and errors, with a weekly summary.
+- **Copy diagnostics.** One button (Network Check, Settings → Application, and on a failed connection or sync) copies a short report for a GitHub issue: app version, system, firewall and connection status, settings that matter and recent errors. Join codes, PINs, IP addresses, friends' names and your user folder are removed, and nothing is sent anywhere.
 - **Storage.** Settings → Storage shows how much SyncCrate keeps per game (backups and file history) and clears a game's file history.
 - **Tray and sidebar.** The tray names the game you're in a session with and copies your join code; pin your games to the top of the sidebar, or search a long library.
 - **Built-in guide.** The **Guide** page in the sidebar explains every feature one task at a time (first sync, LAN and internet play, undo, file history, modpacks, crews, Sims 4 tips, troubleshooting), with search and a button that takes you to the right page.
@@ -123,7 +128,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 ## Supported Games
 
 <!-- GAMES:START -->
-**123 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
+**124 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
 
 <details>
 <summary><strong>Life sim</strong> — 5 games</summary>
@@ -215,13 +220,14 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>MMO</strong> — 7 games</summary>
+<summary><strong>MMO</strong> — 8 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **WoW Classic** | Addons, Addon Settings |
 | **WoW Classic Era** | Addons, Addon Settings |
 | **WoW Custom Server** | Addons, Addon Settings |
+| **WoW Forever** | Addons, Addon Settings |
 | **WoW Retail** | Addons, Addon Settings |
 | **WoW TBC (2.4.3)** | Addons, Addon Settings |
 | **WoW Vanilla (1.12)** | Addons, Addon Settings |
@@ -394,6 +400,18 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Thumbnail cache** is cleared automatically after new mods arrive.
 - **Disabling that sticks.** The game loads mods from subfolders, so disabled mods are renamed to `.disabled` instead of moved. Mods left in an old `_Disabled` folder are fixed in one click.
 - **Outdated script mods** are flagged after a game patch.
+- **CC names and pictures.** Each `.package` shows the thumbnail and catalog name stored inside it. **Check for updates** adds names, pictures and newer versions from CurseForge, with a **What's new** link.
+- **Share as a link** for Patreon early access and "no reupload" CC: friends get the creator's page instead of a copy.
+
+**Minecraft (Java)**
+- **Updates from Modrinth and CurseForge**, only for the same loader and Minecraft version, with a **What's new** link for CurseForge files.
+- **Missing dependencies.** After a check, a mod whose required library (such as Fabric API) isn't installed says **Needs mod**, with a link to it.
+- **Version and loader warnings.** With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods is marked **Mismatch** ("Made for 1.19.2; most of your mods are for 1.20.1").
+
+**World of Warcraft**
+- Addons show their names from their `.toc` files; addons and addon settings (`WTF`, never `Config.wtf`) sync separately.
+- **Check for updates** finds Retail, Classic, Classic Era and WoW Forever addons on CurseForge by folder (names, authors, pictures) and only suggests updates built for your client.
+- **WoW Forever** is supported. Its install folder will be confirmed when it launches; until then, if it isn't found automatically, choose the folder that holds `Interface` yourself.
 
 **Bethesda games, KSP and Mount & Blade:** only mods sync. The game's own files in `Data`, `GameData` or `Modules` (the base game, DLC and Creation Club content) are skipped, so a sync never copies paid content to someone who doesn't own it or replaces base files across game versions. Paid Creations that don't follow Bethesda's `cc…` naming can't be told apart from mods yet. The load order (`plugins.txt`) is outside the game folder and isn't synced either.
 

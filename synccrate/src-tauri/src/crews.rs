@@ -495,10 +495,18 @@ pub fn encode_invite(crew: &Crew, from_node: &str, from_name: &str) -> Result<St
         from_name: clean_name(from_name).unwrap_or_else(|| "A friend".into()),
     };
     let json = serde_json::to_vec(&invite).map_err(|e| e.to_string())?;
-    Ok(format!("{INVITE_PREFIX}{}", URL_SAFE_NO_PAD.encode(json)))
+    Ok(crate::commands::open_intent::web_link(&format!("{INVITE_PREFIX}{}", URL_SAFE_NO_PAD.encode(json))))
 }
 
-/// Decode the base64 payload of a `synccrate://crew/` link (already
+/// The payload of a link `encode_invite` made, for tests that decode it
+/// directly instead of through `open_intent::classify`.
+#[cfg(test)]
+pub(crate) fn invite_payload(link: &str) -> &str {
+    let web = crate::commands::open_intent::web_link(INVITE_PREFIX);
+    link.strip_prefix(web.as_str()).or_else(|| link.strip_prefix(INVITE_PREFIX)).expect("not a crew link")
+}
+
+/// Decode the base64 payload of a crew link (web or `synccrate://crew/`, already
 /// stripped of scheme, percent-encoding and trailing chat junk by
 /// `open_intent::classify`).
 pub fn decode_invite(payload: &str, is_known_game: impl Fn(&str) -> bool) -> Result<CrewInvite, String> {
@@ -691,7 +699,7 @@ mod tests {
     fn pack(game: &str, n: usize) -> ModPack {
         let mut p = crate::testutil::test_pack(game, &[]);
         p.files = (0..n)
-            .map(|i| crate::state::PackFile { relative_path: format!("Mods/{i}.package"), size: 1, hash: "a".repeat(64) })
+            .map(|i| crate::state::PackFile { relative_path: format!("Mods/{i}.package"), size: 1, hash: "a".repeat(64), url: None, label: None })
             .collect();
         p
     }
@@ -765,7 +773,7 @@ mod tests {
     fn invite_round_trips() {
         let c = crew();
         let link = encode_invite(&c, &node(1), "Host").unwrap();
-        let payload = link.strip_prefix(INVITE_PREFIX).unwrap();
+        let payload = invite_payload(&link);
         let inv = decode_invite(payload, known).unwrap();
         assert_eq!(inv.id, c.id);
         assert_eq!(inv.name, "Sunday Sims Crew");

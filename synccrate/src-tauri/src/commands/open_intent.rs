@@ -1,7 +1,9 @@
 //! "Open from anywhere": `synccrate://pack/...`, `synccrate://join/...` and
 //! `synccrate://crew/...` links and double-clicked `.scpack` files all end up here, whether they
 //! started the app (cold start: argv, or macOS `RunEvent::Opened`) or were
-//! forwarded to the running window (single-instance plugin).
+//! forwarded to the running window (single-instance plugin). Web links
+//! (`https://synccrate.app/open/#join/...`) are the same links behind the
+//! website's "Open in SyncCrate" page, so pasting one works too.
 //!
 //! Everything arriving this way is untrusted: it's whatever a stranger
 //! pasted in a chat. `classify` is a pure parser/validator; `resolve` turns
@@ -22,6 +24,12 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 const SCHEME: &str = "synccrate:";
+/// Discord and most chat apps only make http(s) links clickable, so shared
+/// links point at the website's open page, which hands everything after `#`
+/// to `synccrate://`. A fragment never reaches the server, so a pack or
+/// invite isn't logged anywhere on the way.
+pub const WEB_OPEN: &str = "https://synccrate.app/open/#";
+const WEB_HOST: &str = "synccrate.app";
 /// Pack links are capped at 8 KB of base64 on export; leave room for
 /// percent-encoding and the prefix, and refuse anything past that up front.
 pub(crate) const MAX_INPUT_BYTES: usize = crate::commands::modpack::MAX_LINK_BYTES * 3;
@@ -96,6 +104,41 @@ fn strip_trailing_junk(s: &str) -> &str {
     })
 }
 
+/// `synccrate://join/...` -> `https://synccrate.app/open/#join/...`, the form
+/// the app copies for sharing. `classify` reads both.
+pub fn web_link(deep: &str) -> String {
+    let rest = deep.get(..SCHEME.len()).filter(|p| p.eq_ignore_ascii_case(SCHEME)).map_or(deep, |_| &deep[SCHEME.len()..]);
+    format!("{WEB_OPEN}{}", rest.trim_start_matches('/'))
+}
+
+fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    s.get(..prefix.len()).filter(|p| p.eq_ignore_ascii_case(prefix)).map(|_| &s[prefix.len()..])
+}
+
+enum WebLink<'a> {
+    /// What followed `#` on the open page: the deep link without `synccrate://`.
+    Open(&'a str),
+    /// Some other page of the website: a normal link, not ours to handle.
+    OtherPage,
+}
+
+fn parse_web_link(s: &str) -> Option<WebLink<'_>> {
+    let rest = strip_prefix_ci(s, "https://").or_else(|| strip_prefix_ci(s, "http://"))?;
+    let rest = strip_prefix_ci(rest, "www.").unwrap_or(rest);
+    let rest = strip_prefix_ci(rest, WEB_HOST)?;
+    // `synccrate.app.example.com` is someone else's site.
+    if !(rest.is_empty() || rest.starts_with(['/', '#', '?'])) {
+        return None;
+    }
+    let Some(page) = strip_prefix_ci(rest, "/open") else { return Some(WebLink::OtherPage) };
+    let page = page.strip_prefix('/').unwrap_or(page);
+    // Some chat apps and link shorteners percent-encode the `#`.
+    match page.strip_prefix('#').or_else(|| strip_prefix_ci(page, "%23")) {
+        Some(fragment) => Some(WebLink::Open(fragment)),
+        None => Some(WebLink::OtherPage),
+    }
+}
+
 fn is_pack_path(s: &str) -> bool {
     s.len() > ".scpack".len() && s.to_ascii_lowercase().ends_with(".scpack")
 }
@@ -112,6 +155,20 @@ pub fn classify(raw: &str, is_known_game: impl Fn(&str) -> bool) -> Option<OpenT
     if s.is_empty() {
         return None;
     }
+    // A web link is rewritten to the deep link it stands for, so both kinds
+    // get exactly the same checks and messages below.
+    let deep;
+    let s = match parse_web_link(s) {
+        Some(WebLink::Open(_)) if s.len() > MAX_INPUT_BYTES => {
+            return Some(OpenTarget::Invalid("That link is too long to be a SyncCrate link.".into()))
+        }
+        Some(WebLink::Open(fragment)) => {
+            deep = format!("synccrate://{fragment}");
+            deep.as_str()
+        }
+        Some(WebLink::OtherPage) => return None,
+        None => s,
+    };
     let is_link = s.get(..SCHEME.len()).is_some_and(|p| p.eq_ignore_ascii_case(SCHEME));
     if !is_link {
         return (s.len() <= MAX_INPUT_BYTES && is_pack_path(s)).then(|| OpenTarget::PackFile(PathBuf::from(s)));
@@ -352,6 +409,87 @@ mod tests {
         assert!(matches!(classify(&link, known), Some(OpenTarget::Invalid(r)) if r.contains("notagame")));
         let huge = format!("synccrate://crew/{}", "A".repeat(crate::crews::MAX_INVITE_BYTES + 10));
         assert!(is_invalid(classify(&huge, known)));
+    }
+
+    #[test]
+    fn web_link_matches_the_deep_link() {
+        assert_eq!(web_link("synccrate://join/SC-AB12?game=sims4"), "https://synccrate.app/open/#join/SC-AB12?game=sims4");
+        assert_eq!(web_link("SyncCrate://pack/abc"), "https://synccrate.app/open/#pack/abc");
+    }
+
+    #[test]
+    fn web_join_link_and_variants() {
+        let c = code();
+        let want = Some(OpenTarget::Join { code: c.clone(), game_id: "sims4".into() });
+        for raw in [
+            format!("https://synccrate.app/open/#join/{c}?game=sims4"),
+            format!("HTTPS://SyncCrate.App/Open/#join/{c}?game=sims4"),
+            format!("https://www.synccrate.app/open/#join/{c}?game=sims4"),
+            format!("http://synccrate.app/open/#join/{c}?game=sims4"),
+            format!("https://synccrate.app/open#join/{c}?game=sims4"),
+            format!("https://synccrate.app/open/%23join/{c}?game=sims4"),
+            format!("<https://synccrate.app/open/#join/{c}?game=sims4>"),
+            format!("https://synccrate.app/open/#join/{}?game=sims%34", c.replace('-', "%2D")),
+        ] {
+            assert_eq!(classify(&raw, known), want, "{raw}");
+        }
+        for suffix in [")", ".", "),", "**", "/", "!", ">"] {
+            let raw = format!("https://synccrate.app/open/#join/{c}?game=sims4{suffix}");
+            assert_eq!(classify(&raw, known), want, "suffix {suffix:?}");
+        }
+        assert_eq!(classify(&web_link(&format!("synccrate://join/{c}?game=sims4")), known), want);
+    }
+
+    #[test]
+    fn web_pack_and_crew_links() {
+        let safe = URL_SAFE_NO_PAD.encode(pack_json());
+        let Some(OpenTarget::PackLink(p)) = classify(&format!("https://synccrate.app/open/#pack/{safe})."), known) else { panic!("not a pack link") };
+        assert!(matches!(resolve(OpenTarget::PackLink(p)), OpenIntent::Pack { .. }));
+
+        let from = crate::crews::node_id_hex(&iroh::SecretKey::from_bytes(&[4; 32]).public());
+        let crew = crate::crews::Crew {
+            id: crate::crews::new_crew_id(),
+            name: "Sunday Sims Crew".into(),
+            name_updated_at: 0,
+            games: vec!["sims4".into()],
+            members: vec![],
+            sets: Default::default(),
+            last_host: None,
+            created_at: 0,
+            saves: Vec::new(),
+        };
+        let link = crate::crews::encode_invite(&crew, &from, "Host").unwrap();
+        assert!(link.starts_with("https://synccrate.app/open/#crew/"), "{link}");
+        for raw in [link.clone(), format!("{link})."), link.replacen("https://synccrate.app", "http://WWW.SYNCCRATE.APP", 1)] {
+            assert!(matches!(classify(&raw, known), Some(OpenTarget::Crew(inv)) if inv.id == crew.id), "{raw}");
+        }
+    }
+
+    #[test]
+    fn web_link_errors_match_deep_link_errors() {
+        let deep = classify("synccrate://join/SC-NOPE-NOPE?game=sims4", known);
+        assert!(is_invalid(deep.clone()));
+        assert_eq!(classify("https://synccrate.app/open/#join/SC-NOPE-NOPE?game=sims4", known), deep);
+        assert_eq!(classify("https://synccrate.app/open/#settings/reset", known), classify("synccrate://settings/reset", known));
+        let huge = format!("https://synccrate.app/open/#pack/{}", "A".repeat(MAX_INPUT_BYTES));
+        assert_eq!(classify(&huge, known), Some(OpenTarget::Invalid("That link is too long to be a SyncCrate link.".into())));
+    }
+
+    #[test]
+    fn other_website_pages_are_not_ours() {
+        for raw in [
+            "https://synccrate.app",
+            "https://synccrate.app/",
+            "https://synccrate.app/guides/sims4/",
+            "https://synccrate.app/open/",
+            "https://synccrate.app/opener/#join/x",
+            "https://synccrate.app/#join/x",
+            "https://synccrate.app.example.com/open/#join/x",
+            "https://evil.example/open/#join/x",
+            "ftp://synccrate.app/open/#join/x",
+        ] {
+            assert_eq!(classify(raw, known), None, "{raw}");
+        }
     }
 
     #[test]

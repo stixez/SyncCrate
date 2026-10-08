@@ -106,7 +106,7 @@ pub async fn preview_crew_invite(state: tauri::State<'_, Arc<Mutex<AppState>>>, 
     match crate::commands::open_intent::classify(&text, &known) {
         Some(crate::commands::open_intent::OpenTarget::Crew(invite)) => Ok(invite),
         Some(crate::commands::open_intent::OpenTarget::Invalid(reason)) => Err(reason),
-        _ => Err("That isn't a crew invite link (they start with synccrate://crew/).".to_string()),
+        _ => Err("That isn't a crew invite link. Paste the whole link your friend sent (synccrate.app/open/#crew/... or synccrate://crew/...).".to_string()),
     }
 }
 

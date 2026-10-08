@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Puzzle, Palette, AlertTriangle, CheckSquare, Square } from "lucide-react";
-import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, ModWarning } from "../lib/types";
 import { useModIcon } from "../lib/modMeta";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { fileName, formatBytes, isDisabledPath, plural } from "../lib/utils";
@@ -29,12 +29,15 @@ interface GridProps {
   units: GridUnit[];
   getSyncStatus: (path: string) => SyncStatus;
   updateFor: (key?: string) => ModUpdate | undefined;
+  warningsFor: (key?: string) => ModWarning[] | undefined;
   outdatedPaths: Set<string>;
   compatMap: Map<string, ModCompatibility>;
   bulkMode: boolean;
   selected: Set<string>;
   onSelectPaths: (paths: string[], on: boolean) => void;
   onShowDetails: (file: FileInfo) => void;
+  /** Shared as a link to its creator instead of being copied to friends. */
+  isLinked: (path: string) => boolean;
 }
 
 /**
@@ -91,12 +94,14 @@ const Tile = memo(function Tile({
   size,
   getSyncStatus,
   updateFor,
+  warningsFor,
   outdatedPaths,
   compatMap,
   bulkMode,
   selected,
   onSelectPaths,
   onShowDetails,
+  isLinked,
 }: { unit: GridUnit; size: number } & Omit<GridProps, "units">) {
   const { files, meta } = unit;
   const first = files[0];
@@ -107,7 +112,9 @@ const Tile = memo(function Tile({
   const disabled = paths.every(isDisabledPath);
   const status = paths.map(getSyncStatus).reduce((a, b) => (STATUS_RANK[b] > STATUS_RANK[a] ? b : a), "synced" as SyncStatus);
   const update = updateFor(meta?.key);
+  const warnings = warningsFor(meta?.key);
   const outdated = paths.some((p) => outdatedPaths.has(p));
+  const linked = paths.some(isLinked);
   const missingPacks = paths.some((p) => compatMap.get(p)?.status === "MissingPacks");
   const isSelected = bulkMode && paths.every((p) => selected.has(p));
   const bytes = files.reduce((n, f) => n + f.size, 0);
@@ -143,7 +150,13 @@ const Tile = memo(function Tile({
         <span className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
           {disabled && <Badge tone="neutral">Off</Badge>}
           {update && <Badge tone="neon" title={`Update available: ${update.latest}`}>Update</Badge>}
+          {warnings && (
+            <Badge tone="amber" title={warnings.map((w) => w.text).join("\n")}>
+              {warnings.some((w) => w.kind === "missing_dependency") ? "Needs mod" : "Mismatch"}
+            </Badge>
+          )}
           {outdated && <Badge tone="amber">Outdated</Badge>}
+          {linked && <Badge tone="neutral" title="Friends get a link to the creator's page instead of a copy">Link</Badge>}
           {meta?.items != null && meta.items > 1 && <Badge tone="neutral" title="Items in this merged package">{meta.items}</Badge>}
         </span>
         {missingPacks && (

@@ -19,6 +19,12 @@ pub const ALPN: &[u8] = b"synccrate/1";
 
 static ENDPOINT: tokio::sync::OnceCell<Endpoint> = tokio::sync::OnceCell::const_new();
 
+/// Whether the internet endpoint is up (for "Copy diagnostics"); it starts
+/// on first use, so "not yet" is normal before hosting or joining by code.
+pub fn endpoint_ready() -> bool {
+    ENDPOINT.initialized()
+}
+
 fn key_path() -> std::path::PathBuf {
     let config = crate::utils::config_root();
     let dir = config.join("synccrate");

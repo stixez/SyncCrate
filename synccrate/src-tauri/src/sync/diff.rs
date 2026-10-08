@@ -1,7 +1,8 @@
 use crate::registry::ContentType;
+use crate::source_links::{LinkStatus, LinkedFile, SourceLinkItem};
 use crate::state::{FileInfo, FileManifest, SyncAction, SyncPlan};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Suffix rename-disable games (Sims 3/4) append to a disabled mod.
 const DISABLED_SUFFIX: &str = ".disabled";
@@ -445,8 +446,11 @@ pub fn retain_pull_only(plan: &mut SyncPlan) {
     // Keep total_bytes self-consistent so this function is correct in isolation
     // (and unit-testable). compute_sync_plan recomputes it again after its own
     // permission/exclude filtering, so this value is transient in that path.
-    plan.total_bytes = plan
-        .actions
+    plan.total_bytes = actions_bytes(&plan.actions);
+}
+
+fn actions_bytes(actions: &[SyncAction]) -> u64 {
+    actions
         .iter()
         .map(|a| match a {
             SyncAction::ReceiveFromRemote(f) => f.size,
@@ -454,7 +458,68 @@ pub fn retain_pull_only(plan: &mut SyncPlan) {
             SyncAction::SendToRemote(f) => f.size,
             SyncAction::Delete(_) => 0,
         })
-        .sum();
+        .sum()
+}
+
+/// The host's linked files this client should list: paths it could write in
+/// this game's folders, https links, short labels. They come from another
+/// PC and end up as clickable buttons.
+pub fn accepted_links(links: &[LinkedFile], content_types: &[ContentType]) -> Vec<LinkedFile> {
+    links
+        .iter()
+        .filter(|l| crate::utils::validate_relative(&l.path).is_ok() && path_accepted_by(content_types, &l.path))
+        .filter_map(|l| {
+            let url = crate::source_links::validate_url(&l.url).ok()?;
+            Some(LinkedFile { url, label: crate::source_links::clean_label(l.label.as_deref()), ..l.clone() })
+        })
+        .collect()
+}
+
+/// Apply the host's "get it from the creator" files to a plan: no action may
+/// touch a linked path (a friend's own copy is never replaced or deleted,
+/// even if a host also listed it as a normal file), and each linked file the
+/// friend lacks or has in another version becomes a `source_links` row.
+/// Linked files never count toward `total_bytes`.
+pub fn apply_source_links(plan: &mut SyncPlan, links: &[LinkedFile], local: &FileManifest) {
+    if links.is_empty() {
+        return;
+    }
+    let linked: HashSet<String> = links.iter().map(|l| match_key(&l.path)).collect();
+    plan.actions.retain(|a| {
+        let paths: [&str; 2] = match a {
+            SyncAction::Conflict { local, remote } => [&local.relative_path, &remote.relative_path],
+            SyncAction::SendToRemote(f) | SyncAction::ReceiveFromRemote(f) => [&f.relative_path, &f.relative_path],
+            SyncAction::Delete(p) => [p, p],
+        };
+        !paths.iter().any(|p| linked.contains(&match_key(p)))
+    });
+    plan.total_bytes = actions_bytes(&plan.actions);
+
+    let mut local_hashes: HashMap<String, Vec<&str>> = HashMap::new();
+    for f in local.files.values() {
+        local_hashes.entry(match_key(&f.relative_path)).or_default().push(&f.hash);
+    }
+    // One row per file even if the host has both `x` and `x.disabled`.
+    let mut seen = HashSet::new();
+    let mut sorted: Vec<&LinkedFile> = links.iter().collect();
+    sorted.sort_by(|a, b| is_disabled_path(&a.path).cmp(&is_disabled_path(&b.path)).then_with(|| a.path.cmp(&b.path)));
+    let mut items = Vec::new();
+    for l in sorted {
+        let key = match_key(&l.path);
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        let status = match local_hashes.get(&key) {
+            None => LinkStatus::Missing,
+            // Without the host's hash there's no telling; assume theirs is fine.
+            Some(_) if l.hash.is_empty() => continue,
+            Some(hashes) if hashes.contains(&l.hash.as_str()) => continue,
+            Some(_) => LinkStatus::Different,
+        };
+        items.push(SourceLinkItem { path: l.path.clone(), url: l.url.clone(), label: l.label.clone(), status });
+    }
+    items.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    plan.source_links = items;
 }
 
 /// Compute a deterministic hash of a sync plan's actions.
@@ -797,7 +862,7 @@ mod tests {
     }
 
     fn pf(path: &str, hash: &str) -> crate::state::PackFile {
-        crate::state::PackFile { relative_path: path.to_string(), size: 1000, hash: hash.to_string() }
+        crate::state::PackFile { relative_path: path.to_string(), size: 1000, hash: hash.to_string(), url: None, label: None }
     }
 
     #[test]
@@ -927,6 +992,90 @@ mod tests {
         assert_eq!(plan.actions.len(), 1);
         assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(_)));
         assert_eq!(plan.total_bytes, 500);
+    }
+
+    fn linked(path: &str, hash: &str, size: u64) -> LinkedFile {
+        LinkedFile { path: path.into(), size, hash: hash.into(), url: "https://creator.example".into(), label: None }
+    }
+
+    #[test]
+    fn linked_files_become_source_link_rows_by_status() {
+        let local = make_manifest(vec![
+            make_file("Mods/same.package", "s", 10),
+            make_file("Mods/old.package", "old", 10),
+            make_file("Mods/off.package.disabled", "off", 10),
+        ]);
+        let remote = make_manifest(vec![make_file("Mods/free.package", "f", 100)]);
+        let mut plan = compute_diff(&local, &remote);
+        let links = vec![
+            linked("Mods/same.package", "s", 1000),
+            linked("Mods/old.package", "new", 1000),
+            linked("Mods/missing.package", "m", 1000),
+            linked("Mods/off.package", "off", 1000),
+        ];
+        apply_source_links(&mut plan, &links, &local);
+        let rows: Vec<(&str, LinkStatus)> = plan.source_links.iter().map(|i| (i.path.as_str(), i.status)).collect();
+        assert_eq!(rows, vec![("Mods/missing.package", LinkStatus::Missing), ("Mods/old.package", LinkStatus::Different)]);
+        assert_eq!(plan.source_links[0].url, "https://creator.example");
+        // The free file still downloads; the friend's own copies of linked
+        // mods aren't touched; linked bytes never count.
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(&plan.actions[0], SyncAction::ReceiveFromRemote(f) if f.relative_path == "Mods/free.package"));
+        assert_eq!(plan.total_bytes, 100);
+    }
+
+    #[test]
+    fn linked_paths_are_never_received_replaced_or_deleted() {
+        // A host that lists a linked file in its manifest too (an older or
+        // misbehaving one) still can't overwrite the friend's copy.
+        let local = make_manifest(vec![make_file("Mods/cc/Hair.package.disabled", "mine", 10), make_file("Mods/keep.package", "k", 5)]);
+        let remote = make_manifest(vec![
+            make_file("Mods/CC/hair.package", "theirs", 50),
+            make_file("Mods/new.package", "n", 70),
+            make_file("Mods/Creator/a.package", "a", 30),
+        ]);
+        let mut plan = compute_diff(&local, &remote);
+        plan.actions.push(SyncAction::Delete("Mods/keep.package".into()));
+        let links = vec![linked("Mods/CC/hair.package", "theirs", 50), linked("Mods/Creator/a.package", "a", 30), linked("Mods/keep.package", "k2", 5)];
+        apply_source_links(&mut plan, &links, &local);
+        let paths: Vec<&str> = plan.actions.iter().map(|a| match a {
+            SyncAction::ReceiveFromRemote(f) | SyncAction::SendToRemote(f) => f.relative_path.as_str(),
+            SyncAction::Conflict { local, .. } => local.relative_path.as_str(),
+            SyncAction::Delete(p) => p.as_str(),
+        }).collect();
+        assert_eq!(paths, vec!["Mods/new.package"]);
+        assert_eq!(plan.total_bytes, 70);
+        let statuses: Vec<LinkStatus> = plan.source_links.iter().map(|i| i.status).collect();
+        assert_eq!(statuses, vec![LinkStatus::Different, LinkStatus::Missing, LinkStatus::Different]);
+        // Plan identity (resume checkpoints) only depends on the actions.
+        let mut without = plan.clone();
+        without.source_links.clear();
+        assert_eq!(compute_plan_hash(&plan), compute_plan_hash(&without));
+    }
+
+    #[test]
+    fn no_links_leave_the_plan_alone() {
+        let local = make_manifest(vec![]);
+        let remote = make_manifest(vec![make_file("Mods/a.package", "h", 500)]);
+        let mut plan = compute_diff(&local, &remote);
+        apply_source_links(&mut plan, &[], &local);
+        assert_eq!(plan.actions.len(), 1);
+        assert_eq!(plan.total_bytes, 500);
+        assert!(plan.source_links.is_empty());
+    }
+
+    #[test]
+    fn host_links_are_checked_before_the_friend_sees_them() {
+        let cts = vec![ct("Mods", &["package"], true)];
+        let mut bad_url = linked("Mods/a.package", "h", 1);
+        bad_url.url = "javascript:alert(1)".into();
+        let mut long_label = linked("Mods/b.package", "h", 1);
+        long_label.label = Some(format!("{}\n", "x".repeat(400)));
+        let links = vec![bad_url, long_label, linked("../evil.package", "h", 1), linked("Saves/x.save", "h", 1), linked("Mods/c.package", "h", 1)];
+        let ok = accepted_links(&links, &cts);
+        let paths: Vec<&str> = ok.iter().map(|l| l.path.as_str()).collect();
+        assert_eq!(paths, vec!["Mods/b.package", "Mods/c.package"]);
+        assert_eq!(ok[0].label.as_ref().unwrap().len(), 100);
     }
 
     #[test]

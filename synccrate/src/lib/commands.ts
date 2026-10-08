@@ -40,6 +40,7 @@ import type {
   PackApplyStatus,
   PackComparison,
   PackRevertResult,
+  SourceLink,
   SyncFolderPermissions,
   SyncHistoryEntry,
   SyncPlan,
@@ -607,9 +608,27 @@ export async function getModMetadata(game: string): Promise<ModMeta[]> {
   return invoke("get_mod_metadata", { game });
 }
 
-/** Ask Modrinth / Thunderstore / SMAPI for newer versions (only on the user's click). */
+/** Ask Modrinth / Thunderstore / SMAPI / CurseForge for newer versions (only on the user's click). */
 export async function checkModUpdates(game: string): Promise<UpdateReport> {
   return invoke("check_mod_updates", { game });
+}
+
+/** Drop the CurseForge logo links the last check left in the backend (the Content page closed). */
+export async function forgetCurseforgeResults(): Promise<void> {
+  if (isDemoMode()) return;
+  return invoke("forget_curseforge_results");
+}
+
+/** What Discord shows on the user's profile; null clears it (src-tauri/src/discord.rs). */
+export interface DiscordPresence {
+  details: string;
+  state: string;
+  start: number | null;
+}
+
+export async function setDiscordPresence(presence: DiscordPresence | null): Promise<void> {
+  if (isDemoMode()) return;
+  return invoke("set_discord_presence", { presence });
 }
 
 export async function getModIcon(key: string): Promise<string | null> {
@@ -710,6 +729,36 @@ export async function takeSave(crew: string, game: string, unit: string): Promis
 
 export async function giveSave(crew: string, game: string, unit: string): Promise<void> {
   return invoke("give_save", { crew, game, unit });
+}
+
+// "Share as a link": mods the host points friends to the creator for instead
+// of copying them (src-tauri/src/source_links.rs). Demo mode keeps them in memory.
+const demoLinks = new Map<string, SourceLink[]>();
+
+export async function getSourceLinks(game: string): Promise<SourceLink[]> {
+  if (isDemoMode()) return demoLinks.get(game) ?? [];
+  return invoke("get_source_links", { game });
+}
+
+/** Adds the link, or replaces the one with the same prefix. Resolves to the game's links. */
+export async function setSourceLink(game: string, prefix: string, url: string, label: string | null): Promise<SourceLink[]> {
+  if (isDemoMode()) {
+    if (!/^https:\/\/\S+$/i.test(url.trim())) throw "Use a full https:// link (up to 300 characters, no spaces).";
+    const rest = (demoLinks.get(game) ?? []).filter((l) => l.prefix.toLowerCase() !== prefix.toLowerCase());
+    const links = [...rest, { prefix, url: url.trim(), label }];
+    demoLinks.set(game, links);
+    return links;
+  }
+  return invoke("set_source_link", { game, prefix, url, label });
+}
+
+export async function removeSourceLink(game: string, prefix: string): Promise<SourceLink[]> {
+  if (isDemoMode()) {
+    const links = (demoLinks.get(game) ?? []).filter((l) => l.prefix.toLowerCase() !== prefix.toLowerCase());
+    demoLinks.set(game, links);
+    return links;
+  }
+  return invoke("remove_source_link", { game, prefix });
 }
 
 export async function getExtraFolders(game: string): Promise<ExtraFolder[]> {
@@ -876,6 +925,17 @@ export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
 
 export async function testConnection(ip: string, port: number): Promise<ConnectionTestResult> {
   return invoke("test_connection", { ip, port });
+}
+
+/** Plain-text report for bug reports; the backend scrubs codes, PINs, IPs,
+ * names and the home folder. Nothing leaves the PC. */
+export async function diagnosticsReport(
+  log: { timestamp: number; level: string; message: string }[],
+  stayInSync: boolean,
+  discord: boolean,
+  names: string[],
+): Promise<string> {
+  return invoke("diagnostics_report", { log, stayInSync, discord, names });
 }
 
 // --- Content maintenance ---

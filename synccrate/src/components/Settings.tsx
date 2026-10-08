@@ -16,9 +16,11 @@ import { GameIcon } from "./Sidebar";
 import { Badge, Button, EmptyState, GameArt, Input, LiveDot, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
 import { ACCENT_PRESETS, effectsEnabled, isLightColor } from "../lib/appearance";
 import type { Density, ThemeMode, UiScale } from "../lib/prefs";
+import { loadDiscordPresence, saveDiscordPresence } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
+import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
 import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
@@ -49,6 +51,7 @@ export default function Settings() {
   const [keepHistory, setKeepHistory] = useState(true);
   const [closeToTray, setCloseToTrayState] = useState(false);
   const [showArt, setShowArtState] = useState(getShowGameArt);
+  const [discordOn, setDiscordOn] = useState(loadDiscordPresence);
   const [customArt, setCustomArt] = useState<string[]>([]);
   // Saved folders that don't exist right now (kept, not replaced by auto-detect).
   const [unavailable, setUnavailable] = useState<string[]>([]);
@@ -515,16 +518,17 @@ export default function Settings() {
       <Section num="05" title="Transfer" description="Bandwidth and what happens after a sync finishes.">
         <Panel padded={false}>
           <div className="divide-y divide-border">
-            <SettingRow label="Max speed" hint="Limit transfer speed to avoid saturating your network. Unlimited is fastest.">
+            <SettingRow label="Max upload speed" hint="When you host: one limit shared by every friend syncing from you, so the rest of your internet keeps working. Changes apply right away. Unlimited is fastest.">
               <select
                 value={speedLimit}
                 onChange={(e) => {
                   saveSetting(Number(e.target.value), speedLimit, setSpeedLimit, cmd.setTransferSpeedLimit);
                 }}
-                aria-label="Transfer speed limit"
+                aria-label="Max upload speed"
                 className={selectClass}
               >
                 <option value={0}>Unlimited</option>
+                <option value={524288}>512 KB/s</option>
                 <option value={1048576}>1 MB/s</option>
                 <option value={2097152}>2 MB/s</option>
                 <option value={5242880}>5 MB/s</option>
@@ -560,6 +564,17 @@ export default function Settings() {
             </SettingRow>
             <SettingRow>
               <Toggle
+                checked={discordOn}
+                onChange={(v) => {
+                  setDiscordOn(v);
+                  saveDiscordPresence(v);
+                }}
+                label="Show on Discord"
+                description="Off until you turn it on. While you host or sync, your Discord profile shows the game and how many friends are connected. Never your join code or PIN. Needs the Discord app running."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
                 checked={closeToTray}
                 onChange={(v) => saveSetting(v, closeToTray, setCloseToTrayState, cmd.setCloseToTray)}
                 label="Keep running in the tray when the window is closed"
@@ -585,7 +600,7 @@ export default function Settings() {
         <StoragePanel />
       </Section>
 
-      <Section num="07" title="Application" description="Support the project and keep SyncCrate up to date.">
+      <Section num="07" title="Application" description="Support the project, keep SyncCrate up to date, and report problems.">
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
@@ -666,6 +681,17 @@ export default function Settings() {
             >
               {updating ? "Checking..." : "Check for Updates"}
             </Button>
+          </Panel>
+
+          <Panel title="Report a problem" label="// Diagnostics" className="col-span-2">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs text-txt-dim">
+                Something not working? Copy a short report and paste it into a GitHub issue. It has your app version,
+                system and connection status, and recent errors. No files, join codes, PINs or friends' names, and
+                nothing is sent anywhere.
+              </p>
+              <CopyDiagnosticsButton size="md" className="shrink-0" />
+            </div>
           </Panel>
         </div>
       </Section>

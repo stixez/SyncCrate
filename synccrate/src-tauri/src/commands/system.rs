@@ -309,9 +309,34 @@ pub async fn get_network_diagnostics(
     })
 }
 
+/// Outcome of the last "Test" in Network check, without the address, for
+/// "Copy diagnostics" (the result only lived in that panel's state).
+static LAST_REACH_TEST: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn last_reach_test() -> Option<String> {
+    LAST_REACH_TEST.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+fn reach_summary(r: &ConnectionTestResult, timed_out: bool, refused: bool) -> String {
+    let when = chrono::Utc::now().format("%H:%M UTC");
+    match (r.reachable, r.latency_ms) {
+        (true, Some(ms)) => format!("reachable ({ms} ms) at {when}"),
+        (true, None) => format!("reachable at {when}"),
+        _ if timed_out => format!("no answer after 5 s (often the host's firewall) at {when}"),
+        _ if refused => format!("host answered, but nothing listening on that port, at {when}"),
+        _ => format!("couldn't reach the host at {when}"),
+    }
+}
+
 /// Quick TCP reachability test against a host, without joining its session.
 #[tauri::command]
 pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResult, String> {
+    let (result, timed_out, refused) = test_connection_inner(&ip, port).await?;
+    *LAST_REACH_TEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(reach_summary(&result, timed_out, refused));
+    Ok(result)
+}
+
+async fn test_connection_inner(ip: &str, port: u16) -> Result<(ConnectionTestResult, bool, bool), String> {
     let addr: std::net::IpAddr = ip.trim().parse().map_err(|_| "Invalid IP address".to_string())?;
     let target = std::net::SocketAddr::new(addr, port);
     let start = std::time::Instant::now();
@@ -320,7 +345,9 @@ pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResu
         tokio::net::TcpStream::connect(target),
     )
     .await;
-    Ok(match result {
+    let timed_out = result.is_err();
+    let refused = matches!(&result, Ok(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused);
+    let r = match result {
         Ok(Ok(_)) => ConnectionTestResult {
             reachable: true,
             message: format!("{}:{} is reachable. SyncCrate is listening there.", ip, port),
@@ -341,7 +368,8 @@ pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResu
             message: format!("No response from {}:{} after 5s. Most likely the host's firewall is blocking SyncCrate (use \"Fix Windows Firewall\" on the host).", ip, port),
             latency_ms: None,
         },
-    })
+    };
+    Ok((r, timed_out, refused))
 }
 
 #[cfg(test)]

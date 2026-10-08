@@ -46,7 +46,15 @@ pub(crate) async fn offer_files_inner(state: &Arc<Mutex<AppState>>, paths: Vec<S
     crate::commands::files::scan_files_inner(state, None, true).await?;
     let mut s = state.lock().await;
     let cts = crate::commands::files::get_game_def(&s.game_registry, &s.active_game).map(|g| g.content_types.clone()).unwrap_or_default();
-    let host_manifest = s.connections.values().next().and_then(|c| c.remote_manifest.clone()).unwrap_or_default();
+    let mut host_manifest = s.connections.values().next().and_then(|c| c.remote_manifest.clone()).unwrap_or_default();
+    // A mod the host shares as a link is one it has: offering it back would
+    // upload a copy the host chose not to pass around.
+    for l in s.connections.values().next().map(|c| c.remote_links.as_slice()).unwrap_or_default() {
+        host_manifest.files.insert(
+            l.path.clone(),
+            crate::state::FileInfo { relative_path: l.path.clone(), size: l.size, hash: l.hash.clone(), modified: 0, file_type: String::new() },
+        );
+    }
     let wanted: std::collections::HashSet<String> = paths.iter().map(|p| crate::sync::diff::match_key(p)).collect();
     let files: Vec<_> = s
         .local_manifest

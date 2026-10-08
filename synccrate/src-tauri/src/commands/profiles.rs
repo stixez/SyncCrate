@@ -128,7 +128,7 @@ pub(crate) fn profile_to_pack(profile: &ModProfile) -> Result<crate::state::ModP
     let files: Vec<crate::state::PackFile> = profile
         .mods
         .iter()
-        .map(|m| crate::state::PackFile { relative_path: m.relative_path.clone(), size: m.size, hash: m.hash.clone() })
+        .map(|m| crate::state::PackFile { relative_path: m.relative_path.clone(), size: m.size, hash: m.hash.clone(), url: None, label: None })
         .collect();
     let pack = crate::state::ModPack {
         format_version: crate::commands::modpack::FORMAT_VERSION,

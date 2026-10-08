@@ -648,7 +648,7 @@ mod tests {
     }
 
     fn pf(path: &str, hash: &str) -> PackFile {
-        PackFile { relative_path: path.into(), size: 1, hash: hash.into() }
+        PackFile { relative_path: path.into(), size: 1, hash: hash.into(), url: None, label: None }
     }
 
     fn paths(items: &[ApplyItem]) -> Vec<&str> {

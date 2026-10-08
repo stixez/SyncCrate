@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, ArrowUpDown, CheckCheck, Copy, Link2, Loader2, RotateCcw, Save as SaveIcon, Share2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, CheckCheck, Copy, ExternalLink, Link2, Loader2, RotateCcw, Save as SaveIcon, Share2, Upload, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Banner, Button, EmptyState, Input, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { getGameDef, gameLabel } from "../lib/games";
 import { dirOf, formatBytes, formatDate, plural } from "../lib/utils";
+import { isHttps, openCreatorLink } from "../lib/links";
 import * as cmd from "../lib/commands";
 import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { runPackApply } from "../lib/packApply";
@@ -384,7 +385,7 @@ export default function ModpackList({ gameId }: Props) {
             </Button>
             <p className="text-center font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted">or drop one anywhere, or paste a link</p>
             <div className="flex gap-2">
-              <Input wrapperClassName="flex-1 min-w-0" value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
+              <Input wrapperClassName="flex-1 min-w-0" value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="Paste a pack link (synccrate.app/open/… or synccrate://…)" aria-label="Pack link" mono />
               <Button onClick={handleImportLink} disabled={!linkInput.trim()} icon={<Link2 size={12} />}>
                 Load
               </Button>
@@ -427,12 +428,17 @@ export default function ModpackList({ gameId }: Props) {
               {(comparison.missing.length > 0 || comparison.different.length > 0) && (
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   {comparison.missing.length > 0 && (
-                    <FileGroupBox title="Missing" tone="red" entries={comparison.missing} />
+                    <FileGroupBox title="Missing" tone="red" entries={comparison.missing} showLinks />
                   )}
                   {comparison.different.length > 0 && (
-                    <FileGroupBox title="Different locally" tone="amber" entries={comparison.different} />
+                    <FileGroupBox title="Different locally" tone="amber" entries={comparison.different} showLinks />
                   )}
                 </div>
+              )}
+              {[...comparison.missing, ...comparison.different].some((f) => isHttps(f.url)) && (
+                <p className="text-[11px] text-txt-muted mt-2">
+                  The pack's author shares some of these as creator links: get them from the creator's page with <b>Open link</b>.
+                </p>
               )}
 
               {(comparison.missing.length > 0 || comparison.different.length > 0) && (
@@ -493,7 +499,7 @@ export default function ModpackList({ gameId }: Props) {
 
               {applyPreview.to_download.length + applyPreview.conflicts.length + applyPreview.to_enable.length + applyPreview.to_disable.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 mt-4">
-                  {applyPreview.to_download.length > 0 && <FileGroupBox title="Download" tone="neutral" entries={applyPreview.to_download} />}
+                  {applyPreview.to_download.length > 0 && <FileGroupBox title="Download" tone="neutral" entries={applyPreview.to_download} showLinks />}
                   {applyPreview.conflicts.length > 0 && <FileGroupBox title="Conflicts (you choose)" tone="amber" entries={applyPreview.conflicts} />}
                   {applyPreview.to_enable.length > 0 && <FileGroupBox title="Re-enable" tone="green" entries={applyPreview.to_enable} />}
                   {applyPreview.to_disable.length > 0 && <FileGroupBox title="Disable (not in the pack)" tone="amber" entries={applyPreview.to_disable} />}
@@ -565,7 +571,7 @@ export default function ModpackList({ gameId }: Props) {
   );
 }
 
-function FileGroupBox({ title, tone, entries }: { title: string; tone: "red" | "amber" | "green" | "neutral"; entries: PackFileStatus[] }) {
+function FileGroupBox({ title, tone, entries, showLinks = false }: { title: string; tone: "red" | "amber" | "green" | "neutral"; entries: PackFileStatus[]; showLinks?: boolean }) {
   const groups = groupByContentType(entries);
   return (
     <div className="bg-bg border border-border">
@@ -574,11 +580,26 @@ function FileGroupBox({ title, tone, entries }: { title: string; tone: "red" | "
         {groups.map(([type, files]) => (
           <div key={type}>
             <p className="font-mono text-[10px] uppercase tracking-[0.06em] text-txt-muted">{type} ({files.length})</p>
-            {files.slice(0, 20).map((f) => (
-              <p key={f.relative_path} className="text-[11px] text-txt-dim font-mono truncate pl-2">
-                {f.relative_path.split("/").pop()} <span className="text-txt-muted">· {formatBytes(f.size)}</span>
-              </p>
-            ))}
+            {files.slice(0, 20).map((f) =>
+              showLinks && isHttps(f.url) ? (
+                <div key={f.relative_path} className="flex items-center gap-2 pl-2">
+                  <p className="text-[11px] text-txt-dim font-mono truncate min-w-0 flex-1" title={f.label ? `${f.label} · ${f.url}` : f.url}>
+                    {f.relative_path.split("/").pop()} <span className="text-txt-muted">· {formatBytes(f.size)}</span>
+                  </p>
+                  <button
+                    className="shrink-0 inline-flex items-center gap-1 font-mono text-[10.5px] text-accent-light hover:text-neon"
+                    onClick={() => openCreatorLink(f.url)}
+                    aria-label={`Open the creator's page for ${f.relative_path.split("/").pop()}`}
+                  >
+                    <ExternalLink size={11} /> Open link
+                  </button>
+                </div>
+              ) : (
+                <p key={f.relative_path} className="text-[11px] text-txt-dim font-mono truncate pl-2">
+                  {f.relative_path.split("/").pop()} <span className="text-txt-muted">· {formatBytes(f.size)}</span>
+                </p>
+              ),
+            )}
             {files.length > 20 && <p className="text-[11px] text-txt-muted pl-2">…and {files.length - 20} more</p>}
           </div>
         ))}

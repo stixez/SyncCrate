@@ -4,7 +4,7 @@ import {
   ChevronRight, Folder, FolderTree, List, LayoutGrid, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift, SearchCheck,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { getGameDef } from "../lib/games";
+import { getGameDef, relFolder } from "../lib/games";
 import ModItem, { COL, ModIcon } from "./ModItem";
 import ModGrid, { type GridUnit } from "./ModGrid";
 import SaveItem from "./SaveItem";
@@ -19,12 +19,12 @@ import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
-import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
+import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, linkLookup, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
-import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
-import { clearModIconCache, metaLookup } from "../lib/modMeta";
+import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate, ModWarning, SourceLink } from "../lib/types";
+import { clearModIconCache, metaLookup, withCurseForge } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
 type View = "folders" | "flat" | "grid";
@@ -277,10 +277,36 @@ export default function ContentBrowser({ gameId }: Props) {
     cmd.getModMetadata(gameId).then((m) => { if (!cancelled) setModMetas(m); }).catch(() => {});
     return () => { cancelled = true; };
   }, [manifest, gameId, readOnly]);
-  const metaFor = useMemo(() => metaLookup(modMetas), [modMetas]);
   const updateReport = useAppStore((s) => s.modUpdates[gameId]);
+  // CurseForge's names and pictures (from Check for updates) live only while
+  // this page is open: their terms forbid keeping their data.
+  const allMetas = useMemo(() => withCurseForge(modMetas, updateReport?.metas), [modMetas, updateReport]);
+  useEffect(
+    () => () => {
+      useAppStore.getState().forgetCurseForge(gameId);
+      cmd.forgetCurseforgeResults().catch(() => {});
+      clearModIconCache();
+    },
+    [gameId],
+  );
+  const metaFor = useMemo(() => metaLookup(allMetas), [allMetas]);
+  // Mods this PC shares as a link to their creator instead of copying them.
+  const [sourceLinks, setSourceLinks] = useState<SourceLink[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    cmd.getSourceLinks(gameId).then((l) => { if (!cancelled) setSourceLinks(l); }).catch(() => { if (!cancelled) setSourceLinks([]); });
+    return () => { cancelled = true; };
+  }, [gameId]);
+  const linkFor = useMemo(() => linkLookup(sourceLinks), [sourceLinks]);
+  const isLinked = useCallback((path: string) => !!linkFor(path), [linkFor]);
   const updateFor = useMemo(() => {
     const byKey = new Map((updateReport?.updates ?? []).map((u) => [u.key, u]));
+    return (key?: string) => (key ? byKey.get(key) : undefined);
+  }, [updateReport]);
+  // Missing dependencies and jars for another setup, from the same check.
+  const warningsFor = useMemo(() => {
+    const byKey = new Map<string, ModWarning[]>();
+    for (const w of updateReport?.warnings ?? []) byKey.set(w.key, [...(byKey.get(w.key) ?? []), w]);
     return (key?: string) => (key ? byKey.get(key) : undefined);
   }, [updateReport]);
 
@@ -754,6 +780,7 @@ export default function ContentBrowser({ gameId }: Props) {
           group={g}
           meta={metaFor(g.dir)}
           update={updateFor(metaFor(g.dir)?.key)}
+          warnings={warningsFor(metaFor(g.dir)?.key)}
           open={!collapsed.has(g.dir)}
           onToggleOpen={() => toggleCollapsed(g.dir)}
           bulkMode={bulkMode && isModLike}
@@ -780,6 +807,7 @@ export default function ContentBrowser({ gameId }: Props) {
         gameId={gameId}
         meta={metaFor(p)}
         update={metaFor(p)?.is_file ? updateFor(metaFor(p)?.key) : undefined}
+        warnings={metaFor(p)?.is_file ? warningsFor(metaFor(p)?.key) : undefined}
         syncStatus={getSyncStatus(p)}
         tags={modTags[p]}
         onTagsChanged={handleTagsChanged}
@@ -794,6 +822,7 @@ export default function ContentBrowser({ gameId }: Props) {
         canToggle={canToggle}
         toggleBusy={!!busyPaths}
         onToggle={handleToggle}
+        linked={isLinked(p)}
       />
     );
   };
@@ -880,7 +909,7 @@ export default function ContentBrowser({ gameId }: Props) {
 
       {!readOnly && <CompatIssues gameId={gameId} />}
 
-      {!readOnly && isModLike && canCheckUpdates(modMetas) && <ModUpdates gameId={gameId} metas={modMetas} />}
+      {!readOnly && isModLike && canCheckUpdates(modMetas, gameId) && <ModUpdates gameId={gameId} metas={allMetas} />}
 
       {workshopMods > 0 && (
         <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>
@@ -1228,12 +1257,14 @@ export default function ContentBrowser({ gameId }: Props) {
             units={gridUnits}
             getSyncStatus={getSyncStatus}
             updateFor={updateFor}
+            warningsFor={warningsFor}
             outdatedPaths={outdated.paths}
             compatMap={compatMap}
             bulkMode={bulkMode && isModLike}
             selected={selected}
             onSelectPaths={selectPaths}
             onShowDetails={handleShowDetails}
+            isLinked={isLinked}
           />
         </div>
         ) : (
@@ -1296,9 +1327,14 @@ export default function ContentBrowser({ gameId }: Props) {
           file={detailFile}
           meta={metaFor(detailFile.relative_path)}
           update={updateFor(metaFor(detailFile.relative_path)?.key)}
+          warnings={warningsFor(metaFor(detailFile.relative_path)?.key)}
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
+          canLink={isModLike}
+          contentFolder={activeCt ? relFolder(activeCt) : ""}
+          link={linkFor(detailFile.relative_path)}
+          onLinksChanged={setSourceLinks}
           onClose={closeDetails}
         />
       )}
@@ -1333,6 +1369,7 @@ function FolderHeader({
   group,
   meta,
   update,
+  warnings,
   open,
   onToggleOpen,
   bulkMode,
@@ -1348,6 +1385,7 @@ function FolderHeader({
   group: Group;
   meta?: ModMeta;
   update?: ModUpdate;
+  warnings?: ModWarning[];
   open: boolean;
   onToggleOpen: () => void;
   bulkMode: boolean;
@@ -1409,6 +1447,11 @@ function FolderHeader({
             <span className="text-txt font-semibold">{folderMeta.name}</span>
             {folderMeta.version && <span className="font-mono text-[10.5px] text-txt-dim ml-1.5">v{folderMeta.version.replace(/^v/i, "")}</span>}
             {update && <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-neon ml-2" title={`Update available: ${update.latest}`}>update {update.latest}</span>}
+            {warnings && (
+              <span className="inline-flex align-[-2px] text-amber ml-2" title={warnings.map((w) => w.text).join("\n")} aria-label={warnings.map((w) => w.text).join(". ")}>
+                <AlertTriangle size={12} />
+              </span>
+            )}
             <span className="font-mono text-[11px] text-txt-muted ml-2">{group.dir}</span>
           </p>
         </>

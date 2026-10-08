@@ -1,5 +1,6 @@
 use crate::chat::ChatMessage;
 use crate::crews::{CrewHello, CrewWelcome};
+use crate::source_links::LinkedFile;
 use crate::state::{FileInfo, FileManifest, GameInfo};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -63,7 +64,15 @@ pub enum Message {
         features: Vec<String>,
     },
     ManifestRequest,
-    ManifestResponse { manifest: FileManifest },
+    ManifestResponse {
+        manifest: FileManifest,
+        /// Host files shared only as a link to their creator (0.8.5+),
+        /// left out of `manifest`. Omitted when empty; older clients ignore
+        /// the field and simply don't see those files, older hosts never
+        /// send it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        links: Vec<LinkedFile>,
+    },
     FileRequest { path: String },
     FileHeader { path: String, size: u64, hash: String },
     FileChunk {
@@ -164,7 +173,7 @@ pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), 
     let json = serde_json::to_vec(msg).map_err(|e| e.to_string())?;
     // The receiver also caps the file count: say so here instead of every
     // friend being dropped with "Manifest too large".
-    let too_many = matches!(msg, Message::ManifestResponse { manifest } if manifest.files.len() > MAX_MANIFEST_FILES);
+    let too_many = matches!(msg, Message::ManifestResponse { manifest, links } if manifest.files.len() + links.len() > MAX_MANIFEST_FILES);
     if json.len() > MAX_MESSAGE_SIZE || too_many {
         return Err(too_large_to_send(msg, json.len()));
     }
@@ -191,9 +200,9 @@ pub async fn send_message(stream: &mut PeerStream, msg: &Message) -> Result<(), 
 
 fn too_large_to_send(msg: &Message, bytes: usize) -> String {
     match msg {
-        Message::ManifestResponse { manifest } => format!(
+        Message::ManifestResponse { manifest, links } => format!(
             "Too many files to share in one session ({} files, {} MB of file list). Exclude some folders and try again.",
-            manifest.files.len(),
+            manifest.files.len() + links.len(),
             bytes / 1_000_000
         ),
         _ => format!("Message too large to send: {bytes} bytes (max {MAX_MESSAGE_SIZE})"),
@@ -240,11 +249,11 @@ async fn recv_message_raw(stream: &mut PeerStream, max: usize, step_timeout: Opt
     let msg: Message = serde_json::from_slice(&buf).map_err(|e| e.to_string())?;
 
     // Validate manifest size from untrusted peers
-    if let Message::ManifestResponse { ref manifest } = msg {
-        if manifest.files.len() > MAX_MANIFEST_FILES {
+    if let Message::ManifestResponse { ref manifest, ref links } = msg {
+        if manifest.files.len() + links.len() > MAX_MANIFEST_FILES {
             return Err(format!(
                 "Manifest too large: {} files (max {})",
-                manifest.files.len(),
+                manifest.files.len() + links.len(),
                 MAX_MANIFEST_FILES
             ));
         }
@@ -307,6 +316,35 @@ mod tests {
         let new = Message::ChatSync { since: 0, outgoing: vec![], synced_files: Some(5), sync_failed: Some(2) };
         let back: Message = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
         assert!(matches!(back, Message::ChatSync { synced_files: Some(5), sync_failed: Some(2), .. }));
+    }
+
+    #[test]
+    fn manifest_links_are_compatible_both_ways() {
+        // An older host's reply (no `links`) parses on a new client.
+        let old = r#"{"ManifestResponse":{"manifest":{"files":{},"generated_at":1}}}"#;
+        assert!(matches!(serde_json::from_str::<Message>(old).unwrap(), Message::ManifestResponse { links, .. } if links.is_empty()));
+
+        // Without links the reply is byte-for-byte what older hosts sent.
+        let plain = Message::ManifestResponse { manifest: FileManifest::default(), links: vec![] };
+        assert!(!serde_json::to_string(&plain).unwrap().contains("links"));
+
+        // A new reply with links parses into the struct...
+        let link = LinkedFile { path: "Mods/a.package".into(), size: 3, hash: "h".into(), url: "https://c.example".into(), label: Some("A".into()) };
+        let new = Message::ManifestResponse { manifest: FileManifest::default(), links: vec![link.clone()] };
+        let json = serde_json::to_string(&new).unwrap();
+        match serde_json::from_str::<Message>(&json).unwrap() {
+            Message::ManifestResponse { links, .. } => assert_eq!(links, vec![link]),
+            _ => panic!("expected ManifestResponse"),
+        }
+
+        // ...and an older client (whose variant had only `manifest`, no
+        // deny_unknown_fields) still reads it.
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        enum OldMessage {
+            ManifestResponse { manifest: FileManifest },
+        }
+        assert!(matches!(serde_json::from_str::<OldMessage>(&json).unwrap(), OldMessage::ManifestResponse { .. }));
     }
 
     #[test]

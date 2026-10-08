@@ -60,9 +60,12 @@ interface AppState {
   /** Bumped on the backend's offers-updated / offer-updated events. */
   offersVersion: number;
   bumpOffersVersion: () => void;
-  /** Last "Check for updates" result per game (kept while the app runs). */
+  /** Last "Check for updates" result per game (kept while the app runs,
+   * except CurseForge's part: see `forgetCurseForge`). */
   modUpdates: Record<string, UpdateReport>;
   setModUpdates: (game: string, report: UpdateReport) => void;
+  /** CurseForge's terms forbid keeping their data, so it goes when the Content page closes. */
+  forgetCurseForge: (game: string) => void;
 
   // Currently selected game in sidebar (drives Dashboard/Content/Profiles/Backups views)
   selectedGame: string | null;
@@ -185,6 +188,10 @@ interface AppState {
   /** Join code from a clicked invite link; the dashboard fills its join box. */
   pendingJoinCode: string | null;
   setPendingJoinCode: (code: string | null) => void;
+  /** What the first run asked for, done once by the dashboard it opens:
+   * point at Start Hosting, or join with the pasted code. */
+  firstRunIntent: { kind: "host" } | { kind: "join"; code: string } | null;
+  setFirstRunIntent: (intent: { kind: "host" } | { kind: "join"; code: string } | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -266,6 +273,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   bumpOffersVersion: () => set((s) => ({ offersVersion: s.offersVersion + 1 })),
   modUpdates: {},
   setModUpdates: (game, report) => set((s) => ({ modUpdates: { ...s.modUpdates, [game]: report } })),
+  forgetCurseForge: (game) =>
+    set((s) => {
+      const r = s.modUpdates[game];
+      if (!r || (!r.metas?.length && !r.warnings?.length && !r.updates.some((u) => u.source === "curseforge"))) return {};
+      const updates = r.updates.filter((u) => u.source !== "curseforge");
+      return { modUpdates: { ...s.modUpdates, [game]: { ...r, updates, metas: [], warnings: [] } } };
+    }),
 
   selectedGame: null,
   setSelectedGame: (game) => set({ selectedGame: game }),
@@ -372,6 +386,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPendingPackApply: (pendingPackApply) => set({ pendingPackApply }),
   pendingJoinCode: null,
   setPendingJoinCode: (pendingJoinCode) => set({ pendingJoinCode }),
+  firstRunIntent: null,
+  setFirstRunIntent: (firstRunIntent) => set({ firstRunIntent }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

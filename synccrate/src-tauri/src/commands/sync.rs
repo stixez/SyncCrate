@@ -211,6 +211,7 @@ pub(crate) async fn plan_for_peer(
             content_types,
             host_game: conn.info.game_id.clone(),
             remote,
+            links: conn.remote_links.clone(),
             local: app_state.local_manifest.clone(),
             permissions: app_state.folder_permissions.clone(),
             shared_saves: crate::handoff::shared_units(app_state.crews.crews.iter(), &app_state.active_game),
@@ -229,6 +230,8 @@ struct PlanInputs {
     content_types: Vec<crate::registry::ContentType>,
     host_game: Option<String>,
     remote: crate::state::FileManifest,
+    /// Host files shared only as a link to their creator.
+    links: Vec<crate::source_links::LinkedFile>,
     local: crate::state::FileManifest,
     permissions: crate::state::SyncFolderPermissions,
     /// Saves the crew takes turns on: they only move by take and give.
@@ -237,7 +240,7 @@ struct PlanInputs {
 
 /// The sync plan for a snapshot (no locks; runs on a blocking thread).
 fn build_plan(input: PlanInputs) -> SyncPlan {
-    let PlanInputs { resolved_id, active_game, base_path, content_types, host_game, mut remote, mut local, permissions, shared_saves } = input;
+    let PlanInputs { resolved_id, active_game, base_path, content_types, host_game, mut remote, links, mut local, permissions, shared_saves } = input;
     // A shared save's host copy is often older than the holder's: "use
     // theirs" here would overwrite the newer game.
     if !shared_saves.is_empty() {
@@ -263,6 +266,13 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
     }
 
     let mut plan = diff::compute_diff(&local, &remote);
+    let mut links = diff::accepted_links(&links, &content_types);
+    // A content type the friend chose not to sync isn't offered as links either.
+    links.retain(|l| {
+        permissions.is_empty()
+            || diff::content_type_for(&content_types, &l.path).map_or(true, |(ct, _)| crate::state::is_file_allowed(&permissions, &ct.id))
+    });
+    diff::apply_source_links(&mut plan, &links, &local);
     plan.delete_hashes = plan
         .actions
         .iter()
@@ -1973,7 +1983,10 @@ pub async fn get_transfer_speed_limit() -> Result<u64, String> {
 pub async fn set_transfer_speed_limit(limit: u64) -> Result<(), String> {
     update_sync_config(|config| {
         config.transfer_speed_limit = limit;
-    })
+    })?;
+    // Applies to the next chunk of every running upload, not just new ones.
+    crate::network::limiter::set_rate(limit);
+    Ok(())
 }
 
 #[tauri::command]

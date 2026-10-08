@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { toastError, toastErrorAction, toastInfo, toastSuccess } from "../lib/toast";
+import { copyDiagnostics } from "../lib/diagnostics";
 import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
@@ -31,12 +32,15 @@ export function useSync() {
       useAppStore.getState().setPendingPackApply(null);
       setSyncPlan(plan);
       const count = plan.actions.length;
+      const linked = plan.source_links?.length ?? 0;
       if (plan.warning) {
         // e.g. an older host that seems to share a different game
         addLog(plan.warning, "warning");
         toastError(plan.warning);
       } else if (count > 0) {
         toastSuccess(`Found ${plural(count, "difference")} to sync`);
+      } else if (linked > 0) {
+        toastSuccess(`Nothing to download. Get ${plural(linked, "mod")} from the creator.`);
       } else {
         toastSuccess("Everything is in sync");
       }
@@ -79,7 +83,7 @@ export function useSync() {
         // session is gone and that report never comes.
       } else {
         addLog(`Sync failed: ${e}`, "error");
-        toastError(`Sync failed: ${e}`);
+        toastErrorAction(`Sync failed: ${e}`, "Copy diagnostics", () => { copyDiagnostics(); });
       }
     } finally {
       setIsLoading(false);

@@ -5,6 +5,7 @@
       "id": "sims4",
       "duplicate_finder": true,
       "label": "The Sims 4",
+      "curseforge": { "game": "sims4" },
       "install_markers": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"],
       "family": "sims",
       "icon": "gamepad-2",
@@ -529,6 +530,7 @@
     {
       "id": "wow_retail",
       "label": "WoW Retail",
+      "curseforge": { "game": "wow", "flavor": "retail" },
       "install_names": ["World of Warcraft"],
       "install_markers": ["Wow.exe"],
       "family": "wow",
@@ -603,6 +605,7 @@
     {
       "id": "wow_classic",
       "label": "WoW Classic",
+      "curseforge": { "game": "wow", "flavor": "classic" },
       "install_names": ["World of Warcraft Classic"],
       "install_markers": ["WowClassic.exe"],
       "family": "wow",
@@ -675,6 +678,7 @@
     {
       "id": "wow_classic_era",
       "label": "WoW Classic Era",
+      "curseforge": { "game": "wow", "flavor": "classic_era" },
       "install_markers": ["WowClassic.exe"],
       "family": "wow",
       "icon": "swords",
@@ -740,6 +744,86 @@
         }
       },
       "process_names": ["WowClassic.exe", "World of Warcraft Classic"]
+    },
+    {
+      "id": "wow_forever",
+      "label": "WoW Forever",
+      "curseforge": { "game": "wow", "flavor": "forever" },
+      "process_names": ["WowForever.exe", "WowForeverB.exe", "WowForeverT.exe", "World of Warcraft Forever"],
+      "family": "wow",
+      "icon": "swords",
+      "color": "text-purple-400",
+      "primary_color": "#c084fc",
+      "genres": ["mmo", "rpg"],
+      "art_urls": {
+        "hero": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/bltb5a24e5ab1e2cfb0/6a88e3589b942efdb6f74110/wow-thumbnail-homepage.jpg"
+      },
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "absolute_paths",
+            "paths": {
+              "windows": [
+                "C:\\Program Files (x86)\\World of Warcraft\\_forever_",
+                "C:\\Program Files\\World of Warcraft\\_forever_",
+                "D:\\World of Warcraft\\_forever_",
+                "D:\\Games\\World of Warcraft\\_forever_",
+                "E:\\World of Warcraft\\_forever_",
+                "E:\\Games\\World of Warcraft\\_forever_",
+                "F:\\World of Warcraft\\_forever_",
+                "F:\\Games\\World of Warcraft\\_forever_",
+                "C:\\Program Files (x86)\\World of Warcraft\\_forever_beta_",
+                "C:\\Program Files\\World of Warcraft\\_forever_beta_",
+                "D:\\World of Warcraft\\_forever_beta_",
+                "D:\\Games\\World of Warcraft\\_forever_beta_",
+                "E:\\World of Warcraft\\_forever_beta_",
+                "E:\\Games\\World of Warcraft\\_forever_beta_",
+                "F:\\World of Warcraft\\_forever_beta_",
+                "F:\\Games\\World of Warcraft\\_forever_beta_"
+              ],
+              "macos": ["/Applications/World of Warcraft/_forever_", "/Applications/World of Warcraft/_forever_beta_"],
+              "linux": []
+            }
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": ["Interface"]
+      },
+      "content_types": [
+        {
+          "id": "addons",
+          "label": "Addons",
+          "icon": "package",
+          "color": "text-purple-400",
+          "folder": "Interface/AddOns",
+          "extensions": ["lua", "xml", "toc", "tga", "blp", "mp3", "ogg", "ttf", "txt"],
+          "file_type": "Addon",
+          "syncable": true
+        },
+        {
+          "id": "addon_settings",
+          "label": "Addon Settings",
+          "icon": "settings",
+          "color": "text-status-green",
+          "folder": "WTF",
+          "extensions": [],
+          "file_type": "AddonSettings",
+          "classify_by_extension": {
+            "lua": "AddonSettings"
+          },
+          "syncable": true,
+          "exclude_files": ["Config.wtf"]
+        }
+      ],
+      "dangerous_script_extensions": ["lua"],
+      "path_correction": {
+        "known_subfolders": ["Interface", "AddOns", "WTF"],
+        "nested_corrections": {
+          "AddOns": 2
+        }
+      }
     },
     {
       "id": "wow_wotlk",
@@ -1026,6 +1110,7 @@
     {
       "id": "minecraft_java",
       "label": "Minecraft Java",
+      "curseforge": { "game": "minecraft_java" },
       "install_names": ["Minecraft Launcher"],
       "install_markers": ["%LOCALAPPDATA%/Packages/Microsoft.4297127D64EC6_8wekyb3d8bbwe", "%ProgramFiles(x86)%/Minecraft Launcher/MinecraftLauncher.exe", "%ProgramFiles(x86)%/Minecraft/MinecraftLauncher.exe"],
       "family": "minecraft",

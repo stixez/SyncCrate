@@ -143,6 +143,22 @@ export interface SyncPlan {
   notice?: string | null;
   /** Pack files (by path) the host doesn't have with the pack's exact hash. Only set on a pack sync plan. */
   pack_unavailable?: string[];
+  /** Host files shared only as a link to their creator that you lack or have in another version. Never downloaded. */
+  source_links?: SourceLinkItem[];
+}
+
+/** Host side of "Share as a link": a file, or a folder covering every file under it. */
+export interface SourceLink {
+  prefix: string;
+  url: string;
+  label?: string | null;
+}
+
+export interface SourceLinkItem {
+  path: string;
+  url: string;
+  label?: string | null;
+  status: "missing" | "different";
 }
 
 // --- Modpacks ---
@@ -151,6 +167,9 @@ export interface PackFile {
   relative_path: string;
   size: number;
   hash: string;
+  /** The creator's page, for a file the pack's author shares only as a link. */
+  url?: string | null;
+  label?: string | null;
 }
 
 export interface PackJoin {
@@ -170,7 +189,7 @@ export interface ModPack {
   files: PackFile[];
 }
 
-/** What a clicked `synccrate://` link or opened `.scpack` file asked for
+/** What a clicked `synccrate://` (or synccrate.app/open/) link or opened `.scpack` file asked for
  * (validated by the backend; see `commands/open_intent.rs`). */
 /** Mod info read from metadata files mods ship (src-tauri/src/mod_meta.rs). */
 export interface ModMeta {
@@ -189,6 +208,8 @@ export interface ModMeta {
   items?: number | null;
   /** `name` was made from the file name, so don't show both. */
   derived_name: boolean;
+  /** Some of this came from CurseForge (shown with "Info from CurseForge"). */
+  curseforge?: boolean;
 }
 
 /** A previous version of a synced file (src-tauri/src/commands/history.rs). */
@@ -274,18 +295,34 @@ export interface SharedSavesView {
 export interface ModUpdate {
   /** ModMeta.key of the mod. */
   key: string;
-  /** "modrinth" | "thunderstore" | "smapi" */
+  /** "modrinth" | "thunderstore" | "smapi" | "curseforge" */
   source: string;
   current?: string | null;
   latest: string;
   url?: string | null;
   deprecated?: boolean;
+  /** The new version's own page with its changelog ("What's new"). */
+  changelog?: string | null;
+}
+
+/** A missing dependency, or a Minecraft jar for another version or loader than the rest. */
+export interface ModWarning {
+  /** ModMeta.key of the mod. */
+  key: string;
+  kind: "missing_dependency" | "game_version" | "loader";
+  text: string;
+  /** The missing dependency's page. */
+  url?: string | null;
 }
 
 export interface UpdateReport {
   updates: ModUpdate[];
   checked: number;
   errors: string[];
+  /** CurseForge's info for the files it recognized; replaces those files' own entries by key. */
+  metas?: ModMeta[];
+  /** From CurseForge's answer, so dropped with it. */
+  warnings?: ModWarning[];
 }
 
 /** Friends offering files to the host (src-tauri/src/offers.rs). */
@@ -396,6 +433,9 @@ export interface PackFileStatus {
   relative_path: string;
   size: number;
   content_type?: string | null;
+  /** The pack author's creator link for this file (https only). */
+  url?: string | null;
+  label?: string | null;
 }
 
 export interface PackComparison {
@@ -618,6 +658,14 @@ export interface GameDefinition {
   post_sync_delete?: string[];
   install_names?: string[];
   install_markers?: string[];
+  /** How CurseForge knows this game, when "Check for updates" looks its mods up there. */
+  curseforge?: CurseForgeSupport;
+}
+
+/** Backend `registry::CurseForgeSupport`: the proxy's game key and, for WoW, the client's flavour. */
+export interface CurseForgeSupport {
+  game: string;
+  flavor?: string;
 }
 
 export interface DetectionConfig {

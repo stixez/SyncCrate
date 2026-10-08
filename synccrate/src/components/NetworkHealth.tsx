@@ -5,6 +5,7 @@ import type { ConnectionTestResult, FirewallStatus, NetworkDiagnostics } from ".
 import { toastError, toastSuccess } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import { Button, Input, Panel } from "./ui";
+import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
 
 /** True when the firewall is known to be blocking (or not allowing) inbound connections. */
 export function firewallNeedsFix(fw: FirewallStatus | null): boolean {
@@ -111,7 +112,13 @@ export default function NetworkHealth() {
   const realInterfaces = diag?.interfaces.filter((i) => !i.is_virtual) ?? [];
 
   return (
-    <Panel label="// Diagnostics" title="Network check" icon={<Network size={15} className="text-neon" />} bodyClassName="space-y-4">
+    <Panel
+      label="// Diagnostics"
+      title="Network check"
+      icon={<Network size={15} className="text-neon" />}
+      actions={<CopyDiagnosticsButton />}
+      bodyClassName="space-y-4"
+    >
       <FirewallCheck />
 
       {diag && (

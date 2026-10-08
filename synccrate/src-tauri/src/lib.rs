@@ -6,8 +6,11 @@ mod event_sink;
 mod game_install;
 mod handoff;
 mod network;
+mod discord;
+mod curseforge;
 mod mod_meta;
 mod sims_package;
+mod source_links;
 mod mod_updates;
 mod offers;
 mod packs;
@@ -38,6 +41,8 @@ mod stay_in_sync_e2e_tests;
 mod handoff_e2e_tests;
 #[cfg(test)]
 mod extra_folders_e2e_tests;
+#[cfg(test)]
+mod source_links_e2e_tests;
 
 use state::AppState;
 use std::sync::Arc;
@@ -152,7 +157,7 @@ pub fn run() {
                 "skyrim_le", "xcom2", "american_truck_simulator", "slay_the_spire",
                 "hollow_knight", "oxygen_not_included", "victoria_3",
                 "mount_blade_warband", "dont_starve", "vintage_story", "morrowind",
-                "sims2", "warcraft3", "wow_classic_era",
+                "sims2", "warcraft3", "wow_classic_era", "wow_forever",
                 "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom",
             ];
             for g in &priority {
@@ -503,11 +508,15 @@ pub fn run() {
             commands::mod_info::get_mod_metadata,
             commands::mod_info::get_mod_icon,
             commands::mod_info::check_mod_updates,
+            commands::mod_info::forget_curseforge_results,
             commands::offers::offer_files,
             commands::offers::cancel_offer,
             commands::offers::get_outgoing_offer,
             commands::offers::get_incoming_offers,
             commands::offers::decide_offer,
+            commands::source_links::get_source_links,
+            commands::source_links::set_source_link,
+            commands::source_links::remove_source_link,
             commands::history::list_file_history,
             commands::backup::storage_usage,
             commands::backup::clear_file_history,
@@ -534,6 +543,7 @@ pub fn run() {
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,
+            discord::set_discord_presence,
             commands::system::get_firewall_status,
             commands::system::fix_firewall,
             commands::system::is_elevated,
@@ -542,6 +552,7 @@ pub fn run() {
             commands::system::check_game_path_writable,
             commands::system::get_network_diagnostics,
             commands::system::test_connection,
+            commands::diagnostics::diagnostics_report,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

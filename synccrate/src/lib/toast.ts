@@ -30,6 +30,16 @@ export function toastAction(
   show(message, { action: { label: actionLabel, onClick: onAction }, duration: opts.duration });
 }
 
+/** An error toast (same friendly wording as `toastError`) with one action,
+ * e.g. "Copy diagnostics" after a failed connection. */
+export function toastErrorAction(message: string, actionLabel: string, onAction: () => void) {
+  const i = message.indexOf(": ");
+  const tail = i > 0 && i < 80 ? message.slice(i + 2) : message;
+  const friendly = friendlyError(tail);
+  const text = friendly === tail ? message : i > 0 && i < 80 ? `${message.slice(0, i)}: ${friendly}` : friendly;
+  toast.error(text, { action: { label: actionLabel, onClick: onAction }, duration: 10000 });
+}
+
 /** For messages that point at the Activity log: a button that opens it. */
 export function toastWithLog(message: string, tone: "info" | "error" = "info") {
   toastAction(message, "View log", () => useAppStore.getState().navigateToGlobal("activity"), { tone, duration: 8000 });
