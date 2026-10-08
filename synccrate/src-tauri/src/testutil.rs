@@ -414,6 +414,8 @@ pub(crate) fn test_pack(game_id: &str, files: &[(&str, &[u8])]) -> crate::state:
                 relative_path: path.to_string(),
                 size: content.len() as u64,
                 hash: sha256_hex(content),
+                url: None,
+                label: None,
             })
             .collect(),
     }

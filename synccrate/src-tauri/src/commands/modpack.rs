@@ -80,8 +80,39 @@ pub(crate) fn validate_pack(pack: &ModPack) -> Result<(), String> {
         if !is_valid_hash(&f.hash) {
             return Err(format!("Invalid hash in pack for {}", f.relative_path));
         }
+        // Imports clean links first (`clean_pack_links`), so anything unclean
+        // here was handed back altered: refuse rather than open it later.
+        let url_ok = f.url.as_ref().is_none_or(|u| crate::source_links::validate_url(u).as_ref() == Ok(u));
+        let label_ok = f.label.is_none() || (f.url.is_some() && crate::source_links::clean_label(f.label.as_deref()) == f.label);
+        if !url_ok || !label_ok {
+            return Err(format!("Invalid creator link in pack for {}", f.relative_path));
+        }
     }
     Ok(())
+}
+
+/// A pack's creator links come from whoever made the pack and open in the
+/// browser on one click: same rules as a host's own links (https only,
+/// short single-line label). A bad link is dropped, not the whole pack.
+pub(crate) fn clean_pack_links(pack: &mut ModPack) {
+    for f in &mut pack.files {
+        f.url = f.url.as_deref().and_then(|u| crate::source_links::validate_url(u).ok());
+        f.label = if f.url.is_some() { crate::source_links::clean_label(f.label.as_deref()) } else { None };
+    }
+}
+
+/// Fill in the creator link for every file the host shares as a link, with
+/// the same matching as the host's own manifest (`source_links::link_for`).
+fn attach_source_links(files: &mut [PackFile], links: &[crate::source_links::SourceLink]) {
+    if links.is_empty() {
+        return;
+    }
+    for f in files {
+        if let Some(l) = crate::source_links::link_for(links, &f.relative_path) {
+            f.url = Some(l.url.clone());
+            f.label = l.label.clone();
+        }
+    }
 }
 
 #[tauri::command]
@@ -124,6 +155,12 @@ pub(crate) async fn create_pack_inner(
         }
     };
     let manifest = crate::commands::files::scan_files_inner(state, Some(target_game.clone()), true).await?;
+    // Unreadable links only cost the pack its creator links; the files are
+    // listed either way.
+    let links = crate::source_links::load(&target_game).unwrap_or_else(|e| {
+        log::warn!("Pack export without creator links: {e}");
+        Vec::new()
+    });
 
     let app_state = state.lock().await;
     let cts = get_game_def(&app_state.game_registry, &target_game)
@@ -148,7 +185,7 @@ pub(crate) async fn create_pack_inner(
         if let Some(id) = crate::state::content_id_for_file(&f.relative_path, &f.file_type, &cts) {
             included_types.insert(id);
         }
-        files.push(PackFile { relative_path: f.relative_path.clone(), size: f.size, hash: f.hash.clone() });
+        files.push(PackFile { relative_path: f.relative_path.clone(), size: f.size, hash: f.hash.clone(), url: None, label: None });
     }
     if files.is_empty() {
         return Err("Nothing matches that selection. Pick at least one file or content type.".to_string());
@@ -157,6 +194,7 @@ pub(crate) async fn create_pack_inner(
         return Err(format!("Too many files for a pack (>{MAX_PACK_FILES}). Narrow the selection."));
     }
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    attach_source_links(&mut files, &links);
 
     let is_host = app_state.session_type == crate::state::SessionType::Host;
     drop(app_state);
@@ -201,8 +239,9 @@ pub async fn save_pack(pack: ModPack, dest: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Base64 of the pack's compact JSON, for pasting or a `synccrate://pack/`
-/// deep link. Refused above `MAX_LINK_BYTES` — file export has no such cap.
+/// Base64 of the pack's compact JSON as a web link
+/// (`https://synccrate.app/open/#pack/...`, see `open_intent::web_link`).
+/// Refused above `MAX_LINK_BYTES` — file export has no such cap.
 #[tauri::command]
 pub async fn pack_to_link(pack: ModPack) -> Result<String, String> {
     validate_pack(&pack)?;
@@ -220,7 +259,7 @@ pub async fn pack_to_link(pack: ModPack) -> Result<String, String> {
             MAX_LINK_BYTES / 1024
         ));
     }
-    Ok(format!("{LINK_PREFIX}{encoded}"))
+    Ok(crate::commands::open_intent::web_link(&format!("{LINK_PREFIX}{encoded}")))
 }
 
 #[tauri::command]
@@ -236,7 +275,8 @@ pub(crate) fn read_pack_file(path: &std::path::Path) -> Result<ModPack, String> 
         return Err("That file is too big to be a SyncCrate pack.".to_string());
     }
     let data = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let pack: ModPack = serde_json::from_str(&data).map_err(|e| format!("Not a valid pack: {}", e))?;
+    let mut pack: ModPack = serde_json::from_str(&data).map_err(|e| format!("Not a valid pack: {}", e))?;
+    clean_pack_links(&mut pack);
     validate_pack(&pack)?;
     Ok(pack)
 }
@@ -262,7 +302,8 @@ pub(crate) fn decode_pack_payload(encoded: &str) -> Result<ModPack, String> {
     }
     let engine = if encoded.contains(['+', '/']) { &STANDARD_NO_PAD } else { &URL_SAFE_NO_PAD };
     let bytes = engine.decode(encoded).map_err(|_| "Not a valid pack link".to_string())?;
-    let pack: ModPack = serde_json::from_slice(&bytes).map_err(|e| format!("Not a valid pack: {}", e))?;
+    let mut pack: ModPack = serde_json::from_slice(&bytes).map_err(|e| format!("Not a valid pack: {}", e))?;
+    clean_pack_links(&mut pack);
     validate_pack(&pack)?;
     Ok(pack)
 }
@@ -272,6 +313,11 @@ pub struct PackFileStatus {
     pub relative_path: String,
     pub size: u64,
     pub content_type: Option<String>,
+    /// The pack author's creator link for this file (`PackFile::url`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -317,8 +363,16 @@ pub(crate) fn compare_pack_to_local(pack: &ModPack, local: &FileManifest, cts: &
                 have += 1;
                 have_bytes += pf.size;
             }
-            Some(_) => different.push(PackFileStatus { relative_path: pf.relative_path.clone(), size: pf.size, content_type }),
-            None => missing.push(PackFileStatus { relative_path: pf.relative_path.clone(), size: pf.size, content_type }),
+            found => {
+                let status = PackFileStatus {
+                    relative_path: pf.relative_path.clone(),
+                    size: pf.size,
+                    content_type,
+                    url: pf.url.clone(),
+                    label: pf.label.clone(),
+                };
+                if found.is_some() { different.push(status) } else { missing.push(status) }
+            }
         }
     }
     PackComparison {
@@ -357,6 +411,33 @@ pub(crate) async fn compare_pack_inner(state: &Arc<Mutex<AppState>>, pack: ModPa
     let app_state = state.lock().await;
     let cts = get_game_def(&app_state.game_registry, &active_game).map(|d| d.content_types.clone()).unwrap_or_default();
     Ok(compare_pack_to_local(&pack, &manifest, &cts))
+}
+
+/// Pack files this host can't send but the pack's author shares as creator
+/// links: they become "get it from the creator" rows too, so the pack still
+/// points at the right page when the host isn't its author. The host's own
+/// links win; a file the host does send is downloaded as usual.
+pub(crate) fn pack_creator_links(
+    in_scope: &[PackFile],
+    unavailable: &[String],
+    host_links: &[crate::source_links::LinkedFile],
+) -> Vec<crate::source_links::LinkedFile> {
+    let unavailable: std::collections::HashSet<String> = unavailable.iter().map(|p| match_key(p)).collect();
+    let host: std::collections::HashSet<String> = host_links.iter().map(|l| match_key(&l.path)).collect();
+    in_scope
+        .iter()
+        .filter_map(|pf| {
+            let url = crate::source_links::validate_url(pf.url.as_deref()?).ok()?;
+            let key = match_key(&pf.relative_path);
+            (unavailable.contains(&key) && !host.contains(&key)).then(|| crate::source_links::LinkedFile {
+                path: pf.relative_path.clone(),
+                size: pf.size,
+                hash: pf.hash.clone(),
+                url,
+                label: crate::source_links::clean_label(pf.label.as_deref()),
+            })
+        })
+        .collect()
 }
 
 /// Filter the pack down to what the connected host can actually serve (via
@@ -415,10 +496,11 @@ pub(crate) async fn compute_pack_sync_plan_inner(
     // Pack files the host shares only as a link: "get it from the creator",
     // not "this host doesn't have it". Links for files outside the pack stay out.
     let pack_keys: std::collections::HashSet<String> = in_scope.iter().map(|pf| crate::sync::diff::match_key(&pf.relative_path)).collect();
-    let links: Vec<_> = crate::sync::diff::accepted_links(&conn.remote_links, &cts)
+    let mut links: Vec<_> = crate::sync::diff::accepted_links(&conn.remote_links, &cts)
         .into_iter()
         .filter(|l| pack_keys.contains(&crate::sync::diff::match_key(&l.path)))
         .collect();
+    links.extend(pack_creator_links(&in_scope, &unavailable, &links));
     if !links.is_empty() {
         let linked: std::collections::HashSet<String> = links.iter().map(|l| crate::sync::diff::match_key(&l.path)).collect();
         unavailable.retain(|p| !linked.contains(&crate::sync::diff::match_key(p)));
@@ -460,7 +542,7 @@ mod tests {
             created_at: 0,
             content_types: vec![],
             join: None,
-            files: files.iter().map(|(p, h)| PackFile { relative_path: p.to_string(), size: 1, hash: h.to_string() }).collect(),
+            files: files.iter().map(|(p, h)| PackFile { relative_path: p.to_string(), size: 1, hash: h.to_string(), url: None, label: None }).collect(),
         }
     }
 
@@ -573,5 +655,87 @@ mod tests {
         let cmp = compare_pack_to_local(&p, &local, &[]);
         assert_eq!(cmp.have, 1);
         assert!(cmp.missing.is_empty() && cmp.different.is_empty());
+    }
+
+    #[tokio::test]
+    async fn pack_links_are_web_links_that_import_again() {
+        let link = pack_to_link(pack(&[("Mods/a.package", H)])).await.unwrap();
+        assert!(link.starts_with("https://synccrate.app/open/#pack/"), "{link}");
+        assert_eq!(load_pack_link(link).await.unwrap().files[0].relative_path, "Mods/a.package");
+        let files: Vec<(String, String)> = (0..400).map(|i| (format!("Mods/some long folder name/{i}.package"), H.to_string())).collect();
+        let refs: Vec<(&str, &str)> = files.iter().map(|(p, h)| (p.as_str(), h.as_str())).collect();
+        assert!(pack_to_link(pack(&refs)).await.unwrap_err().contains("too big for a text link"));
+    }
+
+    #[test]
+    fn packs_without_links_serialize_as_before() {
+        let json = serde_json::to_string(&pack(&[("Mods/a.package", H)])).unwrap();
+        assert!(!json.contains("\"url\"") && !json.contains("\"label\""), "{json}");
+    }
+
+    #[test]
+    fn export_attaches_the_hosts_creator_links() {
+        let mut p = pack(&[("Mods/Creator/a.package", H), ("Mods/free.package", H), ("Mods/solo.package.disabled", H)]);
+        let links = vec![
+            crate::source_links::SourceLink { prefix: "mods/creator".into(), url: "https://c.example".into(), label: Some("Creator".into()) },
+            crate::source_links::SourceLink { prefix: "Mods/solo.package".into(), url: "https://s.example".into(), label: None },
+        ];
+        attach_source_links(&mut p.files, &links);
+        let got: Vec<Option<&str>> = p.files.iter().map(|f| f.url.as_deref()).collect();
+        assert_eq!(got, [Some("https://c.example"), None, Some("https://s.example")]);
+        assert_eq!(p.files[0].label.as_deref(), Some("Creator"));
+        assert!(validate_pack(&p).is_ok());
+    }
+
+    #[test]
+    fn imported_creator_links_are_cleaned_and_checked() {
+        let mut p = pack(&[("Mods/a.package", H), ("Mods/b.package", H), ("Mods/c.package", H), ("Mods/d.package", H)]);
+        p.files[0].url = Some(" https://ok.example/a ".into());
+        p.files[0].label = Some("  Anna\u{202E}'s hair \n".into());
+        p.files[1].url = Some("http://plain.example".into());
+        p.files[1].label = Some("orphan".into());
+        p.files[2].url = Some("javascript:alert(1)".into());
+        p.files[3].label = Some("label without a link".into());
+        // As a file or a link: both import paths clean before validating.
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_string(&p).unwrap());
+        let imported = decode_pack_payload(&payload).unwrap();
+        assert_eq!(imported.files[0].url.as_deref(), Some("https://ok.example/a"));
+        assert_eq!(imported.files[0].label.as_deref(), Some("Anna's hair"));
+        assert!(imported.files[1..].iter().all(|f| f.url.is_none() && f.label.is_none()));
+
+        // Handed back unclean (not through an import): refused.
+        let mut bad = pack(&[("Mods/a.package", H)]);
+        bad.files[0].url = Some("http://plain.example".into());
+        assert!(validate_pack(&bad).unwrap_err().contains("creator link"));
+        bad.files[0].url = None;
+        bad.files[0].label = Some("x".into());
+        assert!(validate_pack(&bad).is_err());
+    }
+
+    #[test]
+    fn compare_and_plan_carry_the_packs_creator_links() {
+        let mut p = pack(&[("Mods/linked.package", H), ("Mods/plain.package", H), ("Mods/hostlinked.package", H), ("Mods/served.package", H)]);
+        for f in &mut p.files {
+            if f.relative_path != "Mods/plain.package" {
+                f.url = Some("https://creator.example".into());
+            }
+        }
+        let cmp = compare_pack_to_local(&p, &manifest(&[("Mods/linked.package", &"b".repeat(64))]), &[]);
+        assert_eq!(cmp.different[0].url.as_deref(), Some("https://creator.example"));
+        assert!(cmp.missing.iter().any(|m| m.relative_path == "Mods/plain.package" && m.url.is_none()));
+
+        // The host sends `served`, links `hostlinked` itself, and has neither of the others.
+        let unavailable: Vec<String> = ["Mods/linked.package", "Mods/plain.package", "Mods/hostlinked.package"].map(String::from).to_vec();
+        let host = vec![crate::source_links::LinkedFile {
+            path: "Mods/HostLinked.package".into(),
+            size: 1,
+            hash: H.into(),
+            url: "https://host.example".into(),
+            label: None,
+        }];
+        let links = pack_creator_links(&p.files, &unavailable, &host);
+        let paths: Vec<&str> = links.iter().map(|l| l.path.as_str()).collect();
+        assert_eq!(paths, ["Mods/linked.package"]);
+        assert_eq!(links[0].hash, H);
     }
 }

@@ -862,7 +862,7 @@ mod tests {
     }
 
     fn pf(path: &str, hash: &str) -> crate::state::PackFile {
-        crate::state::PackFile { relative_path: path.to_string(), size: 1000, hash: hash.to_string() }
+        crate::state::PackFile { relative_path: path.to_string(), size: 1000, hash: hash.to_string(), url: None, label: None }
     }
 
     #[test]

@@ -167,6 +167,9 @@ export interface PackFile {
   relative_path: string;
   size: number;
   hash: string;
+  /** The creator's page, for a file the pack's author shares only as a link. */
+  url?: string | null;
+  label?: string | null;
 }
 
 export interface PackJoin {
@@ -186,7 +189,7 @@ export interface ModPack {
   files: PackFile[];
 }
 
-/** What a clicked `synccrate://` link or opened `.scpack` file asked for
+/** What a clicked `synccrate://` (or synccrate.app/open/) link or opened `.scpack` file asked for
  * (validated by the backend; see `commands/open_intent.rs`). */
 /** Mod info read from metadata files mods ship (src-tauri/src/mod_meta.rs). */
 export interface ModMeta {
@@ -412,6 +415,9 @@ export interface PackFileStatus {
   relative_path: string;
   size: number;
   content_type?: string | null;
+  /** The pack author's creator link for this file (https only). */
+  url?: string | null;
+  label?: string | null;
 }
 
 export interface PackComparison {

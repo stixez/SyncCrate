@@ -9,7 +9,7 @@ import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
 import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
-import { formatBytes, plural } from "../lib/utils";
+import { formatBytes, plural, webLink } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
@@ -719,7 +719,7 @@ export default function GameDashboard({ gameId }: Props) {
   const copyInviteLink = () => {
     if (!hostJoinCode) return;
     const game = useAppStore.getState().activeGame;
-    navigator.clipboard.writeText(`synccrate://join/${hostJoinCode}?game=${encodeURIComponent(game)}`).then(() => {
+    navigator.clipboard.writeText(webLink(`join/${hostJoinCode}?game=${encodeURIComponent(game)}`)).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
     }, () => toastError("Couldn't copy to the clipboard. Select the code and copy it by hand."));
@@ -856,7 +856,7 @@ export default function GameDashboard({ gameId }: Props) {
                     variant="secondary"
                     onClick={copyInviteLink}
                     icon={inviteCopied ? <Check size={12} /> : <Link2 size={12} />}
-                    title="A synccrate:// link that opens SyncCrate with this code filled in"
+                    title="A link friends can click: it opens SyncCrate with this code filled in"
                   >
                     {inviteCopied ? "Copied" : "Copy invite link"}
                   </Button>

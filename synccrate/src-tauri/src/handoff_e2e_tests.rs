@@ -45,7 +45,7 @@ async fn a_crew_takes_turns_on_a_save_iroh() {
         let s = host_state.lock().await;
         crews::encode_invite(s.crews.get(&c.id).unwrap(), s.local_node_id.as_deref().unwrap(), "Host").unwrap()
     };
-    let invite = crews::decode_invite(link.strip_prefix(crews::INVITE_PREFIX).unwrap(), |g| g == "sims4").unwrap();
+    let invite = crews::decode_invite(crews::invite_payload(&link), |g| g == "sims4").unwrap();
     crew::join_crew_inner(&client_state, invite, "Ann").await.expect("join");
     set_host(&host_state, "Host").await;
     crate::commands::files::scan_files_inner(&host_state, None, true).await.unwrap();

@@ -154,7 +154,7 @@ export default function CrewList() {
         </Panel>
         <Panel tone="accent" label={<b>// Invite</b>} title="Join a crew">
           <div className="flex gap-2">
-            <Input wrapperClassName="flex-1 min-w-0" value={inviteText} onChange={(e) => setInviteText(e.target.value)} placeholder="synccrate://crew/..." aria-label="Crew invite link" mono onKeyDown={(e) => e.key === "Enter" && handlePreviewInvite()} />
+            <Input wrapperClassName="flex-1 min-w-0" value={inviteText} onChange={(e) => setInviteText(e.target.value)} placeholder="Paste a crew link (synccrate.app/open/… or synccrate://…)" aria-label="Crew invite link" mono onKeyDown={(e) => e.key === "Enter" && handlePreviewInvite()} />
             <Button onClick={handlePreviewInvite} disabled={!inviteText.trim()} icon={<Link2 size={12} />}>
               Open
             </Button>

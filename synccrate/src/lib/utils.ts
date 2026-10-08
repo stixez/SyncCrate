@@ -21,6 +21,14 @@ export function renameInManifest(m: FileManifest, moves: [string, string][]): Fi
   return { ...m, files };
 }
 
+/** A shareable link for a `synccrate://` path (`join/SC-...?game=sims4`).
+ * Chat apps only make http(s) links clickable, so this points at the
+ * website's open page, which hands the part after `#` to `synccrate://`.
+ * Mirrors `open_intent::web_link` in the backend. */
+export function webLink(path: string): string {
+  return `https://synccrate.app/open/#${path}`;
+}
+
 /** "1 file" / "3 files" (the "file(s)" style reads like an error message). */
 export function plural(n: number, word: string, many = `${word}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? word : many}`;

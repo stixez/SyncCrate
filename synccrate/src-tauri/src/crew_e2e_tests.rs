@@ -29,7 +29,7 @@ async fn crew_pair(host: &Arc<Mutex<AppState>>, client: &Arc<Mutex<AppState>>, p
         let s = host.lock().await;
         crews::encode_invite(s.crews.get(&c.id).unwrap(), s.local_node_id.as_deref().unwrap(), "Host").unwrap()
     };
-    let invite = crews::decode_invite(link.strip_prefix(crews::INVITE_PREFIX).unwrap(), |g| g == "sims4").unwrap();
+    let invite = crews::decode_invite(crews::invite_payload(&link), |g| g == "sims4").unwrap();
     crew::join_crew_inner(client, invite, "Ann").await.expect("join crew");
     c.id
 }

@@ -248,6 +248,13 @@ pub struct PackFile {
     pub relative_path: String,
     pub size: u64,
     pub hash: String,
+    /// The creator's page, for a file the author shares only as a link
+    /// (`source_links`). Absent on every other file, so packs without links
+    /// read and write exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// A host's join info embedded in a pack, so "get missing files" doesn't
