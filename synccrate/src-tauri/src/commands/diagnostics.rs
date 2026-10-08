@@ -432,7 +432,7 @@ fn format_time(ms: u64) -> String {
 pub fn format_report(d: &DiagnosticsInput, scrub: &Scrubber) -> String {
     let mut lines: Vec<String> = Vec::new();
     lines.push("SyncCrate diagnostics".to_string());
-    lines.push(format!("Paste this into a GitHub issue: {ISSUE_URL}. It contains no files, codes or friends' names."));
+    lines.push(format!("Paste this into a GitHub issue: {ISSUE_URL}. It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
     lines.push(String::new());
 
     lines.push(format!("App version:   {}", d.app_version));
@@ -728,7 +728,7 @@ mod tests {
     fn report_has_header_and_settings_and_scrubs_the_path() {
         let r = format_report(&input(), &scrubber());
         assert!(r.starts_with("SyncCrate diagnostics\nPaste this into a GitHub issue: https://github.com/stixez/SyncCrate/issues/new/choose."));
-        assert!(r.contains("It contains no files, codes or friends' names."));
+        assert!(r.contains("It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
         assert!(r.contains("App version:   0.8.5"));
         assert!(r.contains(r"Game folder:   ~\Documents\Electronic Arts\The Sims 4"));
         assert!(r.contains("Session:       hosting, 2 connected"));
