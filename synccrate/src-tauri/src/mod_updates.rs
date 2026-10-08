@@ -18,7 +18,7 @@
 use crate::mod_meta::ModMeta;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const USER_AGENT: &str = concat!("SyncCrate/", env!("CARGO_PKG_VERSION"), " (github.com/stixez/SyncCrate)");
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -278,7 +278,8 @@ async fn json_of(resp: Result<reqwest::Response, reqwest::Error>) -> Result<Valu
     serde_json::from_slice(&bytes).map_err(|_| "unexpected response".to_string())
 }
 
-async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], game_version: Option<&str>, report: &mut UpdateReport) -> Result<(), String> {
+/// `known` gets the key of every jar Modrinth recognised, updated or not.
+async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], game_version: Option<&str>, report: &mut UpdateReport, known: &mut HashSet<String>) -> Result<(), String> {
     let jars: Vec<(String, String)> = {
         let base = base.to_string();
         let keys: Vec<String> = metas.iter().filter(|m| m.is_file).take(MAX_MODS_PER_SOURCE).map(|m| m.key.clone()).collect();
@@ -302,6 +303,7 @@ async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], 
         &json_of(http.post("https://api.modrinth.com/v2/version_files").json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha512" })).send().await).await?,
     );
     report.checked += current.len();
+    known.extend(current.keys().filter_map(|h| key_of.get(h.as_str())).map(|k| k.to_string()));
     for ((loaders, game_versions), group) in modrinth_groups(&current, game_version) {
         let body = serde_json::json!({ "hashes": group, "algorithm": "sha512", "loaders": loaders, "game_versions": game_versions });
         let latest = parse_modrinth(&json_of(http.post("https://api.modrinth.com/v2/version_files/update").json(&body).send().await).await?);
@@ -386,46 +388,69 @@ async fn check_smapi(http: &reqwest::Client, metas: &[&ModMeta], game_version: O
 /// `curseforge::select_files`) are looked up on CurseForge for `game`.
 pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>, game: &str, curseforge_files: &[String]) -> Result<UpdateReport, String> {
     let http = client()?;
-    let mut report = UpdateReport::default();
     let mr: Vec<&ModMeta> = metas.iter().filter(|m| matches!(m.source.as_str(), "fabric" | "quilt" | "forge")).collect();
     let ts: Vec<&ModMeta> = metas.iter().filter(|m| m.source == "thunderstore").collect();
     let sm: Vec<&ModMeta> = metas.iter().filter(|m| m.source == "smapi").collect();
-    if !mr.is_empty() {
-        if let Err(e) = check_modrinth(&http, base, &mr, game_version, &mut report).await {
-            report.errors.push(format!("Modrinth: {e}"));
-        }
-    }
-    if !ts.is_empty() {
-        if let Err(e) = check_thunderstore(&http, &ts, &mut report).await {
-            report.errors.push(format!("Thunderstore: {e}"));
-        }
-    }
-    if !sm.is_empty() {
-        if let Err(e) = check_smapi(&http, &sm, game_version, &mut report).await {
-            report.errors.push(format!("SMAPI: {e}"));
-        }
-    }
-    if !curseforge_files.is_empty() {
-        match crate::curseforge::check(game, base, curseforge_files, metas).await {
-            Ok(cf) => {
-                report.checked += cf.matched;
-                // Modrinth knows a jar's loader and game version; CurseForge's
-                // "latest" doesn't, so Modrinth's answer wins for the same file.
-                for u in cf.updates {
-                    if !report.updates.iter().any(|x| x.key == u.key) {
-                        report.updates.push(u);
-                    }
-                }
-                report.metas = cf.metas;
-                if let Some(note) = cf.note {
-                    report.errors.push(format!("CurseForge: {note}"));
-                }
+    let others = async {
+        let mut report = UpdateReport::default();
+        let mut modrinth_known = HashSet::new();
+        if !mr.is_empty() {
+            if let Err(e) = check_modrinth(&http, base, &mr, game_version, &mut report, &mut modrinth_known).await {
+                report.errors.push(format!("Modrinth: {e}"));
             }
-            Err(e) => report.errors.push(format!("CurseForge: {e}")),
         }
+        if !ts.is_empty() {
+            if let Err(e) = check_thunderstore(&http, &ts, &mut report).await {
+                report.errors.push(format!("Thunderstore: {e}"));
+            }
+        }
+        if !sm.is_empty() {
+            if let Err(e) = check_smapi(&http, &sm, game_version, &mut report).await {
+                report.errors.push(format!("SMAPI: {e}"));
+            }
+        }
+        (report, modrinth_known)
+    };
+    // CurseForge is independent of the rest and the slowest (it fingerprints
+    // every file first), so it runs alongside them and is merged at the end.
+    let curseforge = async {
+        if curseforge_files.is_empty() {
+            None
+        } else {
+            Some(crate::curseforge::check(game, base, curseforge_files, metas).await)
+        }
+    };
+    let ((mut report, modrinth_known), cf) = tokio::join!(others, curseforge);
+    if let Some(cf) = cf {
+        merge_curseforge(&mut report, &modrinth_known, cf);
     }
     report.updates.sort_by(|a, b| a.key.cmp(&b.key));
     Ok(report)
+}
+
+/// Adds CurseForge's answer to the other sources'. Modrinth knows a jar's
+/// loader and game version and CurseForge's "latest" doesn't, so for any jar
+/// Modrinth recognised (`modrinth_known`), updated or current, Modrinth's
+/// answer stands. Each file counts once in `checked`.
+fn merge_curseforge(report: &mut UpdateReport, modrinth_known: &HashSet<String>, cf: Result<crate::curseforge::Outcome, String>) {
+    let cf = match cf {
+        Ok(cf) => cf,
+        Err(e) => {
+            report.errors.push(format!("CurseForge: {e}"));
+            return;
+        }
+    };
+    // `metas` holds one entry per file CurseForge matched.
+    report.checked += cf.metas.iter().filter(|m| !modrinth_known.contains(&m.key)).count();
+    for u in cf.updates {
+        if !modrinth_known.contains(&u.key) && !report.updates.iter().any(|x| x.key == u.key) {
+            report.updates.push(u);
+        }
+    }
+    report.metas = cf.metas;
+    if let Some(note) = cf.note {
+        report.errors.push(format!("CurseForge: {note}"));
+    }
 }
 
 /// Whether any mod in `metas` has a source this module can check, or there
@@ -518,6 +543,30 @@ mod tests {
         let groups = modrinth_groups(&v, Some("1.20.4"));
         let narrowed = groups.iter().find(|(_, h)| h.contains(&"aaa".to_string())).unwrap();
         assert_eq!(narrowed.0 .1, vec!["1.20.4".to_string()]);
+    }
+
+    #[test]
+    fn modrinth_wins_for_every_jar_it_recognised() {
+        let upd = |key: &str, source: &str| ModUpdate { key: key.into(), source: source.into(), current: Some("1".into()), latest: "2".into(), url: None, deprecated: false };
+        let meta = |key: &str| ModMeta { key: key.into(), is_file: true, ..Default::default() };
+        // Modrinth recognised a.jar (with an update) and b.jar (current).
+        let mut report = UpdateReport { updates: vec![upd("mods/a.jar", "modrinth")], checked: 2, ..Default::default() };
+        let known: HashSet<String> = ["mods/a.jar", "mods/b.jar"].into_iter().map(String::from).collect();
+        let cf = crate::curseforge::Outcome {
+            updates: vec![upd("mods/a.jar", "curseforge"), upd("mods/b.jar", "curseforge"), upd("mods/c.jar", "curseforge")],
+            metas: vec![meta("mods/a.jar"), meta("mods/b.jar"), meta("mods/c.jar")],
+            note: Some("checked 3 of 4 files, then: timed out".into()),
+        };
+        merge_curseforge(&mut report, &known, Ok(cf));
+        let got: Vec<(&str, &str)> = report.updates.iter().map(|u| (u.key.as_str(), u.source.as_str())).collect();
+        assert_eq!(got, vec![("mods/a.jar", "modrinth"), ("mods/c.jar", "curseforge")], "b.jar is current per Modrinth");
+        assert_eq!(report.checked, 3, "a.jar and b.jar counted once");
+        assert_eq!(report.metas.len(), 3, "names and pictures still apply");
+        assert_eq!(report.errors, vec!["CurseForge: checked 3 of 4 files, then: timed out".to_string()]);
+
+        let mut report = UpdateReport::default();
+        merge_curseforge(&mut report, &HashSet::new(), Err("timed out".into()));
+        assert_eq!(report.errors, vec!["CurseForge: timed out".to_string()]);
     }
 
     #[test]

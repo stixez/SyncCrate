@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Link2 } from "lucide-react";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { ModMeta, SourceLinkItem } from "../lib/types";
 import { metaLookup } from "../lib/modMeta";
 import { displayPath, fileName } from "../lib/utils";
 import * as cmd from "../lib/commands";
-import { toastError } from "../lib/toast";
+import { openCreatorLink } from "../lib/links";
 import { Badge, Button, Panel } from "./ui";
 
 const SHOWN = 50;
@@ -26,12 +25,6 @@ export default function SourceLinksPanel({ gameId, items }: { gameId: string; it
   // Names only exist for mods this PC already has (a different version).
   const metaFor = useMemo(() => metaLookup(metas), [metas]);
   const shown = showAll ? items : items.slice(0, SHOWN);
-
-  const open = (url: string) => {
-    // The link came from another PC: only ever hand https to the browser.
-    if (!/^https:\/\//i.test(url)) return;
-    openUrl(url).catch((e) => toastError(`Couldn't open the link: ${e}`));
-  };
 
   return (
     <Panel
@@ -58,7 +51,7 @@ export default function SourceLinksPanel({ gameId, items }: { gameId: string; it
               <Badge tone={item.status === "different" ? "amber" : "neutral"} className="shrink-0">
                 {item.status === "different" ? "Different version" : "Not installed"}
               </Badge>
-              <Button size="sm" className="shrink-0" onClick={() => open(item.url)} icon={<ExternalLink size={12} />}>
+              <Button size="sm" className="shrink-0" onClick={() => openCreatorLink(item.url)} icon={<ExternalLink size={12} />}>
                 Open link
               </Button>
             </li>

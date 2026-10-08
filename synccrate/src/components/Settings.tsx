@@ -569,7 +569,7 @@ export default function Settings() {
                   saveDiscordPresence(v);
                 }}
                 label="Show on Discord"
-                description="While you host or sync, your Discord profile shows the game and how many friends are connected. Never your join code or PIN. Needs the Discord app running."
+                description="Off until you turn it on. While you host or sync, your Discord profile shows the game and how many friends are connected. Never your join code or PIN. Needs the Discord app running."
               />
             </SettingRow>
             <SettingRow>

@@ -642,21 +642,24 @@ async fn handle_client(
                     }
                 }
 
-                let reply = {
+                // Only the copy happens under the AppState lock; reading the
+                // links (maybe from disk) and matching them run after it.
+                let (game, mut filtered) = {
                     let app_state = state.lock().await;
-                    match crate::source_links::load(&app_state.active_game) {
-                        Ok(source_links) => {
-                            let mut filtered = app_state.local_manifest.clone();
-                            filtered.files.retain(|path, info| app_state.is_file_info_allowed(info) && (peer_roots || !crate::registry::is_external_path(path)));
-                            let links = crate::source_links::split_linked(&mut filtered, &source_links);
-                            Message::ManifestResponse { manifest: filtered, links }
-                        }
-                        // Fail closed: without the list we can't tell which
-                        // files the creator asked us not to copy.
-                        Err(e) => {
-                            log::warn!("Couldn't read the shared links: {e}");
-                            Message::Error { message: LINKS_UNREADABLE.to_string() }
-                        }
+                    let mut filtered = app_state.local_manifest.clone();
+                    filtered.files.retain(|path, info| app_state.is_file_info_allowed(info) && (peer_roots || !crate::registry::is_external_path(path)));
+                    (app_state.active_game.clone(), filtered)
+                };
+                let reply = match crate::source_links::index(&game) {
+                    Ok(index) => {
+                        let links = index.split(&mut filtered);
+                        Message::ManifestResponse { manifest: filtered, links }
+                    }
+                    // Fail closed: without the list we can't tell which
+                    // files the creator asked us not to copy.
+                    Err(e) => {
+                        log::warn!("Couldn't read the shared links: {e}");
+                        Message::Error { message: LINKS_UNREADABLE.to_string() }
                     }
                 };
                 let mut s = stream.lock().await;
@@ -687,8 +690,8 @@ async fn handle_client(
                     // client that asks for it by name (an older one, or one
                     // that never looked at the manifest). Checked before the
                     // handoff grant too, so no other path can serve it.
-                    let linked = match crate::source_links::load(&app_state.active_game) {
-                        Ok(links) => crate::source_links::link_for(&links, &path).map(|_| crate::source_links::REFUSAL.to_string()),
+                    let linked = match crate::source_links::index(&app_state.active_game) {
+                        Ok(index) => index.get(&path).map(|_| crate::source_links::REFUSAL.to_string()),
                         Err(_) => Some(LINKS_UNREADABLE.to_string()),
                     };
 

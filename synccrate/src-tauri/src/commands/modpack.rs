@@ -102,13 +102,14 @@ pub(crate) fn clean_pack_links(pack: &mut ModPack) {
 }
 
 /// Fill in the creator link for every file the host shares as a link, with
-/// the same matching as the host's own manifest (`source_links::link_for`).
+/// the same matching as the host's own manifest (`source_links::LinkIndex`).
 fn attach_source_links(files: &mut [PackFile], links: &[crate::source_links::SourceLink]) {
     if links.is_empty() {
         return;
     }
+    let index = crate::source_links::LinkIndex::new(links.to_vec());
     for f in files {
-        if let Some(l) = crate::source_links::link_for(links, &f.relative_path) {
+        if let Some(l) = index.get(&f.relative_path) {
             f.url = Some(l.url.clone());
             f.label = l.label.clone();
         }

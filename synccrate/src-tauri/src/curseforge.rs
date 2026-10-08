@@ -296,20 +296,55 @@ pub fn parse_response(status: u16, json: Option<&Value>) -> Result<Vec<CfMatch>,
 // ---------------------------------------------------------------------------
 // Network
 
-/// Ask the proxy about `fingerprints` (batched to its 1000-per-request limit).
-pub async fn lookup(game: &str, fingerprints: &[u32]) -> Result<Vec<CfMatch>, String> {
-    let http = crate::mod_updates::client()?;
-    let mut out = Vec::new();
+/// What a batched lookup found before it stopped.
+#[derive(Debug, Default)]
+pub struct Lookup {
+    pub matches: Vec<CfMatch>,
+    /// How many of the fingerprints (from the start) got an answer.
+    pub answered: usize,
+    /// Why the rest weren't asked, if a request failed.
+    pub error: Option<String>,
+}
+
+/// Runs `fetch` over `fingerprints` in proxy-sized chunks. A failure stops
+/// the rest (the next request would most likely fail the same way) but keeps
+/// what the earlier chunks found: on a 20k-file Sims folder, a rate limit on
+/// the last chunk used to throw away thousands of answers.
+async fn lookup_chunks<'a, F, Fut>(fingerprints: &'a [u32], mut fetch: F) -> Lookup
+where
+    F: FnMut(&'a [u32]) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<CfMatch>, String>>,
+{
+    let mut out = Lookup::default();
     for chunk in fingerprints.chunks(MAX_PER_REQUEST) {
-        let body = serde_json::json!({ "game": game, "fingerprints": chunk });
-        let resp = http.post(LOOKUP_URL).timeout(REQUEST_TIMEOUT).json(&body).send().await;
-        let resp = resp.map_err(|e| if e.is_timeout() { "timed out".to_string() } else { "couldn't reach synccrate.app".to_string() })?;
-        let status = resp.status().as_u16();
-        let bytes = crate::commands::art::read_capped(resp, MAX_RESPONSE_BYTES).await.map_err(|_| "unexpected response".to_string())?;
-        let json: Option<Value> = serde_json::from_slice(&bytes).ok();
-        out.extend(parse_response(status, json.as_ref())?);
+        match fetch(chunk).await {
+            Ok(m) => {
+                out.matches.extend(m);
+                out.answered += chunk.len();
+            }
+            Err(e) => {
+                out.error = Some(e);
+                break;
+            }
+        }
     }
-    Ok(out)
+    out
+}
+
+async fn fetch_chunk(http: &reqwest::Client, game: &str, chunk: &[u32]) -> Result<Vec<CfMatch>, String> {
+    let body = serde_json::json!({ "game": game, "fingerprints": chunk });
+    let resp = http.post(LOOKUP_URL).timeout(REQUEST_TIMEOUT).json(&body).send().await;
+    let resp = resp.map_err(|e| if e.is_timeout() { "timed out".to_string() } else { "couldn't reach synccrate.app".to_string() })?;
+    let status = resp.status().as_u16();
+    let bytes = crate::commands::art::read_capped(resp, MAX_RESPONSE_BYTES).await.map_err(|_| "unexpected response".to_string())?;
+    let json: Option<Value> = serde_json::from_slice(&bytes).ok();
+    parse_response(status, json.as_ref())
+}
+
+/// Ask the proxy about `fingerprints` (batched to its 1000-per-request limit).
+pub async fn lookup(game: &str, fingerprints: &[u32]) -> Result<Lookup, String> {
+    let http = crate::mod_updates::client()?;
+    Ok(lookup_chunks(fingerprints, |chunk| fetch_chunk(&http, game, chunk)).await)
 }
 
 fn logo_mime(bytes: &[u8]) -> Option<&'static str> {
@@ -343,10 +378,9 @@ pub async fn logo_data_url(url: &str) -> Option<String> {
 #[derive(Debug, Default)]
 pub struct Outcome {
     pub updates: Vec<ModUpdate>,
-    /// Metadata for every matched file, merged with what it already had.
+    /// Metadata for every matched file (one each, so also the files
+    /// CurseForge recognized), merged with what it already had.
     pub metas: Vec<ModMeta>,
-    /// Files CurseForge recognized.
-    pub matched: usize,
     /// Why not every file was looked up, if so.
     pub note: Option<String>,
 }
@@ -425,7 +459,6 @@ pub fn apply(prints: &[(String, u32)], matches: &[CfMatch], offline: &[ModMeta])
     let mut out = Outcome::default();
     for (key, fp) in prints {
         let Some(m) = by_print.get(fp) else { continue };
-        out.matched += 1;
         out.metas.push(merge_meta(offline.get(key.as_str()).copied(), key, m));
         if let Some((current, latest)) = update_of(m) {
             out.updates.push(ModUpdate { key: key.clone(), source: "curseforge".into(), current: Some(current), latest, url: m.website.clone(), deprecated: false });
@@ -444,12 +477,25 @@ pub async fn check(game: &str, base: &str, files: &[String], offline: &[ModMeta]
     let mut fps: Vec<u32> = prints.iter().map(|(_, fp)| *fp).collect();
     fps.sort_unstable();
     fps.dedup();
-    let matches = if fps.is_empty() { Vec::new() } else { lookup(game, &fps).await? };
-    let mut out = apply(&prints, &matches, offline);
-    if !finished || total > MAX_FILES {
-        out.note = Some(format!("checked {} of {total} files (big folders take a while; try again for the rest)", prints.len()));
+    let found = if fps.is_empty() { Lookup::default() } else { lookup(game, &fps).await? };
+    if found.answered == 0 {
+        if let Some(e) = found.error {
+            return Err(e);
+        }
     }
+    let mut out = apply(&prints, &found.matches, offline);
+    out.note = coverage_note(&prints, &fps[..found.answered], found.error.as_deref(), finished, total);
     Ok(out)
+}
+
+/// The report line when not every file was looked up. `answered` is the
+/// sorted part of the fingerprints that got a reply before `error`.
+fn coverage_note(prints: &[(String, u32)], answered: &[u32], error: Option<&str>, finished: bool, total: usize) -> Option<String> {
+    if let Some(e) = error {
+        let n = prints.iter().filter(|(_, fp)| answered.binary_search(fp).is_ok()).count();
+        return Some(format!("checked {n} of {total} files, then: {e}"));
+    }
+    (!finished || total > MAX_FILES).then(|| format!("checked {} of {total} files (big folders take a while; try again for the rest)", prints.len()))
 }
 
 #[cfg(test)]
@@ -571,6 +617,44 @@ mod tests {
         assert_eq!(parse_response(200, None).unwrap_err(), "unexpected response");
     }
 
+    fn found(fp: u32) -> CfMatch {
+        CfMatch { fingerprints: vec![fp], mod_id: fp as u64, name: format!("mod {fp}"), authors: vec![], summary: None, website: None, logo: None, file: None, latest: None }
+    }
+
+    #[tokio::test]
+    async fn a_failed_chunk_keeps_earlier_answers() {
+        let fps: Vec<u32> = (0..2500).collect();
+        let mut calls = 0;
+        let got = lookup_chunks(&fps, |chunk| {
+            calls += 1;
+            let n = calls;
+            let first = chunk[0];
+            async move { if n == 3 { Err("too many checks right now".to_string()) } else { Ok(vec![found(first)]) } }
+        })
+        .await;
+        assert_eq!(got.matches.iter().map(|m| m.mod_id).collect::<Vec<_>>(), vec![0, 1000]);
+        assert_eq!(got.answered, 2000);
+        assert_eq!(got.error.as_deref(), Some("too many checks right now"));
+
+        // Each file counts once, by whether its fingerprint got an answer.
+        let prints = vec![("a".to_string(), 5), ("b".to_string(), 5), ("c".to_string(), 1999), ("d".to_string(), 2400)];
+        let note = coverage_note(&prints, &fps[..got.answered], got.error.as_deref(), true, 4);
+        assert_eq!(note.as_deref(), Some("checked 3 of 4 files, then: too many checks right now"));
+        assert_eq!(coverage_note(&prints, &fps, None, true, 4), None);
+        assert!(coverage_note(&prints, &fps, None, false, 9).unwrap().starts_with("checked 4 of 9 files (big folders"));
+    }
+
+    #[tokio::test]
+    async fn every_chunk_answering_has_no_error() {
+        let fps: Vec<u32> = (0..1001).collect();
+        let got = lookup_chunks(&fps, |chunk| {
+            let first = chunk[0];
+            async move { Ok(vec![found(first)]) }
+        })
+        .await;
+        assert_eq!((got.matches.len(), got.answered, got.error), (2, 1001, None));
+    }
+
     #[test]
     fn updates_need_a_newer_different_file() {
         let m = parse_response(200, Some(&sample())).unwrap();
@@ -598,7 +682,7 @@ mod tests {
         ];
         let prints = vec![("mods/jei.jar".to_string(), 111), ("mods/jei-copy.jar".to_string(), 222), ("Mods/a.package".to_string(), 333), ("mods/unknown.jar".to_string(), 999)];
         let out = apply(&prints, &matches, &offline);
-        assert_eq!(out.matched, 3);
+        assert_eq!(out.metas.len(), 3);
         let by_key: HashMap<&str, &ModMeta> = out.metas.iter().map(|m| (m.key.as_str(), m)).collect();
         let jei = by_key["mods/jei.jar"];
         assert_eq!((jei.name.as_str(), jei.source.as_str()), ("JEI", "forge"), "offline name kept");

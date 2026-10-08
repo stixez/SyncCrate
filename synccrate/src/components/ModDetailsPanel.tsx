@@ -5,8 +5,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS, useModIcon } from "../lib/modMeta";
+import { openCreatorLink } from "../lib/links";
 import { ModIcon } from "./ModItem";
-import { dirOf, displayPath, formatBytes, formatDate, isDisabledPath, modLabel, renameInManifest } from "../lib/utils";
+import { dirOf, displayPath, formatBytes, formatDate, isDisabledPath, modLabel, sameLinkTarget, renameInManifest } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
@@ -101,7 +102,8 @@ export default function ModDetailsPanel({
 
   // "Share as a link": the creator forbids re-uploads, so friends get their page instead.
   const path = file.relative_path;
-  const linkIsFolder = !!link && link.prefix.split("/").length < path.split("/").length;
+  // `link` covers this file, so it's either this file's own link or a folder's.
+  const linkIsFolder = !!link && !sameLinkTarget(link.prefix, path);
   const parent = dirOf(path);
   const ctFolder = (contentFolder ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   // Only a mod in its own subfolder: the content folder itself would cover every mod.
@@ -118,7 +120,9 @@ export default function ModDetailsPanel({
       let links = await cmd.setSourceLink(gameId, prefix, linkUrl.trim(), meta?.name ?? null);
       // A file link becoming a folder link is replaced. The other way round
       // the folder's link stays: removing it would start copying its other mods.
-      if (link && !linkIsFolder && link.prefix.toLowerCase() !== prefix.toLowerCase()) links = await cmd.removeSourceLink(gameId, link.prefix);
+      // Compared like the backend matches: removing a "different" prefix with
+      // the same key (the file's disabled twin) would delete the link just saved.
+      if (link && !linkIsFolder && !sameLinkTarget(link.prefix, prefix)) links = await cmd.removeSourceLink(gameId, link.prefix);
       onLinksChanged?.(links);
       toastSuccess(linkScope === "folder" ? "Friends get the link for this folder instead of a copy" : "Friends get the link instead of a copy");
     } catch (e) {
@@ -223,7 +227,7 @@ export default function ModDetailsPanel({
                   )}
                   {meta.website && (
                     <Row label="Website">
-                      <button className="font-mono text-[11px] text-accent-light hover:text-neon break-all text-left" onClick={() => openUrl(meta.website!).catch(() => {})}>
+                      <button className="font-mono text-[11px] text-accent-light hover:text-neon break-all text-left" onClick={() => openCreatorLink(meta.website)}>
                         {meta.website}
                       </button>
                     </Row>

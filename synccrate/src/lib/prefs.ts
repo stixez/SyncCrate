@@ -8,6 +8,7 @@ const USE_PIN_KEY = "synccrate-host-use-pin";
 const FOLDER_PERMS_KEY = "synccrate-folder-perms";
 const GAME_ART_KEY = "synccrate-game-art";
 const DISCORD_KEY = "synccrate-discord-presence";
+const DISCORD_HINT_KEY = "synccrate-discord-hint-shown";
 
 function read(key: string): string | null {
   try {
@@ -83,9 +84,19 @@ export function saveShowGameArt(show: boolean) {
   write(GAME_ART_KEY, show ? "1" : "0");
 }
 
-/** Show the session on the user's Discord profile (on unless turned off). */
+/** Show the session on the user's Discord profile. Off until the user turns it
+ * on: a profile status is visible to everyone on their friends list. */
 export function loadDiscordPresence(): boolean {
-  return read(DISCORD_KEY) !== "0";
+  return read(DISCORD_KEY) === "1";
+}
+
+/** Whether the one-time "Show on Discord?" offer has already appeared. */
+export function loadDiscordHintShown(): boolean {
+  return read(DISCORD_HINT_KEY) === "1";
+}
+
+export function markDiscordHintShown() {
+  write(DISCORD_HINT_KEY, "1");
 }
 
 export const DISCORD_PREF_EVENT = "synccrate-discord-pref";

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { AlertTriangle, ArrowUpDown, CheckCheck, Copy, ExternalLink, Link2, Loader2, RotateCcw, Save as SaveIcon, Share2, Upload, X } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Banner, Button, EmptyState, Input, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { getGameDef, gameLabel } from "../lib/games";
 import { dirOf, formatBytes, formatDate, plural } from "../lib/utils";
+import { isHttps, openCreatorLink } from "../lib/links";
 import * as cmd from "../lib/commands";
 import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { runPackApply } from "../lib/packApply";
@@ -571,16 +571,6 @@ export default function ModpackList({ gameId }: Props) {
   );
 }
 
-/** Pack links come from whoever made the pack: only ever hand https to the browser. */
-function isHttps(url?: string | null): url is string {
-  return !!url && /^https:\/\//i.test(url);
-}
-
-function openCreatorLink(url: string) {
-  if (!isHttps(url)) return;
-  openUrl(url).catch((e) => toastError(`Couldn't open the link: ${e}`));
-}
-
 function FileGroupBox({ title, tone, entries, showLinks = false }: { title: string; tone: "red" | "amber" | "green" | "neutral"; entries: PackFileStatus[]; showLinks?: boolean }) {
   const groups = groupByContentType(entries);
   return (
@@ -598,7 +588,7 @@ function FileGroupBox({ title, tone, entries, showLinks = false }: { title: stri
                   </p>
                   <button
                     className="shrink-0 inline-flex items-center gap-1 font-mono text-[10.5px] text-accent-light hover:text-neon"
-                    onClick={() => openCreatorLink(f.url!)}
+                    onClick={() => openCreatorLink(f.url)}
                     aria-label={`Open the creator's page for ${f.relative_path.split("/").pop()}`}
                   >
                     <ExternalLink size={11} /> Open link

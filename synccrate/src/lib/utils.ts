@@ -104,6 +104,14 @@ function linkKey(path: string): string {
   return segs.join("/");
 }
 
+/** Whether two link prefixes or paths name the same file or folder as the
+ * backend matches them. Compare these, not raw paths: a mod under a legacy
+ * `_Disabled/` folder has one more segment than its own file link, and was
+ * shown as covered by a folder link. */
+export function sameLinkTarget(a: string, b: string): boolean {
+  return linkKey(a) === linkKey(b);
+}
+
 /** The most specific "share as a link" entry covering `path` (a file link beats its folder's). */
 export function linkLookup<T extends { prefix: string }>(links: T[]): (path: string) => T | undefined {
   if (links.length === 0) return () => undefined;

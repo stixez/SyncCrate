@@ -13,7 +13,7 @@ use crate::state::FileManifest;
 use crate::sync::diff::match_key;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 
 /// The refusal a client gets for a linked file, whatever it asked for.
 pub const REFUSAL: &str = "The host shares this mod as a link to its creator.";
@@ -106,35 +106,92 @@ pub fn clean_label(raw: Option<&str>) -> Option<String> {
     (!s.is_empty()).then(|| s.to_string())
 }
 
+/// The plain definition of a link covering a path, which `find_key` must
+/// agree with (tests check it against this).
+#[cfg(test)]
 fn covers_key(prefix_key: &str, path_key: &str) -> bool {
     !prefix_key.is_empty()
         && path_key.strip_prefix(prefix_key).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
-/// The most specific link covering `path` (a file link beats its folder's).
-pub fn link_for<'a>(links: &'a [SourceLink], path: &str) -> Option<&'a SourceLink> {
-    let key = match_key(path);
-    links
-        .iter()
-        .map(|l| (match_key(&l.prefix), l))
-        .filter(|(k, _)| covers_key(k, &key))
-        .max_by_key(|(k, _)| k.len())
-        .map(|(_, l)| l)
+/// Links keyed by `match_key(prefix)` (index into the list). A path is then
+/// looked up by its own key and each of its folders' keys, so the cost is the
+/// path's depth instead of one `match_key` per link per file: the host runs
+/// this for every file of every manifest and every `FileRequest`.
+fn key_links(links: &[SourceLink]) -> HashMap<String, usize> {
+    // A later duplicate overwrites an earlier one, as `max_by_key` (last of
+    // the equal maxima) did. `load` dedups anyway.
+    links.iter().enumerate().map(|(i, l)| (match_key(&l.prefix), i)).filter(|(k, _)| !k.is_empty()).collect()
 }
 
-/// Host side: move every file a link covers out of the manifest a friend
-/// gets, and describe it as a `LinkedFile` instead (sorted by path).
+/// The most specific entry of `keys` covering `path`: its own key first,
+/// then each parent folder, which is what `covers_key` against every link
+/// and the longest match picked.
+fn find_key(keys: &HashMap<String, usize>, path: &str) -> Option<usize> {
+    if keys.is_empty() {
+        return None;
+    }
+    let key = match_key(path);
+    let mut end = key.len();
+    loop {
+        if let Some(i) = keys.get(&key[..end]) {
+            return Some(*i);
+        }
+        end = key[..end].rfind('/')?;
+    }
+}
+
+/// A game's links, ready for lookups. Cached per game (see `CACHE`).
+#[derive(Debug, Default)]
+pub struct LinkIndex {
+    links: Vec<SourceLink>,
+    keys: HashMap<String, usize>,
+}
+
+impl LinkIndex {
+    pub fn new(links: Vec<SourceLink>) -> Self {
+        let keys = key_links(&links);
+        LinkIndex { links, keys }
+    }
+
+    pub fn links(&self) -> &[SourceLink] {
+        &self.links
+    }
+
+    /// The most specific link covering `path` (a file link beats its folder's).
+    pub fn get(&self, path: &str) -> Option<&SourceLink> {
+        find_key(&self.keys, path).map(|i| &self.links[i])
+    }
+
+    /// Host side: move every file a link covers out of the manifest a friend
+    /// gets, and describe it as a `LinkedFile` instead (sorted by path).
+    pub fn split(&self, manifest: &mut FileManifest) -> Vec<LinkedFile> {
+        split_with(manifest, &self.links, &self.keys)
+    }
+}
+
+/// `LinkIndex::get` for a plain list (builds the index each call).
+#[cfg(test)]
+pub fn link_for<'a>(links: &'a [SourceLink], path: &str) -> Option<&'a SourceLink> {
+    find_key(&key_links(links), path).map(|i| &links[i])
+}
+
+/// `LinkIndex::split` for a plain list.
+#[cfg(test)]
 pub fn split_linked(manifest: &mut FileManifest, links: &[SourceLink]) -> Vec<LinkedFile> {
-    if links.is_empty() {
+    split_with(manifest, links, &key_links(links))
+}
+
+fn split_with(manifest: &mut FileManifest, links: &[SourceLink], keys: &HashMap<String, usize>) -> Vec<LinkedFile> {
+    if keys.is_empty() {
         return Vec::new();
     }
-    let keyed: Vec<(String, &SourceLink)> = links.iter().map(|l| (match_key(&l.prefix), l)).collect();
     let mut out = Vec::new();
     manifest.files.retain(|path, info| {
-        let key = match_key(path);
-        let Some((_, link)) = keyed.iter().filter(|(k, _)| covers_key(k, &key)).max_by_key(|(k, _)| k.len()) else {
+        let Some(i) = find_key(keys, path) else {
             return true;
         };
+        let link = &links[i];
         out.push(LinkedFile { path: path.clone(), size: info.size, hash: info.hash.clone(), url: link.url.clone(), label: link.label.clone() });
         false
     });
@@ -161,9 +218,9 @@ pub fn upsert(links: &mut Vec<SourceLink>, link: SourceLink) -> Result<(), Strin
 // Storage
 
 /// Per game, as last read or saved. The host checks links on every
-/// `FileRequest`; reading the file each time would be thousands of reads in
-/// one big sync.
-static CACHE: LazyLock<RwLock<HashMap<String, Vec<SourceLink>>>> = LazyLock::new(Default::default);
+/// `FileRequest`; reading the file (or even cloning and re-keying the list)
+/// each time would be thousands of times in one big sync.
+static CACHE: LazyLock<RwLock<HashMap<String, Arc<LinkIndex>>>> = LazyLock::new(Default::default);
 
 fn links_path(game: &str) -> std::path::PathBuf {
     let safe: String = game.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
@@ -176,8 +233,13 @@ fn links_path(game: &str) -> std::path::PathBuf {
 /// The game's links. `Err` only when the file exists but couldn't be read:
 /// the host then refuses to serve rather than share files it was told not to.
 pub fn load(game: &str) -> Result<Vec<SourceLink>, String> {
-    if let Some(links) = CACHE.read().unwrap_or_else(|e| e.into_inner()).get(game) {
-        return Ok(links.clone());
+    Ok(index(game)?.links().to_vec())
+}
+
+/// The game's links, indexed for lookups (shared, not copied). `Err` as for `load`.
+pub fn index(game: &str) -> Result<Arc<LinkIndex>, String> {
+    if let Some(index) = CACHE.read().unwrap_or_else(|e| e.into_inner()).get(game) {
+        return Ok(index.clone());
     }
     let stored: Vec<SourceLink> = crate::utils::read_json_strict(&links_path(game))?.unwrap_or_default();
     // Hand-edited or from a newer version: keep only what the rules allow.
@@ -187,8 +249,9 @@ pub fn load(game: &str) -> Result<Vec<SourceLink>, String> {
             let _ = upsert(&mut links, SourceLink { prefix, url, label: clean_label(l.label.as_deref()) });
         }
     }
-    CACHE.write().unwrap_or_else(|e| e.into_inner()).insert(game.to_string(), links.clone());
-    Ok(links)
+    let index = Arc::new(LinkIndex::new(links));
+    CACHE.write().unwrap_or_else(|e| e.into_inner()).insert(game.to_string(), index.clone());
+    Ok(index)
 }
 
 pub fn save(game: &str, links: &[SourceLink]) -> Result<(), String> {
@@ -197,7 +260,7 @@ pub fn save(game: &str, links: &[SourceLink]) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| format!("Couldn't save the links: {e}"))?;
     }
     crate::utils::write_json_atomic(&path, &links)?;
-    CACHE.write().unwrap_or_else(|e| e.into_inner()).insert(game.to_string(), links.to_vec());
+    CACHE.write().unwrap_or_else(|e| e.into_inner()).insert(game.to_string(), Arc::new(LinkIndex::new(links.to_vec())));
     Ok(())
 }
 
@@ -323,6 +386,57 @@ mod tests {
         let mut m2 = m.clone();
         assert!(split_linked(&mut m2, &[]).is_empty());
         assert_eq!(m2.files.len(), 1);
+    }
+
+    #[test]
+    fn many_links_and_files_match_like_the_plain_definition() {
+        // 2000 links (the cap) against 11k files: one link per creator folder,
+        // file links inside some of them, a disabled twin and the legacy folder.
+        let mut links = Vec::new();
+        for c in 0..1500 {
+            links.push(link(&format!("Mods/Creator{c}"), &format!("https://c.example/{c}")));
+        }
+        for c in 0..500 {
+            links.push(link(&format!("Mods/Creator{}/Item{c}.package", c * 3), &format!("https://f.example/{c}")));
+        }
+        let mut m = FileManifest::default();
+        let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
+        for c in 0..1000 {
+            for i in 0..10 {
+                let p = match i {
+                    7 => format!("mods/creator{c}/ITEM{i}.package.disabled"),
+                    8 => format!("Mods/_Disabled/Creator{c}/Item{i}.package"),
+                    9 => format!("Mods/Creator{c}x/Item{i}.package"),
+                    _ => format!("Mods/Creator{c}/Sub/Item{i}.package"),
+                };
+                m.files.insert(p.clone(), info(&p));
+            }
+            let p = format!("Mods/Creator{c}/Item{c}.package");
+            m.files.insert(p.clone(), info(&p));
+        }
+        // The old way: every link against every path, longest key wins.
+        let keyed: Vec<(String, &SourceLink)> = links.iter().map(|l| (match_key(&l.prefix), l)).collect();
+        let plain = |path: &str| {
+            let key = match_key(path);
+            keyed.iter().filter(|(k, _)| covers_key(k, &key)).max_by_key(|(k, _)| k.len()).map(|(_, l)| l.url.clone())
+        };
+        let expected: HashMap<String, Option<String>> = m.files.keys().map(|p| (p.clone(), plain(p))).collect();
+        let index = LinkIndex::new(links.clone());
+        for (p, url) in &expected {
+            assert_eq!(&index.get(p).map(|l| l.url.clone()), url, "{p}");
+            assert_eq!(&link_for(&links, p).map(|l| l.url.clone()), url, "{p}");
+        }
+        let total = m.files.len();
+        let linked = index.split(&mut m);
+        let mut got: Vec<(String, String)> = linked.iter().map(|l| (l.path.clone(), l.url.clone())).collect();
+        let mut want: Vec<(String, String)> = expected.iter().filter_map(|(p, u)| Some((p.clone(), u.clone()?))).collect();
+        got.sort();
+        want.sort();
+        assert_eq!(got, want);
+        assert_eq!(m.files.len() + linked.len(), total);
+        assert!(linked.iter().any(|l| l.url.starts_with("https://f.example/")), "file links beat their folder's");
+        assert!(linked.iter().any(|l| l.path.contains("_Disabled/")), "legacy folder seen through");
+        assert!(m.files.keys().any(|p| p.contains("x/")), "a prefix must end at a folder");
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { friendlyError } from "../lib/errors";
-import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar } from "lucide-react";
+import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar, MessageCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SyncFolderPermissions, GameInfo, ContentTypeDefinition } from "../lib/types";
 import { useAppStore } from "../stores/useAppStore";
@@ -8,7 +8,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
-import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadDiscordPresence, saveDiscordPresence, loadDiscordHintShown, markDiscordHintShown } from "../lib/prefs";
 import { formatBytes, parseInviteLink, plural, webLink } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
@@ -837,6 +837,8 @@ export default function GameDashboard({ gameId }: Props) {
         </Panel>
       )}
 
+      {isHost && !isDemoMode() && <DiscordHint />}
+
       {isHost && (hostJoinCode || session.pin) && (
         <Panel brackets padded={false} className="mx-1">
           <div className="grid lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -1069,7 +1071,43 @@ export default function GameDashboard({ gameId }: Props) {
   );
 }
 
-function StatCardGrid({ cards }: { cards: { label: string; value: string | number; color: string }[] }) {
+/** One-time offer, the first time the user hosts, to turn on the Discord
+ * status. It's off by default, so without this most hosts would never learn
+ * it exists. Marked as shown on first display so it never nags again. */
+function DiscordHint() {
+  const [visible, setVisible] = useState(() => !loadDiscordPresence() && !loadDiscordHintShown());
+  useEffect(() => {
+    if (visible) markDiscordHintShown();
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <Banner
+      tone="info"
+      icon={<MessageCircle size={16} />}
+      title="Show this session on your Discord profile?"
+      actions={
+        <>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              saveDiscordPresence(true);
+              setVisible(false);
+              toastSuccess("Discord status is on. Turn it off any time in Settings → Transfer.");
+            }}
+          >
+            Show on Discord
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setVisible(false)}>No thanks</Button>
+        </>
+      }
+    >
+      Only the game and how many friends are connected, never your code.
+    </Banner>
+  );
+}
+
+function StatCardGrid({ cards }:{ cards: { label: string; value: string | number; color: string }[] }) {
   return (
     <section aria-label="Local files">
       <p className="hud-label mb-2.5"><b>//</b> Local files</p>
