@@ -36,6 +36,7 @@ import {
 import type { InstallResult } from "./lib/types";
 import { toastSuccess, toastError, toastInfo } from "./lib/toast";
 import { friendlyError } from "./lib/errors";
+import { plural } from "./lib/utils";
 import { gameLabel } from "./lib/games";
 import { toast } from "sonner";
 import { check } from "@tauri-apps/plugin-updater";
@@ -177,7 +178,7 @@ function App() {
           id: "sims4", label: "The Sims 4", family: "sims", icon: "gamepad-2",
           color: "text-accent-light", primary_color: "#1fb87e", steam_app_id: 1222670, auto_detect: true,
           content_types: [
-            { id: "mods", label: "Script Mods", icon: "package", color: "text-accent-light", folder: "Mods", extensions: ["package", "ts4script", "zip"], file_type: "CustomContent", classify_by_extension: { ts4script: "Mod", zip: "Mod" }, syncable: true },
+            { id: "mods", label: "Mods & CC", icon: "package", color: "text-accent-light", folder: "Mods", extensions: ["package", "ts4script", "zip"], file_type: "CustomContent", classify_by_extension: { ts4script: "Mod", zip: "Mod" }, syncable: true },
             { id: "saves", label: "Save Files", icon: "save", color: "text-status-green", folder: "Saves", extensions: [], file_type: "Save", syncable: true, save_unit_depth: 0 },
             { id: "tray", label: "Tray Items", icon: "layout-grid", color: "text-purple-400", folder: "Tray", extensions: [], file_type: "Tray", syncable: true },
             { id: "screenshots", label: "Screenshots", icon: "camera", color: "text-sky-400", folder: "Screenshots", extensions: [], file_type: "Screenshot", syncable: true },
@@ -324,8 +325,8 @@ function App() {
         setInstallResults(results);
         const successCount = results.filter((r) => r.status === "Success").length;
         if (successCount > 0) {
-          addLog(`Installed ${successCount} mod file(s)`, "success");
-          toastSuccess(`Installed ${successCount} mod file(s)`);
+          addLog(`Installed ${plural(successCount, "mod file")}`, "success");
+          toastSuccess(`Installed ${plural(successCount, "mod file")}`);
           refreshIfShown(gameId);
         }
       } catch (e) {

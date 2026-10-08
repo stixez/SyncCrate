@@ -151,7 +151,7 @@ pub(crate) async fn create_pack_inner(
         files.push(PackFile { relative_path: f.relative_path.clone(), size: f.size, hash: f.hash.clone() });
     }
     if files.is_empty() {
-        return Err("Nothing matches that selection — pick at least one file or content type.".to_string());
+        return Err("Nothing matches that selection. Pick at least one file or content type.".to_string());
     }
     if files.len() > MAX_PACK_FILES {
         return Err(format!("Too many files for a pack (>{MAX_PACK_FILES}). Narrow the selection."));
@@ -214,7 +214,7 @@ pub async fn pack_to_link(pack: ModPack) -> Result<String, String> {
     let encoded = URL_SAFE_NO_PAD.encode(data.as_bytes());
     if encoded.len() > MAX_LINK_BYTES {
         return Err(format!(
-            "This pack ({} files) is too big for a text link ({} KB, max {} KB) — share the .scpack file instead.",
+            "This pack ({} files) is too big for a text link ({} KB, max {} KB). Share the .scpack file instead.",
             pack.files.len(),
             encoded.len() / 1024,
             MAX_LINK_BYTES / 1024
@@ -382,7 +382,7 @@ pub(crate) async fn compute_pack_sync_plan_inner(
     let needs_rehash = {
         let app_state = state.lock().await;
         if app_state.is_any_syncing() {
-            return Err("A sync is already running — wait for it to finish".to_string());
+            return Err("A sync is already running. Wait for it to finish".to_string());
         }
         let files = &app_state.local_manifest.files;
         files.is_empty() || files.values().any(|f| f.hash.is_empty())
@@ -393,7 +393,7 @@ pub(crate) async fn compute_pack_sync_plan_inner(
 
     let mut app_state = state.lock().await;
     if app_state.is_any_syncing() {
-        return Err("A sync is already running — wait for it to finish".to_string());
+        return Err("A sync is already running. Wait for it to finish".to_string());
     }
     let resolved_id = app_state.resolve_peer_id(peer_id)?;
     let active_game = app_state.active_game.clone();

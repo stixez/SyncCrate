@@ -113,7 +113,7 @@ fn delete_checkpoint() {
     let _ = std::fs::remove_file(&path);
 }
 
-const SYNC_RUNNING: &str = "A sync is already running — wait for it to finish";
+const SYNC_RUNNING: &str = "A sync is already running. Wait for it to finish";
 
 #[tauri::command]
 pub async fn compute_sync_plan(

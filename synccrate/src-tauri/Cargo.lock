@@ -5509,7 +5509,7 @@ dependencies = [
 
 [[package]]
 name = "synccrate"
-version = "0.7.5"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",

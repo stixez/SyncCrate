@@ -4,11 +4,11 @@ import NetworkHealth from "./NetworkHealth";
 import { Panel } from "./ui";
 
 const TROUBLESHOOTING = [
-  <>On the <b className="font-medium text-txt">host</b> PC, use the Network Check above — "Fix Windows Firewall" solves most failed connections</>,
+  <>On the <b className="font-medium text-txt">host</b> PC, use the Network Check above. "Fix Windows Firewall" solves most failed connections</>,
   <>Use <b className="font-medium text-txt">Test</b> above with the host's IP to see whether it's reachable</>,
   <>Make sure both players are running the <b className="font-medium text-txt">same version</b> of SyncCrate</>,
   <>Verify the host is actively hosting (green "Hosting" status)</>,
-  <>Guest Wi-Fi and some mesh routers isolate devices from each other — use the main network or a VPN</>,
+  <>Guest Wi-Fi and some mesh routers isolate devices from each other. Use the main network or a VPN</>,
   <>If using a custom port, make sure both sides use the same port number</>,
   <>Tailscale/ZeroTier: check that both devices show as "Connected" in the VPN app</>,
 ];

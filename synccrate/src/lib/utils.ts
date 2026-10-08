@@ -96,6 +96,13 @@ export function fileKind(relativePath: string): string {
   return i <= 0 ? "" : name.slice(i);
 }
 
+/** "Script mod" only for Sims 4 scripts (.ts4script, or a .zip, which the game
+ * loads scripts from); jars, folders and the like are plain mods. */
+export function modLabel(relativePath: string, gameId?: string): string {
+  const ext = fileKind(relativePath);
+  return ext === ".ts4script" || (gameId === "sims4" && ext === ".zip") ? "Script mod" : "Mod";
+}
+
 /** "42 s", "3 min 5 s", "1 h 2 min" from milliseconds. */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));

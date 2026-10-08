@@ -10,6 +10,7 @@ import type {
   ModProfile,
   LogEntry,
   PeerInfo,
+  ModMeta,
 } from "./types";
 
 const now = Math.floor(Date.now() / 1000);
@@ -324,6 +325,64 @@ export const demoManifests: Record<string, FileManifest> = {
     generated_at: now,
   },
 };
+
+// --- Sims 4 CC with thumbnails (Content page grid, website screenshots) ---
+// Made-up items with generated art: real CC thumbnails are their creators'
+// work and these end up in screenshots on the website.
+
+type DemoCC = { path: string; name: string; author: string; items: number; glyph: string; from: string; to: string };
+const DEMO_CC: DemoCC[] = [
+  { path: "Mods/CC_Hair/aladdin_braids.package", name: "Aladdin Braids", author: "Nuvelle", items: 18, glyph: "💇‍♀️", from: "#f7d6e0", to: "#e9a8c1" },
+  { path: "Mods/CC_Hair/curly_updo.package", name: "Curly Updo", author: "Nuvelle", items: 24, glyph: "👩‍🦱", from: "#f3e1c7", to: "#d9b48f" },
+  { path: "Mods/CC_Clothes/vintage_dress_pack.package", name: "Vintage Dress Pack", author: "Rosemary Lane", items: 96, glyph: "👗", from: "#dcd3f5", to: "#b5a6e8" },
+  { path: "Mods/CC_Clothes/streetwear_tops.package", name: "Streetwear Tops", author: "Kiko", items: 40, glyph: "👕", from: "#cfe8f7", to: "#93c5e8" },
+  { path: "Mods/CC_Furniture/modern_kitchen_set.package", name: "Modern Kitchen Set", author: "Oak & Pine", items: 31, glyph: "🍳", from: "#e3eadf", to: "#b9cdb0" },
+  { path: "Mods/CC_Skin/smooth_skin_overlay.package", name: "Smooth Skin Overlay", author: "Glowpixel", items: 12, glyph: "✨", from: "#fbe7d3", to: "#f2c49b" },
+  { path: "Mods/CC_Decor/cozy_reading_nook.package", name: "Cozy Reading Nook", author: "Oak & Pine", items: 14, glyph: "📚", from: "#efe2cf", to: "#cfb48c" },
+  { path: "Mods/CC_Decor/boho_plant_collection.package", name: "Boho Plant Collection", author: "Greenhaus", items: 22, glyph: "🪴", from: "#dff1e2", to: "#9fd3aa" },
+  { path: "Mods/CC_Decor/fairy_light_garland.package", name: "Fairy Light Garland", author: "Glowpixel", items: 6, glyph: "💡", from: "#fdf3c9", to: "#f3d96b" },
+  { path: "Mods/CC_Furniture/velvet_sofa.package", name: "Velvet Sofa", author: "Rosemary Lane", items: 8, glyph: "🛋️", from: "#e6d6ee", to: "#c49bd6" },
+  { path: "Mods/CC_Furniture/scandi_bedroom.package", name: "Scandi Bedroom", author: "Oak & Pine", items: 27, glyph: "🛏️", from: "#e5ecf2", to: "#b8c9d8" },
+  { path: "Mods/CC_Clothes/knit_sweaters.package", name: "Knit Sweaters", author: "Kiko", items: 30, glyph: "🧶", from: "#f6dccf", to: "#e5a88b" },
+  { path: "Mods/CC_Clothes/sneaker_collection.package", name: "Sneaker Collection", author: "Kiko", items: 16, glyph: "👟", from: "#d8f0ee", to: "#8fd1c9" },
+  { path: "Mods/CC_Accessories/gold_hoops.package", name: "Gold Hoop Earrings", author: "Nuvelle", items: 9, glyph: "💍", from: "#fbf0d2", to: "#e8c76f" },
+  { path: "Mods/CC_Accessories/cat_eye_glasses.package", name: "Cat-Eye Glasses", author: "Glowpixel", items: 11, glyph: "👓", from: "#e7e3f3", to: "#a9a2cf" },
+  { path: "Mods/CC_Decor/wall_art_set.package", name: "Gallery Wall Art", author: "Greenhaus", items: 19, glyph: "🖼️", from: "#f2e4e1", to: "#d6aaa2" },
+  { path: "Mods/CC_Build/arched_windows.package", name: "Arched Windows", author: "Oak & Pine", items: 12, glyph: "🪟", from: "#e1edf6", to: "#9fc0dc" },
+  { path: "Mods/CC_Pets/cat_tree.package", name: "Cat Tree & Bed", author: "Greenhaus", items: 5, glyph: "🐈", from: "#f4e6d6", to: "#d9b38a" },
+];
+
+for (const [i, c] of DEMO_CC.entries()) {
+  if (demoManifests.sims4.files[c.path]) continue;
+  demoManifests.sims4.files[c.path] = {
+    relative_path: c.path,
+    size: 600_000 + i * 731_917,
+    hash: (i + 10).toString(16).padStart(2, "0").repeat(32),
+    modified: now - (i + 1) * 3 * day,
+    file_type: "CustomContent",
+  };
+}
+
+export function demoModMetas(game: string): ModMeta[] {
+  if (game !== "sims4") return [];
+  return DEMO_CC.map((c) => ({
+    key: c.path,
+    is_file: true,
+    source: "sims4",
+    name: c.name,
+    authors: [c.author],
+    has_icon: true,
+    items: c.items,
+    derived_name: false,
+  }));
+}
+
+export function demoModIcon(key: string): string | null {
+  const c = DEMO_CC.find((x) => x.path === key);
+  if (!c) return null;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${c.from}"/><stop offset="1" stop-color="${c.to}"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/><text x="50" y="66" font-size="48" text-anchor="middle">${c.glyph}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 // Keep backward compat for existing code that uses demoManifest directly
 export const demoManifest: FileManifest = demoManifests.sims4;

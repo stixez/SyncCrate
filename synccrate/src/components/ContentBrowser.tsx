@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type CSSProperties, type ReactNode } from "react";
 import {
   Search, Package, Tag, CheckSquare, X, Upload, ArrowUpDown, AlertTriangle, Copy, Sparkles,
-  ChevronRight, Folder, FolderTree, List, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift, SearchCheck,
+  ChevronRight, Folder, FolderTree, List, LayoutGrid, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift, SearchCheck,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { getGameDef } from "../lib/games";
 import ModItem, { COL, ModIcon } from "./ModItem";
+import ModGrid, { type GridUnit } from "./ModGrid";
 import SaveItem from "./SaveItem";
 import ModDetailsPanel from "./ModDetailsPanel";
 import CompatIssues from "./CompatIssues";
@@ -26,7 +27,7 @@ import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } fro
 import { clearModIconCache, metaLookup } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
-type View = "folders" | "flat";
+type View = "folders" | "flat" | "grid";
 type SyncStatus = "synced" | "pending" | "conflict" | "local";
 type StatusKey = "enabled" | "disabled" | "outdated" | "conflict" | "pending";
 
@@ -55,11 +56,11 @@ function writeViews(v: Record<string, View>) {
   }
 }
 
-/** `?demo&view=flat|folders` for screenshots (headless runs start with empty storage). */
+/** `?demo&view=flat|folders|grid` for screenshots (headless runs start with empty storage). */
 function demoView(): View | null {
   if (!isDemoMode()) return null;
   const v = new URLSearchParams(window.location.search).get("view");
-  return v === "flat" || v === "folders" ? v : null;
+  return v === "flat" || v === "folders" || v === "grid" ? v : null;
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -238,8 +239,8 @@ export default function ContentBrowser({ gameId }: Props) {
       setManifest(await cmd.scanFiles(gameId), gameId);
       setLegacyCount(await cmd.countLegacyDisabled(gameId));
       if (r.moved) toastSuccess(`Disabled ${r.moved} mod${r.moved !== 1 ? "s" : ""} properly (renamed to .disabled)`);
-      if (r.collisions.length) toastInfo(`${r.collisions.length} file(s) left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
-      if (r.errors.length) toastError(`${r.errors.length} file(s) could not be moved: ${r.errors[0]}`);
+      if (r.collisions.length) toastInfo(`${plural(r.collisions.length, "file")} left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
+      if (r.errors.length) toastError(`${plural(r.errors.length, "file")} could not be moved: ${r.errors[0]}`);
     } catch (e) {
       toastError(`Fix failed: ${e}`);
     } finally {
@@ -348,7 +349,7 @@ export default function ContentBrowser({ gameId }: Props) {
       setBulkTagInput(false);
       setSelected(new Set());
       setBulkMode(false);
-      toastSuccess(`Tagged ${paths.length} file(s) as "${tag}"`);
+      toastSuccess(`Tagged ${plural(paths.length, "file")} as "${tag}"`);
     } catch (e) {
       toastError(`Bulk tag failed: ${e}`);
     }
@@ -569,7 +570,9 @@ export default function ContentBrowser({ gameId }: Props) {
   // --- View + virtual list items ---------------------------------------------
 
   const viewKey = `${gameId}:${activeTab}`;
-  const view: View = views[viewKey] ?? demoView() ?? (tabStats.dirs > 1 ? "folders" : "flat");
+  const chosen: View = views[viewKey] ?? demoView() ?? (tabStats.dirs > 1 ? "folders" : "flat");
+  // Pictures only mean something for mods and CC; saves stay a list.
+  const view: View = chosen === "grid" && !isModLike ? "flat" : chosen;
   const setView = (v: View) => {
     const next = { ...views, [viewKey]: v };
     setViews(next);
@@ -610,6 +613,30 @@ export default function ContentBrowser({ gameId }: Props) {
     }
     return { items, heights: items.map((it) => (it.type === "group" ? headH : rowH)) };
   }, [view, visible, groups, collapsed, rowH, headH]);
+
+  // Grid tiles: a folder mod with metadata (Thunderstore, SMAPI…) is one tile
+  // for all its files; everything else is a tile per file. `visible` is sorted.
+  const gridUnits = useMemo(() => {
+    if (view !== "grid") return [];
+    const units: GridUnit[] = [];
+    const byMod = new Map<string, GridUnit>();
+    for (const f of visible) {
+      const m = metaFor(f.relative_path);
+      if (m && !m.is_file) {
+        const u = byMod.get(m.key);
+        if (u) {
+          u.files.push(f);
+          continue;
+        }
+        const nu: GridUnit = { key: `m:${m.key}`, files: [f], meta: m };
+        byMod.set(m.key, nu);
+        units.push(nu);
+      } else {
+        units.push({ key: f.relative_path, files: [f], meta: m });
+      }
+    }
+    return units;
+  }, [view, visible, metaFor]);
 
   const toggleCollapsed = useCallback((dir: string) => {
     setCollapsed((prev) => {
@@ -750,6 +777,7 @@ export default function ContentBrowser({ gameId }: Props) {
         key={p}
         style={style}
         file={f}
+        gameId={gameId}
         meta={metaFor(p)}
         update={metaFor(p)?.is_file ? updateFor(metaFor(p)?.key) : undefined}
         syncStatus={getSyncStatus(p)}
@@ -916,7 +944,7 @@ export default function ContentBrowser({ gameId }: Props) {
                     {tabCounts[ct.id] ?? 0}
                   </span>
                   {!!conflictsByTab[ct.id] && (
-                    <span className="font-mono font-normal text-[10px] tracking-normal tabular text-amber" title={`${conflictsByTab[ct.id]} conflict(s) to resolve`}>
+                    <span className="font-mono font-normal text-[10px] tracking-normal tabular text-amber" title={`${plural(conflictsByTab[ct.id], "conflict")} to resolve`}>
                       ⚠ {conflictsByTab[ct.id]}
                     </span>
                   )}
@@ -999,6 +1027,11 @@ export default function ContentBrowser({ gameId }: Props) {
             <Segment active={view === "flat"} onClick={() => setView("flat")} title="Flat list">
               <List size={13} /> Flat
             </Segment>
+            {isModLike && (
+              <Segment active={view === "grid"} onClick={() => setView("grid")} title="Pictures: each mod's thumbnail or icon">
+                <LayoutGrid size={13} /> Grid
+              </Segment>
+            )}
           </div>
         </div>
 
@@ -1189,6 +1222,21 @@ export default function ContentBrowser({ gameId }: Props) {
       ) : (
         // Plain hairline box, not a clipped .panel: the tag editor popover
         // hangs out of its row and clip-path would cut it off.
+        view === "grid" ? (
+        <div className="box">
+          <ModGrid
+            units={gridUnits}
+            getSyncStatus={getSyncStatus}
+            updateFor={updateFor}
+            outdatedPaths={outdated.paths}
+            compatMap={compatMap}
+            bulkMode={bulkMode && isModLike}
+            selected={selected}
+            onSelectPaths={selectPaths}
+            onShowDetails={handleShowDetails}
+          />
+        </div>
+        ) : (
         <div className="box">
           {/* -top-6 cancels <main>'s py-6 so the header pins flush to its top edge. */}
           <div className="sticky -top-6 z-30 flex items-center gap-3 pl-3 pr-3 h-8 border-b border-border bg-bg-2 hud-label text-[10px]!">
@@ -1215,6 +1263,7 @@ export default function ContentBrowser({ gameId }: Props) {
           </div>
           <VirtualList items={items} heights={heights} renderItem={renderItem} />
         </div>
+        )
       )}
 
       {tabFiles.length > 0 && (

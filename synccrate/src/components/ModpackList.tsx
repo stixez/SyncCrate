@@ -5,7 +5,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
 import { Banner, Button, EmptyState, Input, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { getGameDef, gameLabel } from "../lib/games";
-import { dirOf, formatBytes, formatDate } from "../lib/utils";
+import { dirOf, formatBytes, formatDate, plural } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { toastAction, toastError, toastInfo, toastSuccess } from "../lib/toast";
 import { runPackApply } from "../lib/packApply";
@@ -228,7 +228,7 @@ export default function ModpackList({ gameId }: Props) {
       setSyncPlan(plan);
       const unavailable = plan.pack_unavailable?.length ?? 0;
       addLog(
-        `Pack sync ready: ${plan.actions.length} file(s) to sync${unavailable ? `, ${unavailable} unavailable from this host` : ""}`,
+        `Pack sync ready: ${plural(plan.actions.length, "file")} to sync${unavailable ? `, ${unavailable} unavailable from this host` : ""}`,
         "info",
       );
       setPage("dashboard");
@@ -273,7 +273,7 @@ export default function ModpackList({ gameId }: Props) {
         setSyncPlan(plan);
         setPendingPackApply({ pack: importedPack, preview: applyPreview });
         addLog(
-          `Applying pack "${importedPack.name}": step 1 gets ${plan.actions.length} file(s). Mods are disabled/re-enabled after the sync finishes without errors.`,
+          `Applying pack "${importedPack.name}": step 1 gets ${plural(plan.actions.length, "file")}. Mods are disabled/re-enabled after the sync finishes without errors.`,
           "info",
         );
         setApplyPreview(null);
@@ -295,7 +295,7 @@ export default function ModpackList({ gameId }: Props) {
     setReverting(true);
     try {
       const r = await cmd.revertPackApply(gameId);
-      const summary = `${r.reverted} file(s) put back${r.skipped.length ? `, ${r.skipped.length} skipped` : ""}`;
+      const summary = `${plural(r.reverted, "file")} put back${r.skipped.length ? `, ${r.skipped.length} skipped` : ""}`;
       addLog(`Pack apply reverted: ${summary}`, r.skipped.length ? "warning" : "success");
       for (const s of r.skipped) addLog(`  Skipped ${s.relative_path}: ${s.reason}`, "warning");
       if (r.skipped.length) toastInfo(`Reverted: ${summary}. See the activity log.`);
@@ -317,7 +317,7 @@ export default function ModpackList({ gameId }: Props) {
       <SectionHeader
         label={<><b>// Share</b> &nbsp;my exact setup</>}
         title={<>Mod<span className="text-neon">packs</span></>}
-        description="Export what you have as a small, shareable manifest — no file contents. A friend imports it, sees what they're missing, and pulls just those files from you."
+        description="Export what you have as a small, shareable manifest with no file contents. A friend imports it, sees what they're missing, and pulls just those files from you."
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -361,7 +361,7 @@ export default function ModpackList({ gameId }: Props) {
             {exportedPack && (
               <div className="pt-3 border-t border-line space-y-2">
                 <p className="text-xs text-txt-dim">
-                  <span className="text-txt tabular">{exportedPack.files.length}</span> files, exact bytes stay with you — this only shares the list.
+                  <span className="text-txt tabular">{exportedPack.files.length}</span> files, exact bytes stay with you. This only shares the list.
                 </p>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleSaveFile} icon={<SaveIcon size={12} />}>
@@ -382,7 +382,7 @@ export default function ModpackList({ gameId }: Props) {
             <Button block onClick={handleImportFile} icon={<Upload size={14} />}>
               Choose a .scpack File
             </Button>
-            <p className="text-center font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted">— or drop one anywhere, or paste a link —</p>
+            <p className="text-center font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted">or drop one anywhere, or paste a link</p>
             <div className="flex gap-2">
               <Input wrapperClassName="flex-1 min-w-0" value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleImportLink()} placeholder="synccrate://pack/..." aria-label="Pack link" mono />
               <Button onClick={handleImportLink} disabled={!linkInput.trim()} icon={<Link2 size={12} />}>
@@ -501,7 +501,7 @@ export default function ModpackList({ gameId }: Props) {
               )}
 
               {applyPreview.blocked.length > 0 && (
-                <Banner tone="warn" icon={<AlertTriangle size={14} />} title={`${applyPreview.blocked.length} disabled pack file(s) can't be re-enabled`}>
+                <Banner tone="warn" icon={<AlertTriangle size={14} />} title={`${plural(applyPreview.blocked.length, "disabled pack file")} can't be re-enabled`}>
                   {applyPreview.blocked.slice(0, 5).map((b) => (
                     <p key={b.relative_path} className="text-[11px] font-mono truncate">{b.relative_path.split("/").pop()}: {b.reason}</p>
                   ))}
@@ -512,7 +512,7 @@ export default function ModpackList({ gameId }: Props) {
                 Nothing is deleted: mods that aren't in the pack are disabled, and saves and other content are never touched.
                 Downloads and conflicts run as a normal sync first; mods are disabled and re-enabled only if that sync finishes
                 without errors. <b>Revert Pack Apply</b> undoes the disabling and re-enabling; downloaded files are undone
-                with <b>Undo Last Sync</b> on the Backups page.
+                with <b>Undo last sync</b> on the Backups page.
               </p>
               <Button
                 variant="primary"
@@ -548,7 +548,7 @@ export default function ModpackList({ gameId }: Props) {
         >
           <p className="text-xs">
             {applyStatus.disabled} disabled, {applyStatus.enabled} re-enabled. Revert puts exactly those files back (anything you
-            moved since is skipped). Files the pack downloaded stay; use Undo Last Sync on the Backups page for those.
+            moved since is skipped). Files the pack downloaded stay; use Undo last sync on the Backups page for those.
           </p>
         </Banner>
       )}

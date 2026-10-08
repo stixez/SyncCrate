@@ -118,7 +118,7 @@ pub async fn start_broadcast(
     }
 
     if daemon.is_none() && !UDP_ACTIVE.load(Ordering::Relaxed) {
-        return Err("LAN discovery could not start — peers can still join via Direct IP".to_string());
+        return Err("LAN discovery could not start. Friends can still join with a join code or Connect by IP".to_string());
     }
 
     *broadcast_lock().lock().await = Some(BroadcastHandle { daemon, udp_cancel });

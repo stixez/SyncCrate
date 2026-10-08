@@ -185,6 +185,10 @@ export interface ModMeta {
   description?: string | null;
   website?: string | null;
   has_icon: boolean;
+  /** Items inside a Sims 4 package (objects plus CAS swatches); >1 for merged files. */
+  items?: number | null;
+  /** `name` was made from the file name, so don't show both. */
+  derived_name: boolean;
 }
 
 /** A previous version of a synced file (src-tauri/src/commands/history.rs). */

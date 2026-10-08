@@ -173,7 +173,7 @@ pub async fn fix_firewall() -> Result<FirewallStatus, String> {
         }
         let status = get_firewall_status().await?;
         if status.checked && status.has_block_rule {
-            return Err("A firewall block rule for SyncCrate is still active — it may be enforced by a group policy or third-party firewall.".to_string());
+            return Err("A firewall block rule for SyncCrate is still active. It may be enforced by a group policy or third-party firewall.".to_string());
         }
         Ok(status)
     }
@@ -323,7 +323,7 @@ pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResu
     Ok(match result {
         Ok(Ok(_)) => ConnectionTestResult {
             reachable: true,
-            message: format!("{}:{} is reachable — SyncCrate is listening there.", ip, port),
+            message: format!("{}:{} is reachable. SyncCrate is listening there.", ip, port),
             latency_ms: Some(start.elapsed().as_millis() as u64),
         },
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => ConnectionTestResult {
@@ -333,7 +333,7 @@ pub async fn test_connection(ip: String, port: u16) -> Result<ConnectionTestResu
         },
         Ok(Err(e)) => ConnectionTestResult {
             reachable: false,
-            message: format!("Could not reach {}:{} — {}", ip, port, e),
+            message: format!("Could not reach {}:{}. {}", ip, port, e),
             latency_ms: None,
         },
         Err(_) => ConnectionTestResult {

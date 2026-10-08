@@ -504,16 +504,16 @@ pub fn encode_invite(crew: &Crew, from_node: &str, from_name: &str) -> Result<St
 pub fn decode_invite(payload: &str, is_known_game: impl Fn(&str) -> bool) -> Result<CrewInvite, String> {
     let payload = payload.trim();
     if payload.is_empty() {
-        return Err("That crew invite is empty — it may have been cut off.".into());
+        return Err("That crew invite is empty. It may have been cut off.".into());
     }
     if payload.len() > MAX_INVITE_BYTES {
         return Err("That crew invite is too long to be real.".into());
     }
     let bytes = URL_SAFE_NO_PAD
         .decode(payload)
-        .map_err(|_| "That crew invite is damaged — ask for a fresh link.".to_string())?;
+        .map_err(|_| "That crew invite is damaged. Ask for a fresh link.".to_string())?;
     let inv: CrewInvite =
-        serde_json::from_slice(&bytes).map_err(|_| "That crew invite is damaged — ask for a fresh link.".to_string())?;
+        serde_json::from_slice(&bytes).map_err(|_| "That crew invite is damaged. Ask for a fresh link.".to_string())?;
     validate_invite(inv, is_known_game)
 }
 

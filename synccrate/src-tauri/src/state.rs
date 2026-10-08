@@ -504,7 +504,7 @@ impl AppState {
                 } else if self.connections.is_empty() {
                     Err("No active connections".to_string())
                 } else {
-                    Err("Multiple peers connected — specify a peer_id".to_string())
+                    Err("Multiple peers connected. Specify a peer_id".to_string())
                 }
             }
         }

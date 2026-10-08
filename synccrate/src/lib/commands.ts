@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import pkg from "../../package.json";
-import { demoCompatIssues, demoExtraFolders, demoSharedSaves, isDemoMode } from "./demoData";
+import { demoCompatIssues, demoExtraFolders, demoModIcon, demoModMetas, demoSharedSaves, isDemoMode } from "./demoData";
 import type {
   ExtraFolder,
   SharedSavesView,
@@ -603,7 +603,7 @@ export async function connectCrew(crewId: string, nodeId: string | undefined, na
 
 /** Names, versions, authors and icons from mods' own metadata files (active game only). */
 export async function getModMetadata(game: string): Promise<ModMeta[]> {
-  if (isDemoMode()) return [];
+  if (isDemoMode()) return demoModMetas(game);
   return invoke("get_mod_metadata", { game });
 }
 
@@ -613,6 +613,7 @@ export async function checkModUpdates(game: string): Promise<UpdateReport> {
 }
 
 export async function getModIcon(key: string): Promise<string | null> {
+  if (isDemoMode()) return demoModIcon(key);
   return invoke("get_mod_icon", { key });
 }
 

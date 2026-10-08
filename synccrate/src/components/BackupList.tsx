@@ -3,7 +3,7 @@ import { friendlyError } from "../lib/errors";
 import { Archive, Plus, RotateCcw, Trash2, Pencil, Check, X, Loader2, Undo2 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import { formatBytes, formatDate } from "../lib/utils";
+import { formatBytes, formatDate, plural } from "../lib/utils";
 import { gameLabel, getGameDef } from "../lib/games";
 import { Badge, Banner, Button, EmptyState, Input, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
 import FileHistory from "./FileHistory";
@@ -180,7 +180,7 @@ export default function BackupList({ gameId }: Props) {
       toastSuccess(`Backup restored: ${restoreSummary(r)}`);
       if (r.skipped.length > 0) {
         // Mods the user has since disabled/enabled are left as they are.
-        const msg = `${r.skipped.length} file(s) skipped because you've disabled or enabled them since: ${r.skipped[0]}${r.skipped.length > 1 ? " …" : ""}`;
+        const msg = `${plural(r.skipped.length, "file")} skipped because you've disabled or enabled them since: ${r.skipped[0]}${r.skipped.length > 1 ? " …" : ""}`;
         addLog(msg, "warning");
         toastInfo(msg);
       }
@@ -273,7 +273,7 @@ export default function BackupList({ gameId }: Props) {
             undoStatus.added > 0 && `${undoStatus.added} added`,
             undoStatus.deleted > 0 && `${undoStatus.deleted} deleted`,
           ].filter(Boolean).join(", ") || "Nothing changed"}
-          {undoConfirm && " — puts your files back exactly as they were before that sync."}
+          {undoConfirm && ". This puts your files back exactly as they were before that sync."}
         </Banner>
       )}
 

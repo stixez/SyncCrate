@@ -59,8 +59,8 @@ export function FirewallCheck({ compact = false }: { compact?: boolean }) {
           {status.has_block_rule ? "Windows Firewall is blocking SyncCrate" : "SyncCrate isn't allowed through Windows Firewall"}
         </p>
         <p className="text-[11.5px] text-txt-dim leading-relaxed mt-1">
-          Friends won't be able to connect to you until this is fixed. You don't need to run SyncCrate as administrator —
-          click Fix and approve the one-time Windows prompt.
+          Friends won't be able to connect to you until this is fixed. You don't need to run SyncCrate as administrator.
+          Click Fix and approve the one-time Windows prompt.
         </p>
       </div>
       <Button

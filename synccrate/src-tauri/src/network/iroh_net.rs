@@ -164,7 +164,7 @@ pub async fn connect(
 ) -> Result<PeerStream, String> {
     let ep = endpoint(state, app).await?;
     if remote == ep.id() {
-        return Err("That join code is your own — share it with a friend instead.".to_string());
+        return Err("That join code is your own. Share it with a friend instead.".to_string());
     }
     let conn = tokio::time::timeout(Duration::from_secs(25), ep.connect(remote, ALPN))
         .await

@@ -10,6 +10,14 @@ export const MOD_SOURCE_LABELS: Record<string, string> = {
   forge: "Forge",
   paradox: "Paradox mod",
   bannerlord: "Bannerlord module",
+  sims4: "Sims 4 CC",
+  sims3: "Sims 3 CC",
+  rimworld: "RimWorld mod",
+  zomboid: "Project Zomboid mod",
+  factorio: "Factorio mod",
+  darkest: "Darkest Dungeon mod",
+  xcom2: "XCOM 2 mod",
+  wow: "WoW addon",
 };
 
 /** Path → the mod it belongs to: a single-file mod (jar) by exact path,

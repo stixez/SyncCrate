@@ -1086,18 +1086,18 @@ fn connect_failure_message(kind: ConnectFailure, tried: &[String], port: u16, de
     let addrs = tried.join(", ");
     match kind {
         ConnectFailure::Refused => format!(
-            "The host at {} refused the connection on port {}. It's reachable, but SyncCrate isn't hosting on that port — check the host is still hosting and the port matches.",
+            "The host at {} refused the connection on port {}. It's reachable, but SyncCrate isn't hosting on that port. Check the host is still hosting and the port matches.",
             addrs, port
         ),
         ConnectFailure::Timeout => format!(
-            "No response from {} on port {}. This is almost always Windows Firewall on the host blocking SyncCrate — on the host PC, click \"Fix Windows Firewall\" (shown on the hosting screen and in Network Check), then try again.",
+            "No response from {} on port {}. This is almost always Windows Firewall on the host blocking SyncCrate. On the host PC, click \"Fix Windows Firewall\" (shown on the hosting screen and in Network Check), then try again.",
             addrs, port
         ),
         ConnectFailure::Unreachable => format!(
             "{} is unreachable from this PC. Make sure both PCs are on the same network (or the same VPN such as Tailscale/ZeroTier).",
             addrs
         ),
-        ConnectFailure::Other => format!("Could not connect to {}:{} — {}", addrs, port, detail),
+        ConnectFailure::Other => format!("Could not connect to {}:{}. {}", addrs, port, detail),
     }
 }
 
@@ -1328,7 +1328,7 @@ pub(crate) async fn run_client_session(
             let msg = match protocol::try_recv_message(&mut *s, std::time::Duration::from_secs(300)).await? {
                 Some(m) => m,
                 None => return Err(
-                    "Timed out waiting for host manifest — the host may be scanning a very large folder. Try again in a moment.".to_string()
+                    "Timed out waiting for host manifest. The host may be scanning a very large folder. Try again in a moment.".to_string()
                 ),
             };
             match msg {

@@ -37,7 +37,7 @@
       "content_types": [
         {
           "id": "mods",
-          "label": "Script Mods",
+          "label": "Mods & CC",
           "icon": "package",
           "color": "text-accent-light",
           "folder": "Mods",

@@ -218,7 +218,7 @@ export default function GameDashboard({ gameId }: Props) {
       const text = e.clipboardData?.getData("text")?.trim() ?? "";
       if (/^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/i.test(text)) {
         setJoinCode(text.toUpperCase());
-        toastSuccess("Join code pasted — click Join");
+        toastSuccess("Join code pasted. Click Join");
       }
     };
     window.addEventListener("paste", onPaste);
@@ -254,7 +254,7 @@ export default function GameDashboard({ gameId }: Props) {
       const info = await cmd.detectPacks(gameId);
       setGameInfo(info);
       const packCount = info?.installed_packs?.length ?? 0;
-      toastSuccess(`Detected ${packCount} pack(s)`);
+      toastSuccess(`Detected ${plural(packCount, "pack")}`);
     } catch (e) {
       addLog(`Pack detection failed: ${e}`, "error");
       toastError(`Pack detection failed: ${friendlyError(e)}`);
@@ -339,7 +339,7 @@ export default function GameDashboard({ gameId }: Props) {
               size="lg"
               label={<><b>// Session</b> &nbsp;Not connected</>}
               title={gameLabel}
-              description="Host a session so friends can pull your files, or join a friend's. Join codes work on your network and over the internet."
+              description="Host a session so friends can copy your mods, or join a friend's. Join codes work on your network and over the internet."
               actions={
                 <>
                   <PlayButton gameId={gameId} label={gameLabel} />
@@ -348,7 +348,7 @@ export default function GameDashboard({ gameId }: Props) {
                   </Button>
                   {gamePaths[gameId] && (
                     <Button size="sm" onClick={() => cmd.openFolder(gamePaths[gameId]!)} icon={<FolderOpen size={13} />}>
-                      Open Folder
+                      Open folder
                     </Button>
                   )}
                 </>
@@ -603,7 +603,7 @@ export default function GameDashboard({ gameId }: Props) {
                     maxLength={5}
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    placeholder="0000"
+                    placeholder="00000"
                     aria-label="Session PIN"
                     aria-describedby="pin-help"
                     className="input input-mono flex-1 h-11! text-center text-xl tracking-[0.5em]!"
@@ -628,12 +628,12 @@ export default function GameDashboard({ gameId }: Props) {
                 className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-txt-muted hover:text-txt transition-colors"
               >
                 <Globe size={12} />
-                {showManualIp ? "Hide" : "Connect by IP address"}
+                {showManualIp ? "Hide IP connect" : "Connect by IP address"}
                 {showManualIp ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
               {showManualIp && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-[11px] text-txt-dim">For VPN/Tailscale users — enter the host's IP directly. The host must allow SyncCrate through their firewall.</p>
+                  <p className="text-[11px] text-txt-dim">For VPN users (Tailscale, ZeroTier): enter the host's IP address. The host must allow SyncCrate through their firewall.</p>
                   <div className="flex gap-2">
                     <Input
                       mono
@@ -753,7 +753,7 @@ export default function GameDashboard({ gameId }: Props) {
             </Button>
             {gamePaths[gameId] && (
               <Button size="sm" onClick={() => cmd.openFolder(gamePaths[gameId]!)} icon={<FolderOpen size={13} />}>
-                Open Folder
+                Open folder
               </Button>
             )}
             {confirmLeave ? (
@@ -782,7 +782,7 @@ export default function GameDashboard({ gameId }: Props) {
             )}
             {isClient && !sessionGameMismatch && (
               <Button variant="primary" onClick={computePlan} disabled={syncBusy} icon={<ArrowDownUp size={14} />}>
-                {isSyncLoading ? (loadingPhase || "Computing...") : "Compare & Sync"}
+                {isSyncLoading ? (loadingPhase || "Comparing...") : "Compare & Sync"}
               </Button>
             )}
           </>
@@ -903,7 +903,7 @@ export default function GameDashboard({ gameId }: Props) {
 
       {isHost && session.host_ips && session.host_ips.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="hud-label flex items-center gap-1.5" title="Share one of these with friends to connect — they'll download your files from here">
+          <span className="hud-label flex items-center gap-1.5" title="Only needed for Connect by IP (VPN users). Most friends should use the join code.">
             <Globe size={12} /> Direct address
           </span>
           {session.host_ips.map((ip) => (
@@ -1008,7 +1008,7 @@ export default function GameDashboard({ gameId }: Props) {
           )}
           {!!syncPlan.resumed_files && syncPlan.resumed_files > 0 && (
             <p className="font-mono text-xs text-neon">
-              &gt; Resuming — {syncPlan.resumed_files} files already transferred
+              &gt; Resuming: {plural(syncPlan.resumed_files, "file")} already transferred
             </p>
           )}
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
@@ -1018,7 +1018,7 @@ export default function GameDashboard({ gameId }: Props) {
       {isClient && !(syncPlan && syncPlan.actions.length > 0) && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
-          You have everything the host shares. Turn on Stay in sync to get their new mods automatically.
+          You have everything the host shares. {stayInSync ? "Stay in sync will pull their new mods automatically." : "Turn on Stay in sync to get their new mods automatically."}
         </Banner>
       )}
 

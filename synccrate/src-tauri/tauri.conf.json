@@ -1,6 +1,6 @@
 {
   "productName": "SyncCrate",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "identifier": "com.synccrate.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -32,11 +32,18 @@
     "createUpdaterArtifacts": true,
     "windows": {
       "nsis": {
-        "installerHooks": "windows/hooks.nsh"
+        "installerHooks": "windows/hooks.nsh",
+        "headerImage": "windows/header.bmp",
+        "sidebarImage": "windows/sidebar.bmp"
+      },
+      "wix": {
+        "bannerPath": "windows/wix-banner.bmp",
+        "dialogImagePath": "windows/wix-dialog.bmp"
       }
     },
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
     },
     "fileAssociations": [
       {

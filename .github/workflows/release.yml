@@ -46,7 +46,7 @@ jobs:
           script: |
             const workflowTag = (process.env.INPUT_TAG || '').trim();
             const tag = workflowTag || context.ref.replace('refs/tags/', '');
-            const releaseBody = `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n> **macOS:** The app is not signed yet. If macOS says "app is damaged", open Terminal and run:\n> \`\`\`\n> xattr -cr /Applications/SyncCrate.app\n> \`\`\`\n> Then open SyncCrate normally.`;
+            const releaseBody = `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n> **macOS:** SyncCrate isn't notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to SyncCrate.\n> If macOS says the app "is damaged" instead, open Terminal and run \`xattr -cr /Applications/SyncCrate.app\`, then open SyncCrate normally.\n\n> **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.`;
 
             let release;
             try {
@@ -162,3 +162,32 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonKeepUniversal: true
           args: --target ${{ matrix.target }}
+
+  # Opens a PR on microsoft/winget-pkgs for the new version, so
+  # `winget install stixez.SyncCrate` works (and skips the browser download
+  # SmartScreen flags). Its own job: the WINGET_TOKEN PAT never shares a
+  # runner with the updater signing key. Does nothing until that secret
+  # exists, and the package's first version has to be submitted by hand.
+  winget:
+    name: Publish to winget
+    needs: build
+    runs-on: windows-latest
+    permissions: {}
+    steps:
+      - name: Check for the winget token
+        id: token
+        shell: bash
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -n "$WINGET_TOKEN" ]; then echo "set=true" >> "$GITHUB_OUTPUT"; else echo "No WINGET_TOKEN secret: skipping winget."; fi
+
+      - name: Open the winget-pkgs PR
+        if: steps.token.outputs.set == 'true'
+        uses: vedantmgoyal9/winget-releaser@f29ed1ffd34f91223a2aebaa71beaab0901ff9fd # v2
+        with:
+          identifier: stixez.SyncCrate
+          installers-regex: '_x64-setup\.exe$'
+          release-tag: ${{ inputs.tag || github.ref_name }}
+          max-versions-to-keep: 3
+          token: ${{ secrets.WINGET_TOKEN }}

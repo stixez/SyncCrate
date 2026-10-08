@@ -17,6 +17,8 @@ const OS_ERRORS: Record<number, string> = {
   28: "Your drive is full. Free up some space and try again.",
   206: "A path is too long for Windows. Move the mod into a shorter folder and try again.",
   225: "Windows Security blocked a file as a possible threat.",
+  10013: "SyncCrate couldn't open its network port. Close other copies of SyncCrate, or pick another port in Settings → Network & Sync.",
+  10048: "SyncCrate couldn't open its network port. Close other copies of SyncCrate, or pick another port in Settings → Network & Sync.",
   10053: "The connection to the other PC dropped. Reconnect and try again.",
   10054: "The connection to the other PC dropped. Reconnect and try again.",
 };

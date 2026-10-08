@@ -10,7 +10,7 @@ import { runPackApply } from "../lib/packApply";
 import { loadDisplayName } from "../lib/prefs";
 import { sendNotification } from "../lib/notify";
 import { friendlyError } from "../lib/errors";
-import { displayPath } from "../lib/utils";
+import { displayPath, plural } from "../lib/utils";
 
 // One rescan at a time: a change during a scan queues exactly one more.
 let scanInFlight = false;
@@ -331,11 +331,11 @@ export function useTauriEvents() {
         }),
         listen<{ message: string }>("internet-unavailable", (event) => {
           addLog(`Internet joining is unavailable: ${event.payload.message}`, "warning");
-          toastInfo("Friends outside your network can't join right now — same-network joining still works.");
+          toastInfo("Friends outside your network can't join right now. Same-network joining still works.");
         }),
         listen<{ message: string }>("discovery-unavailable", (event) => {
           addLog(`LAN auto-discovery is unavailable: ${event.payload.message}`, "warning");
-          toastInfo("Auto-discovery couldn't start — friends can still join using Connect by IP.");
+          toastInfo("Scan for Hosts isn't working right now. Friends can still join with your join code.");
         }),
         listen<{ message: string; host_game?: string }>("connection-failed", (event) => {
           const msg = event.payload.message;
@@ -355,7 +355,7 @@ export function useTauriEvents() {
             // Host requires a PIN (or ours was wrong): ask for it and retry the
             // exact same attempt instead of failing outright.
             cancelRetry();
-            addLog(attempt.pin ? "Wrong PIN — enter the host's current PIN" : "This host requires a PIN", "warning");
+            addLog(attempt.pin ? "Wrong PIN. Enter the host's current PIN" : "This host requires a PIN", "warning");
             useAppStore.getState().setPinPrompt({ attempt, wrongPin: !!attempt.pin });
             setIsScanning(false);
             useAppStore.getState().setIsConnecting(false);
@@ -438,7 +438,7 @@ export function useTauriEvents() {
             if (pendingApply.preview.game_id !== useAppStore.getState().activeGame) {
               addLog("Apply pack exactly stopped: the active game changed. No mods were disabled.", "warning");
             } else if (cancelled || (errors && errors.length > 0)) {
-              const why = cancelled ? "the sync was cancelled" : `the sync had ${errors.length} error(s)`;
+              const why = cancelled ? "the sync was cancelled" : `the sync had ${plural(errors.length, "error")}`;
               addLog(`Apply pack exactly stopped: ${why}. No mods were disabled; import the pack again to retry.`, "warning");
               toastError(`Pack not applied: ${why}. No mods were disabled.`);
             } else {
@@ -486,24 +486,24 @@ export function useTauriEvents() {
           }
 
           if (cancelled) {
-            addLog(`Sync cancelled after ${files_synced} file(s)`, "warning");
+            addLog(`Sync cancelled after ${plural(files_synced, "file")}`, "warning");
             return;
           }
           const from = peerName((event.payload as { peer_id?: string }).peer_id);
           if (errors && errors.length > 0) {
             addLog(
-              `Sync completed with ${errors.length} error(s): ${files_synced} files synced`,
+              `Sync completed with ${plural(errors.length, "error")}: ${plural(files_synced, "file")} synced`,
               "warning",
             );
             for (const err of errors) {
               addLog(`  Sync error: ${err}`, "error");
             }
-            sendNotification("SyncCrate", `Sync finished with ${errors.length} error(s) — see the activity log`);
+            sendNotification("SyncCrate", `Sync finished with ${plural(errors.length, "error")}. See the activity log.`);
           } else {
             addLog(`${auto ? "Stay in sync: " : ""}Sync complete: ${files_synced} files synced`, "success");
             if (!auto) sendNotification(
               "SyncCrate",
-              `Sync complete — ${files_synced} file${files_synced !== 1 ? "s" : ""}${from ? ` from ${from}` : ""}`,
+              `Sync complete: ${plural(files_synced, "file")}${from ? ` from ${from}` : ""}`,
             );
           }
         }),

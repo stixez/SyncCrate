@@ -130,7 +130,7 @@ impl ChatLog {
     pub fn queue(&mut self, text: &str) -> Result<(), String> {
         let text = clean_text(text, MAX_TEXT_CHARS).ok_or("Type a message first.")?;
         if self.outbox.len() >= MAX_OUTBOX {
-            return Err("Slow down — messages are still being sent.".into());
+            return Err("Slow down. Messages are still being sent.".into());
         }
         self.outbox.push(text);
         Ok(())

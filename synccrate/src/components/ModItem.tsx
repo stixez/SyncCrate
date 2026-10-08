@@ -2,7 +2,7 @@ import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { useModIcon } from "../lib/modMeta";
-import { dirOf, displayPath, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath } from "../lib/utils";
+import { dirOf, displayPath, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath, modLabel } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import TagEditor from "./TagEditor";
 import { Badge, Toggle, cx } from "./ui";
@@ -30,6 +30,8 @@ export function ModIcon({ meta, size, className, fallback }: { meta?: ModMeta; s
 
 interface ModItemProps {
   file: FileInfo;
+  /** The game the row belongs to (tells a Sims 4 script zip from other zips). */
+  gameId?: string;
   /** Metadata of the mod this file belongs to (its own for jars, its folder's otherwise). */
   meta?: ModMeta;
   /** An available update for this file's own mod (jars). */
@@ -57,6 +59,7 @@ interface ModItemProps {
 
 function ModItem({
   file,
+  gameId,
   meta,
   update,
   style,
@@ -122,7 +125,7 @@ function ModItem({
           "w-6 h-6 shrink-0 grid place-items-center border",
           isDisabled ? "border-border text-txt-muted" : isMod ? "border-accent/50 text-accent-light bg-accent/10" : "border-line-hi text-txt-dim bg-bg",
         )}
-        title={isMod ? "Script mod" : "Custom content"}
+        title={isMod ? modLabel(file.relative_path, gameId) : "Custom content"}
       >
         <ModIcon meta={ownMeta} size={22} fallback={isMod ? <Puzzle size={12} /> : <Palette size={12} />} />
       </div>
@@ -140,7 +143,7 @@ function ModItem({
         >
           {ownMeta ? ownMeta.name : name}
           {ownMeta?.version && <span className="font-mono text-[10.5px] text-txt-dim font-normal ml-1.5 no-underline">v{ownMeta.version.replace(/^v/i, "")}</span>}
-          {ownMeta && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
+          {ownMeta && !ownMeta.derived_name && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
           {!ownMeta && meta && showDir && <span className="text-[11px] text-txt-muted font-normal ml-2">· {meta.name}</span>}
         </button>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}

@@ -34,7 +34,7 @@ export const GUIDE: GuideGroup[] = [
         summary: "Get everyone on the same mods in four steps.",
         steps: [
           "Add your game with **Add Game** in the sidebar. Its folder is found automatically, or set it in **Settings → Games**.",
-          "One friend opens the game and clicks **Start Hosting**.",
+          "One friend opens the game's Dashboard in SyncCrate and clicks **Start Hosting**.",
           "Everyone else joins: pick the host under **Scan for Hosts** (same network), or paste the host's join code (anywhere).",
           "Click **Compare & Sync**, check the plan, then **Sync Now**.",
         ],
@@ -240,13 +240,13 @@ export const GUIDE: GuideGroup[] = [
         title: "Manage mods",
         summary: "Browse, filter, switch off and tidy up.",
         steps: [
-          "The Content page shows your mods by folder or as one list, with real mod names and icons where mods include them.",
+          "The Content page shows your mods by folder, as one list, or as a **Grid** of pictures, with real mod names and icons where mods include them.",
           "Filter by status, type or tag, and enable or disable one mod or a whole creator folder.",
           "Drag files onto the window to install them: each goes to the folder its type belongs in.",
           "Use **Find duplicates** to find identical copies, and **Check for updates** where the game supports it.",
         ],
         tip: "Press `/` or `Ctrl+F` to search.",
-        keywords: "content disable enable tag duplicate update install drag drop",
+        keywords: "content disable enable tag duplicate update install drag drop grid pictures thumbnails",
         go: { label: "Open Content", page: "content" },
       },
       {
@@ -268,6 +268,7 @@ export const GUIDE: GuideGroup[] = [
         title: "The Sims 4 tips",
         summary: "What SyncCrate does differently for Sims 4.",
         steps: [
+          "CC shows the thumbnail and name stored inside each `.package`, and the creator from the `[Creator]` tag in its file name. Switch the Content page to **Grid** to browse it by picture; merged packages show how many items they hold.",
           "Disabled mods are renamed to `.disabled`, because the game also loads subfolders. Old `_Disabled` folders are fixed in one click.",
           "The health check on the Content page catches what stops CC from loading: mods switched off in the game's options, script mods more than one folder deep, packages deeper than `Resource.cfg` allows, a missing `Resource.cfg`, two copies of one script mod, and unextracted `.zip` files.",
           "It also finds Tray items saved into Mods and CC saved into Tray (neither works there), and script mods the game's own error report (`lastException`) names. Most have a one-click fix; close the game first.",

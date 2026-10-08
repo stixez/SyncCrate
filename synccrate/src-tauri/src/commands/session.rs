@@ -473,7 +473,7 @@ pub async fn connect_by_code(
     let internet_id = match info.internet_id {
         Some(bytes) => Some(
             iroh::EndpointId::from_bytes(&bytes)
-                .map_err(|_| "That join code isn't valid — check it was copied completely.".to_string())?,
+                .map_err(|_| "That join code isn't valid. Check it was copied completely.".to_string())?,
         ),
         None => None,
     };

@@ -350,7 +350,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
       <div className="px-5 py-3 space-y-2">
         {gameRunning && (
           <Banner tone="warn" icon={<Gamepad2 size={14} />}>
-            {gameLabel(activeGame)} is running — close it before syncing so files aren't locked or half-loaded.
+            {gameLabel(activeGame)} is running. Close it before syncing so files aren't locked or half-loaded.
           </Banner>
         )}
 
@@ -368,7 +368,7 @@ export default function SyncBanner({ plan, onSync, onResolveAll, busy }: SyncBan
         )}
         {(plan.pack_unavailable?.length ?? 0) > 0 && (
           <p className="text-xs text-txt-dim">
-            {plan.pack_unavailable!.length} pack file{plan.pack_unavailable!.length !== 1 ? "s" : ""} this host doesn't have — try someone else who has them.
+            {plan.pack_unavailable!.length} pack file{plan.pack_unavailable!.length !== 1 ? "s" : ""} this host doesn't have. Try someone else who has them.
           </p>
         )}
         {((plan.disabled_locally ?? 0) > 0 || (plan.disabled_on_host ?? 0) > 0) && (

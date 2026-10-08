@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Loader2, Trash2, EyeOff, X } from "lucide-react";
 import type { DuplicateGroup } from "../lib/types";
-import { formatBytes, isDisabledPath } from "../lib/utils";
+import { formatBytes, isDisabledPath, plural } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastError, toastSuccess } from "../lib/toast";
 import * as cmd from "../lib/commands";
@@ -74,7 +74,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
     }
     setBusy(false);
     if (ok) toastSuccess(`Disabled ${ok} duplicate${ok !== 1 ? "s" : ""}`);
-    if (errors.length) toastError(`${errors.length} file(s) couldn't be disabled: ${errors[0]}`);
+    if (errors.length) toastError(`${plural(errors.length, "file")} couldn't be disabled: ${errors[0]}`);
     await refresh();
   };
 
@@ -97,7 +97,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
     try {
       const r = await cmd.deleteModFiles(gameId, confirmDelete.paths, confirmDelete.keep);
       if (r.deleted) toastSuccess(`Deleted ${r.deleted} duplicate${r.deleted !== 1 ? "s" : ""}`);
-      if (r.errors.length) toastError(`${r.errors.length} file(s) couldn't be deleted: ${r.errors[0]}`);
+      if (r.errors.length) toastError(`${plural(r.errors.length, "file")} couldn't be deleted: ${r.errors[0]}`);
     } catch (e) {
       toastError(`Delete failed: ${e}`);
     } finally {
@@ -159,7 +159,7 @@ export default function DuplicateFinder({ gameId, onClose }: Props) {
 
       {loading ? (
         <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim">
-          <Loader2 size={12} className="animate-spin text-neon" /> Hashing files to find identical copies…
+          <Loader2 size={12} className="animate-spin text-neon" /> Checking files for identical copies…
         </p>
       ) : groups && groups.length === 0 ? (
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-txt-dim">No duplicates. Every file is unique.</p>

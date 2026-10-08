@@ -6,7 +6,7 @@ import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
 import { friendlyError } from "../lib/errors";
-import { displayPath } from "../lib/utils";
+import { displayPath, plural } from "../lib/utils";
 
 export function useSync() {
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,7 @@ export function useSync() {
     setIsLoading(true);
     try {
       // Full scan with hashes needed for accurate sync comparison
-      setLoadingPhase("Hashing files...");
+      setLoadingPhase("Checking your files...");
       await cmd.scanFiles(undefined, false);
       setLoadingPhase("Comparing with the host...");
       const plan = await cmd.computeSyncPlan();
@@ -36,7 +36,7 @@ export function useSync() {
         addLog(plan.warning, "warning");
         toastError(plan.warning);
       } else if (count > 0) {
-        toastSuccess(`Found ${count} difference(s) to sync`);
+        toastSuccess(`Found ${plural(count, "difference")} to sync`);
       } else {
         toastSuccess("Everything is in sync");
       }
