@@ -6,6 +6,7 @@ import { gamePrimaryColor, getGameDef } from "../lib/games";
 import { applyAccent, applyAppearanceRoot, applyThemeClass, useMediaPreference } from "../lib/appearance";
 import DonateModal from "./DonateModal";
 import { GameArt, LiveDot } from "./ui";
+import { plural } from "../lib/utils";
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -73,7 +74,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <span className="text-neon">{session.session_type === "Host" ? "Hosting" : "Connected"}</span>
                 {session.peers.length > 0 && (
                   <span className="text-txt-muted">
-                    / {session.peers.length} peer{session.peers.length > 1 ? "s" : ""}
+                    / {plural(session.peers.length, "friend")}
                   </span>
                 )}
               </span>
