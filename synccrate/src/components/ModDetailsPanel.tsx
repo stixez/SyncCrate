@@ -2,7 +2,7 @@ import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle, Copy, L
 import { useDialog } from "../hooks/useDialog";
 import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, ModWarning, SourceLink } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS, useModIcon } from "../lib/modMeta";
 import { openCreatorLink } from "../lib/links";
@@ -23,6 +23,8 @@ interface ModDetailsPanelProps {
   file: FileInfo;
   meta?: ModMeta;
   update?: ModUpdate;
+  /** Missing dependencies, or made for another Minecraft version or loader. */
+  warnings?: ModWarning[];
   syncStatus: "synced" | "pending" | "conflict" | "local";
   tags: string[];
   compatibility?: ModCompatibility;
@@ -63,6 +65,7 @@ export default function ModDetailsPanel({
   file,
   meta,
   update,
+  warnings,
   syncStatus,
   tags,
   compatibility,
@@ -217,6 +220,30 @@ export default function ModDetailsPanel({
                           Get it
                         </button>
                       )}
+                      {update.changelog && (
+                        <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(update.changelog!).catch(() => {})}>
+                          What's new
+                        </button>
+                      )}
+                    </Row>
+                  )}
+                  {warnings && (
+                    <Row label="Check">
+                      <ul className="flex flex-col gap-1">
+                        {warnings.map((w, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-amber">
+                            <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                            <span>
+                              {w.text}
+                              {w.url && (
+                                <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(w.url!).catch(() => {})}>
+                                  Open on CurseForge
+                                </button>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </Row>
                   )}
                   {meta.authors.length > 0 && <Row label={meta.authors.length > 1 ? "Authors" : "Author"}>{meta.authors.join(", ")}</Row>}
@@ -232,7 +259,7 @@ export default function ModDetailsPanel({
                       </button>
                     </Row>
                   )}
-                  {(meta.curseforge || meta.source === "curseforge" || update?.source === "curseforge") && (
+                  {(meta.curseforge || meta.source === "curseforge" || update?.source === "curseforge" || !!warnings) && (
                     <p className="pt-2 font-mono text-[10.5px] text-txt-muted">Info from CurseForge</p>
                   )}
                 </>

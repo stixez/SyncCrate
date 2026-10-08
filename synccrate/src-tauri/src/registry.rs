@@ -579,8 +579,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 123,
-            "expected at least 123 games, found {}",
+            registry.games.len() >= 124,
+            "expected at least 124 games, found {}",
             registry.games.len()
         );
 

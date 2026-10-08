@@ -1,6 +1,6 @@
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Puzzle, Palette, Tag, AlertTriangle } from "lucide-react";
-import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, ModWarning } from "../lib/types";
 import { useModIcon } from "../lib/modMeta";
 import { dirOf, displayPath, fileName, formatBytes, formatDate, formatDateShort, formatRelative, isDisabledPath, modLabel } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
@@ -36,6 +36,8 @@ interface ModItemProps {
   meta?: ModMeta;
   /** An available update for this file's own mod (jars). */
   update?: ModUpdate;
+  /** Missing dependencies, or made for another Minecraft version or loader. */
+  warnings?: ModWarning[];
   /** Fixed row height from the virtual list (density-dependent). */
   style?: CSSProperties;
   syncStatus?: "synced" | "pending" | "conflict" | "local";
@@ -64,6 +66,7 @@ function ModItem({
   gameId,
   meta,
   update,
+  warnings,
   style,
   syncStatus = "local",
   tags = [],
@@ -151,6 +154,11 @@ function ModItem({
         </button>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
         {update && <Badge tone="neon" className="shrink-0" title={`Update available: ${update.latest}`}>Update</Badge>}
+        {warnings && (
+          <Badge tone="amber" className="shrink-0" title={warnings.map((w) => w.text).join("\n")}>
+            {warnings.some((w) => w.kind === "missing_dependency") ? "Needs mod" : "Mismatch"}
+          </Badge>
+        )}
         {linked && <Badge tone="neutral" className="shrink-0" title="Friends get a link to the creator's page instead of a copy">Link</Badge>}
         {isOutdated && (
           <Badge tone="amber" className="shrink-0" title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}>

@@ -8,7 +8,7 @@
 //! - SMAPI's web API (Stardew Valley): the manifest's `UpdateKeys`
 //!   (Nexus/GitHub/ModDrop/CurseForge ids) in one batch request, the same
 //!   service SMAPI itself uses.
-//! - CurseForge (Sims 4, Minecraft): file fingerprints through SyncCrate's
+//! - CurseForge (Sims 4, Minecraft, WoW): file fingerprints through SyncCrate's
 //!   own proxy, which holds the API key (`crate::curseforge`).
 //!
 //! Nexus proper needs a per-user API key, so it's not used. Checks only run
@@ -42,6 +42,21 @@ pub struct ModUpdate {
     /// Thunderstore: the package is deprecated (no longer maintained).
     #[serde(default)]
     pub deprecated: bool,
+    /// The new version's own page, with its changelog ("What's new").
+    pub changelog: Option<String>,
+}
+
+/// Something about one mod worth a look: a missing dependency, or a jar for
+/// another Minecraft version or loader than the rest (`crate::curseforge`).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ModWarning {
+    /// `ModMeta::key` of the mod.
+    pub key: String,
+    /// "missing_dependency" | "game_version" | "loader"
+    pub kind: String,
+    pub text: String,
+    /// The missing dependency's page.
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -54,6 +69,8 @@ pub struct UpdateReport {
     /// Metadata CurseForge added for the files it recognized (replacing the
     /// file's own entry by key). Only held in memory by the page that asked.
     pub metas: Vec<ModMeta>,
+    /// From CurseForge's answer too, so dropped with it.
+    pub warnings: Vec<ModWarning>,
 }
 
 fn clean_version(s: &str) -> Option<String> {
@@ -317,6 +334,7 @@ async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], 
                     latest: new.version_number.clone(),
                     url: Some(format!("https://modrinth.com/project/{}/version/{}", new.project_id, new.id)),
                     deprecated: false,
+                    changelog: None,
                 });
             }
         }
@@ -355,7 +373,7 @@ async fn check_thunderstore(http: &reqwest::Client, metas: &[&ModMeta], report: 
             let Some((latest, url, deprecated)) = parse_thunderstore(&json) else { continue };
             let newer = meta.version.as_deref().map_or(true, |cur| is_newer(&latest, cur));
             if newer || deprecated {
-                report.updates.push(ModUpdate { key: meta.key.clone(), source: "thunderstore".into(), current: meta.version.clone(), latest, url, deprecated });
+                report.updates.push(ModUpdate { key: meta.key.clone(), source: "thunderstore".into(), current: meta.version.clone(), latest, url, deprecated, changelog: None });
             }
         }
     }
@@ -377,7 +395,7 @@ async fn check_smapi(http: &reqwest::Client, metas: &[&ModMeta], game_version: O
     for m in with_keys {
         let Some((latest, url)) = m.id.as_deref().and_then(|id| suggested.get(id)) else { continue };
         if m.version.as_deref().map_or(true, |cur| is_newer(latest, cur)) {
-            report.updates.push(ModUpdate { key: m.key.clone(), source: "smapi".into(), current: m.version.clone(), latest: latest.clone(), url: url.clone(), deprecated: false });
+            report.updates.push(ModUpdate { key: m.key.clone(), source: "smapi".into(), current: m.version.clone(), latest: latest.clone(), url: url.clone(), deprecated: false, changelog: None });
         }
     }
     Ok(())
@@ -448,6 +466,7 @@ fn merge_curseforge(report: &mut UpdateReport, modrinth_known: &HashSet<String>,
         }
     }
     report.metas = cf.metas;
+    report.warnings = cf.warnings;
     if let Some(note) = cf.note {
         report.errors.push(format!("CurseForge: {note}"));
     }
@@ -547,7 +566,7 @@ mod tests {
 
     #[test]
     fn modrinth_wins_for_every_jar_it_recognised() {
-        let upd = |key: &str, source: &str| ModUpdate { key: key.into(), source: source.into(), current: Some("1".into()), latest: "2".into(), url: None, deprecated: false };
+        let upd = |key: &str, source: &str| ModUpdate { key: key.into(), source: source.into(), current: Some("1".into()), latest: "2".into(), url: None, deprecated: false, changelog: None };
         let meta = |key: &str| ModMeta { key: key.into(), is_file: true, ..Default::default() };
         // Modrinth recognised a.jar (with an update) and b.jar (current).
         let mut report = UpdateReport { updates: vec![upd("mods/a.jar", "modrinth")], checked: 2, ..Default::default() };
@@ -555,6 +574,7 @@ mod tests {
         let cf = crate::curseforge::Outcome {
             updates: vec![upd("mods/a.jar", "curseforge"), upd("mods/b.jar", "curseforge"), upd("mods/c.jar", "curseforge")],
             metas: vec![meta("mods/a.jar"), meta("mods/b.jar"), meta("mods/c.jar")],
+            warnings: vec![],
             note: Some("checked 3 of 4 files, then: timed out".into()),
         };
         merge_curseforge(&mut report, &known, Ok(cf));

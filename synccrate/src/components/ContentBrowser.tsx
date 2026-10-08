@@ -23,7 +23,7 @@ import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, i
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
-import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
+import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate, ModWarning, SourceLink } from "../lib/types";
 import { clearModIconCache, metaLookup, withCurseForge } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
@@ -301,6 +301,12 @@ export default function ContentBrowser({ gameId }: Props) {
   const isLinked = useCallback((path: string) => !!linkFor(path), [linkFor]);
   const updateFor = useMemo(() => {
     const byKey = new Map((updateReport?.updates ?? []).map((u) => [u.key, u]));
+    return (key?: string) => (key ? byKey.get(key) : undefined);
+  }, [updateReport]);
+  // Missing dependencies and jars for another setup, from the same check.
+  const warningsFor = useMemo(() => {
+    const byKey = new Map<string, ModWarning[]>();
+    for (const w of updateReport?.warnings ?? []) byKey.set(w.key, [...(byKey.get(w.key) ?? []), w]);
     return (key?: string) => (key ? byKey.get(key) : undefined);
   }, [updateReport]);
 
@@ -774,6 +780,7 @@ export default function ContentBrowser({ gameId }: Props) {
           group={g}
           meta={metaFor(g.dir)}
           update={updateFor(metaFor(g.dir)?.key)}
+          warnings={warningsFor(metaFor(g.dir)?.key)}
           open={!collapsed.has(g.dir)}
           onToggleOpen={() => toggleCollapsed(g.dir)}
           bulkMode={bulkMode && isModLike}
@@ -800,6 +807,7 @@ export default function ContentBrowser({ gameId }: Props) {
         gameId={gameId}
         meta={metaFor(p)}
         update={metaFor(p)?.is_file ? updateFor(metaFor(p)?.key) : undefined}
+        warnings={metaFor(p)?.is_file ? warningsFor(metaFor(p)?.key) : undefined}
         syncStatus={getSyncStatus(p)}
         tags={modTags[p]}
         onTagsChanged={handleTagsChanged}
@@ -1249,6 +1257,7 @@ export default function ContentBrowser({ gameId }: Props) {
             units={gridUnits}
             getSyncStatus={getSyncStatus}
             updateFor={updateFor}
+            warningsFor={warningsFor}
             outdatedPaths={outdated.paths}
             compatMap={compatMap}
             bulkMode={bulkMode && isModLike}
@@ -1318,6 +1327,7 @@ export default function ContentBrowser({ gameId }: Props) {
           file={detailFile}
           meta={metaFor(detailFile.relative_path)}
           update={updateFor(metaFor(detailFile.relative_path)?.key)}
+          warnings={warningsFor(metaFor(detailFile.relative_path)?.key)}
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
@@ -1359,6 +1369,7 @@ function FolderHeader({
   group,
   meta,
   update,
+  warnings,
   open,
   onToggleOpen,
   bulkMode,
@@ -1374,6 +1385,7 @@ function FolderHeader({
   group: Group;
   meta?: ModMeta;
   update?: ModUpdate;
+  warnings?: ModWarning[];
   open: boolean;
   onToggleOpen: () => void;
   bulkMode: boolean;
@@ -1435,6 +1447,11 @@ function FolderHeader({
             <span className="text-txt font-semibold">{folderMeta.name}</span>
             {folderMeta.version && <span className="font-mono text-[10.5px] text-txt-dim ml-1.5">v{folderMeta.version.replace(/^v/i, "")}</span>}
             {update && <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-neon ml-2" title={`Update available: ${update.latest}`}>update {update.latest}</span>}
+            {warnings && (
+              <span className="inline-flex align-[-2px] text-amber ml-2" title={warnings.map((w) => w.text).join("\n")} aria-label={warnings.map((w) => w.text).join(". ")}>
+                <AlertTriangle size={12} />
+              </span>
+            )}
             <span className="font-mono text-[11px] text-txt-muted ml-2">{group.dir}</span>
           </p>
         </>

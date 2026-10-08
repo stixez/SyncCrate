@@ -98,7 +98,7 @@ pub async fn check_mod_updates(state: tauri::State<'_, Arc<Mutex<AppState>>>, ga
         let gv = s.game_info.get(&game).and_then(|g| g.game_version.clone());
         let mods_folder = crate::registry::build_registry_map(&s.game_registry)
             .get(&game)
-            .and_then(|d| d.content_types.iter().find(|ct| ct.id == "mods").map(|ct| ct.rel_folder()));
+            .and_then(|d| d.content_types.iter().find(|ct| ct.id == "mods" || ct.id == "addons").map(|ct| ct.rel_folder()));
         (s.active_game_path()?, s.local_manifest.files.keys().cloned().collect::<Vec<_>>(), gv, mods_folder)
     };
     *CF_ICONS.lock().unwrap_or_else(|e| e.into_inner()) = None;

@@ -9,8 +9,9 @@ import type { ModMeta, UpdateReport } from "../lib/types";
 
 export const UPDATE_SOURCE_LABELS: Record<string, string> = { modrinth: "Modrinth", thunderstore: "Thunderstore", smapi: "SMAPI", curseforge: "CurseForge" };
 
-/** Games whose mod files are looked up on CurseForge (backend `curseforge::select_files`). */
-const CURSEFORGE_GAMES = new Set(["sims4", "minecraft_java"]);
+/** Games whose mod files are looked up on CurseForge (backend `curseforge::select_files`;
+ * WoW addons by folder, for the clients CurseForge has builds for). */
+const CURSEFORGE_GAMES = new Set(["sims4", "minecraft_java", "wow_retail", "wow_classic", "wow_classic_era", "wow_forever"]);
 
 /** Whether any mod here has a source we can check (mirrors backend `mod_updates::checkable`). */
 export function canCheckUpdates(metas: ModMeta[], gameId: string) {
@@ -23,7 +24,7 @@ export function canCheckUpdates(metas: ModMeta[], gameId: string) {
 /** What the check sends, and to whom, for this game. */
 function sendsWhat(gameId: string): string {
   const cf = "Sends file fingerprints (not names or files) to CurseForge through synccrate.app.";
-  if (gameId === "sims4") return cf;
+  if (gameId === "sims4" || (gameId.startsWith("wow_") && CURSEFORGE_GAMES.has(gameId))) return cf;
   if (gameId === "minecraft_java") return `Asks Modrinth about your mods (their file hashes). ${cf}`;
   return "Asks Modrinth, Thunderstore and SMAPI about your mods (their ids and file hashes).";
 }
@@ -100,6 +101,11 @@ export default function ModUpdates({ gameId, metas }: { gameId: string; metas: M
                     {u.deprecated && <span className="text-amber ml-1.5">no longer maintained</span>}
                   </span>
                   <span className="font-mono text-[10px] uppercase text-txt-muted">{UPDATE_SOURCE_LABELS[u.source] ?? u.source}</span>
+                  {u.changelog && (
+                    <button className="font-mono text-[10.5px] text-accent-light hover:text-neon" onClick={() => openUrl(u.changelog!).catch(() => {})} aria-label={`What's new in ${nameOf(u.key)} ${u.latest}`}>
+                      What's new
+                    </button>
+                  )}
                   {u.url && (
                     <button className="text-accent-light hover:text-neon" onClick={() => openUrl(u.url!).catch(() => {})} aria-label={`Open the update page for ${nameOf(u.key)}`}>
                       <ExternalLink size={12} />

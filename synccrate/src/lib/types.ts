@@ -301,6 +301,18 @@ export interface ModUpdate {
   latest: string;
   url?: string | null;
   deprecated?: boolean;
+  /** The new version's own page with its changelog ("What's new"). */
+  changelog?: string | null;
+}
+
+/** A missing dependency, or a Minecraft jar for another version or loader than the rest. */
+export interface ModWarning {
+  /** ModMeta.key of the mod. */
+  key: string;
+  kind: "missing_dependency" | "game_version" | "loader";
+  text: string;
+  /** The missing dependency's page. */
+  url?: string | null;
 }
 
 export interface UpdateReport {
@@ -309,6 +321,8 @@ export interface UpdateReport {
   errors: string[];
   /** CurseForge's info for the files it recognized; replaces those files' own entries by key. */
   metas?: ModMeta[];
+  /** From CurseForge's answer, so dropped with it. */
+  warnings?: ModWarning[];
 }
 
 /** Friends offering files to the host (src-tauri/src/offers.rs). */

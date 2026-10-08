@@ -157,7 +157,7 @@ pub fn run() {
                 "skyrim_le", "xcom2", "american_truck_simulator", "slay_the_spire",
                 "hollow_knight", "oxygen_not_included", "victoria_3",
                 "mount_blade_warband", "dont_starve", "vintage_story", "morrowind",
-                "sims2", "warcraft3", "wow_classic_era",
+                "sims2", "warcraft3", "wow_classic_era", "wow_forever",
                 "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom",
             ];
             for g in &priority {

@@ -272,9 +272,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   forgetCurseForge: (game) =>
     set((s) => {
       const r = s.modUpdates[game];
-      if (!r || (!r.metas?.length && !r.updates.some((u) => u.source === "curseforge"))) return {};
+      if (!r || (!r.metas?.length && !r.warnings?.length && !r.updates.some((u) => u.source === "curseforge"))) return {};
       const updates = r.updates.filter((u) => u.source !== "curseforge");
-      return { modUpdates: { ...s.modUpdates, [game]: { ...r, updates, metas: [] } } };
+      return { modUpdates: { ...s.modUpdates, [game]: { ...r, updates, metas: [], warnings: [] } } };
     }),
 
   selectedGame: null,

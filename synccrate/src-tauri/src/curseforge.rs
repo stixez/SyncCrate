@@ -1,4 +1,6 @@
-//! CurseForge names, pictures and updates for Sims 4 and Minecraft (Java).
+//! CurseForge names, pictures and updates for Sims 4, Minecraft (Java) and
+//! World of Warcraft addons, plus missing dependencies and Minecraft jars
+//! made for another game version or loader.
 //!
 //! CurseForge identifies a file by a "fingerprint" (MurmurHash2 of its bytes
 //! with whitespace removed), so a mod is found without sending its name or
@@ -12,7 +14,7 @@
 //! page closes) and logos are fetched on demand, never written to disk.
 //! Every response is untrusted: sizes are capped, strings cleaned, URLs https.
 use crate::mod_meta::{self, IconRef, ModMeta};
-use crate::mod_updates::ModUpdate;
+use crate::mod_updates::{ModUpdate, ModWarning};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
@@ -181,6 +183,8 @@ pub fn select_files(game: &str, mods_folder: &str, files: &[String]) -> Vec<Stri
     let exts: &[&str] = match game {
         "sims4" => &["package", "ts4script"],
         "minecraft_java" => &["jar"],
+        // WoW addons are identified per folder, from the files their .toc loads.
+        _ if wow_flavor(game).is_some() && mods_folder.eq_ignore_ascii_case(WOW_ADDONS) => &["toc", "xml", "lua"],
         _ => return Vec::new(),
     };
     let prefix = format!("{}/", mods_folder.trim_end_matches('/').to_ascii_lowercase());
@@ -198,6 +202,209 @@ pub fn select_files(game: &str, mods_folder: &str, files: &[String]) -> Vec<Stri
 }
 
 // ---------------------------------------------------------------------------
+// WoW addon folders
+//
+// CurseForge knows a WoW addon by each of its folders: the fingerprint of
+// the files the folder's .toc loads, combined. The method below was checked
+// against the live API (DBM, WeakAuras, BigWigs and Questie: every folder
+// matched); it follows the description of what open source addon managers
+// do, with two corrections that matching needed: any `Name-x.toc` /
+// `Name_x.toc` suffix counts (Questie ships `_Forever` and `_Camelot`), and
+// `Bindings.xml` is hashed without being followed.
+
+/// Where every WoW client keeps addons (registry content folder).
+pub const WOW_ADDONS: &str = "Interface/AddOns";
+/// .toc and .xml files are read to follow what they load. Not small: QuestieDB
+/// bakes its database into .toc metadata, up to 57 MB per client.
+const MAX_LOADER_BYTES: u64 = 128 * 1024 * 1024;
+/// Stops a folder whose files include each other in circles or explode.
+const MAX_ADDON_FILES: usize = 5000;
+
+/// The WoW clients CurseForge has addons for, by registry id, with the name
+/// the proxy filters updates by (each client gets its own builds).
+pub fn wow_flavor(game: &str) -> Option<&'static str> {
+    match game {
+        "wow_retail" => Some("retail"),
+        "wow_classic" => Some("classic"),
+        "wow_classic_era" => Some("classic_era"),
+        "wow_forever" => Some("forever"),
+        _ => None,
+    }
+}
+
+/// `<Name>.toc` or `<Name>` + `-`/`_` + any suffix + `.toc`, compared
+/// without case, directly in the folder.
+fn is_own_toc(folder: &str, file: &str) -> bool {
+    let lower = file.to_ascii_lowercase();
+    let Some(stem) = lower.strip_suffix(".toc") else { return false };
+    let folder = folder.to_ascii_lowercase();
+    !file.contains('/') && (stem == folder || stem.strip_prefix(folder.as_str()).is_some_and(|rest| rest.starts_with(['-', '_'])))
+}
+
+/// XML without its `<!-- -->` comments (they can span lines).
+fn strip_xml_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("<!--") {
+        out.push_str(&rest[..i]);
+        match rest[i + 4..].find("-->") {
+            Some(j) => rest = &rest[i + 4 + j + 3..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The first `<Script file="x"/>` or `<Include file="x"/>` on an XML line.
+fn xml_include(line: &str) -> Option<&str> {
+    let lower = line.to_ascii_lowercase();
+    for (start, _) in lower.match_indices('<') {
+        let after = &lower[start + 1..];
+        let Some(tag_len) = ["include", "script"].iter().find(|t| after.starts_with(**t)).map(|t| t.len()) else { continue };
+        let rest = &after[tag_len..];
+        let attrs = rest.trim_start();
+        if attrs.len() == rest.len() || !attrs.starts_with("file=") {
+            continue;
+        }
+        let value = &attrs[5..];
+        if !value.starts_with(['"', '\'']) {
+            continue;
+        }
+        let Some(end) = value[1..].find(['"', '\'']) else { continue };
+        if !value[1 + end + 1..].trim_start().starts_with("/>") {
+            continue;
+        }
+        // Same byte offsets in the original: lowercasing ASCII keeps lengths.
+        let from = line.len() - value.len() + 1;
+        return Some(&line[from..from + end]);
+    }
+    None
+}
+
+/// What one .toc or .xml file loads, as written (relative to its folder).
+fn includes(text: &str, xml: bool) -> Vec<String> {
+    if xml {
+        return strip_xml_comments(text).lines().filter_map(|l| xml_include(l.trim()).map(str::to_string)).collect();
+    }
+    // A .toc line loads a file when, without its `#` comment, it names a .lua or .xml.
+    text.lines()
+        .filter_map(|l| {
+            let l = l.split('#').next().unwrap_or("").trim();
+            let lower = l.to_ascii_lowercase();
+            (lower.ends_with(".lua") || lower.ends_with(".xml")).then(|| l.to_string())
+        })
+        .collect()
+}
+
+/// The files of one addon folder that CurseForge hashes: the folder's own
+/// .toc files, `Bindings.xml`, and everything the .toc and .xml files load,
+/// recursively. `files` are paths inside the folder (forward slashes);
+/// lookups ignore case like the game does. `read` reads one of them.
+pub fn addon_load_list(folder: &str, files: &[String], read: &dyn Fn(&str) -> Option<Vec<u8>>) -> Vec<String> {
+    let mut todo: Vec<String> = files.iter().filter(|f| is_own_toc(folder, f)).cloned().collect();
+    if todo.is_empty() {
+        // Not an addon the game loads (a library's leftovers, a backup).
+        return Vec::new();
+    }
+    let by_lower: HashMap<String, &String> = files.iter().map(|f| (f.to_ascii_lowercase(), f)).collect();
+    let mut listed: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    if let Some(b) = by_lower.get("bindings.xml") {
+        seen.insert(b.to_ascii_lowercase());
+        listed.push((*b).clone());
+    }
+    todo.sort();
+    todo.reverse();
+    while let Some(want) = todo.pop() {
+        if listed.len() >= MAX_ADDON_FILES {
+            break;
+        }
+        let Some(file) = by_lower.get(&want.to_ascii_lowercase()).copied() else { continue };
+        if !seen.insert(file.to_ascii_lowercase()) {
+            continue;
+        }
+        listed.push(file.clone());
+        let lower = file.to_ascii_lowercase();
+        let xml = lower.ends_with(".xml");
+        if !xml && !lower.ends_with(".toc") {
+            continue;
+        }
+        let Some(bytes) = read(file) else { continue };
+        let dir = file.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+        // Depth first, in file order, like the game reads them.
+        let mut found: Vec<String> = includes(&String::from_utf8_lossy(&bytes), xml)
+            .into_iter()
+            .map(|inc| inc.replace('\\', "/"))
+            .filter(|inc| !inc.split('/').any(|p| p == "..") && !inc.starts_with('/') && !inc.contains(':'))
+            .map(|inc| if dir.is_empty() { inc } else { format!("{dir}/{inc}") })
+            .collect();
+        found.reverse();
+        todo.extend(found);
+    }
+    listed
+}
+
+/// A folder's fingerprint from its files' fingerprints: sorted, written as
+/// decimal numbers with nothing between them, and hashed like a file.
+pub fn folder_fingerprint(file_prints: &[u32]) -> u32 {
+    let mut sorted = file_prints.to_vec();
+    sorted.sort_unstable();
+    let joined: String = sorted.iter().map(u32::to_string).collect();
+    fingerprint(joined.as_bytes())
+}
+
+/// Each addon folder under `Interface/AddOns` with its files (paths inside
+/// the folder), from the manifest paths `select_files` picked.
+fn addon_folders(files: &[String]) -> Vec<(String, Vec<String>)> {
+    let prefix_len = WOW_ADDONS.len() + 1;
+    let mut by_folder: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+    for f in files {
+        let Some(inside) = f.get(prefix_len..) else { continue };
+        let Some((folder, rest)) = inside.split_once('/') else { continue };
+        by_folder.entry(format!("{}{folder}", &f[..prefix_len])).or_default().push(rest.to_string());
+    }
+    by_folder.into_iter().collect()
+}
+
+/// Fingerprints of the addon folders (keyed like their `ModMeta`, e.g.
+/// `Interface/AddOns/DBM-Core`), within the time budget. Folders with no
+/// .toc of their own (leftovers, libraries' subfolders) have none.
+fn fingerprint_addon_folders(base: &str, folders: &[(String, Vec<String>)]) -> (Vec<(String, u32)>, bool) {
+    use rayon::prelude::*;
+    let started = std::time::Instant::now();
+    let out_of_time = std::sync::atomic::AtomicBool::new(false);
+    let prints = folders
+        .par_iter()
+        .filter_map(|(key, files)| {
+            if started.elapsed() >= FINGERPRINT_BUDGET {
+                out_of_time.store(true, std::sync::atomic::Ordering::Relaxed);
+                return None;
+            }
+            let folder = key.rsplit('/').next().unwrap_or(key);
+            let dir = crate::utils::safe_join(base, key).ok()?;
+            let read = |rel: &str| -> Option<Vec<u8>> {
+                let p = crate::utils::safe_join(dir.to_str()?, rel).ok()?;
+                let md = std::fs::symlink_metadata(&p).ok()?;
+                (md.file_type().is_file() && md.len() <= MAX_LOADER_BYTES).then(|| std::fs::read(&p).ok()).flatten()
+            };
+            let list = addon_load_list(folder, files, &read);
+            if list.is_empty() {
+                return None;
+            }
+            let mut fps = Vec::with_capacity(list.len());
+            for rel in &list {
+                // A file the .toc loads that can't be read would give a
+                // fingerprint CurseForge never matches; better to skip.
+                fps.push(fingerprint_file(&crate::utils::safe_join(dir.to_str()?, rel).ok()?)?);
+            }
+            Some((key.clone(), folder_fingerprint(&fps)))
+        })
+        .collect();
+    (prints, !out_of_time.into_inner())
+}
+
+// ---------------------------------------------------------------------------
 // Response
 
 #[derive(Debug, Clone, PartialEq)]
@@ -205,6 +412,17 @@ pub struct CfFile {
     pub id: u64,
     pub display_name: String,
     pub file_date: String,
+    /// The file's page on curseforge.com, which shows its changelog.
+    pub url: Option<String>,
+}
+
+/// A mod the installed file needs (CurseForge's "required dependency").
+#[derive(Debug, Clone, PartialEq)]
+pub struct CfDep {
+    pub mod_id: u64,
+    pub name: String,
+    pub slug: String,
+    pub website: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -218,6 +436,22 @@ pub struct CfMatch {
     pub logo: Option<String>,
     pub file: Option<CfFile>,
     pub latest: Option<CfFile>,
+    /// The installed file's required dependencies.
+    pub requires: Vec<CfDep>,
+    /// The installed file's game versions and loaders ("1.20.1", "Fabric").
+    pub game_versions: Vec<String>,
+}
+
+const MAX_DEPS: usize = 50;
+const MAX_GAME_VERSIONS: usize = 64;
+
+/// A link on curseforge.com (https). The UI opens these in the browser, so
+/// nothing else in those fields is trusted.
+pub fn curseforge_page(s: &str) -> Option<String> {
+    let url = mod_meta::clean_url(s)?;
+    let parsed = reqwest::Url::parse(&url).ok()?;
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    (parsed.scheme() == "https" && (host == "curseforge.com" || host == "www.curseforge.com")).then_some(url)
 }
 
 /// Logos come from CurseForge's CDN; anything else in that field is ignored
@@ -238,7 +472,23 @@ fn parse_file(v: Option<&Value>) -> Option<CfFile> {
         id,
         display_name: mod_meta::clean(name, 64)?,
         file_date: v.get("fileDate").and_then(Value::as_str).and_then(|d| mod_meta::clean(d, 40)).unwrap_or_default(),
+        url: v.get("url").and_then(Value::as_str).and_then(curseforge_page),
     })
+}
+
+fn parse_dep(v: &Value) -> Option<CfDep> {
+    let slug = v.get("slug").and_then(Value::as_str).and_then(|s| mod_meta::clean(s, 64)).unwrap_or_default();
+    let name = v.get("name").and_then(Value::as_str).and_then(|s| mod_meta::clean(s, mod_meta::MAX_NAME)).unwrap_or_else(|| slug.clone());
+    if name.is_empty() {
+        return None;
+    }
+    Some(CfDep { mod_id: v.get("modId")?.as_u64()?, name, slug, website: v.get("websiteUrl").and_then(Value::as_str).and_then(curseforge_page) })
+}
+
+fn parse_game_versions(v: Option<&Value>) -> Vec<String> {
+    v.and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).filter_map(|s| mod_meta::clean(s, 32)).take(MAX_GAME_VERSIONS).collect())
+        .unwrap_or_default()
 }
 
 fn parse_match(v: &Value) -> Option<CfMatch> {
@@ -268,6 +518,8 @@ fn parse_match(v: &Value) -> Option<CfMatch> {
         logo: v.get("logo").and_then(Value::as_str).and_then(logo_url),
         file: parse_file(v.get("file")),
         latest: parse_file(v.get("latest")),
+        requires: v.get("requires").and_then(Value::as_array).map(|a| a.iter().filter_map(parse_dep).take(MAX_DEPS).collect()).unwrap_or_default(),
+        game_versions: parse_game_versions(v.get("gameVersions")),
     })
 }
 
@@ -331,8 +583,17 @@ where
     out
 }
 
+/// What the proxy is asked: WoW clients share CurseForge's one WoW game, and
+/// the flavour picks the updates built for this client.
+fn request_body(game: &str, chunk: &[u32]) -> Value {
+    match wow_flavor(game) {
+        Some(flavor) => serde_json::json!({ "game": "wow", "flavor": flavor, "fingerprints": chunk }),
+        None => serde_json::json!({ "game": game, "fingerprints": chunk }),
+    }
+}
+
 async fn fetch_chunk(http: &reqwest::Client, game: &str, chunk: &[u32]) -> Result<Vec<CfMatch>, String> {
-    let body = serde_json::json!({ "game": game, "fingerprints": chunk });
+    let body = request_body(game, chunk);
     let resp = http.post(LOOKUP_URL).timeout(REQUEST_TIMEOUT).json(&body).send().await;
     let resp = resp.map_err(|e| if e.is_timeout() { "timed out".to_string() } else { "couldn't reach synccrate.app".to_string() })?;
     let status = resp.status().as_u16();
@@ -381,6 +642,8 @@ pub struct Outcome {
     /// Metadata for every matched file (one each, so also the files
     /// CurseForge recognized), merged with what it already had.
     pub metas: Vec<ModMeta>,
+    /// Missing dependencies and (Minecraft) jars made for another setup.
+    pub warnings: Vec<ModWarning>,
     /// Why not every file was looked up, if so.
     pub note: Option<String>,
 }
@@ -413,7 +676,7 @@ pub fn update_of(m: &CfMatch) -> Option<(String, String)> {
 /// What a matched file shows. A file with its own metadata keeps its name and
 /// picture (they describe this exact file) and only gains what it lacks; a
 /// name made up from the file name gives way to the real one.
-pub fn merge_meta(offline: Option<&ModMeta>, key: &str, m: &CfMatch) -> ModMeta {
+pub fn merge_meta(offline: Option<&ModMeta>, key: &str, m: &CfMatch, is_file: bool) -> ModMeta {
     let mut meta = match offline {
         Some(o) => {
             let mut meta = o.clone();
@@ -431,7 +694,7 @@ pub fn merge_meta(offline: Option<&ModMeta>, key: &str, m: &CfMatch) -> ModMeta 
         }
         None => ModMeta {
             key: key.to_string(),
-            is_file: true,
+            is_file,
             source: "curseforge".into(),
             id: Some(m.mod_id.to_string()),
             name: m.name.clone(),
@@ -451,18 +714,189 @@ pub fn merge_meta(offline: Option<&ModMeta>, key: &str, m: &CfMatch) -> ModMeta 
     meta
 }
 
+fn is_disabled(key: &str) -> bool {
+    key.to_ascii_lowercase().ends_with(crate::commands::files::DISABLED_SUFFIX)
+}
+
+/// Lower case without spaces, dashes and underscores, so "Fabric API",
+/// "fabric-api" and "fabric_api" are the same name.
+pub fn norm_name(s: &str) -> String {
+    s.chars().filter(|c| !matches!(c, ' ' | '-' | '_')).flat_map(char::to_lowercase).collect()
+}
+
+/// What counts as installed when looking for a mod's dependencies: mods
+/// CurseForge recognised, plus every installed mod's own ids and names (a
+/// dependency can be installed from Modrinth or by hand, and then CurseForge
+/// doesn't know the file).
+#[derive(Debug, Default)]
+pub struct Installed {
+    mod_ids: std::collections::HashSet<u64>,
+    names: std::collections::HashSet<String>,
+}
+
+impl Installed {
+    pub fn new(cf_mod_ids: impl IntoIterator<Item = u64>, metas: &[ModMeta]) -> Self {
+        let mut names = std::collections::HashSet::new();
+        for m in metas.iter().filter(|m| !is_disabled(&m.key)) {
+            if !m.derived_name {
+                names.insert(norm_name(&m.name));
+            }
+            if let Some(id) = &m.id {
+                names.insert(norm_name(id));
+                // Thunderstore "Author-Name" and SMAPI "Author.Name": the
+                // name part is what CurseForge's slug would be.
+                if let Some((_, last)) = id.rsplit_once(['-', '.']) {
+                    names.insert(norm_name(last));
+                }
+            }
+        }
+        names.remove("");
+        Installed { mod_ids: cf_mod_ids.into_iter().collect(), names }
+    }
+
+    pub fn has(&self, d: &CfDep) -> bool {
+        self.mod_ids.contains(&d.mod_id) || [&d.slug, &d.name].iter().any(|s| self.names.contains(&norm_name(s)))
+    }
+}
+
+/// "Needs <name>" for each enabled file whose required dependencies aren't
+/// installed. `matched` pairs file keys with their match.
+pub fn missing_dependencies(matched: &[(&str, &CfMatch)], metas: &[ModMeta]) -> Vec<ModWarning> {
+    let live: Vec<&(&str, &CfMatch)> = matched.iter().filter(|(k, _)| !is_disabled(k)).collect();
+    let installed = Installed::new(live.iter().map(|(_, m)| m.mod_id), metas);
+    let mut out = Vec::new();
+    for (key, m) in live {
+        let mut seen = std::collections::HashSet::new();
+        for d in &m.requires {
+            if d.mod_id != m.mod_id && seen.insert(d.mod_id) && !installed.has(d) {
+                out.push(ModWarning {
+                    key: key.to_string(),
+                    kind: "missing_dependency".into(),
+                    text: format!("Needs {}: not found in your mods", d.name),
+                    url: d.website.clone(),
+                });
+            }
+        }
+    }
+    out
+}
+
+const MC_LOADERS: [&str; 4] = ["Forge", "NeoForge", "Fabric", "Quilt"];
+
+fn mc_loader(v: &str) -> Option<&'static str> {
+    MC_LOADERS.iter().copied().find(|l| l.eq_ignore_ascii_case(v))
+}
+
+/// "1.20.1" or "1.21", not "1.20-Snapshot" or "Java 17".
+fn is_mc_version(v: &str) -> bool {
+    let parts: Vec<&str> = v.split('.').collect();
+    (2..=3).contains(&parts.len()) && parts.iter().all(|p| !p.is_empty() && p.len() <= 4 && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn highest(versions: &[String]) -> Option<String> {
+    let mut best: Option<&str> = None;
+    for v in versions {
+        if best.map_or(true, |b| crate::mod_updates::is_newer(v, b)) {
+            best = Some(v);
+        }
+    }
+    best.map(str::to_string)
+}
+
+/// The values more than half of `sets` (non-empty ones only) include, when
+/// there are at least 3. Ties at the top all count: jars usually list
+/// several versions ("1.20", "1.20.1"), and picking one of two equally
+/// common ones would flag jars that only list the other.
+fn majority(sets: &[Vec<String>]) -> Vec<String> {
+    let sets: Vec<&Vec<String>> = sets.iter().filter(|s| !s.is_empty()).collect();
+    if sets.len() < 3 {
+        return Vec::new();
+    }
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for s in &sets {
+        for v in s.iter().collect::<std::collections::HashSet<_>>() {
+            *counts.entry(v.as_str()).or_default() += 1;
+        }
+    }
+    let top = counts.values().copied().max().unwrap_or(0);
+    if top * 2 <= sets.len() {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = counts.into_iter().filter(|(_, n)| *n == top).map(|(v, _)| v.to_string()).collect();
+    out.sort();
+    out
+}
+
+/// Whether a jar for `jar` loaders runs where most mods use `most`. Quilt
+/// loads Fabric mods, so a Quilt jar among Fabric ones may just mean the
+/// player uses Quilt; on 1.20.1 NeoForge still loads Forge mods.
+fn loaders_fit(jar: &[String], most: &[String], mc: &[String]) -> bool {
+    let has = |set: &[String], l: &str| set.iter().any(|x| x == l);
+    let fits = |a: &str, b: &str| has(jar, a) && has(most, b);
+    jar.iter().any(|l| has(most, l))
+        || fits("Quilt", "Fabric")
+        || fits("Fabric", "Quilt")
+        || (has(mc, "1.20.1") && (fits("Forge", "NeoForge") || fits("NeoForge", "Forge")))
+}
+
+/// Minecraft jars made for another game version or loader than most of the
+/// player's mods (`jars`: key and CurseForge's game versions for each
+/// enabled matched jar). Needs 3+ jars and a clear majority, so a mixed or
+/// small folder isn't second-guessed.
+pub fn version_warnings(jars: &[(String, Vec<String>)]) -> Vec<ModWarning> {
+    let versions: Vec<Vec<String>> = jars.iter().map(|(_, gv)| gv.iter().filter(|v| is_mc_version(v)).cloned().collect()).collect();
+    let loaders: Vec<Vec<String>> = jars
+        .iter()
+        .map(|(_, gv)| MC_LOADERS.iter().filter(|l| gv.iter().any(|v| mc_loader(v) == Some(**l))).map(|l| l.to_string()).collect())
+        .collect();
+    let (most_mc, most_loader) = (majority(&versions), majority(&loaders));
+    let mut out = Vec::new();
+    for (i, (key, _)) in jars.iter().enumerate() {
+        let mine = &versions[i];
+        if !most_mc.is_empty() && !mine.is_empty() && !mine.iter().any(|v| most_mc.contains(v)) {
+            if let (Some(made), Some(most)) = (highest(mine), highest(&most_mc)) {
+                out.push(ModWarning { key: key.clone(), kind: "game_version".into(), text: format!("Made for {made}; most of your mods are for {most}"), url: None });
+            }
+        }
+        let mine = &loaders[i];
+        if !most_loader.is_empty() && !mine.is_empty() && !loaders_fit(mine, &most_loader, &most_mc) {
+            // MC_LOADERS order, so ties name the same loader every time.
+            let most = MC_LOADERS.iter().find(|l| most_loader.iter().any(|m| m == *l)).copied().unwrap_or_default();
+            out.push(ModWarning { key: key.clone(), kind: "loader".into(), text: format!("A {} mod; most of your mods are {most}", mine.join("/")), url: None });
+        }
+    }
+    out
+}
+
 /// Turn the proxy's matches into updates and metadata for the files whose
-/// fingerprints they list.
-pub fn apply(prints: &[(String, u32)], matches: &[CfMatch], offline: &[ModMeta]) -> Outcome {
+/// fingerprints they list, plus warnings about missing dependencies and
+/// (Minecraft) jars for another setup.
+pub fn apply(game: &str, prints: &[(String, u32)], matches: &[CfMatch], offline: &[ModMeta]) -> Outcome {
     let by_print: HashMap<u32, &CfMatch> = matches.iter().flat_map(|m| m.fingerprints.iter().map(move |fp| (*fp, m))).collect();
-    let offline: HashMap<&str, &ModMeta> = offline.iter().filter(|m| m.is_file).map(|m| (m.key.as_str(), m)).collect();
+    let by_key: HashMap<&str, &ModMeta> = offline.iter().map(|m| (m.key.as_str(), m)).collect();
+    // WoW keys are addon folders, and one addon often has several (DBM has
+    // nine): each folder gets the names, but the update and the warnings
+    // show once per addon, on its first folder.
+    let folders = wow_flavor(game).is_some();
     let mut out = Outcome::default();
+    let mut matched: Vec<(&str, &CfMatch)> = Vec::new();
+    let mut seen_mods = std::collections::HashSet::new();
     for (key, fp) in prints {
         let Some(m) = by_print.get(fp) else { continue };
-        out.metas.push(merge_meta(offline.get(key.as_str()).copied(), key, m));
-        if let Some((current, latest)) = update_of(m) {
-            out.updates.push(ModUpdate { key: key.clone(), source: "curseforge".into(), current: Some(current), latest, url: m.website.clone(), deprecated: false });
+        out.metas.push(merge_meta(by_key.get(key.as_str()).copied(), key, m, !folders));
+        if folders && !seen_mods.insert(m.mod_id) {
+            continue;
         }
+        matched.push((key, m));
+        if let Some((current, latest)) = update_of(m) {
+            let changelog = m.latest.as_ref().and_then(|l| l.url.clone());
+            out.updates.push(ModUpdate { key: key.clone(), source: "curseforge".into(), current: Some(current), latest, url: m.website.clone(), deprecated: false, changelog });
+        }
+    }
+    out.warnings = missing_dependencies(&matched, offline);
+    if game == "minecraft_java" {
+        let jars: Vec<(String, Vec<String>)> = matched.iter().filter(|(k, _)| !is_disabled(k)).map(|(k, m)| (k.to_string(), m.game_versions.clone())).collect();
+        out.warnings.extend(version_warnings(&jars));
     }
     out
 }
@@ -470,10 +904,19 @@ pub fn apply(prints: &[(String, u32)], matches: &[CfMatch], offline: &[ModMeta])
 /// Fingerprint `files` (from `select_files`), ask the proxy and merge the
 /// answers with the files' own metadata (`offline`).
 pub async fn check(game: &str, base: &str, files: &[String], offline: &[ModMeta]) -> Result<Outcome, String> {
-    let total = files.len();
-    let files: Vec<String> = files.iter().take(MAX_FILES).cloned().collect();
     let b = base.to_string();
-    let (prints, finished) = tokio::task::spawn_blocking(move || fingerprint_files(&b, &files)).await.map_err(|e| e.to_string())?;
+    let (prints, finished, total, unit) = if wow_flavor(game).is_some() {
+        let folders = addon_folders(files);
+        let total = folders.len();
+        let folders: Vec<(String, Vec<String>)> = folders.into_iter().take(MAX_FILES).collect();
+        let (prints, finished) = tokio::task::spawn_blocking(move || fingerprint_addon_folders(&b, &folders)).await.map_err(|e| e.to_string())?;
+        (prints, finished, total, "addon folders")
+    } else {
+        let total = files.len();
+        let files: Vec<String> = files.iter().take(MAX_FILES).cloned().collect();
+        let (prints, finished) = tokio::task::spawn_blocking(move || fingerprint_files(&b, &files)).await.map_err(|e| e.to_string())?;
+        (prints, finished, total, "files")
+    };
     let mut fps: Vec<u32> = prints.iter().map(|(_, fp)| *fp).collect();
     fps.sort_unstable();
     fps.dedup();
@@ -483,19 +926,19 @@ pub async fn check(game: &str, base: &str, files: &[String], offline: &[ModMeta]
             return Err(e);
         }
     }
-    let mut out = apply(&prints, &found.matches, offline);
-    out.note = coverage_note(&prints, &fps[..found.answered], found.error.as_deref(), finished, total);
+    let mut out = apply(game, &prints, &found.matches, offline);
+    out.note = coverage_note(&prints, &fps[..found.answered], found.error.as_deref(), finished, total, unit);
     Ok(out)
 }
 
 /// The report line when not every file was looked up. `answered` is the
 /// sorted part of the fingerprints that got a reply before `error`.
-fn coverage_note(prints: &[(String, u32)], answered: &[u32], error: Option<&str>, finished: bool, total: usize) -> Option<String> {
+fn coverage_note(prints: &[(String, u32)], answered: &[u32], error: Option<&str>, finished: bool, total: usize, unit: &str) -> Option<String> {
     if let Some(e) = error {
         let n = prints.iter().filter(|(_, fp)| answered.binary_search(fp).is_ok()).count();
-        return Some(format!("checked {n} of {total} files, then: {e}"));
+        return Some(format!("checked {n} of {total} {unit}, then: {e}"));
     }
-    (!finished || total > MAX_FILES).then(|| format!("checked {} of {total} files (big folders take a while; try again for the rest)", prints.len()))
+    (!finished || total > MAX_FILES).then(|| format!("checked {} of {total} {unit} (big folders take a while; try again for the rest)", prints.len()))
 }
 
 #[cfg(test)]
@@ -584,11 +1027,16 @@ mod tests {
              "websiteUrl": "https://www.curseforge.com/minecraft/mc-mods/jei",
              "logo": "https://media.forgecdn.net/avatars/thumbnails/29/69/256/256/635838945588716414.jpeg",
              "file": {"id": 1, "displayName": "jei-1.20.1-15.2.0", "fileName": "jei.jar", "fileDate": "2023-08-01T10:00:00Z"},
-             "latest": {"id": 2, "displayName": "jei-1.20.1-15.3.0", "fileName": "jei.jar", "fileDate": "2023-09-01T10:00:00.5Z"}},
+             "latest": {"id": 2, "displayName": "jei-1.20.1-15.3.0", "fileName": "jei.jar", "fileDate": "2023-09-01T10:00:00.5Z",
+                        "url": "https://www.curseforge.com/minecraft/mc-mods/jei/files/2"},
+             "gameVersions": ["1.20.1", "Forge", "Client"],
+             "requires": [{"modId": 306612, "name": "Fabric API", "slug": "fabric-api", "websiteUrl": "https://www.curseforge.com/minecraft/mc-mods/fabric-api"},
+                          {"modId": 7, "name": "Bad link", "slug": "bad", "websiteUrl": "https://evil.example/x"},
+                          {"name": "No id"}]},
             {"fingerprints": [333], "modId": 5, "name": "Up To Date", "authors": [], "summary": "", "websiteUrl": "javascript:alert(1)",
              "logo": "https://evil.example/x.png",
              "file": {"id": 9, "displayName": "v1", "fileName": "a.package", "fileDate": "2024-01-01T00:00:00Z"},
-             "latest": {"id": 9, "displayName": "v1", "fileName": "a.package", "fileDate": "2024-01-01T00:00:00Z"}},
+             "latest": {"id": 9, "displayName": "v1", "fileName": "a.package", "fileDate": "2024-01-01T00:00:00Z", "url": "https://curseforge.com.evil.example/x"}},
             {"fingerprints": [], "modId": 6, "name": "No prints"},
             {"fingerprints": [444], "name": "No id"}
         ]})
@@ -602,6 +1050,12 @@ mod tests {
         assert_eq!(m[0].logo.as_deref(), Some("https://media.forgecdn.net/avatars/thumbnails/29/69/256/256/635838945588716414.jpeg"));
         assert_eq!(m[0].latest.as_ref().unwrap().display_name, "jei-1.20.1-15.3.0");
         assert_eq!((m[1].website.clone(), m[1].logo.clone(), m[1].summary.clone()), (None, None, None), "non-https links and other hosts' images are dropped");
+        assert_eq!(m[0].latest.as_ref().unwrap().url.as_deref(), Some("https://www.curseforge.com/minecraft/mc-mods/jei/files/2"));
+        assert_eq!(m[1].latest.as_ref().unwrap().url, None, "file links only to curseforge.com");
+        assert_eq!(m[0].game_versions, vec!["1.20.1", "Forge", "Client"]);
+        assert_eq!(m[0].requires.len(), 2, "a dependency without a mod id is dropped");
+        assert_eq!((m[0].requires[0].mod_id, m[0].requires[0].slug.as_str()), (306612, "fabric-api"));
+        assert_eq!(m[0].requires[1].website, None);
     }
 
     #[test]
@@ -618,7 +1072,7 @@ mod tests {
     }
 
     fn found(fp: u32) -> CfMatch {
-        CfMatch { fingerprints: vec![fp], mod_id: fp as u64, name: format!("mod {fp}"), authors: vec![], summary: None, website: None, logo: None, file: None, latest: None }
+        CfMatch { fingerprints: vec![fp], mod_id: fp as u64, name: format!("mod {fp}"), authors: vec![], summary: None, website: None, logo: None, file: None, latest: None, requires: vec![], game_versions: vec![] }
     }
 
     #[tokio::test]
@@ -638,10 +1092,10 @@ mod tests {
 
         // Each file counts once, by whether its fingerprint got an answer.
         let prints = vec![("a".to_string(), 5), ("b".to_string(), 5), ("c".to_string(), 1999), ("d".to_string(), 2400)];
-        let note = coverage_note(&prints, &fps[..got.answered], got.error.as_deref(), true, 4);
+        let note = coverage_note(&prints, &fps[..got.answered], got.error.as_deref(), true, 4, "files");
         assert_eq!(note.as_deref(), Some("checked 3 of 4 files, then: too many checks right now"));
-        assert_eq!(coverage_note(&prints, &fps, None, true, 4), None);
-        assert!(coverage_note(&prints, &fps, None, false, 9).unwrap().starts_with("checked 4 of 9 files (big folders"));
+        assert_eq!(coverage_note(&prints, &fps, None, true, 4, "files"), None);
+        assert!(coverage_note(&prints, &fps, None, false, 9, "addon folders").unwrap().starts_with("checked 4 of 9 addon folders (big folders"));
     }
 
     #[tokio::test]
@@ -681,7 +1135,7 @@ mod tests {
             ModMeta { key: "Mods/a.package".into(), is_file: true, source: "sims4".into(), name: "a".into(), derived_name: true, ..Default::default() },
         ];
         let prints = vec![("mods/jei.jar".to_string(), 111), ("mods/jei-copy.jar".to_string(), 222), ("Mods/a.package".to_string(), 333), ("mods/unknown.jar".to_string(), 999)];
-        let out = apply(&prints, &matches, &offline);
+        let out = apply("minecraft_java", &prints, &matches, &offline);
         assert_eq!(out.metas.len(), 3);
         let by_key: HashMap<&str, &ModMeta> = out.metas.iter().map(|m| (m.key.as_str(), m)).collect();
         let jei = by_key["mods/jei.jar"];
@@ -701,6 +1155,239 @@ mod tests {
         assert_eq!(keys, vec!["mods/jei.jar", "mods/jei-copy.jar"]);
         assert_eq!(out.updates[0].source, "curseforge");
         assert_eq!(out.updates[0].url.as_deref(), Some("https://www.curseforge.com/minecraft/mc-mods/jei"));
+        assert_eq!(out.updates[0].changelog.as_deref(), Some("https://www.curseforge.com/minecraft/mc-mods/jei/files/2"), "What's new");
+        // JEI's sample needs Fabric API, which nothing installed provides.
+        let needs: Vec<(&str, &str)> = out.warnings.iter().map(|w| (w.key.as_str(), w.text.as_str())).collect();
+        assert_eq!(needs[0], ("mods/jei.jar", "Needs Fabric API: not found in your mods"));
+        assert_eq!(out.warnings[0].url.as_deref(), Some("https://www.curseforge.com/minecraft/mc-mods/fabric-api"));
+    }
+
+    fn dep(mod_id: u64, name: &str, slug: &str) -> CfDep {
+        CfDep { mod_id, name: name.into(), slug: slug.into(), website: None }
+    }
+
+    fn needing(mod_id: u64, deps: Vec<CfDep>) -> CfMatch {
+        CfMatch { requires: deps, ..found(mod_id as u32) }
+    }
+
+    #[test]
+    fn dependencies_count_as_installed_by_id_or_name() {
+        assert_eq!(norm_name("Fabric API"), "fabricapi");
+        assert_eq!(norm_name("fabric_api"), norm_name("fabric-api"));
+        let metas = vec![
+            ModMeta { key: "mods/cloth.jar".into(), is_file: true, source: "fabric".into(), id: Some("cloth-config".into()), name: "Cloth Config v13".into(), ..Default::default() },
+            ModMeta { key: "mods/arch.jar".into(), is_file: true, source: "fabric".into(), id: Some("architectury".into()), name: "Architectury".into(), ..Default::default() },
+            ModMeta { key: "mods/off.jar.disabled".into(), is_file: true, source: "fabric".into(), id: Some("geckolib".into()), name: "GeckoLib".into(), ..Default::default() },
+            ModMeta { key: "BepInEx/plugins/x".into(), source: "thunderstore".into(), id: Some("ValheimModding-Jotunn".into()), name: "x".into(), ..Default::default() },
+            ModMeta { key: "mods/made-up.jar".into(), is_file: true, name: "Iris".into(), derived_name: true, ..Default::default() },
+        ];
+        let installed = Installed::new([10], &metas);
+        assert!(installed.has(&dep(10, "Anything", "anything")), "matched on CurseForge by mod id");
+        assert!(installed.has(&dep(1, "Cloth Config API", "cloth-config")), "slug against a Fabric mod id");
+        assert!(!installed.has(&dep(2, "Architectury API", "architectury-api")), "no partial matches");
+        assert!(installed.has(&dep(2, "architectury", "architectury-api")), "name against a mod's name");
+        assert!(installed.has(&dep(3, "Jotunn", "jotunn")), "the name part of a Thunderstore id");
+        assert!(!installed.has(&dep(4, "GeckoLib", "geckolib")), "a disabled mod doesn't count");
+        assert!(!installed.has(&dep(6, "Iris", "iris-shaders")), "a name made up from a file name doesn't count");
+    }
+
+    #[test]
+    fn missing_dependencies_are_flagged_once_per_mod() {
+        let a = needing(1, vec![dep(2, "Lib", "lib"), dep(2, "Lib", "lib"), dep(3, "Other", "other"), dep(1, "Itself", "self")]);
+        let b = found(2);
+        let off = needing(4, vec![dep(9, "Gone", "gone")]);
+        let matched = vec![("mods/a.jar", &a), ("mods/b.jar", &b), ("mods/off.jar.disabled", &off)];
+        let w = missing_dependencies(&matched, &[]);
+        let got: Vec<(&str, &str)> = w.iter().map(|w| (w.key.as_str(), w.text.as_str())).collect();
+        assert_eq!(got, vec![("mods/a.jar", "Needs Other: not found in your mods")], "b.jar provides Lib; disabled files aren't checked");
+        // A disabled copy of the dependency doesn't satisfy it.
+        let matched = vec![("mods/a.jar", &a), ("mods/b.jar.disabled", &b)];
+        assert_eq!(missing_dependencies(&matched, &[]).len(), 2);
+    }
+
+    fn jar(key: &str, versions: &[&str]) -> (String, Vec<String>) {
+        (key.to_string(), versions.iter().map(|s| s.to_string()).collect())
+    }
+
+    fn texts(w: &[ModWarning]) -> Vec<(&str, &str)> {
+        w.iter().map(|w| (w.key.as_str(), w.text.as_str())).collect()
+    }
+
+    #[test]
+    fn jars_for_another_minecraft_version_or_loader() {
+        let jars = vec![
+            jar("a", &["1.20", "1.20.1", "Fabric", "Quilt", "Client"]),
+            jar("b", &["1.20.1", "Fabric"]),
+            jar("c", &["1.20.1", "Fabric", "Server"]),
+            jar("d", &["1.19.2", "1.19.1", "Forge"]),
+            jar("e", &["1.20.1", "Quilt"]),
+            jar("f", &[]),
+        ];
+        let w = version_warnings(&jars);
+        assert_eq!(
+            texts(&w),
+            vec![("d", "Made for 1.19.2; most of your mods are for 1.20.1"), ("d", "A Forge mod; most of your mods are Fabric")],
+            "Quilt loads Fabric mods; no versions listed, nothing to say"
+        );
+        assert_eq!(w[0].kind, "game_version");
+        assert_eq!(w[1].kind, "loader");
+    }
+
+    #[test]
+    fn no_version_warnings_without_a_clear_majority() {
+        // Two jars: too few to say what "most" is.
+        assert!(version_warnings(&[jar("a", &["1.20.1", "Fabric"]), jar("b", &["1.19.2", "Forge"])]).is_empty());
+        // Half and half isn't a majority.
+        let even = [jar("a", &["1.20.1", "Fabric"]), jar("b", &["1.20.1", "Fabric"]), jar("c", &["1.19.2", "Forge"]), jar("d", &["1.19.2", "Forge"])];
+        assert!(version_warnings(&even).is_empty());
+        // Tied top versions both count: a jar listing only "1.20" is fine.
+        let tied = [jar("a", &["1.20", "1.20.1", "Fabric"]), jar("b", &["1.20", "1.20.1", "Fabric"]), jar("c", &["1.20", "Fabric"])];
+        assert!(version_warnings(&tied).is_empty());
+        // On 1.20.1 NeoForge still runs Forge mods.
+        let neo = [jar("a", &["1.20.1", "NeoForge"]), jar("b", &["1.20.1", "NeoForge"]), jar("c", &["1.20.1", "Forge"])];
+        assert!(version_warnings(&neo).is_empty());
+        let neo21 = [jar("a", &["1.21.1", "NeoForge"]), jar("b", &["1.21.1", "NeoForge"]), jar("c", &["1.21.1", "Forge"])];
+        assert_eq!(texts(&version_warnings(&neo21)), vec![("c", "A Forge mod; most of your mods are NeoForge")]);
+        assert!(is_mc_version("1.21") && is_mc_version("1.20.1") && !is_mc_version("1.20-Snapshot") && !is_mc_version("Java 17"));
+    }
+
+    #[test]
+    fn version_warnings_only_for_minecraft() {
+        let m = |id: u32, gv: &[&str]| CfMatch { game_versions: gv.iter().map(|s| s.to_string()).collect(), ..found(id) };
+        let ms = vec![m(1, &["1.20.1", "Fabric"]), m(2, &["1.20.1", "Fabric"]), m(3, &["1.20.1", "Fabric"]), m(4, &["1.19.2", "Fabric"])];
+        let prints: Vec<(String, u32)> = (1..=4).map(|i| (format!("mods/{i}.jar"), i)).collect();
+        assert_eq!(apply("minecraft_java", &prints, &ms, &[]).warnings.len(), 1);
+        assert!(apply("sims4", &prints, &ms, &[]).warnings.is_empty());
+    }
+
+    // Checked against the live API: DBM-StatusBarTimers' .toc and DBT.lua,
+    // and DBM-VPVEM's single file.
+    #[test]
+    fn folder_fingerprint_vectors() {
+        assert_eq!(folder_fingerprint(&[2357310193, 737326275]), 1833201348, "sorted, so order doesn't matter");
+        assert_eq!(folder_fingerprint(&[737326275, 2357310193]), 1833201348);
+        assert_eq!(folder_fingerprint(&[3946803678]), 3933556927);
+        assert_eq!(folder_fingerprint(&[3946803678]), fingerprint(b"3946803678"));
+    }
+
+    #[test]
+    fn own_toc_files_take_any_suffix() {
+        assert!(is_own_toc("DBM-Core", "DBM-Core.toc"));
+        assert!(is_own_toc("DBM-Core", "dbm-core_Mainline.toc"));
+        assert!(is_own_toc("QuestieDB", "QuestieDB_Forever.toc"), "Questie ships client names CurseForge's list lacks");
+        assert!(is_own_toc("Questie", "Questie-Camelot.toc"));
+        assert!(!is_own_toc("Questie", "QuestieDB.toc"), "another folder's name");
+        assert!(!is_own_toc("Foo", "Libs/Foo.toc"), "only directly in the folder");
+        assert!(!is_own_toc("Foo", "Foo.lua"));
+    }
+
+    #[test]
+    fn toc_and_xml_includes() {
+        let toc = "## Interface: 110200\n## Title: Foo\n# a comment.lua\nCore.lua\n  Libs\\Lib.xml  \nlocale.lua # trailing\nreadme.txt\n";
+        assert_eq!(includes(toc, false), vec!["Core.lua", "Libs\\Lib.xml", "locale.lua"]);
+        let xml = "<Ui>\n<!-- <Script file=\"old.lua\"/>\n still a comment -->\n<Script file=\"a.lua\"/>\n  <Include   FILE='sub\\b.xml' />\n<Script file=\"c.lua\"></Script>\n<Scriptfile=\"d.lua\"/>\n</Ui>";
+        assert_eq!(includes(xml, true), vec!["a.lua", "sub\\b.xml"], "self-closing tags only, like CurseForge's own parser");
+        assert_eq!(xml_include(r#"<Frame/><Script file="x.lua"/>"#), Some("x.lua"));
+    }
+
+    #[test]
+    fn addon_load_list_follows_what_the_toc_loads() {
+        let files: Vec<String> = [
+            "Foo.toc", "Foo_Mainline.toc", "Bindings.xml", "core.lua", "Libs/libs.xml", "Libs/LibA/LibA.lua",
+            "Libs/LibA/unused.lua", "Locales/enUS.lua", "Other.toc", "Media/icon.tga", "cycle.xml",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let read = |f: &str| -> Option<Vec<u8>> {
+            let s = match f {
+                "Foo.toc" => "## Title: Foo\nCore.lua\nLibs\\Libs.xml\nmissing.lua\n..\\Other\\x.lua\ncycle.xml\n",
+                "Foo_Mainline.toc" => "Core.lua\nLocales/enUS.lua\n",
+                "Libs/libs.xml" => "<Ui><Script file=\"LibA\\LibA.lua\"/></Ui>",
+                "cycle.xml" => "<Include file=\"cycle.xml\"/>",
+                "Bindings.xml" => "<Script file=\"Libs\\LibA\\unused.lua\"/>",
+                _ => return Some(b"x".to_vec()),
+            };
+            Some(s.as_bytes().to_vec())
+        };
+        let mut got = addon_load_list("Foo", &files, &read);
+        got.sort();
+        assert_eq!(
+            got,
+            vec!["Bindings.xml", "Foo.toc", "Foo_Mainline.toc", "Libs/LibA/LibA.lua", "Libs/libs.xml", "Locales/enUS.lua", "core.lua", "cycle.xml"],
+            "case-insensitive lookups, Bindings.xml hashed but not followed, no '..', each file once"
+        );
+        assert!(addon_load_list("Bar", &files, &read).is_empty(), "no .toc of its own, nothing to match");
+    }
+
+    #[test]
+    fn addon_folders_fingerprint_from_disk() {
+        let dir = crate::testutil::temp_dir("curseforge_wow");
+        crate::testutil::write_file(&dir, "Interface/AddOns/DBM-VPVEM/DBM-VPVEM.toc", b"## Title: x\nsound.lua\n");
+        crate::testutil::write_file(&dir, "Interface/AddOns/DBM-VPVEM/sound.lua", b"abc");
+        crate::testutil::write_file(&dir, "Interface/AddOns/Leftover/readme.lua", b"abc");
+        let files: Vec<String> = ["Interface/AddOns/DBM-VPVEM/DBM-VPVEM.toc", "Interface/AddOns/DBM-VPVEM/sound.lua", "Interface/AddOns/Leftover/readme.lua", "Interface/AddOns/stray.lua"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(select_files("wow_retail", "Interface/AddOns", &files).len(), 4);
+        assert!(select_files("wow_wotlk", "Interface/AddOns", &files).is_empty(), "private-server clients aren't on CurseForge");
+        let folders = addon_folders(&files);
+        assert_eq!(folders.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(), vec!["Interface/AddOns/DBM-VPVEM", "Interface/AddOns/Leftover"]);
+        let (prints, finished) = fingerprint_addon_folders(dir.to_str().unwrap(), &folders);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(finished);
+        let toc = fingerprint(b"## Title: x\nsound.lua\n");
+        assert_eq!(prints, vec![("Interface/AddOns/DBM-VPVEM".to_string(), folder_fingerprint(&[toc, fingerprint(b"abc")]))]);
+    }
+
+    #[test]
+    fn wow_asks_the_proxy_with_its_flavour() {
+        assert_eq!(request_body("wow_classic_era", &[1, 2]), serde_json::json!({"game": "wow", "flavor": "classic_era", "fingerprints": [1, 2]}));
+        assert_eq!(request_body("wow_forever", &[1])["flavor"], "forever");
+        assert_eq!(request_body("sims4", &[1]), serde_json::json!({"game": "sims4", "fingerprints": [1]}));
+    }
+
+    #[test]
+    fn a_wow_addon_with_several_folders_shows_its_update_once() {
+        let mut dbm = found(1);
+        dbm.fingerprints = vec![1, 2];
+        dbm.file = Some(CfFile { id: 1, display_name: "12.1.11".into(), file_date: "2026-09-01T00:00:00Z".into(), url: None });
+        dbm.latest = Some(CfFile { id: 2, display_name: "12.1.12".into(), file_date: "2026-10-01T00:00:00Z".into(), url: None });
+        let prints = vec![("Interface/AddOns/DBM-Core".to_string(), 1), ("Interface/AddOns/DBM-GUI".to_string(), 2)];
+        let offline = vec![ModMeta { key: "Interface/AddOns/DBM-Core".into(), source: "wow".into(), name: "DBM Core".into(), ..Default::default() }];
+        let out = apply("wow_retail", &prints, &[dbm], &offline);
+        assert_eq!(out.metas.len(), 2, "both folders get CurseForge's info");
+        assert_eq!((out.metas[0].name.as_str(), out.metas[0].curseforge), ("DBM Core", true), "the .toc's title stays");
+        assert!(!out.metas[1].is_file, "a folder mod");
+        assert_eq!(out.updates.iter().map(|u| u.key.as_str()).collect::<Vec<_>>(), vec!["Interface/AddOns/DBM-Core"]);
+    }
+
+    /// Prints folder fingerprints of real addons, to compare with the live
+    /// API by hand: `SYNCCRATE_WOW_ADDONS=<dir with addon folders> cargo test wow_live -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn wow_live_fingerprints() {
+        let Ok(root) = std::env::var("SYNCCRATE_WOW_ADDONS") else { return };
+        let base = std::path::Path::new(&root);
+        let mut files = Vec::new();
+        fn walk(dir: &std::path::Path, rel: &str, out: &mut Vec<String>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                let r = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+                if e.file_type().unwrap().is_dir() {
+                    walk(&e.path(), &r, out);
+                } else {
+                    out.push(r);
+                }
+            }
+        }
+        walk(&base.join(WOW_ADDONS), WOW_ADDONS, &mut files);
+        let selected = select_files("wow_retail", WOW_ADDONS, &files);
+        let (prints, _) = fingerprint_addon_folders(&root, &addon_folders(&selected));
+        for (k, fp) in prints {
+            println!("{k} {fp}");
+        }
     }
 
     #[test]

@@ -31,7 +31,7 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 - **Built for LAN parties.** One PC feeds the whole room at 100–900 MB/s. Hosts are found automatically, no internet needed.
 - **Or from anywhere.** At home, friends paste one join code. Peer-to-peer and encrypted, no port forwarding or VPN.
 - **Nothing breaks.** You see the plan before anything changes, conflicts are yours to decide, every file is verified and backups let you roll back.
-- **123 games, real box art.** Valheim, Elden Ring, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
+- **124 games, real box art.** Valheim, Elden Ring, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
 
 <table>
   <tr>
@@ -80,12 +80,12 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 **Mods**
 - **Mod manager.** Browse by folder, filter by status, type and tag, and enable or disable one mod or a whole creator folder. 12 tags, drag & drop install (each file goes to the folder its type belongs in), pack/DLC detection and a duplicate finder for games where duplicate packages cause trouble (The Sims 2/3/4, Euro/American Truck Simulator, Farming Simulator). Handles 20,000+ files smoothly.
-- **Real mod names and icons.** The Content page reads the info mods ship with and shows each mod's name, version, author, description, website and icon instead of bare file names, and search finds mods by name. It works offline for Thunderstore/BepInEx packages (Valheim, Lethal Company, …), SMAPI mods (Stardew Valley), Minecraft Fabric, Quilt and Forge jars, Paradox mods, Bannerlord modules, RimWorld, Project Zomboid, Factorio, Darkest Dungeon and XCOM 2 mods, and WoW addons. **Sims 4 CC** shows the thumbnail stored inside each `.package` (click an item for a bigger preview), the object's catalog name, and the creator from the `[Creator]` tag in the file name; merged packages show how many items they hold. **Sims 3 CC** shows the thumbnail or icon stored in its `.package` too. Switch the view to **Grid** to browse mods and CC by picture. Mods without that info keep their file names. **Check for updates** asks Modrinth (Minecraft), Thunderstore (BepInEx games), SMAPI (Stardew Valley) and CurseForge (Sims 4 and Minecraft) which mods have newer versions and links to each one; it only runs when you click it. For Sims 4 and Minecraft it also fills in names, authors and pictures from CurseForge for mods and CC that don't carry their own. CurseForge only gets each file's fingerprint (a number computed from its contents, not its name or the file), sent through synccrate.app, and nothing it returns is saved: it's gone when you leave the Content page.
+- **Real mod names and icons.** The Content page reads the info mods ship with and shows each mod's name, version, author, description, website and icon instead of bare file names, and search finds mods by name. It works offline for Thunderstore/BepInEx packages (Valheim, Lethal Company, …), SMAPI mods (Stardew Valley), Minecraft Fabric, Quilt and Forge jars, Paradox mods, Bannerlord modules, RimWorld, Project Zomboid, Factorio, Darkest Dungeon and XCOM 2 mods, and WoW addons. **Sims 4 CC** shows the thumbnail stored inside each `.package` (click an item for a bigger preview), the object's catalog name, and the creator from the `[Creator]` tag in the file name; merged packages show how many items they hold. **Sims 3 CC** shows the thumbnail or icon stored in its `.package` too. Switch the view to **Grid** to browse mods and CC by picture. Mods without that info keep their file names. **Check for updates** asks Modrinth (Minecraft), Thunderstore (BepInEx games), SMAPI (Stardew Valley) and CurseForge (Sims 4, Minecraft and WoW addons) which mods have newer versions and links to each one, with a **What's new** link to the changelog for CurseForge updates; it only runs when you click it. For those games it also fills in names, authors and pictures from CurseForge for mods, CC and addons that don't carry their own, and flags mods whose required dependency is missing. CurseForge only gets each file's fingerprint (a number computed from its contents, not its name or the file), sent through synccrate.app, and nothing it returns is saved: it's gone when you leave the Content page.
 - **Saves outside the game folder.** Valheim worlds, Stardew Valley saves and RimWorld saves live in your user folder (AppData, `~/.config`, Application Support), not next to the mods. SyncCrate finds them once the game has run and syncs them with the mods; Settings shows where each is and lets you pick another folder. A friend whose PC doesn't have the folder yet is told to start the game once, and the mods still sync. Friends on an older SyncCrate get only the mods until they update.
 - **Mod health check.** Catches what stops synced mods from loading: a missing mod loader (BepInEx, SMAPI), and for The Sims 4 mods or script mods switched off in the game's options (after most patches; one click turns them back on), script mods more than one folder deep, packages deeper than `Resource.cfg` allows (five folders as standard), a missing or empty `Resource.cfg` (one click writes the standard one), two copies of the same script mod (one click turns the older ones off), `.zip` files that were never extracted, Tray items saved into Mods and CC saved into Tray (one click moves them; never overwriting, and on a friend's PC only the Tray items, since the host's files would come back with the next sync), and script mods named in the game's own error report (`lastException`) that weren't updated since. Fixes wait until the game is closed. For Crusader Kings III, Europa Universalis IV, Hearts of Iron IV and Stellaris it finds mod descriptors whose path only exists on one PC (the launcher writes full paths) and makes them portable (`path="mod/<folder>"`) in one click on the host, keeping the old versions in File history. It shows on the Content page, with a note on the Dashboard.
 - **Find a broken mod.** The 50/50 method, done for you: SyncCrate turns half of your mods off, you check the game and say whether the problem is still there, and it halves again until one mod (or creator folder) is left, about a dozen rounds even for thousands of mods. Progress is saved between rounds, your own disabled mods are left alone, and at the end everything it turned off goes back on (or you keep the broken one off).
 - **Play.** The Dashboard's **Play** button starts the game once you're synced: through Steam when Steam has it, or The Sims 4's own launcher on EA app installs.
-- **Game browser.** 123 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
+- **Game browser.** 124 games with official box art, filtered by genre and status, in a grid or a list. Set your own cover for any game.
 - **Profiles.** Snapshot a setup and share it as a `.synccrate-profile` file on Discord. Compare it with what's installed, and **Apply this loadout** opens it on the Modpacks page to get the missing files or make the game load exactly those mods (with one-click revert).
 
 **Share your setup**
@@ -125,7 +125,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 ## Supported Games
 
 <!-- GAMES:START -->
-**123 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
+**124 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](#adding-a-game), no code needed.
 
 <details>
 <summary><strong>Life sim</strong> — 5 games</summary>
@@ -217,13 +217,14 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 </details>
 
 <details>
-<summary><strong>MMO</strong> — 7 games</summary>
+<summary><strong>MMO</strong> — 8 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **WoW Classic** | Addons, Addon Settings |
 | **WoW Classic Era** | Addons, Addon Settings |
 | **WoW Custom Server** | Addons, Addon Settings |
+| **WoW Forever** | Addons, Addon Settings |
 | **WoW Retail** | Addons, Addon Settings |
 | **WoW TBC (2.4.3)** | Addons, Addon Settings |
 | **WoW Vanilla (1.12)** | Addons, Addon Settings |
@@ -396,6 +397,18 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Thumbnail cache** is cleared automatically after new mods arrive.
 - **Disabling that sticks.** The game loads mods from subfolders, so disabled mods are renamed to `.disabled` instead of moved. Mods left in an old `_Disabled` folder are fixed in one click.
 - **Outdated script mods** are flagged after a game patch.
+- **CC names and pictures.** Each `.package` shows the thumbnail and catalog name stored inside it. **Check for updates** adds names, pictures and newer versions from CurseForge, with a **What's new** link.
+- **Share as a link** for Patreon early access and "no reupload" CC: friends get the creator's page instead of a copy.
+
+**Minecraft (Java)**
+- **Updates from Modrinth and CurseForge**, only for the same loader and Minecraft version, with a **What's new** link for CurseForge files.
+- **Missing dependencies.** After a check, a mod whose required library (such as Fabric API) isn't installed says **Needs mod**, with a link to it.
+- **Version and loader warnings.** With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods is marked **Mismatch** ("Made for 1.19.2; most of your mods are for 1.20.1").
+
+**World of Warcraft**
+- Addons show their names from their `.toc` files; addons and addon settings (`WTF`, never `Config.wtf`) sync separately.
+- **Check for updates** finds Retail, Classic, Classic Era and WoW Forever addons on CurseForge by folder (names, authors, pictures) and only suggests updates built for your client.
+- **WoW Forever** is supported. Its install folder will be confirmed when it launches; until then, if it isn't found automatically, choose the folder that holds `Interface` yourself.
 
 **Bethesda games, KSP and Mount & Blade:** only mods sync. The game's own files in `Data`, `GameData` or `Modules` (the base game, DLC and Creation Club content) are skipped, so a sync never copies paid content to someone who doesn't own it or replaces base files across game versions. Paid Creations that don't follow Bethesda's `cc…` naming can't be told apart from mods yet. The load order (`plugins.txt`) is outside the game folder and isn't synced either.
 
