@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { toastAction, toastError, toastInfo, toastSuccess, toastWithLog } from "../lib/toast";
+import { toastAction, toastError, toastErrorAction, toastInfo, toastSuccess, toastWithLog } from "../lib/toast";
+import { copyDiagnostics } from "../lib/diagnostics";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "../stores/useAppStore";
@@ -366,7 +367,9 @@ export function useTauriEvents() {
           // The backend now explains the likely cause (firewall timeout vs refused
           // vs unreachable), so surface it directly instead of only in the log.
           // Not during auto-reconnect: that retries quietly and reports once.
-          if (!retryRef.current.active) toastError(msg);
+          // Bug reports for failed connections came without version, OS or
+          // firewall state: offer the scrubbed report right where it fails.
+          if (!retryRef.current.active) toastErrorAction(msg, "Copy diagnostics", () => { copyDiagnostics(); });
           if (/forcibly closed|connection reset|10054/i.test(msg)) {
             addLog("The host dropped the connection. Ask the host to click \"Fix Windows Firewall\" in SyncCrate and try again.", "warning");
           }

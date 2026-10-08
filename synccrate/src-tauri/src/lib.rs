@@ -552,6 +552,7 @@ pub fn run() {
             commands::system::check_game_path_writable,
             commands::system::get_network_diagnostics,
             commands::system::test_connection,
+            commands::diagnostics::diagnostics_report,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

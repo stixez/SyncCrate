@@ -20,6 +20,7 @@ import { loadDiscordPresence, saveDiscordPresence } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
+import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
 import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
@@ -599,7 +600,7 @@ export default function Settings() {
         <StoragePanel />
       </Section>
 
-      <Section num="07" title="Application" description="Support the project and keep SyncCrate up to date.">
+      <Section num="07" title="Application" description="Support the project, keep SyncCrate up to date, and report problems.">
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
@@ -680,6 +681,17 @@ export default function Settings() {
             >
               {updating ? "Checking..." : "Check for Updates"}
             </Button>
+          </Panel>
+
+          <Panel title="Report a problem" label="// Diagnostics" className="col-span-2">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs text-txt-dim">
+                Something not working? Copy a short report and paste it into a GitHub issue. It has your app version,
+                system and connection status, and recent errors. No files, join codes, PINs or friends' names, and
+                nothing is sent anywhere.
+              </p>
+              <CopyDiagnosticsButton size="md" className="shrink-0" />
+            </div>
           </Panel>
         </div>
       </Section>

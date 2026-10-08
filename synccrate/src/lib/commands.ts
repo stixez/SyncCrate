@@ -927,6 +927,17 @@ export async function testConnection(ip: string, port: number): Promise<Connecti
   return invoke("test_connection", { ip, port });
 }
 
+/** Plain-text report for bug reports; the backend scrubs codes, PINs, IPs,
+ * names and the home folder. Nothing leaves the PC. */
+export async function diagnosticsReport(
+  log: { timestamp: number; level: string; message: string }[],
+  stayInSync: boolean,
+  discord: boolean,
+  names: string[],
+): Promise<string> {
+  return invoke("diagnostics_report", { log, stayInSync, discord, names });
+}
+
 // --- Content maintenance ---
 
 /** Mods still in a legacy `_Disabled/` folder (loaded anyway by The Sims). */

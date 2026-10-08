@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { useLogStore } from "../stores/useLogStore";
-import { toastError, toastInfo, toastSuccess } from "../lib/toast";
+import { toastError, toastErrorAction, toastInfo, toastSuccess } from "../lib/toast";
+import { copyDiagnostics } from "../lib/diagnostics";
 import { incrementSyncCount, checkMilestone } from "../lib/donations";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
@@ -82,7 +83,7 @@ export function useSync() {
         // session is gone and that report never comes.
       } else {
         addLog(`Sync failed: ${e}`, "error");
-        toastError(`Sync failed: ${e}`);
+        toastErrorAction(`Sync failed: ${e}`, "Copy diagnostics", () => { copyDiagnostics(); });
       }
     } finally {
       setIsLoading(false);

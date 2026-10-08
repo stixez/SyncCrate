@@ -5,7 +5,7 @@
 <h1 align="center">SyncCrate</h1>
 
 <p align="center">
-  <strong>Same mods on every PC, for co-op squads and LAN parties.</strong>
+  <strong>Play modded games together: same mods, same saves, every PC.</strong>
 </p>
 
 <p align="center">
@@ -23,15 +23,15 @@
   <img src="assets/social-preview.png" width="100%" alt="SyncCrate: Same mods. Every PC. No excuses." />
 </p>
 
-One mismatched mod and nobody can join. **SyncCrate makes every PC match the host by copying only the files that differ, straight from PC to PC.** No cloud, no accounts, no tracking.
+One friend hosts. Everyone else gets an exact copy of their setup, straight from PC to PC.
 
 ## Why SyncCrate
 
-- **Everyone can join.** Friends pull the host's exact mods, configs and saves, so nobody is stuck on "version mismatch" in the lobby.
-- **Built for LAN parties.** One PC feeds the whole room at 100–900 MB/s. Hosts are found automatically, no internet needed.
-- **Or from anywhere.** At home, friends paste one join code. Peer-to-peer and encrypted, no port forwarding or VPN.
-- **Nothing breaks.** You see the plan before anything changes, conflicts are yours to decide, every file is verified and backups let you roll back.
-- **124 games, real box art.** Valheim, Elden Ring, Lethal Company, Minecraft, Baldur's Gate 3, The Sims 4 and more, found on every drive.
+- **Play together.** Everyone gets the exact same mods, saves and configs, so nobody's stuck on "version mismatch" in the lobby. You see every change before it happens, and you can undo it.
+- **Share your setup.** Send a link to your exact setup. Friends see what they're missing and get it from you. Mods that have to come from their creator (Patreon, "no reupload") arrive as the creator's link instead.
+- **Keep it synced.** New mods reach everyone automatically. At a LAN party it works without internet; from anywhere, friends paste one join code.
+
+Works with the games you already mod: The Sims 4, Minecraft, Valheim, World of Warcraft, Stardew Valley and 120+ more. Free, open source, no accounts, no cloud.
 
 <table>
   <tr>
@@ -47,7 +47,7 @@ One mismatched mod and nobody can join. **SyncCrate makes every PC match the hos
 ## Get Started
 
 1. **Download** SyncCrate for Windows, macOS or Linux from [Releases](../../releases/latest) and install it on every PC.
-2. **Add your game** in the Game Browser. Its folder is detected automatically, or set it manually.
+2. **Say whether you're hosting or joining.** The first run picks your game (its folder is found automatically) and takes you to **Start Hosting**, or joins your friend from their code or invite link. "Just look around" opens the Game Browser instead.
 3. **One friend clicks Start Hosting.** Everyone else picks the host under **Scan for Hosts** (same network) or pastes the join code (anywhere).
 4. **Click Compare & Sync**, check the plan, then **Sync Now**.
 
@@ -63,8 +63,10 @@ New to it? The **Guide** page in the app's sidebar walks through every feature.
 
 Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, macOS 11 Big Sur or newer) · Linux `.AppImage` / `.deb` / `.rpm`. The app updates itself.
 
+## Everything under the hood
+
 <details>
-<summary><strong>All features</strong></summary>
+<summary><strong>Show all features</strong></summary>
 
 **Sync**
 - **Only what changed.** SHA-256 diffing, zstd compression (50–80% less data), 100–900 MB/s peer-to-peer on LAN. Synced files keep the host's dates, so games that order mods by file date (Oblivion, New Vegas, Morrowind) load them in the same order.
@@ -113,6 +115,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 **Yours**
 - **Activity log.** Search it, filter to problems, copy or save it as a text file for a bug report; sync history shows each sync's speed, duration and errors, with a weekly summary.
+- **Copy diagnostics.** One button (Network Check, Settings → Application, and on a failed connection or sync) copies a short report for a GitHub issue: app version, system, firewall and connection status, settings that matter and recent errors. Join codes, PINs, IP addresses, friends' names and your user folder are removed, and nothing is sent anywhere.
 - **Storage.** Settings → Storage shows how much SyncCrate keeps per game (backups and file history) and clears a game's file history.
 - **Tray and sidebar.** The tray names the game you're in a session with and copies your join code; pin your games to the top of the sidebar, or search a long library.
 - **Built-in guide.** The **Guide** page in the sidebar explains every feature one task at a time (first sync, LAN and internet play, undo, file history, modpacks, crews, Sims 4 tips, troubleshooting), with search and a button that takes you to the right page.

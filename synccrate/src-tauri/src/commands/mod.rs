@@ -4,6 +4,7 @@ pub mod bisect;
 pub mod chat;
 pub mod compat;
 pub mod crew;
+pub mod diagnostics;
 pub mod files;
 pub mod handoff;
 pub mod game_state;

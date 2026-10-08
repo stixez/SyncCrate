@@ -62,6 +62,15 @@ export function parseInviteLink(text: string): { code: string; game: string | nu
   return { code, game: /^[a-z0-9_]{1,64}$/.test(game) ? game : null };
 }
 
+/** What someone pasted into "join": an invite link (maybe naming the game)
+ * or a bare join code. Null when it's neither. */
+export function parseJoinInput(text: string): { code: string; game: string | null } | null {
+  const link = parseInviteLink(text);
+  if (link) return link;
+  const t = text.trim().toUpperCase();
+  return /^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/.test(t) ? { code: t, game: null } : null;
+}
+
 /** "1 file" / "3 files" (the "file(s)" style reads like an error message). */
 export function plural(n: number, word: string, many = `${word}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? word : many}`;

@@ -328,6 +328,18 @@ export const GUIDE: GuideGroup[] = [
         go: { label: "Open the Dashboard", page: "dashboard" },
       },
       {
+        id: "report",
+        title: "Report a problem",
+        summary: "Copy diagnostics for a bug report.",
+        steps: [
+          "Click **Copy diagnostics** (in the Network Check on the Dashboard, or Settings → Application).",
+          "Open a GitHub issue and paste it. It has your app version, system, connection status and recent errors.",
+          "It never includes files, join codes, PINs, IP addresses or friends' names, and nothing is sent anywhere.",
+        ],
+        keywords: "bug report issue diagnostics github help error log",
+        go: { label: "Open Settings", page: "settings" },
+      },
+      {
         id: "shortcuts",
         title: "Keyboard shortcuts",
         summary: "Get around faster.",

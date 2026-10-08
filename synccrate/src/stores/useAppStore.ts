@@ -188,6 +188,10 @@ interface AppState {
   /** Join code from a clicked invite link; the dashboard fills its join box. */
   pendingJoinCode: string | null;
   setPendingJoinCode: (code: string | null) => void;
+  /** What the first run asked for, done once by the dashboard it opens:
+   * point at Start Hosting, or join with the pasted code. */
+  firstRunIntent: { kind: "host" } | { kind: "join"; code: string } | null;
+  setFirstRunIntent: (intent: { kind: "host" } | { kind: "join"; code: string } | null) => void;
 
   excludePatterns: string[];
   setExcludePatterns: (patterns: string[]) => void;
@@ -382,6 +386,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPendingPackApply: (pendingPackApply) => set({ pendingPackApply }),
   pendingJoinCode: null,
   setPendingJoinCode: (pendingJoinCode) => set({ pendingJoinCode }),
+  firstRunIntent: null,
+  setFirstRunIntent: (firstRunIntent) => set({ firstRunIntent }),
 
   excludePatterns: [],
   setExcludePatterns: (patterns) => set({ excludePatterns: patterns }),

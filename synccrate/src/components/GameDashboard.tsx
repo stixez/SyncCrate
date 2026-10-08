@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { friendlyError } from "../lib/errors";
 import { Monitor, Users, Package, RefreshCw, AlertTriangle, Lock, Copy, Check, Link2, FolderSync, Gamepad2, ChevronDown, ChevronRight, FolderOpen, Settings, Globe, Power, ArrowDownUp, Radar, MessageCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -195,6 +195,29 @@ export default function GameDashboard({ gameId }: Props) {
     setJoinCode(pendingJoinCode);
     useAppStore.getState().setPendingJoinCode(null);
   }, [pendingJoinCode]);
+
+  // The first run said "I'm hosting" (point at Start Hosting) or "I'm
+  // joining" with a code: that click was the user's go-ahead, so join now.
+  const [hostSpotlight, setHostSpotlight] = useState(false);
+  const startHostingRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const intent = useAppStore.getState().firstRunIntent;
+    if (!intent) return;
+    useAppStore.getState().setFirstRunIntent(null);
+    if (intent.kind === "host") {
+      setHostSpotlight(true);
+      // After the panel has rendered.
+      requestAnimationFrame(() => {
+        startHostingRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+        startHostingRef.current?.focus({ preventScroll: true });
+      });
+    } else {
+      setJoinCode(intent.code);
+      if (isDemoMode()) toastInfo("Demo mode: nothing connects, but the code is in the join box.");
+      else connectByCode(intent.code, loadDisplayName().trim() || "Guest");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on the first-run hand-off
+  }, []);
 
   // Fetch the join code whenever we start hosting (port/PIN are baked into it).
   const hostingKey = session?.session_type === "Host" ? `${session.port}:${session.pin ?? ""}` : null;
@@ -451,7 +474,13 @@ export default function GameDashboard({ gameId }: Props) {
         />
 
         <div className="grid grid-cols-2 gap-4 items-start">
-          <Panel label={<><b>01</b> &nbsp;Host</>} title="Host a session" icon={<Monitor size={16} className="text-neon" />}>
+          <Panel
+            label={<><b>01</b> &nbsp;Host</>}
+            title="Host a session"
+            icon={<Monitor size={16} className="text-neon" />}
+            tone={hostSpotlight ? "accent" : "default"}
+            brackets={hostSpotlight}
+          >
             <p className="text-txt-dim text-sm mb-5">Friends download a copy of your files; yours are never changed. You decide which folders are shared.</p>
             <Toggle
               checked={usePin}
@@ -474,11 +503,17 @@ export default function GameDashboard({ gameId }: Props) {
                 ))}
               </div>
             </div>
+            {hostSpotlight && (
+              <p className="text-[13px] text-txt mb-3 border-l-2 border-l-neon pl-2.5">
+                Next: click Start Hosting. You'll get a join code and an invite link to send your friends.
+              </p>
+            )}
             <Button
+              ref={startHostingRef}
               variant="primary"
               size="lg"
               block
-              onClick={() => host(hostName.trim() || "Host", usePin, folderPerms)}
+              onClick={() => { setHostSpotlight(false); host(hostName.trim() || "Host", usePin, folderPerms); }}
               disabled={isLoading || isConnecting}
             >
               {isLoading ? "Starting..." : "Start Hosting"}
