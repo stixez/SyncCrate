@@ -7,6 +7,12 @@
 //! - Paradox games (`descriptor.mod`, `thumbnail.png` / `picture=`)
 //! - Mount & Blade II: Bannerlord (`SubModule.xml`)
 //! - Sims 4 `.package` files: thumbnail, catalog name (`crate::sims_package`)
+//! - RimWorld (`About/About.xml`, `About/Preview.png`)
+//! - Project Zomboid (`mod.info`, `poster=`)
+//! - Factorio (`info.json`, `thumbnail.png`; zipped or unpacked)
+//! - Darkest Dungeon (`project.xml`, `PreviewIconFile`)
+//! - XCOM 2 (`<Mod>.XComMod`, `ModPreview.jpg`)
+//! - World of Warcraft addons (`<Addon>.toc` `## Title:` etc.)
 //!
 //! Candidates come from the scanned manifest only (each file's own folder and
 //! its parents, plus `.jar` files themselves), never from walking a content
@@ -36,6 +42,7 @@ pub struct ModMeta {
     pub key: String,
     pub is_file: bool,
     /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord" | "sims4"
+    /// | "rimworld" | "zomboid" | "factorio" | "darkest" | "xcom2" | "wow"
     pub source: String,
     pub id: Option<String>,
     pub name: String,
@@ -61,7 +68,7 @@ pub enum IconRef {
     None,
     /// Relative path (forward slashes) of an image file in the game folder.
     File(String),
-    /// An entry inside the jar at `ModMeta::key`.
+    /// An entry inside the jar (or Factorio zip) at `ModMeta::key`.
     JarEntry(String),
     /// A thumbnail resource inside the Sims 4 package at `ModMeta::key`.
     Package(crate::sims_package::ResourceRef),
@@ -428,6 +435,203 @@ pub fn parse_bannerlord(text: &str) -> Option<ModMeta> {
     })
 }
 
+fn xml_unescape(s: &str) -> String {
+    s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
+}
+
+/// Text of the first `<tag>` element (no attributes needed), CDATA or escaped.
+fn xml_text(text: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}");
+    let mut from = 0;
+    let start = loop {
+        let i = from + text[from..].find(&open)?;
+        let after = &text[i + open.len()..];
+        // `<name>` but not `<nameSpace>`.
+        if after.starts_with('>') || after.starts_with(' ') {
+            break i + open.len() + after.find('>')? + 1;
+        }
+        from = i + open.len();
+    };
+    let body = &text[start..];
+    let body = &body[..body.find(&format!("</{tag}>"))?];
+    let body = body.trim();
+    Some(match body.strip_prefix("<![CDATA[").and_then(|b| b.strip_suffix("]]>")) {
+        Some(raw) => raw.to_string(),
+        None => xml_unescape(body),
+    })
+}
+
+/// `text` without `<tag ...>...</tag>` blocks (dependency lists repeat
+/// `<name>`-like elements of other mods).
+fn without_blocks(text: &str, tags: &[&str]) -> String {
+    let mut out = text.to_string();
+    for tag in tags {
+        while let Some(i) = out.find(&format!("<{tag}>")) {
+            let close = format!("</{tag}>");
+            let Some(j) = out[i..].find(&close) else { break };
+            out.replace_range(i..i + j + close.len(), "");
+        }
+    }
+    out
+}
+
+/// Steam Workshop page for an id taken from a mod file (digits only).
+fn workshop_url(id: &str) -> Option<String> {
+    let id = id.trim();
+    (!id.is_empty() && id.len() <= 20 && id != "0" && id.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| format!("https://steamcommunity.com/sharedfiles/filedetails/?id={id}"))
+}
+
+/// RimWorld `About/About.xml`.
+pub fn parse_rimworld(text: &str) -> Option<ModMeta> {
+    let t = without_blocks(text, &["modDependencies", "modDependenciesByVersion", "loadAfter", "loadBefore", "incompatibleWith", "descriptionsByVersion"]);
+    let authors = match xml_text(&t, "author") {
+        Some(a) => authors_from(Some(&Value::String(a))),
+        None => xml_text(&t, "authors")
+            .map(|block| block.split("<li>").skip(1).filter_map(|li| li.split("</li>").next()).filter_map(|a| clean(&xml_unescape(a), 64)).take(MAX_AUTHORS).collect())
+            .unwrap_or_default(),
+    };
+    Some(ModMeta {
+        source: "rimworld".into(),
+        id: xml_text(&t, "packageId").and_then(|s| clean(&s, MAX_NAME)),
+        name: xml_text(&t, "name").and_then(|s| clean(&s, MAX_NAME))?,
+        version: xml_text(&t, "modVersion").and_then(|s| clean_version(&s)),
+        authors,
+        description: xml_text(&t, "description").and_then(|s| clean_desc(&s)),
+        website: xml_text(&t, "url").and_then(|s| clean_url(&s)),
+        ..Default::default()
+    })
+}
+
+/// Project Zomboid `mod.info`: `key=value` lines. Returns the poster file name.
+pub fn parse_zomboid(text: &str) -> Option<(ModMeta, Option<String>)> {
+    let mut kv: HashMap<String, String> = HashMap::new();
+    for line in text.trim_start_matches('\u{feff}').lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        kv.entry(k.trim().to_ascii_lowercase()).or_insert_with(|| v.trim().to_string());
+    }
+    let meta = ModMeta {
+        source: "zomboid".into(),
+        id: kv.get("id").and_then(|s| clean(s, MAX_NAME)),
+        name: kv.get("name").and_then(|s| clean(s, MAX_NAME))?,
+        version: kv.get("modversion").and_then(|s| clean_version(s)),
+        authors: kv.get("author").map(|a| authors_from(Some(&Value::String(a.clone())))).unwrap_or_default(),
+        description: kv.get("description").and_then(|s| clean_desc(&s.replace("<LINE>", "\n"))),
+        website: kv.get("url").and_then(|s| clean_url(s)),
+        ..Default::default()
+    };
+    Some((meta, kv.get("poster").and_then(|p| plain_image_name(p))))
+}
+
+/// Factorio `info.json`; `factorio_version` tells it apart from other info.json files.
+pub fn parse_factorio(text: &str) -> Option<ModMeta> {
+    let v = relaxed_json(text)?;
+    str_of(&v, "factorio_version")?;
+    let id = str_of(&v, "name")?;
+    let portal = (id.len() <= 100 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b' '))
+        .then(|| format!("https://mods.factorio.com/mod/{}", id.replace(' ', "%20")));
+    Some(ModMeta {
+        source: "factorio".into(),
+        id: clean(id, MAX_NAME),
+        name: str_of(&v, "title").and_then(|s| clean(s, MAX_NAME)).or_else(|| clean(id, MAX_NAME))?,
+        version: str_of(&v, "version").and_then(clean_version),
+        authors: authors_from(v.get("author")),
+        description: str_of(&v, "description").and_then(clean_desc),
+        website: str_of(&v, "homepage").and_then(clean_url).or(portal),
+        ..Default::default()
+    })
+}
+
+/// Darkest Dungeon `project.xml` (the Workshop uploader's file).
+pub fn parse_darkest(text: &str) -> Option<(ModMeta, Option<String>)> {
+    let meta = ModMeta {
+        source: "darkest".into(),
+        id: xml_text(text, "PublishedFileId").filter(|s| workshop_url(s).is_some()),
+        name: xml_text(text, "Title").and_then(|s| clean(&s, MAX_NAME))?,
+        description: xml_text(text, "ItemDescription").and_then(|s| clean_desc(&s)),
+        website: xml_text(text, "PublishedFileId").and_then(|s| workshop_url(&s)),
+        ..Default::default()
+    };
+    Some((meta, xml_text(text, "PreviewIconFile").and_then(|p| plain_image_name(&p))))
+}
+
+/// XCOM 2 `<Mod>.XComMod`: an ini with `[mod]` keys.
+pub fn parse_xcom2(text: &str) -> Option<ModMeta> {
+    let mut kv: HashMap<String, String> = HashMap::new();
+    for line in text.trim_start_matches('\u{feff}').lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        kv.entry(k.trim().to_ascii_lowercase()).or_insert_with(|| v.trim().trim_matches('"').to_string());
+    }
+    Some(ModMeta {
+        source: "xcom2".into(),
+        id: kv.get("publishedfileid").filter(|s| workshop_url(s).is_some()).cloned(),
+        name: kv.get("title").and_then(|s| clean(s, MAX_NAME))?,
+        description: kv.get("description").and_then(|s| clean_desc(&s.replace("\\n", "\n"))),
+        website: kv.get("publishedfileid").and_then(|s| workshop_url(s)),
+        ..Default::default()
+    })
+}
+
+/// WoW's UI escapes in addon titles: `|cAARRGGBB` colours, `|r`, `|T...|t` textures.
+fn strip_wow_escapes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '|' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek().copied() {
+            Some('c') | Some('C') => {
+                chars.next();
+                for _ in 0..8 {
+                    chars.next_if(|c| c.is_ascii_hexdigit());
+                }
+            }
+            Some('r') | Some('R') => {
+                chars.next();
+            }
+            Some('T') | Some('A') => {
+                // Texture / atlas: skip to the closing |t / |a.
+                while let Some(c) = chars.next() {
+                    if c == '|' && matches!(chars.peek(), Some('t') | Some('a')) {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            Some('|') => {
+                chars.next();
+                out.push('|');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// WoW addon `.toc`: `## Key: value` lines.
+pub fn parse_wow_toc(text: &str) -> Option<ModMeta> {
+    let mut kv: HashMap<String, String> = HashMap::new();
+    for line in text.trim_start_matches('\u{feff}').lines() {
+        let Some(rest) = line.strip_prefix("##") else { continue };
+        let Some((k, v)) = rest.split_once(':') else { continue };
+        kv.entry(k.trim().to_ascii_lowercase()).or_insert_with(|| v.trim().to_string());
+    }
+    let field = |k: &str| kv.get(k).map(|v| strip_wow_escapes(v));
+    // Packagers leave `@project-version@` when building from source.
+    let version = field("version").filter(|v| !v.contains('@')).and_then(|v| clean_version(&v));
+    Some(ModMeta {
+        source: "wow".into(),
+        name: field("title").and_then(|s| clean(&s, MAX_NAME))?,
+        version,
+        authors: field("author").map(|a| authors_from(Some(&Value::String(a)))).unwrap_or_default(),
+        description: field("notes").and_then(|s| clean_desc(&s)),
+        website: field("x-website").and_then(|s| clean_url(&s)),
+        ..Default::default()
+    })
+}
+
 /// Item descriptions in Sims 4 CC often carry the game's `<font>` markup.
 fn strip_tags(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -633,7 +837,9 @@ fn dir_name(rel_dir: &str) -> &str {
     rel_dir.rsplit('/').next().unwrap_or(rel_dir)
 }
 
-fn probe_dir(base: &str, rel_dir: &str) -> Option<ModMeta> {
+/// `named` holds the scanned `.XComMod` / `.toc` file names in this folder:
+/// their names vary per mod, so they come from the manifest, not a guess.
+fn probe_dir(base: &str, rel_dir: &str, named: &[String]) -> Option<ModMeta> {
     let dir = crate::utils::safe_join(base, rel_dir).ok()?;
     let with = |mut meta: ModMeta, icon: Option<String>| {
         meta.key = rel_dir.to_string();
@@ -659,7 +865,64 @@ fn probe_dir(base: &str, rel_dir: &str) -> Option<ModMeta> {
             return Some(with(meta, None));
         }
     }
+    if let Some(t) = read_small(&dir.join("About").join("About.xml")) {
+        if let Some(mut meta) = parse_rimworld(&t) {
+            if meta.website.is_none() {
+                meta.website = read_small(&dir.join("About").join("PublishedFileId.txt")).and_then(|id| workshop_url(&id));
+            }
+            return Some(with(meta, Some("About/Preview.png".into())));
+        }
+    }
+    if let Some(t) = read_small(&dir.join("mod.info")) {
+        if let Some((meta, poster)) = parse_zomboid(&t) {
+            return Some(with(meta, poster.or_else(|| Some("poster.png".into()))));
+        }
+    }
+    if let Some(t) = read_small(&dir.join("info.json")) {
+        if let Some(meta) = parse_factorio(&t) {
+            return Some(with(meta, Some("thumbnail.png".into())));
+        }
+    }
+    if let Some(t) = read_small(&dir.join("project.xml")) {
+        if let Some((meta, icon)) = parse_darkest(&t) {
+            return Some(with(meta, icon));
+        }
+    }
+    for file in named {
+        let lower = file.to_ascii_lowercase();
+        let Some(t) = read_small(&dir.join(file)) else { continue };
+        if lower.ends_with(".xcommod") {
+            if let Some(meta) = parse_xcom2(&t) {
+                return Some(with(meta, Some("ModPreview.jpg".into())));
+            }
+        } else if lower.ends_with(".toc") {
+            // An addon's own toc is named after its folder (`Foo.toc`, or
+            // `Foo_Mainline.toc` / `Foo-Classic.toc` per client).
+            let stem = &file[..file.len() - 4];
+            let folder = dir_name(rel_dir);
+            let own = stem.eq_ignore_ascii_case(folder)
+                || stem.get(..folder.len()).is_some_and(|p| p.eq_ignore_ascii_case(folder)) && matches!(stem.as_bytes().get(folder.len()), Some(b'_') | Some(b'-'));
+            if own {
+                if let Some(meta) = parse_wow_toc(&t) {
+                    return Some(with(meta, None));
+                }
+            }
+        }
+    }
     None
+}
+
+/// Factorio's zipped mods hold one top folder with `info.json` and maybe
+/// `thumbnail.png`. Returns the metadata and the thumbnail's entry path.
+fn read_factorio_zip(path: &Path) -> Option<(ModMeta, Option<String>)> {
+    let mut zip = open_bounded_zip(path, MAX_JAR_BYTES)?;
+    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    let info = names.iter().find(|n| n.ends_with("/info.json") && n.matches('/').count() == 1)?.clone();
+    let top = &info[..info.len() - "info.json".len()];
+    let bytes = zip_entry(&mut zip, &info, MAX_META_BYTES)?;
+    let meta = parse_factorio(&String::from_utf8_lossy(&bytes))?;
+    let thumb = format!("{top}thumbnail.png");
+    Some((meta, names.contains(&thumb).then_some(thumb)))
 }
 
 /// Metadata for everything in `files` (relative paths from the scanned
@@ -667,12 +930,21 @@ fn probe_dir(base: &str, rel_dir: &str) -> Option<ModMeta> {
 pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
     let mut dirs = BTreeSet::new();
     let mut jars = Vec::new();
+    let mut zips = Vec::new();
     let mut packages = Vec::new();
+    let mut named: HashMap<&str, Vec<String>> = HashMap::new();
     for f in files {
+        let lower = f.to_ascii_lowercase();
         if is_jar(f) {
             jars.push(f.clone());
         } else if is_package(f) {
             packages.push(f);
+        } else if lower.ends_with(".zip") {
+            zips.push(f);
+        } else if lower.ends_with(".xcommod") || lower.ends_with(".toc") {
+            if let Some((dir, name)) = f.rsplit_once('/') {
+                named.entry(dir).or_default().push(name.to_string());
+            }
         }
         let mut d = f.as_str();
         while let Some((parent, _)) = d.rsplit_once('/') {
@@ -682,7 +954,7 @@ pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
             d = parent;
         }
     }
-    let mut out: Vec<ModMeta> = dirs.iter().filter_map(|d| probe_dir(base, d)).collect();
+    let mut out: Vec<ModMeta> = dirs.iter().filter_map(|d| probe_dir(base, d, named.get(d.as_str()).map(Vec::as_slice).unwrap_or_default())).collect();
     for rel in jars {
         let Ok(path) = crate::utils::safe_join(base, &rel) else { continue };
         if let Some((mut meta, icon)) = read_jar(&path) {
@@ -690,6 +962,18 @@ pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
             meta.is_file = true;
             if let Some(icon) = icon.filter(|i| !i.is_empty() && i.len() <= 256) {
                 meta.icon = IconRef::JarEntry(icon.trim_start_matches('/').to_string());
+                meta.has_icon = true;
+            }
+            out.push(meta);
+        }
+    }
+    for rel in zips {
+        let Ok(path) = crate::utils::safe_join(base, rel) else { continue };
+        if let Some((mut meta, thumb)) = read_factorio_zip(&path) {
+            meta.key = rel.clone();
+            meta.is_file = true;
+            if let Some(thumb) = thumb {
+                meta.icon = IconRef::JarEntry(thumb);
                 meta.has_icon = true;
             }
             out.push(meta);
@@ -841,6 +1125,94 @@ mod tests {
         let (m, _) = parse_fabric(r#"{"id":"x","contact":{"homepage":"javascript:alert(1)"}}"#).unwrap();
         assert_eq!(m.website, None, "only http(s) links");
         assert!(relaxed_json("{not json").is_none());
+    }
+
+    #[test]
+    fn rimworld_about_ignores_dependency_names() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <modDependencies><li><packageId>brrainz.harmony</packageId><displayName>Harmony</displayName><name>Not me</name></li></modDependencies>
+  <name>RimHUD &amp; More</name>
+  <author>Jaxe</author>
+  <packageId>Jaxe.RimHUD</packageId>
+  <modVersion>1.16.0</modVersion>
+  <url>https://github.com/Jaxe-Dev/RimHUD</url>
+  <description><![CDATA[Shows <b>stats</b>]]></description>
+</ModMetaData>"#;
+        let m = parse_rimworld(xml).unwrap();
+        assert_eq!((m.name.as_str(), m.id.as_deref(), m.version.as_deref()), ("RimHUD & More", Some("Jaxe.RimHUD"), Some("1.16.0")));
+        assert_eq!(m.authors, vec!["Jaxe".to_string()]);
+        assert_eq!(m.description.as_deref(), Some("Shows <b>stats</b>"));
+        let m = parse_rimworld("<ModMetaData><name>X</name><authors><li>A</li><li>B</li></authors></ModMetaData>").unwrap();
+        assert_eq!(m.authors, vec!["A".to_string(), "B".to_string()]);
+        assert!(parse_rimworld("<ModMetaData><nameSpace>x</nameSpace></ModMetaData>").is_none());
+    }
+
+    #[test]
+    fn zomboid_factorio_darkest_xcom() {
+        let (m, poster) = parse_zomboid("name=Better Sorting\nposter=poster.png\nid=BetterSorting\ndescription=Sorts<LINE>things\nauthor=blindcoder").unwrap();
+        assert_eq!((m.name.as_str(), m.id.as_deref(), poster.as_deref()), ("Better Sorting", Some("BetterSorting"), Some("poster.png")));
+        assert_eq!(m.description.as_deref(), Some("Sorts\nthings"));
+        assert_eq!(parse_zomboid("name=x\nposter=../../evil.png").unwrap().1, None);
+
+        let m = parse_factorio(r#"{"name":"Krastorio2","version":"1.3.24","title":"Krastorio 2","author":"raiguard","factorio_version":"1.1"}"#).unwrap();
+        assert_eq!((m.name.as_str(), m.website.as_deref()), ("Krastorio 2", Some("https://mods.factorio.com/mod/Krastorio2")));
+        assert!(parse_factorio(r#"{"name":"x","version":"1"}"#).is_none(), "not Factorio without factorio_version");
+
+        let (m, icon) = parse_darkest("<project><Title>Marvin Seo</Title><PreviewIconFile>preview_icon.png</PreviewIconFile><PublishedFileId>885957080</PublishedFileId><ItemDescription>A hero</ItemDescription></project>").unwrap();
+        assert_eq!((m.name.as_str(), icon.as_deref()), ("Marvin Seo", Some("preview_icon.png")));
+        assert_eq!(m.website.as_deref(), Some("https://steamcommunity.com/sharedfiles/filedetails/?id=885957080"));
+
+        let m = parse_xcom2("[mod]\npublishedFileId=0\nTitle=\"Robojumper's Squad Select\"\nDescription=Better squad select\nRequiresXPACK=true").unwrap();
+        assert_eq!((m.name.as_str(), m.website.as_deref()), ("Robojumper's Squad Select", None));
+    }
+
+    #[test]
+    fn wow_toc_titles_lose_colour_codes() {
+        let toc = "## Interface: 110200\n## Title: |cff33ff99Deadly|r Boss Mods |TInterface\\Icons\\x:16|t\n## Notes: Raid warnings\n## Author: MysticalOS\n## Version: @project-version@\n## X-Website: https://deadlybossmods.com\nDBM.lua";
+        let m = parse_wow_toc(toc).unwrap();
+        assert_eq!(m.name, "Deadly Boss Mods");
+        assert_eq!(m.version, None, "an unfilled packager placeholder is never shown");
+        assert_eq!((m.authors.clone(), m.website.as_deref()), (vec!["MysticalOS".to_string()], Some("https://deadlybossmods.com")));
+        assert_eq!(strip_wow_escapes("a||b |Cffffffffc|R"), "a|b c");
+    }
+
+    #[test]
+    fn extract_finds_the_folder_formats_and_factorio_zips() {
+        let base = crate::testutil::temp_dir("mod-meta-more");
+        write(&base, "Mods/RimHUD/About/About.xml", b"<ModMetaData><name>RimHUD</name></ModMetaData>");
+        write(&base, "Mods/RimHUD/About/Preview.png", PNG);
+        write(&base, "Mods/RimHUD/About/PublishedFileId.txt", b"1508850027\r\n");
+        write(&base, "Mods/RimHUD/Assemblies/RimHUD.dll", b"MZ");
+        write(&base, "AddOns/DBM-Core/DBM-Core_Mainline.toc", b"## Title: DBM Core");
+        write(&base, "AddOns/DBM-Core/Other.toc", b"## Title: Wrong");
+        write(&base, "AddOns/Stray/NotStray.toc", b"## Title: Not this folder's own toc");
+        jar(&base, "mods/Krastorio2_1.3.24.zip", &[("Krastorio2_1.3.24/info.json", br#"{"name":"Krastorio2","title":"Krastorio 2","version":"1.3.24","factorio_version":"1.1"}"#), ("Krastorio2_1.3.24/thumbnail.png", PNG)]);
+        jar(&base, "mods/random.zip", &[("readme/info.json", br#"{"name":"x"}"#)]);
+        let files: Vec<String> = [
+            "Mods/RimHUD/Assemblies/RimHUD.dll",
+            "Mods/RimHUD/About/About.xml",
+            "AddOns/DBM-Core/DBM-Core_Mainline.toc",
+            "AddOns/DBM-Core/Other.toc",
+            "AddOns/Stray/NotStray.toc",
+            "mods/Krastorio2_1.3.24.zip",
+            "mods/random.zip",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let b = base.to_str().unwrap();
+        let metas = extract(b, &files);
+        assert_eq!(metas.len(), 3, "{metas:?}");
+        let rim = metas.iter().find(|m| m.key == "Mods/RimHUD").unwrap();
+        assert!(rim.has_icon);
+        assert_eq!(rim.website.as_deref(), Some("https://steamcommunity.com/sharedfiles/filedetails/?id=1508850027"));
+        assert!(icon_data_url(b, &rim.key, &rim.icon).unwrap().starts_with("data:image/png"));
+        assert_eq!(metas.iter().find(|m| m.key == "AddOns/DBM-Core").unwrap().name, "DBM Core");
+        let k2 = metas.iter().find(|m| m.key == "mods/Krastorio2_1.3.24.zip").unwrap();
+        assert!(k2.is_file && k2.has_icon);
+        assert!(icon_data_url(b, &k2.key, &k2.icon).unwrap().starts_with("data:image/png"));
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
