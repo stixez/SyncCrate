@@ -10,8 +10,9 @@
 use serde::Deserialize;
 use serde_json::json;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 /// The SyncCrate application on Discord's developer portal; its name is what
@@ -91,15 +92,28 @@ struct Conn {
     /// One message per frame the worker expects next.
     want: mpsc::Sender<()>,
     frames: mpsc::Receiver<std::io::Result<()>>,
+    /// True until the reader thread has ended.
+    reader_alive: Arc<AtomicBool>,
+}
+
+/// Clears the flag however the reader thread ends.
+struct AliveGuard(Arc<AtomicBool>);
+impl Drop for AliveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 impl Conn {
     fn start(mut reader: Reader, writer: Writer) -> std::io::Result<Conn> {
         let (want, want_rx) = mpsc::channel::<()>();
         let (frames_tx, frames) = mpsc::channel();
+        let reader_alive = Arc::new(AtomicBool::new(true));
+        let guard = AliveGuard(reader_alive.clone());
         // Reads only on request: a synchronous Windows pipe serialises I/O on
         // the handle, so an idle read left pending would block the next write.
         std::thread::Builder::new().name("discord-ipc-read".into()).spawn(move || {
+            let _guard = guard;
             while want_rx.recv().is_ok() {
                 let r = read_frame(&mut *reader);
                 let failed = r.is_err();
@@ -108,7 +122,7 @@ impl Conn {
                 }
             }
         })?;
-        Ok(Conn { writer, want, frames })
+        Ok(Conn { writer, want, frames, reader_alive })
     }
 
     /// Sends `bytes` and waits up to `timeout` for Discord's reply frame. After a
@@ -151,12 +165,23 @@ fn open_socket(i: u8) -> std::io::Result<(Reader, Writer)> {
     Err(last)
 }
 
-fn connect() -> std::io::Result<Conn> {
+/// Whether the reader of an earlier connection is still running. One stays
+/// blocked when Discord keeps the pipe open without answering (the Windows
+/// pipe has no read timeout), and connecting again would strand another one
+/// every retry, so the worker waits until it has ended.
+fn reader_busy(last: &Option<Arc<AtomicBool>>) -> bool {
+    last.as_ref().is_some_and(|a| a.load(Ordering::Acquire))
+}
+
+/// Connects and says hello. `last_reader` gets the new connection's reader
+/// flag, also when the hello times out.
+fn connect(last_reader: &mut Option<Arc<AtomicBool>>) -> std::io::Result<Conn> {
     let mut last = std::io::Error::other("Discord isn't running");
     for i in 0..10 {
         match open_socket(i) {
             Ok((reader, writer)) => {
                 let mut c = Conn::start(reader, writer)?;
+                *last_reader = Some(c.reader_alive.clone());
                 c.request(&frame(0, &json!({ "v": 1, "client_id": CLIENT_ID })), REPLY_TIMEOUT)?; // READY
                 return Ok(c);
             }
@@ -178,6 +203,7 @@ fn worker(rx: mpsc::Receiver<Option<Presence>>) {
     // Set while Discord isn't reachable: don't try again before then.
     let mut retry_at: Option<Instant> = None;
     let mut nonce = 0u64;
+    let mut last_reader: Option<Arc<AtomicBool>> = None;
     loop {
         let wait = if shown.as_ref() == Some(&wanted) {
             RETRY
@@ -209,7 +235,11 @@ fn worker(rx: mpsc::Receiver<Option<Presence>>) {
                 shown = Some(None);
                 continue;
             }
-            match connect() {
+            if reader_busy(&last_reader) {
+                retry_at = Some(Instant::now() + RETRY);
+                continue;
+            }
+            match connect(&mut last_reader) {
                 Ok(p) => {
                     pipe = Some(p);
                     retry_at = None;
@@ -314,6 +344,26 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
         assert!(started.elapsed() < Duration::from_secs(5));
         assert!(!sink.0.lock().unwrap().is_empty(), "the frame went out before the wait");
+    }
+
+    #[test]
+    fn a_stuck_reader_blocks_reconnecting_until_it_ends() {
+        let (hold, rx) = mpsc::channel::<()>();
+        let mut c = Conn::start(Box::new(Silent(rx)), Box::new(Sink::default())).unwrap();
+        let last = Some(c.reader_alive.clone());
+        assert!(c.request(b"x", Duration::from_millis(50)).is_err());
+        drop(c);
+        // Dropping the connection doesn't end a reader stuck in a read.
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(reader_busy(&last));
+        // Discord answers or closes the pipe: the reader ends and a new attempt may start.
+        drop(hold);
+        let started = Instant::now();
+        while reader_busy(&last) && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!reader_busy(&last));
+        assert!(!reader_busy(&None));
     }
 
     #[test]
