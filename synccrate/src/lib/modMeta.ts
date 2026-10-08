@@ -11,6 +11,7 @@ export const MOD_SOURCE_LABELS: Record<string, string> = {
   paradox: "Paradox mod",
   bannerlord: "Bannerlord module",
   sims4: "Sims 4 CC",
+  sims3: "Sims 3 CC",
   rimworld: "RimWorld mod",
   zomboid: "Project Zomboid mod",
   factorio: "Factorio mod",

@@ -9,6 +9,12 @@
 //! name themselves with internal ids (`Creator_yfBody_Dress_2025...`), so
 //! their readable name comes from the file name instead.
 //!
+//! Sims 3 packages are DBPF 2.0 with the same index; their thumbnails are
+//! PNG `THUM` / `ICON` resources (type ids from s3pi's ImageResources list)
+//! and almost everything is RefPack-compressed. Sims 3 object definitions
+//! share the COBJ type id but not its layout, so Sims 3 CC is named from the
+//! file name only. Not checked against real Sims 3 CC yet (none on the dev PC).
+//!
 //! Packages come from friends via sync, i.e. untrusted: every count, offset
 //! and size is bounded before it's used, and decompression is capped.
 use std::io::{Read, Seek, SeekFrom};
@@ -18,9 +24,15 @@ pub const T_COBJ: u32 = 0x319E4F1D;
 pub const T_CASP: u32 = 0x034AEECB;
 /// CAS part, build/buy and body part thumbnails.
 pub const THUMB_TYPES: [u32; 3] = [0x3C1AF1F2, 0x3C2A8647, 0x5B282D45];
+/// Sims 3 `THUM` (CAS and object thumbnails, three sizes each) and `ICON`
+/// (object icons, four sizes) resources, all PNG.
+pub const SIMS3_THUMB_TYPES: [u32; 7] = [0x0580A2B4, 0x0580A2B5, 0x0580A2B6, 0x2E75C764, 0x2E75C765, 0x2E75C766, 0x2E75C767];
 
 const COMP_NONE: u16 = 0x0000;
 const COMP_ZLIB: u16 = 0x5A42;
+/// EA's RefPack (QFS), used by Sims 3; 0xFFFE is its "streamable" variant.
+const COMP_REFPACK: u16 = 0xFFFF;
+const COMP_REFPACK_STREAM: u16 = 0xFFFE;
 /// 500k entries is a 16 MB index; real merged packages stay far below.
 const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_STBL_BYTES: u32 = 4 * 1024 * 1024;
@@ -41,7 +53,7 @@ pub struct Entry {
 
 impl Entry {
     fn readable(&self) -> bool {
-        matches!(self.compression, COMP_NONE | COMP_ZLIB)
+        matches!(self.compression, COMP_NONE | COMP_ZLIB | COMP_REFPACK | COMP_REFPACK_STREAM)
     }
 }
 
@@ -69,6 +81,8 @@ pub struct PackageInfo {
     /// Build/buy objects plus CAS parts (each swatch is its own CAS part).
     pub items: u32,
     pub thumbnail: Option<ResourceRef>,
+    /// A Sims 3 package (DBPF 2.0) rather than Sims 4 (2.1).
+    pub sims3: bool,
 }
 
 fn u16_at(b: &[u8], p: usize) -> Option<u16> {
@@ -81,13 +95,14 @@ fn u64_at(b: &[u8], p: usize) -> Option<u64> {
     Some(u64::from_le_bytes(b.get(p..p + 8)?.try_into().ok()?))
 }
 
-/// The resource index of a DBPF 2.1 package, or None for anything else
-/// (including Sims 3's DBPF 2.0 and Sims 2's 1.x).
-pub fn read_index<R: Read + Seek>(r: &mut R, file_len: u64) -> Option<Vec<Entry>> {
+/// The DBPF minor version (1 = Sims 4, 0 = Sims 3) and resource index of a
+/// package, or None for anything else (Sims 2's DBPF 1.x included).
+pub fn read_index<R: Read + Seek>(r: &mut R, file_len: u64) -> Option<(u32, Vec<Entry>)> {
     let mut hdr = [0u8; 96];
     r.seek(SeekFrom::Start(0)).ok()?;
     r.read_exact(&mut hdr).ok()?;
-    if &hdr[..4] != b"DBPF" || u32_at(&hdr, 4)? != 2 || u32_at(&hdr, 8)? != 1 {
+    let minor = u32_at(&hdr, 8)?;
+    if &hdr[..4] != b"DBPF" || u32_at(&hdr, 4)? != 2 || minor > 1 {
         return None;
     }
     let count = u32_at(&hdr, 36)? as u64;
@@ -103,7 +118,7 @@ pub fn read_index<R: Read + Seek>(r: &mut R, file_len: u64) -> Option<Vec<Entry>
     let mut buf = vec![0u8; index_size as usize];
     r.seek(SeekFrom::Start(pos)).ok()?;
     r.read_exact(&mut buf).ok()?;
-    parse_index(&buf, count)
+    Some((minor, parse_index(&buf, count)?))
 }
 
 /// Index layout: a flags word saying which of type / group / instance-hi /
@@ -175,8 +190,64 @@ pub fn read_resource<R: Read + Seek>(r: &mut R, res: &ResourceRef, file_len: u64
             flate2::read::ZlibDecoder::new(&raw[..]).take(max as u64 + 1).read_to_end(&mut out).ok()?;
             (out.len() <= max as usize).then_some(out)
         }
+        COMP_REFPACK | COMP_REFPACK_STREAM => refpack(&raw, max as usize),
         _ => None,
     }
+}
+
+/// RefPack (QFS), EA's LZ77 variant. A two-byte header (flags, 0xFB) and the
+/// plain size (3 bytes, or 4 with flag 0x80; a compressed size comes first
+/// with flag 0x01), then control bytes: each copies 0-3 literal bytes and
+/// then a back reference, except 0xE0-0xFB (4-112 literals only) and
+/// 0xFC-0xFF (0-3 final literals, end). Output past `max` is refused.
+pub fn refpack(data: &[u8], max: usize) -> Option<Vec<u8>> {
+    let flags = *data.first()?;
+    if data.get(1) != Some(&0xFB) {
+        return None;
+    }
+    let width = if flags & 0x80 != 0 { 4 } else { 3 };
+    let mut at = 2 + if flags & 0x01 != 0 { width } else { 0 };
+    let size_bytes = data.get(at..at + width)?;
+    let plain = size_bytes.iter().fold(0usize, |n, b| (n << 8) | *b as usize);
+    at += width;
+    if plain > max {
+        return None;
+    }
+    let mut out = Vec::with_capacity(plain);
+    let byte = |i: usize| data.get(i).map(|b| *b as usize);
+    while out.len() < plain {
+        let c = byte(at)?;
+        let (literals, count, distance, used);
+        if c < 0x80 {
+            let b1 = byte(at + 1)?;
+            (literals, count, distance, used) = (c & 0x03, ((c >> 2) & 0x07) + 3, ((c & 0x60) << 3) + b1 + 1, 2);
+        } else if c < 0xC0 {
+            let (b1, b2) = (byte(at + 1)?, byte(at + 2)?);
+            (literals, count, distance, used) = ((b1 >> 6) & 0x03, (c & 0x3F) + 4, ((b1 & 0x3F) << 8) + b2 + 1, 3);
+        } else if c < 0xE0 {
+            let (b1, b2, b3) = (byte(at + 1)?, byte(at + 2)?, byte(at + 3)?);
+            (literals, count, distance, used) = (c & 0x03, ((c & 0x0C) << 6) + b3 + 5, ((c & 0x10) << 12) + (b1 << 8) + b2 + 1, 4);
+        } else {
+            let n = if c < 0xFC { ((c & 0x1F) + 1) * 4 } else { c & 0x03 };
+            out.extend_from_slice(data.get(at + 1..at + 1 + n)?);
+            at += 1 + n;
+            if c >= 0xFC {
+                break;
+            }
+            continue;
+        }
+        at += used;
+        out.extend_from_slice(data.get(at..at + literals)?);
+        at += literals;
+        if distance > out.len() || out.len() + count > max {
+            return None;
+        }
+        // Byte by byte: the source may overlap what's being written (runs).
+        for _ in 0..count {
+            out.push(out[out.len() - distance]);
+        }
+    }
+    (out.len() == plain).then_some(out)
 }
 
 /// String table: `STBL`, version u16, compressed u8, entry count u64, two
@@ -206,8 +277,11 @@ pub fn cobj_name_keys(b: &[u8]) -> Option<(u32, u32)> {
 
 /// Everything we show for one package, or None when it isn't DBPF 2.1.
 pub fn read_package<R: Read + Seek>(r: &mut R, file_len: u64, max_thumb: u32) -> Option<PackageInfo> {
-    let index = read_index(r, file_len)?;
+    let (minor, index) = read_index(r, file_len)?;
+    let sims3 = minor == 0;
+    let thumb_types: &[u32] = if sims3 { &SIMS3_THUMB_TYPES } else { &THUMB_TYPES };
     let mut info = PackageInfo {
+        sims3,
         items: index.iter().filter(|e| e.rtype == T_COBJ || e.rtype == T_CASP).count().min(u32::MAX as usize) as u32,
         ..Default::default()
     };
@@ -215,7 +289,7 @@ pub fn read_package<R: Read + Seek>(r: &mut R, file_len: u64, max_thumb: u32) ->
     // size, and the big ones look best in the details panel.
     info.thumbnail = index
         .iter()
-        .filter(|e| THUMB_TYPES.contains(&e.rtype) && e.readable() && e.mem_size > 0 && e.mem_size <= max_thumb)
+        .filter(|e| thumb_types.contains(&e.rtype) && e.readable() && e.mem_size > 0 && e.mem_size <= max_thumb)
         .max_by_key(|e| e.mem_size)
         .map(ResourceRef::from);
 
@@ -223,7 +297,8 @@ pub fn read_package<R: Read + Seek>(r: &mut R, file_len: u64, max_thumb: u32) ->
     // package, which the first object's name would mislabel ("Washing Powder"
     // for a whole merged furniture set). A few catalog entries tell them apart.
     let mut keys: Vec<(u32, u32)> = Vec::new();
-    for cobj in index.iter().filter(|e| e.rtype == T_COBJ && e.readable()).take(8) {
+    // Sims 3's object definition uses the same type id with another layout.
+    for cobj in index.iter().filter(|e| !sims3 && e.rtype == T_COBJ && e.readable()).take(8) {
         if let Some(k) = read_resource(r, &cobj.into(), file_len, MAX_COBJ_BYTES).as_deref().and_then(cobj_name_keys) {
             if !keys.iter().any(|(n, _)| *n == k.0) {
                 keys.push(k);
@@ -289,25 +364,55 @@ pub(crate) mod tests {
     /// A DBPF 2.1 package with these (type, instance, data, zlib?) resources.
     /// The group is shared (flag bit 1), as real packages often do.
     pub(crate) fn package(resources: &[(u32, u64, Vec<u8>, bool)]) -> Vec<u8> {
+        package_v(1, resources)
+    }
+
+    /// RefPack made of literal runs only: valid input for the decoder.
+    pub(crate) fn refpack_literal(data: &[u8]) -> Vec<u8> {
+        let mut out = vec![0x10, 0xFB];
+        out.extend(&(data.len() as u32).to_be_bytes()[1..]);
+        let mut rest = data;
+        while rest.len() >= 4 {
+            let n = (rest.len() / 4 * 4).min(112);
+            out.push(0xE0 + (n / 4 - 1) as u8);
+            out.extend(&rest[..n]);
+            rest = &rest[n..];
+        }
+        out.push(0xFC + rest.len() as u8);
+        out.extend(rest);
+        out
+    }
+
+    /// `compress`: zlib for Sims 4 (minor 1), RefPack for Sims 3 (minor 0).
+    pub(crate) fn package_v(minor: u32, resources: &[(u32, u64, Vec<u8>, bool)]) -> Vec<u8> {
         let mut body = Vec::new();
         let mut index = 2u32.to_le_bytes().to_vec();
         index.extend(0u32.to_le_bytes()); // shared group
         for (t, inst, data, compress) in resources {
-            let stored = if *compress { zlib(data) } else { data.clone() };
+            let stored = match (*compress, minor) {
+                (false, _) => data.clone(),
+                (true, 0) => refpack_literal(data),
+                (true, _) => zlib(data),
+            };
+            let method = match (*compress, minor) {
+                (false, _) => COMP_NONE,
+                (true, 0) => COMP_REFPACK,
+                (true, _) => COMP_ZLIB,
+            };
             index.extend(t.to_le_bytes());
             index.extend(((inst >> 32) as u32).to_le_bytes());
             index.extend((*inst as u32).to_le_bytes());
             index.extend((96 + body.len() as u32).to_le_bytes());
             index.extend((stored.len() as u32 | 0x8000_0000).to_le_bytes());
             index.extend((data.len() as u32).to_le_bytes());
-            index.extend((if *compress { COMP_ZLIB } else { COMP_NONE }).to_le_bytes());
+            index.extend(method.to_le_bytes());
             index.extend(1u16.to_le_bytes());
             body.extend(stored);
         }
         let mut hdr = vec![0u8; 96];
         hdr[..4].copy_from_slice(b"DBPF");
         hdr[4..8].copy_from_slice(&2u32.to_le_bytes());
-        hdr[8..12].copy_from_slice(&1u32.to_le_bytes());
+        hdr[8..12].copy_from_slice(&minor.to_le_bytes());
         hdr[36..40].copy_from_slice(&(resources.len() as u32).to_le_bytes());
         hdr[44..48].copy_from_slice(&(index.len() as u32).to_le_bytes());
         hdr[64..72].copy_from_slice(&(96 + body.len() as u64).to_le_bytes());
@@ -360,9 +465,9 @@ pub(crate) mod tests {
     #[test]
     fn other_formats_and_lies_are_refused() {
         assert!(read(b"not a package").is_none());
-        let mut sims3 = package(&[(T_CASP, 1, vec![0; 8], false)]);
-        sims3[8..12].copy_from_slice(&0u32.to_le_bytes()); // DBPF 2.0
-        assert!(read(&sims3).is_none());
+        let mut sims2 = package(&[(T_CASP, 1, vec![0; 8], false)]);
+        sims2[4..8].copy_from_slice(&1u32.to_le_bytes()); // DBPF 1.x
+        assert!(read(&sims2).is_none());
 
         // An entry count far beyond what the index can hold.
         let mut pkg = package(&[(T_CASP, 1, vec![0; 8], false)]);
@@ -388,9 +493,51 @@ pub(crate) mod tests {
         let data = zlib(&vec![0u8; 1024 * 1024]);
         let res = ResourceRef { offset: 0, size: data.len() as u32, mem_size: 10, compression: COMP_ZLIB };
         assert!(read_resource(&mut Cursor::new(&data), &res, data.len() as u64, 4096).is_none());
-        // RefPack and other compressions aren't read.
-        let res = ResourceRef { compression: 0xFFFF, ..res };
+        // Unknown compressions aren't read.
+        let res = ResourceRef { compression: 0xFFE0, ..res };
         assert!(read_resource(&mut Cursor::new(&data), &res, data.len() as u64, 1024 * 1024 * 2).is_none());
+    }
+
+    #[test]
+    fn refpack_decodes_every_control_shape_and_refuses_lies() {
+        // "ABCD" literal run, a 2-byte copy (3 from 4 back), a 3-byte op with
+        // one literal "X" then 4 from 7 back, a 4-byte copy (5 from 12 back),
+        // and a final literal.
+        let mut s = vec![0x10, 0xFB, 0, 0, 18];
+        s.extend([0xE0, b'A', b'B', b'C', b'D']);
+        s.extend([0x00, 0x03]);
+        s.extend([0x80, 0x40, 0x06, b'X']);
+        s.extend([0xC0, 0x00, 0x0B, 0x00]);
+        s.extend([0xFD, b'!']);
+        assert_eq!(refpack(&s, 1024).unwrap(), b"ABCDABCXBCDAABCDA!".to_vec());
+
+        let data: Vec<u8> = (0..300u32).map(|i| (i * 7) as u8).collect();
+        assert_eq!(refpack(&refpack_literal(&data), 1024).unwrap(), data);
+        assert!(refpack(&refpack_literal(&data), 100).is_none(), "plain size over the cap");
+        // A back reference before the start, a wrong magic, a truncated stream.
+        assert!(refpack(&[0x10, 0xFB, 0, 0, 5, 0x00, 0x09], 64).is_none());
+        assert!(refpack(&[0x10, 0xFA, 0, 0, 1, 0xFD, 1], 64).is_none());
+        assert!(refpack(&[0x10, 0xFB, 0, 0, 9, 0xE1, 1, 2], 64).is_none());
+    }
+
+    #[test]
+    fn sims3_package_gives_its_largest_png_thumbnail_but_no_catalog_name() {
+        const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 9, 9, 9, 9];
+        let large = [PNG, &[1; 200]].concat();
+        let pkg = package_v(0, &[
+            (T_CASP, 1, vec![0; 40], true),
+            (SIMS3_THUMB_TYPES[0], 1, PNG.to_vec(), true),
+            (SIMS3_THUMB_TYPES[2], 1, large.clone(), true),
+            // A Sims 4 thumbnail type means nothing in a Sims 3 package.
+            (THUMB_TYPES[0], 1, [PNG, &[2; 400]].concat(), false),
+            // Same type id as Sims 4's COBJ, different layout: never read as one.
+            (T_COBJ, 1, cobj(1, 2), true),
+            (T_STBL, 1, stbl(&[(1, "Wrong")]), true),
+        ]);
+        let info = read(&pkg).unwrap();
+        assert!(info.sims3 && info.object_name.is_none());
+        let t = info.thumbnail.unwrap();
+        assert_eq!(read_resource(&mut Cursor::new(&pkg), &t, pkg.len() as u64, 1024 * 1024).unwrap(), large);
     }
 
     #[test]

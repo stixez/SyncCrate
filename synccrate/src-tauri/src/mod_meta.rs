@@ -41,7 +41,7 @@ pub struct ModMeta {
     /// itself for single-file mods (jars). Files under a folder key belong to it.
     pub key: String,
     pub is_file: bool,
-    /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord" | "sims4"
+    /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord" | "sims4" | "sims3"
     /// | "rimworld" | "zomboid" | "factorio" | "darkest" | "xcom2" | "wow"
     pub source: String,
     pub id: Option<String>,
@@ -692,7 +692,7 @@ pub fn sims_meta(rel: &str, info: crate::sims_package::PackageInfo) -> ModMeta {
     ModMeta {
         key: rel.to_string(),
         is_file: true,
-        source: "sims4".into(),
+        source: if info.sims3 { "sims3" } else { "sims4" }.into(),
         name: object_name.unwrap_or(file_derived),
         authors: tag_author.or(by_author).into_iter().collect(),
         description,
@@ -1228,7 +1228,7 @@ mod tests {
     #[test]
     fn sims_meta_prefers_the_catalog_name_and_reads_by_lines_as_authors() {
         use crate::sims_package::PackageInfo;
-        let info = PackageInfo { object_name: Some("Cinnamon Roll".into()), object_desc: Some("by icemunmun".into()), items: 3, thumbnail: None };
+        let info = PackageInfo { object_name: Some("Cinnamon Roll".into()), object_desc: Some("by icemunmun".into()), items: 3, thumbnail: None, sims3: false };
         let m = sims_meta("Mods/food/icemunmun_CinnamonRolls.package", info);
         assert_eq!((m.name.as_str(), m.derived_name, m.is_file), ("Cinnamon Roll", false, true));
         assert_eq!((m.authors.clone(), m.description.clone(), m.items), (vec!["icemunmun".to_string()], None, Some(3)));
