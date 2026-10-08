@@ -7,6 +7,7 @@ mod game_install;
 mod handoff;
 mod network;
 mod mod_meta;
+mod sims_package;
 mod mod_updates;
 mod offers;
 mod packs;

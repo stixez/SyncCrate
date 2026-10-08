@@ -10,6 +10,7 @@ export const MOD_SOURCE_LABELS: Record<string, string> = {
   forge: "Forge",
   paradox: "Paradox mod",
   bannerlord: "Bannerlord module",
+  sims4: "Sims 4 CC",
 };
 
 /** Path → the mod it belongs to: a single-file mod (jar) by exact path,

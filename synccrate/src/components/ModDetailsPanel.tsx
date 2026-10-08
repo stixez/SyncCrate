@@ -4,7 +4,7 @@ import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { MOD_SOURCE_LABELS } from "../lib/modMeta";
+import { MOD_SOURCE_LABELS, useModIcon } from "../lib/modMeta";
 import { ModIcon } from "./ModItem";
 import { displayPath, formatBytes, formatDate, isDisabledPath, renameInManifest } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
@@ -26,6 +26,18 @@ interface ModDetailsPanelProps {
   tags: string[];
   compatibility?: ModCompatibility;
   onClose: () => void;
+}
+
+/** The mod's image at a size you can see: Sims 4 thumbnails are swatches and
+ * item renders that are unreadable at icon size. Nothing while loading. */
+function Preview({ meta }: { meta: ModMeta }) {
+  const url = useModIcon(meta);
+  if (!url) return null;
+  return (
+    <div className="mb-2 grid place-items-center border border-border bg-bg">
+      <img src={url} alt="" className="max-h-48 max-w-full object-contain" draggable={false} />
+    </div>
+  );
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -132,9 +144,11 @@ export default function ModDetailsPanel({
           </div>
 
           <div className="px-5 py-3">
+            {meta?.has_icon && <Preview meta={meta} />}
             {meta && (
               <>
                 {meta.version && <Row label="Version"><span className="font-mono text-xs">{meta.version}</span></Row>}
+                {meta.items != null && meta.items > 1 && <Row label="Items"><span className="font-mono text-xs tabular">{meta.items}</span></Row>}
                 {update && (
                   <Row label="Update">
                     <span className="font-mono text-xs text-neon">{update.latest}</span>

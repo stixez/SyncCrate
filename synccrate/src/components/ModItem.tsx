@@ -140,7 +140,7 @@ function ModItem({
         >
           {ownMeta ? ownMeta.name : name}
           {ownMeta?.version && <span className="font-mono text-[10.5px] text-txt-dim font-normal ml-1.5 no-underline">v{ownMeta.version.replace(/^v/i, "")}</span>}
-          {ownMeta && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
+          {ownMeta && !ownMeta.derived_name && <span className="font-mono text-[10.5px] text-txt-muted font-normal ml-2">{name}</span>}
           {!ownMeta && meta && showDir && <span className="text-[11px] text-txt-muted font-normal ml-2">· {meta.name}</span>}
         </button>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}

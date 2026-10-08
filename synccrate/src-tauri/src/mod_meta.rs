@@ -6,6 +6,7 @@
 //!   NeoForge `META-INF/(neoforge.)mods.toml`, old Forge `mcmod.info`
 //! - Paradox games (`descriptor.mod`, `thumbnail.png` / `picture=`)
 //! - Mount & Blade II: Bannerlord (`SubModule.xml`)
+//! - Sims 4 `.package` files: thumbnail, catalog name (`crate::sims_package`)
 //!
 //! Candidates come from the scanned manifest only (each file's own folder and
 //! its parents, plus `.jar` files themselves), never from walking a content
@@ -34,7 +35,7 @@ pub struct ModMeta {
     /// itself for single-file mods (jars). Files under a folder key belong to it.
     pub key: String,
     pub is_file: bool,
-    /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord"
+    /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord" | "sims4"
     pub source: String,
     pub id: Option<String>,
     pub name: String,
@@ -43,6 +44,10 @@ pub struct ModMeta {
     pub description: Option<String>,
     pub website: Option<String>,
     pub has_icon: bool,
+    /// Items inside a Sims 4 package (objects plus CAS swatches); >1 for merged files.
+    pub items: Option<u32>,
+    /// `name` was made from the file name (so rows don't show both).
+    pub derived_name: bool,
     #[serde(skip)]
     pub icon: IconRef,
     /// SMAPI `UpdateKeys` ("Nexus:541", "GitHub:owner/repo"), for update checks.
@@ -58,6 +63,8 @@ pub enum IconRef {
     File(String),
     /// An entry inside the jar at `ModMeta::key`.
     JarEntry(String),
+    /// A thumbnail resource inside the Sims 4 package at `ModMeta::key`.
+    Package(crate::sims_package::ResourceRef),
 }
 
 // ---------------------------------------------------------------------------
@@ -421,6 +428,78 @@ pub fn parse_bannerlord(text: &str) -> Option<ModMeta> {
     })
 }
 
+/// Item descriptions in Sims 4 CC often carry the game's `<font>` markup.
+fn strip_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' if in_tag => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Sims 4 CC files are usually named `[Creator] Item.package` or
+/// `(Creator) Item.package`: the tag is the author and the rest, with
+/// underscores as spaces, the name. Returns (name, author).
+pub fn sims_name_from_file(file_name: &str) -> (String, Option<String>) {
+    let mut stem = file_name;
+    if stem.to_ascii_lowercase().ends_with(".disabled") {
+        stem = &stem[..stem.len() - ".disabled".len()];
+    }
+    if stem.to_ascii_lowercase().ends_with(".package") {
+        stem = &stem[..stem.len() - ".package".len()];
+    }
+    let (mut author, mut rest) = (None, stem);
+    for (open, close) in [('[', ']'), ('(', ')')] {
+        if let Some(inner) = stem.strip_prefix(open) {
+            if let Some((tag, after)) = inner.split_once(close) {
+                author = clean(tag, 64);
+                rest = after;
+            }
+            break;
+        }
+    }
+    let name = rest.replace('_', " ");
+    let name = name.trim_start_matches(|c: char| c == '-' || c == '.' || c.is_whitespace());
+    let name = clean(name, MAX_NAME).or_else(|| clean(&stem.replace('_', " "), MAX_NAME)).unwrap_or_else(|| file_name.to_string());
+    (name, author)
+}
+
+pub fn sims_meta(rel: &str, info: crate::sims_package::PackageInfo) -> ModMeta {
+    let file_name = rel.rsplit('/').next().unwrap_or(rel);
+    let (file_derived, tag_author) = sims_name_from_file(file_name);
+    let object_name = info.object_name.as_deref().map(strip_tags).and_then(|n| clean(&n, MAX_NAME));
+    let mut description = info.object_desc.as_deref().map(strip_tags).and_then(|d| clean_desc(&d));
+    // Many objects describe themselves only as "by Creator": that's the author.
+    let by_author = description
+        .as_deref()
+        .and_then(|d| d.strip_prefix("by ").or_else(|| d.strip_prefix("By ")))
+        .filter(|who| who.len() <= 64 && !who.contains('\n'))
+        .and_then(|who| clean(who, 64));
+    if by_author.is_some() || (description.is_some() && description == object_name) {
+        description = None;
+    }
+    let derived_name = object_name.is_none();
+    ModMeta {
+        key: rel.to_string(),
+        is_file: true,
+        source: "sims4".into(),
+        name: object_name.unwrap_or(file_derived),
+        authors: tag_author.or(by_author).into_iter().collect(),
+        description,
+        items: Some(info.items),
+        derived_name,
+        has_icon: info.thumbnail.is_some(),
+        icon: info.thumbnail.map(IconRef::Package).unwrap_or_default(),
+        ..Default::default()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Extraction
 
@@ -521,6 +600,30 @@ fn read_jar(path: &Path) -> Option<(ModMeta, Option<String>)> {
     text(&mut zip, "mcmod.info").and_then(|t| parse_mcmod_info(&t))
 }
 
+fn is_package(rel: &str) -> bool {
+    let l = rel.to_ascii_lowercase();
+    l.ends_with(".package") || l.ends_with(".package.disabled")
+}
+
+/// Package results by path, kept while the file's size and date are the same:
+/// a Sims 4 Mods folder can hold 20k+ packages, and a rescan shouldn't mean
+/// reading every index again.
+type PackageCache = HashMap<std::path::PathBuf, (u64, Option<std::time::SystemTime>, Option<crate::sims_package::PackageInfo>)>;
+static PACKAGES: std::sync::Mutex<Option<PackageCache>> = std::sync::Mutex::new(None);
+
+fn read_package_cached(path: &Path) -> Option<crate::sims_package::PackageInfo> {
+    let md = std::fs::symlink_metadata(path).ok().filter(|m| m.file_type().is_file())?;
+    let (len, modified) = (md.len(), md.modified().ok());
+    if let Some((l, m, info)) = PACKAGES.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|c| c.get(path)) {
+        if *l == len && *m == modified {
+            return info.clone();
+        }
+    }
+    let info = std::fs::File::open(path).ok().and_then(|mut f| crate::sims_package::read_package(&mut f, len, MAX_ICON_BYTES as u32));
+    PACKAGES.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(path.to_path_buf(), (len, modified, info.clone()));
+    info
+}
+
 fn is_jar(rel: &str) -> bool {
     let l = rel.to_ascii_lowercase();
     l.ends_with(".jar") || l.ends_with(".jar.disabled")
@@ -564,9 +667,12 @@ fn probe_dir(base: &str, rel_dir: &str) -> Option<ModMeta> {
 pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
     let mut dirs = BTreeSet::new();
     let mut jars = Vec::new();
+    let mut packages = Vec::new();
     for f in files {
         if is_jar(f) {
             jars.push(f.clone());
+        } else if is_package(f) {
+            packages.push(f);
         }
         let mut d = f.as_str();
         while let Some((parent, _)) = d.rsplit_once('/') {
@@ -589,6 +695,11 @@ pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
             out.push(meta);
         }
     }
+    use rayon::prelude::*;
+    out.par_extend(packages.par_iter().filter_map(|rel| {
+        let path = crate::utils::safe_join(base, rel).ok()?;
+        Some(sims_meta(rel, read_package_cached(&path)?))
+    }));
     out
 }
 
@@ -618,6 +729,12 @@ pub fn icon_data_url(base: &str, key: &str, icon: &IconRef) -> Option<String> {
             let path = crate::utils::safe_join(base, key).ok()?;
             let mut zip = open_bounded_zip(&path, MAX_JAR_BYTES)?;
             zip_entry(&mut zip, entry, MAX_ICON_BYTES)?
+        }
+        IconRef::Package(res) => {
+            let path = crate::utils::safe_join(base, key).ok()?;
+            let md = std::fs::symlink_metadata(&path).ok().filter(|m| m.file_type().is_file())?;
+            let mut file = std::fs::File::open(&path).ok()?;
+            crate::sims_package::read_resource(&mut file, res, md.len(), MAX_ICON_BYTES as u32)?
         }
     };
     let mime = image_mime(&bytes)?;
@@ -724,6 +841,68 @@ mod tests {
         let (m, _) = parse_fabric(r#"{"id":"x","contact":{"homepage":"javascript:alert(1)"}}"#).unwrap();
         assert_eq!(m.website, None, "only http(s) links");
         assert!(relaxed_json("{not json").is_none());
+    }
+
+    #[test]
+    fn sims_names_from_files() {
+        let n = |f: &str| sims_name_from_file(f);
+        assert_eq!(n("[SEOULSOUL] 2026_#148_No Jacket Ver.package"), ("2026 #148 No Jacket Ver".into(), Some("SEOULSOUL".into())));
+        assert_eq!(n("(Bluepill) Keonho Hair.package.disabled"), ("Keonho Hair".into(), Some("Bluepill".into())));
+        assert_eq!(n("serenity_SookieShorts.package"), ("serenity SookieShorts".into(), None));
+        assert_eq!(n("[KAT].package"), ("[KAT]".into(), Some("KAT".into())), "a tag alone stays the name");
+        assert_eq!(n("[unclosed name.package"), ("[unclosed name".into(), None));
+    }
+
+    #[test]
+    fn sims_meta_prefers_the_catalog_name_and_reads_by_lines_as_authors() {
+        use crate::sims_package::PackageInfo;
+        let info = PackageInfo { object_name: Some("Cinnamon Roll".into()), object_desc: Some("by icemunmun".into()), items: 3, thumbnail: None };
+        let m = sims_meta("Mods/food/icemunmun_CinnamonRolls.package", info);
+        assert_eq!((m.name.as_str(), m.derived_name, m.is_file), ("Cinnamon Roll", false, true));
+        assert_eq!((m.authors.clone(), m.description.clone(), m.items), (vec!["icemunmun".to_string()], None, Some(3)));
+        assert!(!m.has_icon);
+
+        let info = PackageInfo {
+            object_name: Some("SYB Spiral staircase".into()),
+            object_desc: Some("<font color='#ae0000'>Needs the portal CC</font>\r\nMore at s4cc.syboulette.fr".into()),
+            ..Default::default()
+        };
+        let m = sims_meta("[SYB] stairs.package", info);
+        assert_eq!(m.description.as_deref(), Some("Needs the portal CC\nMore at s4cc.syboulette.fr"));
+        assert_eq!(m.authors, vec!["SYB".to_string()]);
+
+        let m = sims_meta("Mods/[KAT]AbsShadow01.package", PackageInfo { items: 440, ..Default::default() });
+        assert_eq!((m.name.as_str(), m.derived_name), ("AbsShadow01", true));
+    }
+
+    #[test]
+    fn extract_reads_sims_packages_and_their_thumbnails() {
+        use crate::sims_package::{tests as pkg, THUMB_TYPES, T_COBJ, T_STBL};
+        let base = crate::testutil::temp_dir("mod-meta-sims");
+        let bytes = pkg::package(&[
+            (T_COBJ, 1, pkg::cobj(1, 2), true),
+            (T_STBL, 1, pkg::stbl(&[(1, "Goose Wallpaper"), (2, "by BML")]), true),
+            (THUMB_TYPES[1], 1, pkg::JPEG.to_vec(), true),
+        ]);
+        write(&base, "Mods/BML_Goose.package", &bytes);
+        write(&base, "Mods/old.package.disabled", &bytes);
+        write(&base, "Mods/broken.package", b"DBPF garbage");
+        let files = vec!["Mods/BML_Goose.package".to_string(), "Mods/old.package.disabled".to_string(), "Mods/broken.package".to_string()];
+        let b = base.to_str().unwrap();
+        let metas = extract(b, &files);
+        assert_eq!(metas.len(), 2, "{metas:?}");
+        let goose = metas.iter().find(|m| m.key == "Mods/BML_Goose.package").unwrap();
+        assert_eq!((goose.name.as_str(), goose.source.as_str()), ("Goose Wallpaper", "sims4"));
+        assert_eq!(goose.authors, vec!["BML".to_string()]);
+        assert!(icon_data_url(b, &goose.key, &goose.icon).unwrap().starts_with("data:image/jpeg;base64,"));
+
+        // A rewritten file (new size) is read again, not served from the cache.
+        let plain = pkg::package(&[(THUMB_TYPES[0], 1, b"not an image".to_vec(), false)]);
+        write(&base, "Mods/BML_Goose.package", &plain);
+        let metas = extract(b, &files[..1]);
+        assert!(metas[0].derived_name && metas[0].has_icon);
+        assert!(icon_data_url(b, &metas[0].key, &metas[0].icon).is_none(), "not a JPEG/PNG: no data URL");
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     fn write(base: &Path, rel: &str, bytes: &[u8]) {
