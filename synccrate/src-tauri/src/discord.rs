@@ -15,8 +15,8 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 /// The SyncCrate application on Discord's developer portal; its name is what
-/// profiles show after "Playing". Empty = presence off (not configured yet).
-const CLIENT_ID: &str = "";
+/// profiles show after "Playing". Not a secret: every Rich Presence client ships it.
+const CLIENT_ID: &str = "1557724028129771530";
 const MIN_GAP: Duration = Duration::from_secs(5);
 const RETRY: Duration = Duration::from_secs(20);
 const WEBSITE: &str = "https://synccrate.app";
