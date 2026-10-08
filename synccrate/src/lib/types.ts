@@ -658,6 +658,14 @@ export interface GameDefinition {
   post_sync_delete?: string[];
   install_names?: string[];
   install_markers?: string[];
+  /** How CurseForge knows this game, when "Check for updates" looks its mods up there. */
+  curseforge?: CurseForgeSupport;
+}
+
+/** Backend `registry::CurseForgeSupport`: the proxy's game key and, for WoW, the client's flavour. */
+export interface CurseForgeSupport {
+  game: string;
+  flavor?: string;
 }
 
 export interface DetectionConfig {

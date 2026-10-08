@@ -68,16 +68,40 @@ pub fn frame(op: u32, body: &serde_json::Value) -> Vec<u8> {
     out
 }
 
-fn read_frame(p: &mut dyn Read) -> std::io::Result<()> {
+/// Discord's opcode for "this connection is over" (bad client id, an
+/// unsupported version), sent instead of READY or a reply.
+const OP_CLOSE: u32 = 2;
+
+/// One frame's opcode and body.
+fn read_frame(p: &mut dyn Read) -> std::io::Result<(u32, Vec<u8>)> {
     let mut hdr = [0u8; 8];
     p.read_exact(&mut hdr)?;
+    let op = u32::from_le_bytes([hdr[0], hdr[1], hdr[2], hdr[3]]);
     let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
     // Replies are small; a huge length means a wrong peer, not Discord.
     if len > 64 * 1024 {
         return Err(std::io::Error::other("oversized frame"));
     }
     let mut body = vec![0u8; len];
-    p.read_exact(&mut body)
+    p.read_exact(&mut body)?;
+    Ok((op, body))
+}
+
+/// Whether a reply means Discord took what was sent. Any frame used to count,
+/// so a CLOSE on the handshake or an `"evt": "ERROR"` reply to SET_ACTIVITY
+/// was taken as shown and never retried. A refusal is `ConnectionRefused`,
+/// which the worker answers with the slow retry.
+fn check_reply(op: u32, body: &[u8]) -> std::io::Result<()> {
+    let json: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
+    let message = json.get("message").or_else(|| json.pointer("/data/message")).and_then(|m| m.as_str()).unwrap_or("no reason given");
+    let refused = |what: &str| std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("{what}: {message}"));
+    if op == OP_CLOSE {
+        return Err(refused("Discord closed the connection"));
+    }
+    if json.get("evt").and_then(|e| e.as_str()) == Some("ERROR") {
+        return Err(refused("Discord refused the request"));
+    }
+    Ok(())
 }
 
 type Reader = Box<dyn Read + Send>;
@@ -115,7 +139,8 @@ impl Conn {
         std::thread::Builder::new().name("discord-ipc-read".into()).spawn(move || {
             let _guard = guard;
             while want_rx.recv().is_ok() {
-                let r = read_frame(&mut *reader);
+                // A refusal ends the reader too: after a CLOSE nothing more comes.
+                let r = read_frame(&mut *reader).and_then(|(op, body)| check_reply(op, &body));
                 let failed = r.is_err();
                 if frames_tx.send(r).is_err() || failed {
                     return;
@@ -173,6 +198,41 @@ fn reader_busy(last: &Option<Arc<AtomicBool>>) -> bool {
     last.as_ref().is_some_and(|a| a.load(Ordering::Acquire))
 }
 
+/// What the worker does when it has no connection.
+#[derive(Debug, PartialEq)]
+enum Unconnected {
+    /// Connect (and then send).
+    Connect,
+    /// A clear with nothing on Discord to clear: done.
+    NothingToClear,
+    /// Wait for an earlier connection's stuck reader to end first.
+    WaitForReader,
+}
+
+/// `may_show`: an activity went out and no clear was answered since. While
+/// the reader of a timed-out connection is alive, that pipe is still open
+/// and Discord can keep showing "Hosting..." (or apply the late
+/// SET_ACTIVITY), so a clear isn't done until it's sent on a new connection.
+/// Once that reader ends the old pipe is closed, and Discord drops a closed
+/// connection's activity on its own (which is also why quitting SyncCrate
+/// never leaves one behind).
+fn unconnected_step(clearing: bool, may_show: bool, reader_busy: bool) -> Unconnected {
+    if clearing && !may_show {
+        Unconnected::NothingToClear
+    } else if reader_busy {
+        Unconnected::WaitForReader
+    } else {
+        Unconnected::Connect
+    }
+}
+
+/// Errors that get the slow retry: a Discord that stopped answering (each
+/// attempt can leave a reader blocked) or refused what was sent (asking
+/// again right away gets the same answer).
+fn slow_retry(e: &std::io::Error) -> bool {
+    matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::ConnectionRefused)
+}
+
 /// Connects and says hello. `last_reader` gets the new connection's reader
 /// flag, also when the hello times out.
 fn connect(last_reader: &mut Option<Arc<AtomicBool>>) -> std::io::Result<Conn> {
@@ -204,6 +264,7 @@ fn worker(rx: mpsc::Receiver<Option<Presence>>) {
     let mut retry_at: Option<Instant> = None;
     let mut nonce = 0u64;
     let mut last_reader: Option<Arc<AtomicBool>> = None;
+    let mut may_show = false;
     loop {
         let wait = if shown.as_ref() == Some(&wanted) {
             RETRY
@@ -230,19 +291,28 @@ fn worker(rx: mpsc::Receiver<Option<Presence>>) {
             continue;
         }
         if pipe.is_none() {
-            if wanted.is_none() {
-                // Nothing to clear on a Discord we aren't connected to.
-                shown = Some(None);
-                continue;
-            }
-            if reader_busy(&last_reader) {
-                retry_at = Some(Instant::now() + RETRY);
-                continue;
+            match unconnected_step(wanted.is_none(), may_show, reader_busy(&last_reader)) {
+                Unconnected::Connect => {}
+                Unconnected::NothingToClear => {
+                    shown = Some(None);
+                    continue;
+                }
+                Unconnected::WaitForReader => {
+                    retry_at = Some(Instant::now() + RETRY);
+                    continue;
+                }
             }
             match connect(&mut last_reader) {
                 Ok(p) => {
                     pipe = Some(p);
                     retry_at = None;
+                }
+                Err(e) if wanted.is_none() && e.kind() != std::io::ErrorKind::TimedOut => {
+                    // No Discord to talk to, and the old pipe is closed (its
+                    // reader ended), which cleared the activity already.
+                    may_show = false;
+                    shown = Some(None);
+                    continue;
                 }
                 Err(_) => {
                     // Not running (or not logged in yet): try again later.
@@ -253,17 +323,21 @@ fn worker(rx: mpsc::Receiver<Option<Presence>>) {
         }
         let p = pipe.as_mut().expect("connected above");
         nonce += 1;
+        // Set before sending: a request that times out may still be applied.
+        may_show |= wanted.is_some();
         let sent = p.request(&frame(1, &activity_payload(wanted.as_ref(), pid, nonce)), REPLY_TIMEOUT);
         last_send = Instant::now();
         match sent {
-            Ok(()) => shown = Some(wanted.clone()),
+            Ok(()) => {
+                may_show = wanted.is_some();
+                shown = Some(wanted.clone());
+            }
             Err(e) => {
                 // Discord quit or restarted: reconnect on the next round. A
-                // Discord that stopped answering gets the slower retry, since
-                // each attempt can leave a reader blocked until it recovers.
+                // Discord that stopped answering or refused gets the slower retry.
                 pipe = None;
                 shown = None;
-                if e.kind() == std::io::ErrorKind::TimedOut {
+                if slow_retry(&e) {
                     retry_at = Some(Instant::now() + RETRY);
                 }
             }
@@ -376,6 +450,42 @@ mod tests {
         c.request(b"b", t).unwrap();
         // The pipe is now empty: a third request sees it closed, not a hang.
         assert!(c.request(b"c", t).is_err());
+    }
+
+    #[test]
+    fn a_close_or_an_error_reply_is_a_refusal() {
+        let t = Duration::from_secs(5);
+        // Handshake answered with CLOSE (e.g. an unknown client id).
+        let close = frame(OP_CLOSE, &json!({ "code": 4000, "message": "Invalid Client ID" }));
+        let mut c = Conn::start(Box::new(std::io::Cursor::new(close)), Box::new(Sink::default())).unwrap();
+        let e = c.request(b"hello", t).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::ConnectionRefused);
+        assert!(e.to_string().contains("Invalid Client ID"), "{e}");
+        assert!(slow_retry(&e), "not the 5 s fast path");
+
+        // READY, then SET_ACTIVITY answered with an ERROR event.
+        let mut replies = frame(1, &json!({ "cmd": "DISPATCH", "evt": "READY" }));
+        replies.extend(frame(1, &json!({ "cmd": "SET_ACTIVITY", "evt": "ERROR", "data": { "code": 4000, "message": "activity is invalid" } })));
+        let mut c = Conn::start(Box::new(std::io::Cursor::new(replies)), Box::new(Sink::default())).unwrap();
+        c.request(b"hello", t).unwrap();
+        let e = c.request(b"activity", t).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::ConnectionRefused);
+        assert!(e.to_string().contains("activity is invalid"), "{e}");
+        assert!(slow_retry(&e));
+        assert!(!slow_retry(&std::io::Error::from(std::io::ErrorKind::BrokenPipe)), "Discord restarting reconnects soon");
+    }
+
+    #[test]
+    fn a_clear_after_a_timeout_waits_and_is_sent() {
+        // Never showed anything: a clear needs no connection.
+        assert_eq!(unconnected_step(true, false, false), Unconnected::NothingToClear);
+        // SET_ACTIVITY timed out and its reader still holds the pipe open:
+        // Discord may show "Hosting..." until a clear gets through.
+        assert_eq!(unconnected_step(true, true, true), Unconnected::WaitForReader);
+        assert_eq!(unconnected_step(true, true, false), Unconnected::Connect);
+        // Showing something works the same way.
+        assert_eq!(unconnected_step(false, false, true), Unconnected::WaitForReader);
+        assert_eq!(unconnected_step(false, true, false), Unconnected::Connect);
     }
 
     #[test]

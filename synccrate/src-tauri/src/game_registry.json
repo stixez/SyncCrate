@@ -5,6 +5,7 @@
       "id": "sims4",
       "duplicate_finder": true,
       "label": "The Sims 4",
+      "curseforge": { "game": "sims4" },
       "install_markers": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"],
       "family": "sims",
       "icon": "gamepad-2",
@@ -529,6 +530,7 @@
     {
       "id": "wow_retail",
       "label": "WoW Retail",
+      "curseforge": { "game": "wow", "flavor": "retail" },
       "install_names": ["World of Warcraft"],
       "install_markers": ["Wow.exe"],
       "family": "wow",
@@ -603,6 +605,7 @@
     {
       "id": "wow_classic",
       "label": "WoW Classic",
+      "curseforge": { "game": "wow", "flavor": "classic" },
       "install_names": ["World of Warcraft Classic"],
       "install_markers": ["WowClassic.exe"],
       "family": "wow",
@@ -675,6 +678,7 @@
     {
       "id": "wow_classic_era",
       "label": "WoW Classic Era",
+      "curseforge": { "game": "wow", "flavor": "classic_era" },
       "install_markers": ["WowClassic.exe"],
       "family": "wow",
       "icon": "swords",
@@ -744,6 +748,8 @@
     {
       "id": "wow_forever",
       "label": "WoW Forever",
+      "curseforge": { "game": "wow", "flavor": "forever" },
+      "process_names": ["WowForever.exe", "WowForeverB.exe", "WowForeverT.exe", "World of Warcraft Forever"],
       "family": "wow",
       "icon": "swords",
       "color": "text-purple-400",
@@ -1104,6 +1110,7 @@
     {
       "id": "minecraft_java",
       "label": "Minecraft Java",
+      "curseforge": { "game": "minecraft_java" },
       "install_names": ["Minecraft Launcher"],
       "install_markers": ["%LOCALAPPDATA%/Packages/Microsoft.4297127D64EC6_8wekyb3d8bbwe", "%ProgramFiles(x86)%/Minecraft Launcher/MinecraftLauncher.exe", "%ProgramFiles(x86)%/Minecraft/MinecraftLauncher.exe"],
       "family": "minecraft",

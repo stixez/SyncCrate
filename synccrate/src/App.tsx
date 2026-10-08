@@ -185,6 +185,7 @@ function App() {
             { id: "screenshots", label: "Screenshots", icon: "camera", color: "text-sky-400", folder: "Screenshots", extensions: [], file_type: "Screenshot", syncable: true },
           ],
           dangerous_script_extensions: ["ts4script"], packs: "sims4", legacy_id: "Sims4", disable_method: "rename", duplicate_finder: true,
+          curseforge: { game: "sims4" },
         },
         {
           id: "minecraft_java", label: "Minecraft Java", family: "minecraft", icon: "box",
@@ -196,6 +197,7 @@ function App() {
             { id: "shaderpacks", label: "Shader Packs", icon: "sun", color: "text-sky-400", folder: "shaderpacks", extensions: ["zip"], file_type: "ShaderPack", syncable: true },
           ],
           dangerous_script_extensions: ["jar"],
+          curseforge: { game: "minecraft_java" },
         },
         {
           id: "wow_retail", label: "WoW Retail", family: "wow", icon: "swords",
@@ -204,7 +206,7 @@ function App() {
             { id: "addons", label: "Addons", icon: "package", color: "text-yellow-400", folder: "Interface/AddOns", extensions: ["lua", "toc", "xml"], file_type: "Addon", syncable: true },
             { id: "settings", label: "Settings", icon: "settings", color: "text-blue-400", folder: "WTF", extensions: ["lua", "bak"], file_type: "Settings", syncable: true },
           ],
-          dangerous_script_extensions: [], legacy_id: "WowRetail",
+          dangerous_script_extensions: [], legacy_id: "WowRetail", curseforge: { game: "wow", flavor: "retail" },
         },
       ] as any[];
       setGameRegistry(demoRegistry);

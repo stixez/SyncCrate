@@ -295,7 +295,8 @@ async fn json_of(resp: Result<reqwest::Response, reqwest::Error>) -> Result<Valu
     serde_json::from_slice(&bytes).map_err(|_| "unexpected response".to_string())
 }
 
-/// `known` gets the key of every jar Modrinth recognised, updated or not.
+/// `known` gets the key of every jar Modrinth answered for, updated or not
+/// (see `modrinth_updates`).
 async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], game_version: Option<&str>, report: &mut UpdateReport, known: &mut HashSet<String>) -> Result<(), String> {
     let jars: Vec<(String, String)> = {
         let base = base.to_string();
@@ -319,11 +320,36 @@ async fn check_modrinth(http: &reqwest::Client, base: &str, metas: &[&ModMeta], 
     let current = parse_modrinth(
         &json_of(http.post("https://api.modrinth.com/v2/version_files").json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha512" })).send().await).await?,
     );
-    report.checked += current.len();
-    known.extend(current.keys().filter_map(|h| key_of.get(h.as_str())).map(|k| k.to_string()));
-    for ((loaders, game_versions), group) in modrinth_groups(&current, game_version) {
+    modrinth_updates(&current, &key_of, game_version, report, known, |body| {
+        let http = http.clone();
+        async move { json_of(http.post("https://api.modrinth.com/v2/version_files/update").json(&body).send().await).await }
+    })
+    .await
+}
+
+/// Asks for the newest version of each group of recognised jars (`fetch`
+/// posts one `version_files/update` body) and adds the updates. A group's
+/// jars count as checked, and go into `known`, only once its request
+/// answered: `known` makes CurseForge's answer give way to Modrinth's, and
+/// when the request failed there is no Modrinth answer to prefer (a jar
+/// with an update CurseForge found went unreported).
+async fn modrinth_updates<F, Fut>(
+    current: &HashMap<String, MrVersion>,
+    key_of: &HashMap<&str, &str>,
+    game_version: Option<&str>,
+    report: &mut UpdateReport,
+    known: &mut HashSet<String>,
+    mut fetch: F,
+) -> Result<(), String>
+where
+    F: FnMut(Value) -> Fut,
+    Fut: std::future::Future<Output = Result<Value, String>>,
+{
+    for ((loaders, game_versions), group) in modrinth_groups(current, game_version) {
         let body = serde_json::json!({ "hashes": group, "algorithm": "sha512", "loaders": loaders, "game_versions": game_versions });
-        let latest = parse_modrinth(&json_of(http.post("https://api.modrinth.com/v2/version_files/update").json(&body).send().await).await?);
+        let latest = parse_modrinth(&fetch(body).await?);
+        report.checked += group.len();
+        known.extend(group.iter().filter_map(|h| key_of.get(h.as_str())).map(|k| k.to_string()));
         for hash in &group {
             let (Some(cur), Some(new), Some(key)) = (current.get(hash), latest.get(hash), key_of.get(hash.as_str())) else { continue };
             if new.id != cur.id && new.project_id == cur.project_id {
@@ -403,8 +429,15 @@ async fn check_smapi(http: &reqwest::Client, metas: &[&ModMeta], game_version: O
 
 /// Check every mod that has a supported source. A failing source is reported
 /// in `errors` without failing the others. `curseforge_files` (from
-/// `curseforge::select_files`) are looked up on CurseForge for `game`.
-pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>, game: &str, curseforge_files: &[String]) -> Result<UpdateReport, String> {
+/// `curseforge::select_files`) are looked up on CurseForge as `curseforge`
+/// (the game's registry entry).
+pub async fn check(
+    metas: &[ModMeta],
+    base: &str,
+    game_version: Option<&str>,
+    curseforge: Option<&crate::registry::CurseForgeSupport>,
+    curseforge_files: &[String],
+) -> Result<UpdateReport, String> {
     let http = client()?;
     let mr: Vec<&ModMeta> = metas.iter().filter(|m| matches!(m.source.as_str(), "fabric" | "quilt" | "forge")).collect();
     let ts: Vec<&ModMeta> = metas.iter().filter(|m| m.source == "thunderstore").collect();
@@ -432,10 +465,9 @@ pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>, ga
     // CurseForge is independent of the rest and the slowest (it fingerprints
     // every file first), so it runs alongside them and is merged at the end.
     let curseforge = async {
-        if curseforge_files.is_empty() {
-            None
-        } else {
-            Some(crate::curseforge::check(game, base, curseforge_files, metas).await)
+        match curseforge {
+            Some(cf) if !curseforge_files.is_empty() => Some(crate::curseforge::check(cf, base, curseforge_files, metas).await),
+            _ => None,
         }
     };
     let ((mut report, modrinth_known), cf) = tokio::join!(others, curseforge);
@@ -589,6 +621,40 @@ mod tests {
         assert_eq!(report.errors, vec!["CurseForge: timed out".to_string()]);
     }
 
+    #[tokio::test]
+    async fn a_failed_modrinth_update_query_leaves_the_jar_to_curseforge() {
+        let current = parse_modrinth(&serde_json::json!({
+            "aaa": {"id":"A1","project_id":"PA","version_number":"1.0","loaders":["fabric"],"game_versions":["1.20.1"]},
+            "bbb": {"id":"B1","project_id":"PB","version_number":"1.0","loaders":["forge"],"game_versions":["1.20.1"]}
+        }));
+        let key_of: HashMap<&str, &str> = [("aaa", "mods/a.jar"), ("bbb", "mods/b.jar")].into_iter().collect();
+        let cf_update = || crate::curseforge::Outcome {
+            updates: vec![ModUpdate { key: "mods/a.jar".into(), source: "curseforge".into(), current: Some("1.0".into()), latest: "2.0".into(), url: None, deprecated: false, changelog: None }],
+            ..Default::default()
+        };
+
+        // Recognised by version_files, but the update query fails.
+        let (mut report, mut known) = (UpdateReport::default(), HashSet::new());
+        let r = modrinth_updates(&current, &key_of, None, &mut report, &mut known, |_| async { Err::<Value, String>("timed out".into()) }).await;
+        assert!(r.is_err());
+        assert!(known.is_empty() && report.checked == 0, "no Modrinth answer to prefer");
+        merge_curseforge(&mut report, &known, Ok(cf_update()));
+        assert_eq!(report.updates.iter().map(|u| u.source.as_str()).collect::<Vec<_>>(), vec!["curseforge"]);
+
+        // Answered (no update): Modrinth's "current" stands.
+        let (mut report, mut known) = (UpdateReport::default(), HashSet::new());
+        let same = serde_json::json!({ "aaa": {"id":"A1","project_id":"PA","version_number":"1.0"}, "bbb": {"id":"B1","project_id":"PB","version_number":"1.0"} });
+        modrinth_updates(&current, &key_of, None, &mut report, &mut known, |_| {
+            let same = same.clone();
+            async move { Ok(same) }
+        })
+        .await
+        .unwrap();
+        assert_eq!((known.len(), report.checked), (2, 2));
+        merge_curseforge(&mut report, &known, Ok(cf_update()));
+        assert!(report.updates.is_empty());
+    }
+
     #[test]
     fn only_mods_with_a_source_are_checkable() {
         let plain = ModMeta { source: "paradox".into(), ..Default::default() };
@@ -606,7 +672,7 @@ mod tests {
     async fn live_thunderstore_and_smapi() {
         let ts = ModMeta { key: "BepInEx/plugins/ValheimModding-Jotunn".into(), source: "thunderstore".into(), id: Some("ValheimModding-Jotunn".into()), version: Some("2.0.0".into()), ..Default::default() };
         let sm = ModMeta { key: "Mods/LookupAnything".into(), source: "smapi".into(), id: Some("Pathoschild.LookupAnything".into()), version: Some("1.30.0".into()), update_keys: vec!["Nexus:541".into()], ..Default::default() };
-        let r = check(&[ts, sm], ".", Some("1.6.8"), "valheim", &[]).await.unwrap();
+        let r = check(&[ts, sm], ".", Some("1.6.8"), None, &[]).await.unwrap();
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_eq!(r.updates.len(), 2, "{:?}", r.updates);
     }

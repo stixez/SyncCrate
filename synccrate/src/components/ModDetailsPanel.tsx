@@ -3,7 +3,6 @@ import { useDialog } from "../hooks/useDialog";
 import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, ModWarning, SourceLink } from "../lib/types";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS, useModIcon } from "../lib/modMeta";
 import { openCreatorLink } from "../lib/links";
 import { ModIcon } from "./ModItem";
@@ -216,12 +215,12 @@ export default function ModDetailsPanel({
                       <span className="font-mono text-xs text-neon">{update.latest}</span>
                       {update.deprecated && <span className="text-xs text-amber ml-2">no longer maintained</span>}
                       {update.url && (
-                        <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(update.url!).catch(() => {})}>
+                        <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openCreatorLink(update.url)}>
                           Get it
                         </button>
                       )}
                       {update.changelog && (
-                        <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(update.changelog!).catch(() => {})}>
+                        <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openCreatorLink(update.changelog)}>
                           What's new
                         </button>
                       )}
@@ -236,7 +235,7 @@ export default function ModDetailsPanel({
                             <span>
                               {w.text}
                               {w.url && (
-                                <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openUrl(w.url!).catch(() => {})}>
+                                <button className="ml-2 font-mono text-[11px] text-accent-light hover:text-neon" onClick={() => openCreatorLink(w.url)}>
                                   Open on CurseForge
                                 </button>
                               )}

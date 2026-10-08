@@ -1,31 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpCircle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Banner, Button } from "./ui";
 import { useAppStore } from "../stores/useAppStore";
 import * as cmd from "../lib/commands";
 import { toastError, toastInfo } from "../lib/toast";
+import { openCreatorLink } from "../lib/links";
+import { getGameDef } from "../lib/games";
 import type { ModMeta, UpdateReport } from "../lib/types";
 
 export const UPDATE_SOURCE_LABELS: Record<string, string> = { modrinth: "Modrinth", thunderstore: "Thunderstore", smapi: "SMAPI", curseforge: "CurseForge" };
 
-/** Games whose mod files are looked up on CurseForge (backend `curseforge::select_files`;
- * WoW addons by folder, for the clients CurseForge has builds for). */
-const CURSEFORGE_GAMES = new Set(["sims4", "minecraft_java", "wow_retail", "wow_classic", "wow_classic_era", "wow_forever"]);
+/** Whether this game's mod files are looked up on CurseForge: the registry's
+ * `curseforge` entry, which the backend's `curseforge::select_files` reads too. */
+function onCurseForge(gameId: string): boolean {
+  return !!getGameDef(gameId)?.curseforge;
+}
 
 /** Whether any mod here has a source we can check (mirrors backend `mod_updates::checkable`). */
 export function canCheckUpdates(metas: ModMeta[], gameId: string) {
   return (
-    CURSEFORGE_GAMES.has(gameId) ||
+    onCurseForge(gameId) ||
     metas.some((m) => (["fabric", "quilt", "forge"].includes(m.source) && m.is_file) || m.source === "thunderstore" || m.source === "smapi")
   );
 }
 
 /** What the check sends, and to whom, for this game. */
 function sendsWhat(gameId: string): string {
+  const curseforge = getGameDef(gameId)?.curseforge;
   const cf = "Sends file fingerprints (not names or files) to CurseForge through synccrate.app.";
-  if (gameId === "sims4" || (gameId.startsWith("wow_") && CURSEFORGE_GAMES.has(gameId))) return cf;
-  if (gameId === "minecraft_java") return `Asks Modrinth about your mods (their file hashes). ${cf}`;
+  // Minecraft jars carry Fabric/Forge metadata, so Modrinth is asked about them too.
+  if (curseforge?.game === "minecraft_java") return `Asks Modrinth about your mods (their file hashes). ${cf}`;
+  if (curseforge) return cf;
   return "Asks Modrinth, Thunderstore and SMAPI about your mods (their ids and file hashes).";
 }
 
@@ -59,7 +64,7 @@ export default function ModUpdates({ gameId, metas }: { gameId: string; metas: M
         return;
       }
       if (r.updates.length === 0 && r.errors.length === 0) {
-        const none = CURSEFORGE_GAMES.has(gameId) ? "None of these mods were found on CurseForge or another source we can check." : "None of these mods list an update source we can check.";
+        const none = onCurseForge(gameId) ? "None of these mods were found on CurseForge or another source we can check." : "None of these mods list an update source we can check.";
         toastInfo(r.checked > 0 ? `All ${r.checked} checked mods are up to date.` : none);
       }
     } catch (e) {
@@ -102,12 +107,12 @@ export default function ModUpdates({ gameId, metas }: { gameId: string; metas: M
                   </span>
                   <span className="font-mono text-[10px] uppercase text-txt-muted">{UPDATE_SOURCE_LABELS[u.source] ?? u.source}</span>
                   {u.changelog && (
-                    <button className="font-mono text-[10.5px] text-accent-light hover:text-neon" onClick={() => openUrl(u.changelog!).catch(() => {})} aria-label={`What's new in ${nameOf(u.key)} ${u.latest}`}>
+                    <button className="font-mono text-[10.5px] text-accent-light hover:text-neon" onClick={() => openCreatorLink(u.changelog)} aria-label={`What's new in ${nameOf(u.key)} ${u.latest}`}>
                       What's new
                     </button>
                   )}
                   {u.url && (
-                    <button className="text-accent-light hover:text-neon" onClick={() => openUrl(u.url!).catch(() => {})} aria-label={`Open the update page for ${nameOf(u.key)}`}>
+                    <button className="text-accent-light hover:text-neon" onClick={() => openCreatorLink(u.url)} aria-label={`Open the update page for ${nameOf(u.key)}`}>
                       <ExternalLink size={12} />
                     </button>
                   )}
