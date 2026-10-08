@@ -475,7 +475,7 @@ async fn plan_invalidation_tcp() {
     client_state.lock().await.game_paths.insert("sims4".to_string(), other_dir.to_string_lossy().to_string());
 
     let err = run_sync_now(&client_state).await.expect_err("a changed game folder must refuse to run the old plan");
-    assert!(err.contains("compare again"), "unexpected error: {err}");
+    assert!(err.contains("Compare again"), "unexpected error: {err}");
     assert!(!file_exists(&other_dir, "Mods/a.package"));
     assert!(!file_exists(&client_dir, "Mods/a.package"));
 

@@ -112,7 +112,7 @@ pub fn encode(info: &JoinInfo) -> Result<String, String> {
 }
 
 pub fn decode(code: &str) -> Result<JoinInfo, String> {
-    let invalid = || "That join code isn't valid — check it was copied completely.".to_string();
+    let invalid = || "That join code isn't valid. Check it was copied completely.".to_string();
     let cleaned: String = code
         .trim()
         .chars()
@@ -132,7 +132,7 @@ pub fn decode(code: &str) -> Result<JoinInfo, String> {
     }
 
     if payload[0] != VERSION {
-        return Err("This join code is from a different SyncCrate version — update both apps.".to_string());
+        return Err("This join code is from a different SyncCrate version. Update both apps.".to_string());
     }
     let has_pin = payload[1] & 1 == 1;
     let has_internet = payload[1] & 2 == 2;

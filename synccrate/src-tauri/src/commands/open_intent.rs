@@ -130,14 +130,14 @@ pub fn classify(raw: &str, is_known_game: impl Fn(&str) -> bool) -> Option<OpenT
         "pack" => {
             let payload = percent_decode(path).trim().to_string();
             if payload.is_empty() {
-                return invalid("That pack link is empty — it may have been cut off.");
+                return invalid("That pack link is empty. It may have been cut off.");
             }
             Some(OpenTarget::PackLink(payload))
         }
         "join" => {
             let code = percent_decode(path.trim_end_matches('/')).trim().to_ascii_uppercase();
             if code.is_empty() || code.len() > MAX_CODE_CHARS || crate::network::joincode::decode(&code).is_err() {
-                return invalid("That invite link has a broken join code — ask your friend to copy it again.");
+                return invalid("That invite link has a broken join code. Ask your friend to copy it again.");
             }
             let game = query
                 .split('&')
@@ -149,7 +149,7 @@ pub fn classify(raw: &str, is_known_game: impl Fn(&str) -> bool) -> Option<OpenT
                 return invalid("That invite link doesn't say which game it's for.");
             };
             if !is_plausible_game_id(&game_id) || !is_known_game(&game_id) {
-                return invalid("That invite is for a game this version of SyncCrate doesn't know — try updating.");
+                return invalid("That invite is for a game this version of SyncCrate doesn't know. Try updating.");
             }
             Some(OpenTarget::Join { code, game_id })
         }
@@ -160,7 +160,7 @@ pub fn classify(raw: &str, is_known_game: impl Fn(&str) -> bool) -> Option<OpenT
                 Err(e) => invalid(&e),
             }
         }
-        _ => invalid("SyncCrate doesn't recognize this link — you may need a newer version."),
+        _ => invalid("SyncCrate doesn't recognize this link. You may need a newer version."),
     }
 }
 
@@ -199,7 +199,7 @@ pub(crate) async fn intent_from_raw(state: &Arc<Mutex<AppState>>, raw: &str, cwd
     let target = classify(raw, |g| known.contains(g))?;
     if syncing || crate::commands::backup::restore_in_progress() {
         return Some(OpenIntent::Invalid {
-            reason: "SyncCrate is busy syncing or restoring — open the link again when it's done.".to_string(),
+            reason: "SyncCrate is busy syncing or restoring. Open the link again when it's done.".to_string(),
         });
     }
     let target = match (target, cwd) {

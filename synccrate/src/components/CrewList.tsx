@@ -365,7 +365,7 @@ function CrewDetail({ crew, myNode, activeGame, inSession, isHosting, lanHosts, 
       }
       actions={
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={handleCopyInvite} icon={<Copy size={12} />}>Copy Invite</Button>
+          <Button size="sm" variant="secondary" onClick={handleCopyInvite} icon={<Copy size={12} />}>Copy invite</Button>
           {!renaming && (
             <Button size="sm" variant="ghost" onClick={() => { setNameDraft(crew.name); setRenaming(true); }} icon={<Pencil size={12} />}>Rename</Button>
           )}

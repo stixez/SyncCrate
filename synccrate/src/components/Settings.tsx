@@ -316,7 +316,7 @@ export default function Settings() {
                       <h3 className="font-display font-semibold uppercase tracking-wider text-[14px]">{game.label}</h3>
                       {unavailable.includes(game.id) ? (
                         <Badge tone="amber" dot title="The saved folder is kept; SyncCrate won't scan or sync this game until it's back.">
-                          Folder not found — drive disconnected?
+                          Folder not found. Drive disconnected?
                         </Badge>
                       ) : installedGames.includes(game.id) ? (
                         <Badge tone="green" dot>Installed</Badge>
@@ -754,7 +754,7 @@ function AppearanceSection() {
               description="Recolor the app with the selected game's own color instead of your accent."
             />
           </SettingRow>
-          <SettingRow label="Theme" hint="System follows your Windows light/dark setting.">
+          <SettingRow label="Theme" hint="System follows your computer's light/dark setting.">
             <Segmented label="Theme" value={theme} onChange={setTheme} options={THEME_OPTIONS} />
           </SettingRow>
           <SettingRow label="UI scale" hint="Make everything larger or smaller.">
@@ -799,7 +799,7 @@ function AccentPreview() {
         <div className="flex items-center gap-2">
           <LiveDot />
           <span className="font-display font-semibold uppercase tracking-[0.06em] text-[13px]">Hosting</span>
-          <span className="font-mono text-[11px] text-txt-muted ml-auto">3 peers</span>
+          <span className="font-mono text-[11px] text-txt-muted ml-auto">3 friends</span>
         </div>
         <ProgressBar value={64} label="Syncing mods" />
         <Button variant="primary" size="sm" block tabIndex={-1}>Sync now</Button>

@@ -34,7 +34,7 @@ export const GUIDE: GuideGroup[] = [
         summary: "Get everyone on the same mods in four steps.",
         steps: [
           "Add your game with **Add Game** in the sidebar. Its folder is found automatically, or set it in **Settings → Games**.",
-          "One friend opens the game and clicks **Start Hosting**.",
+          "One friend opens the game's Dashboard in SyncCrate and clicks **Start Hosting**.",
           "Everyone else joins: pick the host under **Scan for Hosts** (same network), or paste the host's join code (anywhere).",
           "Click **Compare & Sync**, check the plan, then **Sync Now**.",
         ],

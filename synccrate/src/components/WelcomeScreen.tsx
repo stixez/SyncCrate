@@ -28,9 +28,9 @@ export function markOnboardingComplete(): void {
 }
 
 const HOW_IT_WORKS: [string, string, string][] = [
-  ["01", "Pick your games", "We found these on your PC."],
+  ["01", "Pick your games", "Tick the games you play. Ones we found are already ticked."],
   ["02", "One person hosts", "Whoever has the mods clicks Start Hosting and sends the join code."],
-  ["03", "Everyone else joins", "Paste the code, check the list, click Sync. Replaced files are kept, so you can undo."],
+  ["03", "Everyone else joins", "Paste the code, click Compare & Sync, check the list, then Sync Now. Replaced files are kept, so you can undo."],
 ];
 
 export default function WelcomeScreen() {
@@ -310,7 +310,7 @@ export default function WelcomeScreen() {
               {gameRegistry.length === 0 && (
                 <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-txt-dim py-6">
                   <RefreshCw size={13} className="animate-spin text-neon" />
-                  Loading game registry...
+                  Loading games...
                 </div>
               )}
             </div>

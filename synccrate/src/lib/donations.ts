@@ -69,7 +69,7 @@ export function getMilestoneMessage(milestone: number): { title: string; message
     case 10:
       return {
         title: "Thanks for using SyncCrate!",
-        message: `You've synced 10 times, saving yourself ${timeSaved} of manual work. SyncCrate is free forever — donations help fund future updates.`,
+        message: `You've synced 10 times, saving yourself ${timeSaved} of manual work. SyncCrate is free forever, and donations help fund future updates.`,
       };
     case 50:
       return {

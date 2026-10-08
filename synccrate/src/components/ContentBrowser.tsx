@@ -238,8 +238,8 @@ export default function ContentBrowser({ gameId }: Props) {
       setManifest(await cmd.scanFiles(gameId), gameId);
       setLegacyCount(await cmd.countLegacyDisabled(gameId));
       if (r.moved) toastSuccess(`Disabled ${r.moved} mod${r.moved !== 1 ? "s" : ""} properly (renamed to .disabled)`);
-      if (r.collisions.length) toastInfo(`${r.collisions.length} file(s) left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
-      if (r.errors.length) toastError(`${r.errors.length} file(s) could not be moved: ${r.errors[0]}`);
+      if (r.collisions.length) toastInfo(`${plural(r.collisions.length, "file")} left in _Disabled: a disabled copy already exists (${r.collisions[0]})`);
+      if (r.errors.length) toastError(`${plural(r.errors.length, "file")} could not be moved: ${r.errors[0]}`);
     } catch (e) {
       toastError(`Fix failed: ${e}`);
     } finally {
@@ -348,7 +348,7 @@ export default function ContentBrowser({ gameId }: Props) {
       setBulkTagInput(false);
       setSelected(new Set());
       setBulkMode(false);
-      toastSuccess(`Tagged ${paths.length} file(s) as "${tag}"`);
+      toastSuccess(`Tagged ${plural(paths.length, "file")} as "${tag}"`);
     } catch (e) {
       toastError(`Bulk tag failed: ${e}`);
     }
@@ -750,6 +750,7 @@ export default function ContentBrowser({ gameId }: Props) {
         key={p}
         style={style}
         file={f}
+        gameId={gameId}
         meta={metaFor(p)}
         update={metaFor(p)?.is_file ? updateFor(metaFor(p)?.key) : undefined}
         syncStatus={getSyncStatus(p)}
@@ -916,7 +917,7 @@ export default function ContentBrowser({ gameId }: Props) {
                     {tabCounts[ct.id] ?? 0}
                   </span>
                   {!!conflictsByTab[ct.id] && (
-                    <span className="font-mono font-normal text-[10px] tracking-normal tabular text-amber" title={`${conflictsByTab[ct.id]} conflict(s) to resolve`}>
+                    <span className="font-mono font-normal text-[10px] tracking-normal tabular text-amber" title={`${plural(conflictsByTab[ct.id], "conflict")} to resolve`}>
                       ⚠ {conflictsByTab[ct.id]}
                     </span>
                   )}

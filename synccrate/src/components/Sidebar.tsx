@@ -49,6 +49,7 @@ import type { Page } from "../lib/types";
 import { GameArt, LiveDot, cx } from "./ui";
 import { toastAction, toastError } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
+import { plural } from "../lib/utils";
 
 const ICON_MAP: Record<string, typeof Gamepad2> = {
   "gamepad-2": Gamepad2,
@@ -326,8 +327,8 @@ export default function Sidebar() {
                   {!(isConnected && game.id === activeGame) && <button
                     onClick={() => handleRemoveGame(game.id, game.label)}
                     className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 mr-2 text-txt-muted hover:text-status-red transition-opacity"
-                    title={`Remove ${game.label}`}
-                    aria-label={`Remove ${game.label}`}
+                    title={`Remove ${game.label} from your library (your files stay)`}
+                    aria-label={`Remove ${game.label} from your library (your files stay)`}
                   >
                     <X size={12} />
                   </button>}
@@ -368,7 +369,7 @@ export default function Sidebar() {
             className="mx-4 mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-txt-muted hover:text-txt"
             title="Show them again in Settings → Games"
           >
-            {hiddenCount} hidden
+            {plural(hiddenCount, "hidden game")}
           </button>
         )}
 
@@ -408,7 +409,7 @@ export default function Sidebar() {
             </span>
             {isConnected && (
               <span className="ml-auto font-mono text-[10px] text-txt-dim tabular">
-                {peerCount} {peerCount === 1 ? "peer" : "peers"}
+                {plural(peerCount, "friend")}
               </span>
             )}
           </div>

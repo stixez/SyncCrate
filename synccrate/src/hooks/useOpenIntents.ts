@@ -45,7 +45,7 @@ function routeOpenIntent(intent: OpenIntent) {
     s.setGameSwitchPrompt({ hostGame: intent.game_id, attempt });
   } else {
     s.setPendingJoinCode(intent.code);
-    toastSuccess("Invite opened — click Join to connect");
+    toastSuccess("Invite opened. Click Join to connect");
   }
 }
 

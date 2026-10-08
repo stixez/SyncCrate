@@ -5,6 +5,7 @@ import { useLogStore } from "../stores/useLogStore";
 import type { SyncFolderPermissions } from "../lib/types";
 import * as cmd from "../lib/commands";
 import { toastError, toastInfo } from "../lib/toast";
+import { plural } from "../lib/utils";
 
 export function useSession() {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,8 +24,8 @@ export function useSession() {
       setSession(status);
       addLog(`Hosting session as "${name}" on port ${info.port}`, "success");
     } catch (e: any) {
-      addLog(`Failed to host: ${e}`, "error");
-      toastError(`Failed to host: ${e}`);
+      addLog(`Couldn't start hosting: ${e}`, "error");
+      toastError(`Couldn't start hosting: ${e}`);
     } finally {
       setIsLoading(false);
     }
@@ -35,13 +36,13 @@ export function useSession() {
     try {
       const peers = await cmd.startJoin(name);
       setDiscoveredPeers(peers);
-      addLog(`Found ${peers.length} host(s) on LAN`, "info");
+      addLog(`Found ${plural(peers.length, "host")} on LAN`, "info");
       if (peers.length === 0) {
         toastInfo("No hosts found on this network. Ask your friend for their join code (it starts with SC-) and paste it above.");
       }
     } catch (e: any) {
-      addLog(`Failed to scan: ${e}`, "error");
-      toastError(`Failed to scan: ${e}`);
+      addLog(`Couldn't scan for hosts: ${e}`, "error");
+      toastError(`Couldn't scan for hosts: ${e}`);
     } finally {
       setIsLoading(false);
     }
@@ -69,8 +70,8 @@ export function useSession() {
     try {
       await cmd.connectToPeer(peerId, pin);
     } catch (e: any) {
-      addLog(`Failed to connect: ${e}`, "error");
-      toastError(`Failed to connect: ${e}`);
+      addLog(`Couldn't connect: ${e}`, "error");
+      toastError(`Couldn't connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);
@@ -89,8 +90,8 @@ export function useSession() {
     try {
       await cmd.connectByIp(ip, port, name, pin);
     } catch (e: any) {
-      addLog(`Failed to connect: ${e}`, "error");
-      toastError(`Failed to connect: ${e}`);
+      addLog(`Couldn't connect: ${e}`, "error");
+      toastError(`Couldn't connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);
@@ -109,8 +110,8 @@ export function useSession() {
     try {
       await cmd.connectByCode(code, name, pin);
     } catch (e: any) {
-      addLog(`Failed to connect: ${e}`, "error");
-      toastError(`Failed to connect: ${e}`);
+      addLog(`Couldn't connect: ${e}`, "error");
+      toastError(`Couldn't connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);
@@ -131,8 +132,8 @@ export function useSession() {
     try {
       await cmd.connectCrew(crewId, nodeId, name, pin);
     } catch (e: any) {
-      addLog(`Failed to connect: ${e}`, "error");
-      toastError(`Failed to connect: ${e}`);
+      addLog(`Couldn't connect: ${e}`, "error");
+      toastError(`Couldn't connect: ${e}`);
       setIsConnecting(false);
     } finally {
       setIsLoading(false);

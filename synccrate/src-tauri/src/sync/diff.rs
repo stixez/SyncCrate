@@ -371,7 +371,7 @@ pub fn compute_pack_plan(
 /// changed would download (and replace) files in the wrong place.
 pub fn plan_target_mismatch(plan: &SyncPlan, active_game: &str, active_path: &str) -> Option<String> {
     if plan.game_id.is_empty() || plan.game_id != active_game || plan.base_path != active_path {
-        Some("Game folder changed — compare again".to_string())
+        Some("Game folder changed. Compare again".to_string())
     } else {
         None
     }

@@ -5,6 +5,7 @@ import { useLogStore } from "../stores/useLogStore";
 import * as cmd from "../lib/commands";
 import type { BisectView } from "../lib/commands";
 import { toastError, toastSuccess } from "../lib/toast";
+import { plural } from "../lib/utils";
 import { Banner, Button, Panel } from "./ui";
 
 interface Props {
@@ -41,7 +42,7 @@ export default function FiftyFifty({ gameId, gameLabel, onClose, onActive }: Pro
     try {
       const v = await what();
       setView(v);
-      if (v?.errors.length) toastError(`${v.errors.length} file(s) couldn't be moved: ${v.errors[0]}`);
+      if (v?.errors.length) toastError(`${plural(v.errors.length, "file")} couldn't be moved: ${v.errors[0]}`);
       if (done && !v?.errors.length) {
         toastSuccess(done);
         addLog(done, "success");

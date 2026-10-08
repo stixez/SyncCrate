@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Users, Monitor, X, ChevronDown, ChevronRight, Gamepad2, ArrowUpFromLine } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { formatBytes, formatRelative } from "../lib/utils";
+import { formatBytes, formatRelative, plural } from "../lib/utils";
 import * as cmd from "../lib/commands";
 import { useLogStore } from "../stores/useLogStore";
 import { toastError } from "../lib/toast";
@@ -156,7 +156,7 @@ export default function PeerList() {
                   <ProgressBar value={dlPercent} ariaLabel={`${peer.name}'s download`} />
                   {dlProgress.files_sent > 0 && (
                     <p className="font-mono text-[10px] text-txt-muted mt-1">
-                      {dlProgress.files_sent} file(s) sent
+                      {plural(dlProgress.files_sent, "file")} sent
                     </p>
                   )}
                 </div>
@@ -164,7 +164,7 @@ export default function PeerList() {
               {isHost && !isDownloading && dlProgress && dlProgress.files_sent > 0 && (
                 <div className="mt-2 ml-12 flex items-center gap-2 font-mono text-[11px] text-txt-dim">
                   <ArrowUpFromLine size={11} className="text-status-green" />
-                  <span>{dlProgress.files_sent} file(s) sent</span>
+                  <span>{plural(dlProgress.files_sent, "file")} sent</span>
                 </div>
               )}
               {isExpanded && peerPackCount > 0 && (

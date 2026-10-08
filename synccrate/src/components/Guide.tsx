@@ -26,7 +26,7 @@ function go(page: Page) {
   }
   const game = s.myLibrary.includes(s.activeGame) ? s.activeGame : s.myLibrary[0];
   if (!game) {
-    toastInfo("Add a game first: pick one in the Game Browser.");
+    toastInfo("Add a game first: click Add Game in the sidebar.");
     s.navigateToGlobal("game-browser");
     return;
   }

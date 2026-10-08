@@ -7,8 +7,8 @@ interface StatusBadgeProps {
 
 const tooltips: Record<string, string> = {
   synced: "Same as the host's copy",
-  pending: "This file will be synced in the next transfer",
-  conflict: "Different versions exist — resolve before syncing",
+  pending: "Differs from the host's copy. Compare & Sync to update it.",
+  conflict: "Different versions exist. Resolve before syncing.",
   local: "Only on this PC (the host doesn't have it)",
 };
 

@@ -371,10 +371,10 @@ fn check_guards(app_state: &AppState) -> Result<(), String> {
         return Err("Can't change mods while a sync is in progress.".into());
     }
     if app_state.session_type == SessionType::Host {
-        return Err("Stop hosting first — friends may be pulling from this folder right now.".into());
+        return Err("Stop hosting first. Friends may be pulling from this folder right now.".into());
     }
     if backup::restore_in_progress() {
-        return Err("A restore is running — wait for it to finish.".into());
+        return Err("A restore is running. Wait for it to finish.".into());
     }
     Ok(())
 }
@@ -432,7 +432,7 @@ pub(crate) async fn preview_pack_apply_inner(state: &Arc<Mutex<AppState>>, pack:
     } else {
         let what = ctx.mods.as_ref().map(|m| m.label.clone()).unwrap_or_else(|| "mods".into());
         preview.unavailable_reason = Some(format!(
-            "This pack has no {} in it, so there's no exact set to match — Get Missing Files still works.",
+            "This pack has no {} in it, so there's no exact set to match. Get Missing Files still works.",
             what.to_lowercase()
         ));
     }
@@ -464,7 +464,7 @@ pub(crate) async fn apply_pack_exact_inner(
         let active = app_state.active_game.clone();
         let ctx = game_ctx(&app_state, &active)?;
         if preview.game_id != active || !pack_is_for(&app_state, &pack, &active) || preview.base_path != ctx.base_path {
-            return Err("The game or its folder changed since the preview — preview the pack again.".into());
+            return Err("The game or its folder changed since the preview. Preview the pack again.".into());
         }
         if ctx.disable_none {
             return Err(files::disable_unsupported_message(&ctx.label));
@@ -487,7 +487,7 @@ pub(crate) async fn apply_pack_exact_inner(
     if !missing.is_empty() {
         let names: Vec<&str> = missing.iter().take(3).map(|m| m.relative_path.as_str()).collect();
         return Err(format!(
-            "{} pack file(s) are still missing ({}{}). Get them from a host first — nothing was disabled.",
+            "{} pack file(s) are still missing ({}{}). Get them from a host first. Nothing was disabled.",
             missing.len(),
             names.join(", "),
             if missing.len() > 3 { ", …" } else { "" }
@@ -597,7 +597,7 @@ pub(crate) async fn revert_pack_apply_inner(state: &Arc<Mutex<AppState>>, game: 
         return Err("No pack apply to revert.".into());
     };
     if record.game != ctx.game_id || record.base_path != ctx.base_path {
-        return Err("The game folder changed since that pack was applied — nothing to revert.".into());
+        return Err("The game folder changed since that pack was applied, so there's nothing to revert.".into());
     }
     if !Path::new(&ctx.base_path).is_dir() {
         return Err(missing_folder_error(&ctx.label, &ctx.base_path));

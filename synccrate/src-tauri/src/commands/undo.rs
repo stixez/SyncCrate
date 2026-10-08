@@ -189,7 +189,7 @@ pub(crate) async fn undo_last_sync_inner(
         return Err(format!("{} path not set.", game_label));
     };
     if record.game != game_id || record.base_path != base_path {
-        return Err("The game or folder changed since that sync — nothing to undo.".to_string());
+        return Err("The game or folder changed since that sync, so there's nothing to undo.".to_string());
     }
     if !std::path::Path::new(&base_path).is_dir() {
         return Err(crate::commands::files::missing_folder_error(&game_label, &base_path));
