@@ -18,7 +18,17 @@ export const MOD_SOURCE_LABELS: Record<string, string> = {
   darkest: "Darkest Dungeon mod",
   xcom2: "XCOM 2 mod",
   wow: "WoW addon",
+  curseforge: "CurseForge",
 };
+
+/** The mods' own metadata with CurseForge's (from Check for updates) laid
+ * over it: CurseForge's entry for a file replaces the file's own one, which
+ * the backend already merged into it. */
+export function withCurseForge(metas: ModMeta[], extra: ModMeta[] | undefined): ModMeta[] {
+  if (!extra?.length) return metas;
+  const keys = new Set(extra.map((m) => m.key));
+  return [...metas.filter((m) => !keys.has(m.key)), ...extra];
+}
 
 /** Path → the mod it belongs to: a single-file mod (jar) by exact path,
  * otherwise the nearest folder that has metadata. */

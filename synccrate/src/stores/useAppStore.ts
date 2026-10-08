@@ -60,9 +60,12 @@ interface AppState {
   /** Bumped on the backend's offers-updated / offer-updated events. */
   offersVersion: number;
   bumpOffersVersion: () => void;
-  /** Last "Check for updates" result per game (kept while the app runs). */
+  /** Last "Check for updates" result per game (kept while the app runs,
+   * except CurseForge's part: see `forgetCurseForge`). */
   modUpdates: Record<string, UpdateReport>;
   setModUpdates: (game: string, report: UpdateReport) => void;
+  /** CurseForge's terms forbid keeping their data, so it goes when the Content page closes. */
+  forgetCurseForge: (game: string) => void;
 
   // Currently selected game in sidebar (drives Dashboard/Content/Profiles/Backups views)
   selectedGame: string | null;
@@ -266,6 +269,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   bumpOffersVersion: () => set((s) => ({ offersVersion: s.offersVersion + 1 })),
   modUpdates: {},
   setModUpdates: (game, report) => set((s) => ({ modUpdates: { ...s.modUpdates, [game]: report } })),
+  forgetCurseForge: (game) =>
+    set((s) => {
+      const r = s.modUpdates[game];
+      if (!r || (!r.metas?.length && !r.updates.some((u) => u.source === "curseforge"))) return {};
+      const updates = r.updates.filter((u) => u.source !== "curseforge");
+      return { modUpdates: { ...s.modUpdates, [game]: { ...r, updates, metas: [] } } };
+    }),
 
   selectedGame: null,
   setSelectedGame: (game) => set({ selectedGame: game }),

@@ -9,7 +9,7 @@ import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
 import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms } from "../lib/prefs";
-import { formatBytes, plural, webLink } from "../lib/utils";
+import { formatBytes, parseInviteLink, plural, webLink } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
 import * as cmd from "../lib/commands";
@@ -209,6 +209,21 @@ export default function GameDashboard({ gameId }: Props) {
       .catch(() => { if (!cancelled && isDemoMode()) setHostJoinCode(demoJoinCode); });
     return () => { cancelled = true; };
   }, [hostingKey]);
+  // A pasted invite link fills the box with its code. One for another game
+  // also raises the same "Switch to <game> and join" prompt a clicked invite
+  // does (`useOpenIntents`); switching and joining still need a click.
+  const takeInviteLink = (text: string): boolean => {
+    const link = parseInviteLink(text);
+    if (!link) return false;
+    setJoinCode(link.code);
+    const { activeGame: current, setGameSwitchPrompt: prompt } = useAppStore.getState();
+    if (link.game && link.game !== current && getGameDef(link.game)) {
+      prompt({ hostGame: link.game, attempt: { kind: "code", code: link.code, name: loadDisplayName().trim() || "Guest", label: "host" } });
+    } else {
+      toastSuccess("Invite pasted. Click Join");
+    }
+    return true;
+  };
   // Paste a join code anywhere on the dashboard (outside text fields) to fill
   // the join box — people paste codes from chat, nobody types them.
   useEffect(() => {
@@ -217,6 +232,7 @@ export default function GameDashboard({ gameId }: Props) {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (takeInviteLink(text)) return;
       if (/^SC[-\s]?[0-9A-Z][0-9A-Z\s-]{8,}$/i.test(text)) {
         setJoinCode(text.toUpperCase());
         toastSuccess("Join code pasted. Click Join");
@@ -224,6 +240,7 @@ export default function GameDashboard({ gameId }: Props) {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- takeInviteLink only uses stable setters and the store
   }, [session]);
 
   const [manualIp, setManualIp] = useState("");
@@ -469,12 +486,14 @@ export default function GameDashboard({ gameId }: Props) {
           </Panel>
 
           <Panel label={<><b>02</b> &nbsp;Join</>} title="Join a session" icon={<Users size={16} className="text-neon" />}>
-            <p className="text-txt-dim text-sm mb-4">Paste the code your friend sees after clicking Start Hosting (it starts with SC-), or scan for hosts on your Wi-Fi.</p>
+            <p className="text-txt-dim text-sm mb-4">Paste the code or invite link your friend sees after clicking Start Hosting (the code starts with SC-), or scan for hosts on your Wi-Fi.</p>
             <div className="flex items-stretch gap-2 mb-2">
               <input
                 type="text"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  if (!takeInviteLink(e.target.value)) setJoinCode(e.target.value.toUpperCase());
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && joinCode.trim() && !isLoading && !isConnecting) connectByCode(joinCode, hostName.trim() || "Guest");
                 }}

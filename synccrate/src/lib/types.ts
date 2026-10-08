@@ -208,6 +208,8 @@ export interface ModMeta {
   items?: number | null;
   /** `name` was made from the file name, so don't show both. */
   derived_name: boolean;
+  /** Some of this came from CurseForge (shown with "Info from CurseForge"). */
+  curseforge?: boolean;
 }
 
 /** A previous version of a synced file (src-tauri/src/commands/history.rs). */
@@ -293,7 +295,7 @@ export interface SharedSavesView {
 export interface ModUpdate {
   /** ModMeta.key of the mod. */
   key: string;
-  /** "modrinth" | "thunderstore" | "smapi" */
+  /** "modrinth" | "thunderstore" | "smapi" | "curseforge" */
   source: string;
   current?: string | null;
   latest: string;
@@ -305,6 +307,8 @@ export interface UpdateReport {
   updates: ModUpdate[];
   checked: number;
   errors: string[];
+  /** CurseForge's info for the files it recognized; replaces those files' own entries by key. */
+  metas?: ModMeta[];
 }
 
 /** Friends offering files to the host (src-tauri/src/offers.rs). */

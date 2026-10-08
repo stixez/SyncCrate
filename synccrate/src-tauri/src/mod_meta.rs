@@ -30,10 +30,10 @@ const MAX_META_BYTES: u64 = 256 * 1024;
 const MAX_ICON_BYTES: u64 = 1024 * 1024;
 /// A jar's central directory is read in full by `zip`; skip absurd archives.
 const MAX_JAR_BYTES: u64 = 1024 * 1024 * 1024;
-const MAX_NAME: usize = 128;
+pub(crate) const MAX_NAME: usize = 128;
 const MAX_VERSION: usize = 64;
 const MAX_DESC: usize = 1000;
-const MAX_AUTHORS: usize = 10;
+pub(crate) const MAX_AUTHORS: usize = 10;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]
 pub struct ModMeta {
@@ -42,7 +42,7 @@ pub struct ModMeta {
     pub key: String,
     pub is_file: bool,
     /// "thunderstore" | "smapi" | "fabric" | "quilt" | "forge" | "paradox" | "bannerlord" | "sims4" | "sims3"
-    /// | "rimworld" | "zomboid" | "factorio" | "darkest" | "xcom2" | "wow"
+    /// | "rimworld" | "zomboid" | "factorio" | "darkest" | "xcom2" | "wow" | "curseforge"
     pub source: String,
     pub id: Option<String>,
     pub name: String,
@@ -55,6 +55,9 @@ pub struct ModMeta {
     pub items: Option<u32>,
     /// `name` was made from the file name (so rows don't show both).
     pub derived_name: bool,
+    /// Some of this came from CurseForge (`crate::curseforge`): their terms
+    /// want the data attributed, so the details panel says so.
+    pub curseforge: bool,
     #[serde(skip)]
     pub icon: IconRef,
     /// SMAPI `UpdateKeys` ("Nexus:541", "GitHub:owner/repo"), for update checks.
@@ -72,12 +75,17 @@ pub enum IconRef {
     JarEntry(String),
     /// A thumbnail resource inside the Sims 4 package at `ModMeta::key`.
     Package(crate::sims_package::ResourceRef),
+    /// A CurseForge logo (https). Fetched when a row shows it and handed over
+    /// as a `data:` URL like the others (the webview's CSP blocks remote
+    /// images); the bytes live only in memory, since CurseForge's terms
+    /// forbid storing their data.
+    Remote(String),
 }
 
 // ---------------------------------------------------------------------------
 // String hygiene
 
-fn clean(s: &str, max: usize) -> Option<String> {
+pub(crate) fn clean(s: &str, max: usize) -> Option<String> {
     let s: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let s: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
     let s: String = s.chars().take(max).collect();
@@ -85,7 +93,7 @@ fn clean(s: &str, max: usize) -> Option<String> {
 }
 
 /// Mod descriptions keep their paragraphs, but lose other control characters.
-fn clean_desc(s: &str) -> Option<String> {
+pub(crate) fn clean_desc(s: &str) -> Option<String> {
     let s: String = s.chars().filter(|c| *c == '\n' || !c.is_control()).collect();
     let s: String = s.trim().chars().take(MAX_DESC).collect();
     (!s.is_empty()).then_some(s)
@@ -987,7 +995,7 @@ pub fn extract(base: &str, files: &[String]) -> Vec<ModMeta> {
     out
 }
 
-fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn image_mime(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
         Some("image/png")
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
@@ -1001,7 +1009,8 @@ fn image_mime(bytes: &[u8]) -> Option<&'static str> {
 pub fn icon_data_url(base: &str, key: &str, icon: &IconRef) -> Option<String> {
     use base64::Engine as _;
     let bytes = match icon {
-        IconRef::None => return None,
+        // Downloaded asynchronously by `get_mod_icon`, never read from disk.
+        IconRef::None | IconRef::Remote(_) => return None,
         IconRef::File(rel) => {
             let path = crate::utils::safe_join(base, rel).ok()?;
             if !small_regular_file(&path, MAX_ICON_BYTES) {

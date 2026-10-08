@@ -7,6 +7,7 @@ mod game_install;
 mod handoff;
 mod network;
 mod discord;
+mod curseforge;
 mod mod_meta;
 mod sims_package;
 mod source_links;
@@ -507,6 +508,7 @@ pub fn run() {
             commands::mod_info::get_mod_metadata,
             commands::mod_info::get_mod_icon,
             commands::mod_info::check_mod_updates,
+            commands::mod_info::forget_curseforge_results,
             commands::offers::offer_files,
             commands::offers::cancel_offer,
             commands::offers::get_outgoing_offer,

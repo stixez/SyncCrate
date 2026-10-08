@@ -608,9 +608,15 @@ export async function getModMetadata(game: string): Promise<ModMeta[]> {
   return invoke("get_mod_metadata", { game });
 }
 
-/** Ask Modrinth / Thunderstore / SMAPI for newer versions (only on the user's click). */
+/** Ask Modrinth / Thunderstore / SMAPI / CurseForge for newer versions (only on the user's click). */
 export async function checkModUpdates(game: string): Promise<UpdateReport> {
   return invoke("check_mod_updates", { game });
+}
+
+/** Drop the CurseForge logo links the last check left in the backend (the Content page closed). */
+export async function forgetCurseforgeResults(): Promise<void> {
+  if (isDemoMode()) return;
+  return invoke("forget_curseforge_results");
 }
 
 /** What Discord shows on the user's profile; null clears it (src-tauri/src/discord.rs). */

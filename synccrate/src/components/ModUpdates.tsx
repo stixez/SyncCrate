@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpCircle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Banner, Button } from "./ui";
@@ -7,22 +7,43 @@ import * as cmd from "../lib/commands";
 import { toastError, toastInfo } from "../lib/toast";
 import type { ModMeta, UpdateReport } from "../lib/types";
 
-export const UPDATE_SOURCE_LABELS: Record<string, string> = { modrinth: "Modrinth", thunderstore: "Thunderstore", smapi: "SMAPI" };
+export const UPDATE_SOURCE_LABELS: Record<string, string> = { modrinth: "Modrinth", thunderstore: "Thunderstore", smapi: "SMAPI", curseforge: "CurseForge" };
+
+/** Games whose mod files are looked up on CurseForge (backend `curseforge::select_files`). */
+const CURSEFORGE_GAMES = new Set(["sims4", "minecraft_java"]);
 
 /** Whether any mod here has a source we can check (mirrors backend `mod_updates::checkable`). */
-export function canCheckUpdates(metas: ModMeta[]) {
-  return metas.some(
-    (m) => (["fabric", "quilt", "forge"].includes(m.source) && m.is_file) || m.source === "thunderstore" || m.source === "smapi",
+export function canCheckUpdates(metas: ModMeta[], gameId: string) {
+  return (
+    CURSEFORGE_GAMES.has(gameId) ||
+    metas.some((m) => (["fabric", "quilt", "forge"].includes(m.source) && m.is_file) || m.source === "thunderstore" || m.source === "smapi")
   );
 }
 
+/** What the check sends, and to whom, for this game. */
+function sendsWhat(gameId: string): string {
+  const cf = "Sends file fingerprints (not names or files) to CurseForge through synccrate.app.";
+  if (gameId === "sims4") return cf;
+  if (gameId === "minecraft_java") return `Asks Modrinth about your mods (their file hashes). ${cf}`;
+  return "Asks Modrinth, Thunderstore and SMAPI about your mods (their ids and file hashes).";
+}
+
 /** "Check for updates" button + result summary for the Content page. Only
- * runs on click: it sends mod ids and hashes to Modrinth / Thunderstore / SMAPI. */
+ * runs on click: it sends mod ids, hashes and fingerprints to Modrinth /
+ * Thunderstore / SMAPI / CurseForge (through synccrate.app). */
 export default function ModUpdates({ gameId, metas }: { gameId: string; metas: ModMeta[] }) {
   const report = useAppStore((s) => s.modUpdates[gameId]);
   const setModUpdates = useAppStore((s) => s.setModUpdates);
   const [checking, setChecking] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // The page can close while a big folder is still being fingerprinted.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const nameOf = (key: string) => metas.find((m) => m.key === key)?.name ?? key.split("/").pop() ?? key;
 
   const check = async () => {
@@ -30,8 +51,15 @@ export default function ModUpdates({ gameId, metas }: { gameId: string; metas: M
     try {
       const r: UpdateReport = await cmd.checkModUpdates(gameId);
       setModUpdates(gameId, r);
+      if (!mounted.current) {
+        // CurseForge's part only lives while the page is open (their terms).
+        useAppStore.getState().forgetCurseForge(gameId);
+        cmd.forgetCurseforgeResults().catch(() => {});
+        return;
+      }
       if (r.updates.length === 0 && r.errors.length === 0) {
-        toastInfo(r.checked > 0 ? `All ${r.checked} checked mods are up to date.` : "None of these mods list an update source we can check.");
+        const none = CURSEFORGE_GAMES.has(gameId) ? "None of these mods were found on CurseForge or another source we can check." : "None of these mods list an update source we can check.";
+        toastInfo(r.checked > 0 ? `All ${r.checked} checked mods are up to date.` : none);
       }
     } catch (e) {
       toastError(`Couldn't check for updates: ${e}`);
@@ -46,7 +74,7 @@ export default function ModUpdates({ gameId, metas }: { gameId: string; metas: M
         <Button size="sm" variant="secondary" onClick={check} disabled={checking} icon={checking ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}>
           {checking ? "Checking…" : "Check for updates"}
         </Button>
-        <span className="text-[11px] text-txt-muted">Asks Modrinth, Thunderstore and SMAPI about your mods (their ids and file hashes).</span>
+        <span className="text-[11px] text-txt-muted">{sendsWhat(gameId)}</span>
       </div>
       {report && report.updates.length > 0 && (
         <Banner

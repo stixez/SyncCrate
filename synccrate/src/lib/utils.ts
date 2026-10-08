@@ -29,6 +29,39 @@ export function webLink(path: string): string {
   return `https://synccrate.app/open/#${path}`;
 }
 
+/** The join code (and game, when it names a plausible one) in a pasted invite
+ * link: `https://synccrate.app/open/#join/<code>?game=<id>` or
+ * `synccrate://join/<code>?game=<id>`. Null for anything else. Same reading
+ * as the backend's `open_intent::classify`; the code itself is checked when
+ * joining, like a typed one. */
+export function parseInviteLink(text: string): { code: string; game: string | null } | null {
+  const decode = (s: string) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+  let s = text.trim().replace(/^</, "").replace(/^"+|"+$/g, "");
+  if (s.length > 4096) return null;
+  // Some chat apps and link shorteners percent-encode the `#`.
+  const web = /^https?:\/\/(?:www\.)?synccrate\.app\/open\/?(?:#|%23)(.*)$/i.exec(s);
+  if (web) s = `synccrate://${web[1]}`;
+  // Chat apps and markdown glue punctuation onto links.
+  s = s.replace(/[\s)\]}>.,;:!?"'*|`]+$/, "");
+  const m = /^synccrate:\/*join\/+([^?]*)(?:\?(.*))?$/i.exec(s);
+  if (!m) return null;
+  const code = decode(m[1].replace(/\/+$/, "")).trim().toUpperCase();
+  if (!code || code.length > 256) return null;
+  const param = (m[2] ?? "")
+    .split("&")
+    .map((kv) => kv.split("="))
+    .find(([k, v]) => v !== undefined && k.toLowerCase() === "game");
+  // Browsers sometimes append a `/` to custom-scheme URLs.
+  const game = param ? decode(param[1]).trim().replace(/\/+$/, "").toLowerCase() : "";
+  return { code, game: /^[a-z0-9_]{1,64}$/.test(game) ? game : null };
+}
+
 /** "1 file" / "3 files" (the "file(s)" style reads like an error message). */
 export function plural(n: number, word: string, many = `${word}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? word : many}`;

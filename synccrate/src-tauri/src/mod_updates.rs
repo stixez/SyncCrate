@@ -8,9 +8,11 @@
 //! - SMAPI's web API (Stardew Valley): the manifest's `UpdateKeys`
 //!   (Nexus/GitHub/ModDrop/CurseForge ids) in one batch request, the same
 //!   service SMAPI itself uses.
+//! - CurseForge (Sims 4, Minecraft): file fingerprints through SyncCrate's
+//!   own proxy, which holds the API key (`crate::curseforge`).
 //!
-//! CurseForge and Nexus proper need API keys, so they're not used. Checks
-//! only run when the user asks (they send mod ids/hashes to those services).
+//! Nexus proper needs a per-user API key, so it's not used. Checks only run
+//! when the user asks (they send mod ids/hashes to those services).
 //! Every response is untrusted: sizes are capped, versions and URLs cleaned,
 //! URLs must be https.
 use crate::mod_meta::ModMeta;
@@ -49,6 +51,9 @@ pub struct UpdateReport {
     pub checked: usize,
     /// Sources that failed, with a short reason ("Modrinth: timed out").
     pub errors: Vec<String>,
+    /// Metadata CurseForge added for the files it recognized (replacing the
+    /// file's own entry by key). Only held in memory by the page that asked.
+    pub metas: Vec<ModMeta>,
 }
 
 fn clean_version(s: &str) -> Option<String> {
@@ -252,7 +257,7 @@ fn sha512_file(path: &std::path::Path) -> Option<String> {
 // ---------------------------------------------------------------------------
 // Network
 
-fn client() -> Result<reqwest::Client, String> {
+pub(crate) fn client() -> Result<reqwest::Client, String> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
@@ -377,8 +382,9 @@ async fn check_smapi(http: &reqwest::Client, metas: &[&ModMeta], game_version: O
 }
 
 /// Check every mod that has a supported source. A failing source is reported
-/// in `errors` without failing the others.
-pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>) -> Result<UpdateReport, String> {
+/// in `errors` without failing the others. `curseforge_files` (from
+/// `curseforge::select_files`) are looked up on CurseForge for `game`.
+pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>, game: &str, curseforge_files: &[String]) -> Result<UpdateReport, String> {
     let http = client()?;
     let mut report = UpdateReport::default();
     let mr: Vec<&ModMeta> = metas.iter().filter(|m| matches!(m.source.as_str(), "fabric" | "quilt" | "forge")).collect();
@@ -399,13 +405,34 @@ pub async fn check(metas: &[ModMeta], base: &str, game_version: Option<&str>) ->
             report.errors.push(format!("SMAPI: {e}"));
         }
     }
+    if !curseforge_files.is_empty() {
+        match crate::curseforge::check(game, base, curseforge_files, metas).await {
+            Ok(cf) => {
+                report.checked += cf.matched;
+                // Modrinth knows a jar's loader and game version; CurseForge's
+                // "latest" doesn't, so Modrinth's answer wins for the same file.
+                for u in cf.updates {
+                    if !report.updates.iter().any(|x| x.key == u.key) {
+                        report.updates.push(u);
+                    }
+                }
+                report.metas = cf.metas;
+                if let Some(note) = cf.note {
+                    report.errors.push(format!("CurseForge: {note}"));
+                }
+            }
+            Err(e) => report.errors.push(format!("CurseForge: {e}")),
+        }
+    }
     report.updates.sort_by(|a, b| a.key.cmp(&b.key));
     Ok(report)
 }
 
-/// Whether any mod in `metas` has a source this module can check.
-pub fn checkable(metas: &[ModMeta]) -> bool {
-    metas.iter().any(|m| {
+/// Whether any mod in `metas` has a source this module can check, or there
+/// are files to look up on CurseForge.
+pub fn checkable(metas: &[ModMeta], curseforge_files: usize) -> bool {
+    curseforge_files > 0
+        || metas.iter().any(|m| {
         matches!(m.source.as_str(), "fabric" | "quilt" | "forge") && m.is_file
             || thunderstore_target(m).is_some()
             || (m.source == "smapi" && !m.update_keys.is_empty())
@@ -496,11 +523,12 @@ mod tests {
     #[test]
     fn only_mods_with_a_source_are_checkable() {
         let plain = ModMeta { source: "paradox".into(), ..Default::default() };
-        assert!(!checkable(&[plain.clone()]));
+        assert!(!checkable(&[plain.clone()], 0));
         let smapi_no_keys = ModMeta { source: "smapi".into(), id: Some("x".into()), ..Default::default() };
-        assert!(!checkable(&[plain, smapi_no_keys]));
+        assert!(!checkable(&[plain.clone(), smapi_no_keys], 0));
         let jar = ModMeta { source: "fabric".into(), is_file: true, ..Default::default() };
-        assert!(checkable(&[jar]));
+        assert!(checkable(&[jar], 0));
+        assert!(checkable(&[plain], 3), "Sims 4 / Minecraft files CurseForge may know");
     }
 
     /// Live check against the real APIs (run by hand: `cargo test live_ -- --ignored`).
@@ -509,7 +537,7 @@ mod tests {
     async fn live_thunderstore_and_smapi() {
         let ts = ModMeta { key: "BepInEx/plugins/ValheimModding-Jotunn".into(), source: "thunderstore".into(), id: Some("ValheimModding-Jotunn".into()), version: Some("2.0.0".into()), ..Default::default() };
         let sm = ModMeta { key: "Mods/LookupAnything".into(), source: "smapi".into(), id: Some("Pathoschild.LookupAnything".into()), version: Some("1.30.0".into()), update_keys: vec!["Nexus:541".into()], ..Default::default() };
-        let r = check(&[ts, sm], ".", Some("1.6.8")).await.unwrap();
+        let r = check(&[ts, sm], ".", Some("1.6.8"), "valheim", &[]).await.unwrap();
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_eq!(r.updates.len(), 2, "{:?}", r.updates);
     }

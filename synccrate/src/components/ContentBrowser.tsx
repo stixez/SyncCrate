@@ -24,7 +24,7 @@ import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
 import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
-import { clearModIconCache, metaLookup } from "../lib/modMeta";
+import { clearModIconCache, metaLookup, withCurseForge } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
 type View = "folders" | "flat" | "grid";
@@ -277,7 +277,19 @@ export default function ContentBrowser({ gameId }: Props) {
     cmd.getModMetadata(gameId).then((m) => { if (!cancelled) setModMetas(m); }).catch(() => {});
     return () => { cancelled = true; };
   }, [manifest, gameId, readOnly]);
-  const metaFor = useMemo(() => metaLookup(modMetas), [modMetas]);
+  const updateReport = useAppStore((s) => s.modUpdates[gameId]);
+  // CurseForge's names and pictures (from Check for updates) live only while
+  // this page is open: their terms forbid keeping their data.
+  const allMetas = useMemo(() => withCurseForge(modMetas, updateReport?.metas), [modMetas, updateReport]);
+  useEffect(
+    () => () => {
+      useAppStore.getState().forgetCurseForge(gameId);
+      cmd.forgetCurseforgeResults().catch(() => {});
+      clearModIconCache();
+    },
+    [gameId],
+  );
+  const metaFor = useMemo(() => metaLookup(allMetas), [allMetas]);
   // Mods this PC shares as a link to their creator instead of copying them.
   const [sourceLinks, setSourceLinks] = useState<SourceLink[]>([]);
   useEffect(() => {
@@ -287,7 +299,6 @@ export default function ContentBrowser({ gameId }: Props) {
   }, [gameId]);
   const linkFor = useMemo(() => linkLookup(sourceLinks), [sourceLinks]);
   const isLinked = useCallback((path: string) => !!linkFor(path), [linkFor]);
-  const updateReport = useAppStore((s) => s.modUpdates[gameId]);
   const updateFor = useMemo(() => {
     const byKey = new Map((updateReport?.updates ?? []).map((u) => [u.key, u]));
     return (key?: string) => (key ? byKey.get(key) : undefined);
@@ -890,7 +901,7 @@ export default function ContentBrowser({ gameId }: Props) {
 
       {!readOnly && <CompatIssues gameId={gameId} />}
 
-      {!readOnly && isModLike && canCheckUpdates(modMetas) && <ModUpdates gameId={gameId} metas={modMetas} />}
+      {!readOnly && isModLike && canCheckUpdates(modMetas, gameId) && <ModUpdates gameId={gameId} metas={allMetas} />}
 
       {workshopMods > 0 && (
         <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>

@@ -228,6 +228,9 @@ export default function ModDetailsPanel({
                       </button>
                     </Row>
                   )}
+                  {(meta.curseforge || meta.source === "curseforge" || update?.source === "curseforge") && (
+                    <p className="pt-2 font-mono text-[10.5px] text-txt-muted">Info from CurseForge</p>
+                  )}
                 </>
               )}
               <Row label="Path">

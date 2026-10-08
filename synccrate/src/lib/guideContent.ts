@@ -61,7 +61,7 @@ export const GUIDE: GuideGroup[] = [
         summary: "Friends somewhere else join with one code. No VPN or port forwarding.",
         steps: [
           "The host shares the `SC-…` join code from their Dashboard, or sends **Copy invite link**.",
-          "Friends paste the code (or click the link: it opens SyncCrate with the code filled in).",
+          "Friends paste the code or the link into the join box (or click the link: it opens SyncCrate with the code filled in).",
           "SyncCrate connects directly when it can, otherwise through an encrypted relay that can't read your files.",
         ],
         tip: "The code (and its PIN) stays the same between sessions, so friends can use **Reconnect**. Posted it somewhere public? Click **New PIN** while hosting.",
@@ -243,11 +243,11 @@ export const GUIDE: GuideGroup[] = [
           "The Content page shows your mods by folder, as one list, or as a **Grid** of pictures, with real mod names and icons where mods include them.",
           "Filter by status, type or tag, and enable or disable one mod or a whole creator folder.",
           "Drag files onto the window to install them: each goes to the folder its type belongs in.",
-          "Use **Find duplicates** to find identical copies, and **Check for updates** where the game supports it.",
+          "Use **Find duplicates** to find identical copies, and **Check for updates** where the game supports it. For Sims 4 and Minecraft it also finds names, pictures and newer versions on CurseForge, sending only file fingerprints (not names or files) through synccrate.app.",
           "Creator doesn't allow re-uploads? Open the mod, paste their page under **Share as a link** and click **Save**. Friends get the link instead of a copy.",
         ],
         tip: "Press `/` or `Ctrl+F` to search.",
-        keywords: "content disable enable tag duplicate update install drag drop grid pictures thumbnails link creator reupload patreon early access",
+        keywords: "content disable enable tag duplicate update install drag drop grid pictures thumbnails link creator reupload patreon early access curseforge",
         go: { label: "Open Content", page: "content" },
       },
       {
