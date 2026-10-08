@@ -612,6 +612,18 @@ export async function checkModUpdates(game: string): Promise<UpdateReport> {
   return invoke("check_mod_updates", { game });
 }
 
+/** What Discord shows on the user's profile; null clears it (src-tauri/src/discord.rs). */
+export interface DiscordPresence {
+  details: string;
+  state: string;
+  start: number | null;
+}
+
+export async function setDiscordPresence(presence: DiscordPresence | null): Promise<void> {
+  if (isDemoMode()) return;
+  return invoke("set_discord_presence", { presence });
+}
+
 export async function getModIcon(key: string): Promise<string | null> {
   if (isDemoMode()) return demoModIcon(key);
   return invoke("get_mod_icon", { key });

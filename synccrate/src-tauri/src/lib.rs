@@ -6,6 +6,7 @@ mod event_sink;
 mod game_install;
 mod handoff;
 mod network;
+mod discord;
 mod mod_meta;
 mod sims_package;
 mod mod_updates;
@@ -534,6 +535,7 @@ pub fn run() {
             commands::packs::detect_packs,
             commands::packs::get_game_info,
             commands::packs::check_compatibility,
+            discord::set_discord_presence,
             commands::system::get_firewall_status,
             commands::system::fix_firewall,
             commands::system::is_elevated,

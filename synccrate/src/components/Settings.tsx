@@ -16,6 +16,7 @@ import { GameIcon } from "./Sidebar";
 import { Badge, Button, EmptyState, GameArt, Input, LiveDot, Panel, ProgressBar, SectionHeader, Toggle, cx } from "./ui";
 import { ACCENT_PRESETS, effectsEnabled, isLightColor } from "../lib/appearance";
 import type { Density, ThemeMode, UiScale } from "../lib/prefs";
+import { loadDiscordPresence, saveDiscordPresence } from "../lib/prefs";
 import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useGameArt";
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
@@ -49,6 +50,7 @@ export default function Settings() {
   const [keepHistory, setKeepHistory] = useState(true);
   const [closeToTray, setCloseToTrayState] = useState(false);
   const [showArt, setShowArtState] = useState(getShowGameArt);
+  const [discordOn, setDiscordOn] = useState(loadDiscordPresence);
   const [customArt, setCustomArt] = useState<string[]>([]);
   // Saved folders that don't exist right now (kept, not replaced by auto-detect).
   const [unavailable, setUnavailable] = useState<string[]>([]);
@@ -557,6 +559,17 @@ export default function Settings() {
                 onChange={setNotificationsEnabled}
                 label="Desktop notifications"
                 description="When SyncCrate is in the background: sync finished, friend connected."
+              />
+            </SettingRow>
+            <SettingRow>
+              <Toggle
+                checked={discordOn}
+                onChange={(v) => {
+                  setDiscordOn(v);
+                  saveDiscordPresence(v);
+                }}
+                label="Show on Discord"
+                description="While you host or sync, your Discord profile shows the game and how many friends are connected. Never your join code or PIN. Needs the Discord app running."
               />
             </SettingRow>
             <SettingRow>

@@ -18,6 +18,7 @@ import DropZoneOverlay from "./components/DropZoneOverlay";
 import InstallResultsModal from "./components/InstallResultsModal";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import StayInSyncRunner from "./components/StayInSyncRunner";
+import DiscordPresenceRunner from "./components/DiscordPresenceRunner";
 import { useAppStore } from "./stores/useAppStore";
 import { useLogStore } from "./stores/useLogStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
@@ -420,6 +421,7 @@ function App() {
         <Suspense fallback={null}>{renderPage()}</Suspense>
       </PageErrorBoundary>
       <StayInSyncRunner />
+      <DiscordPresenceRunner />
       {isDragging && <DropZoneOverlay />}
       {installResults && (
         <InstallResultsModal
