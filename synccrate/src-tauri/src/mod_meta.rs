@@ -101,7 +101,7 @@ fn clean_version(s: &str) -> Option<String> {
     (!is_placeholder(&v)).then_some(v)
 }
 
-fn clean_url(s: &str) -> Option<String> {
+pub(crate) fn clean_url(s: &str) -> Option<String> {
     let s = s.trim();
     let lower = s.to_ascii_lowercase();
     // https only: these come from mod files (a friend's, via sync) and open

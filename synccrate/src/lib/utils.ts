@@ -53,6 +53,30 @@ export function isDisabledPath(relativePath: string): boolean {
   return p.includes("_Disabled/") || p.toLowerCase().endsWith(".disabled");
 }
 
+/** Path as the backend matches it (`diff::match_key`): case-insensitive, with
+ * `.disabled`, a legacy `_Disabled/` folder and trailing dots/spaces seen through. */
+function linkKey(path: string): string {
+  const segs = path.replace(/\\/g, "/").split("/").filter((s) => s && s !== ".").map((s) => s.replace(/[. ]+$/, "").toLowerCase());
+  if (segs.length) segs[segs.length - 1] = segs[segs.length - 1].replace(/\.disabled$/, "").replace(/[. ]+$/, "");
+  const legacy = segs.slice(0, -1).indexOf("_disabled");
+  if (legacy >= 0) segs.splice(legacy, 1);
+  return segs.join("/");
+}
+
+/** The most specific "share as a link" entry covering `path` (a file link beats its folder's). */
+export function linkLookup<T extends { prefix: string }>(links: T[]): (path: string) => T | undefined {
+  if (links.length === 0) return () => undefined;
+  const keyed = links.map((l) => [linkKey(l.prefix), l] as const);
+  return (path: string) => {
+    const key = linkKey(path);
+    let best: readonly [string, T] | undefined;
+    for (const k of keyed) {
+      if (k[0] && (key === k[0] || key.startsWith(k[0] + "/")) && (!best || k[0].length > best[0].length)) best = k;
+    }
+    return best?.[1];
+  };
+}
+
 /** "3d ago" style age for dense tables; pair with formatDate in a title. */
 export function formatRelative(ts: number, nowSecs = Date.now() / 1000): string {
   if (!ts) return "—";

@@ -35,6 +35,8 @@ interface GridProps {
   selected: Set<string>;
   onSelectPaths: (paths: string[], on: boolean) => void;
   onShowDetails: (file: FileInfo) => void;
+  /** Shared as a link to its creator instead of being copied to friends. */
+  isLinked: (path: string) => boolean;
 }
 
 /**
@@ -97,6 +99,7 @@ const Tile = memo(function Tile({
   selected,
   onSelectPaths,
   onShowDetails,
+  isLinked,
 }: { unit: GridUnit; size: number } & Omit<GridProps, "units">) {
   const { files, meta } = unit;
   const first = files[0];
@@ -108,6 +111,7 @@ const Tile = memo(function Tile({
   const status = paths.map(getSyncStatus).reduce((a, b) => (STATUS_RANK[b] > STATUS_RANK[a] ? b : a), "synced" as SyncStatus);
   const update = updateFor(meta?.key);
   const outdated = paths.some((p) => outdatedPaths.has(p));
+  const linked = paths.some(isLinked);
   const missingPacks = paths.some((p) => compatMap.get(p)?.status === "MissingPacks");
   const isSelected = bulkMode && paths.every((p) => selected.has(p));
   const bytes = files.reduce((n, f) => n + f.size, 0);
@@ -144,6 +148,7 @@ const Tile = memo(function Tile({
           {disabled && <Badge tone="neutral">Off</Badge>}
           {update && <Badge tone="neon" title={`Update available: ${update.latest}`}>Update</Badge>}
           {outdated && <Badge tone="amber">Outdated</Badge>}
+          {linked && <Badge tone="neutral" title="Friends get a link to the creator's page instead of a copy">Link</Badge>}
           {meta?.items != null && meta.items > 1 && <Badge tone="neutral" title="Items in this merged package">{meta.items}</Badge>}
         </span>
         {missingPacks && (

@@ -25,6 +25,7 @@ import ConnectionGuide from "./ConnectionGuide";
 import UndoLastSync from "./UndoLastSync";
 import PlayButton from "./PlayButton";
 import WhatsNew from "./WhatsNew";
+import SourceLinksPanel from "./SourceLinksPanel";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
 import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
@@ -1014,12 +1015,22 @@ export default function GameDashboard({ gameId }: Props) {
           <SyncBanner plan={syncPlan} onSync={executeSync} onResolveAll={resolveAll} busy={isSyncStarting} />
         </section>
       )}
+      {syncPlan && !sessionGameMismatch && (syncPlan.source_links?.length ?? 0) > 0 && (
+        <SourceLinksPanel gameId={gameId} items={syncPlan.source_links!} />
+      )}
       {isClient && !syncProgress && <WhatsNew gameId={gameId} />}
       {isClient && !(syncPlan && syncPlan.actions.length > 0) && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
-        <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
-          You have everything the host shares. {stayInSync ? "Stay in sync will pull their new mods automatically." : "Turn on Stay in sync to get their new mods automatically."}
-        </Banner>
+        (syncPlan.source_links?.length ?? 0) > 0 ? (
+          // Nothing to download, but not "everything": the rest comes from the creators' pages.
+          <Banner tone="success" icon={<Check size={16} />} title="Nothing to download">
+            You have every file the host can send. Get the mods below from their creators.
+          </Banner>
+        ) : (
+          <Banner tone="success" icon={<Check size={16} />} title="Everything is in sync">
+            You have everything the host shares. {stayInSync ? "Stay in sync will pull their new mods automatically." : "Turn on Stay in sync to get their new mods automatically."}
+          </Banner>
+        )
       )}
 
       {hasPacks && (

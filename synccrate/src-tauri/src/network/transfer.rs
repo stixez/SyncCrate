@@ -25,6 +25,10 @@ pub(crate) fn host_manifest_needs_rescan(manifest: &crate::state::FileManifest, 
         || now.saturating_sub(manifest.generated_at) > HOST_MANIFEST_MAX_AGE_SECS
 }
 
+/// Sent instead of a manifest or a file when the host's links file exists but
+/// can't be read: serving anyway could copy files a creator forbids sharing.
+const LINKS_UNREADABLE: &str = "The host couldn't read its list of mods shared as links. Try again in a moment.";
+
 /// Maximum simultaneous peer connections a host will accept
 const MAX_PEERS: usize = 8;
 
@@ -536,6 +540,7 @@ async fn handle_client(
                 info: peer,
                 stream: stream.clone(),
                 remote_manifest: None,
+                remote_links: Vec::new(),
                 sync_plan: None,
                 is_syncing: false,
             },
@@ -637,16 +642,27 @@ async fn handle_client(
                     }
                 }
 
-                let manifest = {
+                let reply = {
                     let app_state = state.lock().await;
-                    let mut filtered = app_state.local_manifest.clone();
-                    filtered.files.retain(|path, info| app_state.is_file_info_allowed(info) && (peer_roots || !crate::registry::is_external_path(path)));
-                    filtered
+                    match crate::source_links::load(&app_state.active_game) {
+                        Ok(source_links) => {
+                            let mut filtered = app_state.local_manifest.clone();
+                            filtered.files.retain(|path, info| app_state.is_file_info_allowed(info) && (peer_roots || !crate::registry::is_external_path(path)));
+                            let links = crate::source_links::split_linked(&mut filtered, &source_links);
+                            Message::ManifestResponse { manifest: filtered, links }
+                        }
+                        // Fail closed: without the list we can't tell which
+                        // files the creator asked us not to copy.
+                        Err(e) => {
+                            log::warn!("Couldn't read the shared links: {e}");
+                            Message::Error { message: LINKS_UNREADABLE.to_string() }
+                        }
+                    }
                 };
                 let mut s = stream.lock().await;
-                protocol::send_message(&mut *s, &Message::ManifestResponse { manifest }).await?;
+                protocol::send_message(&mut *s, &reply).await?;
             }
-            Message::ManifestResponse { manifest } => {
+            Message::ManifestResponse { manifest, .. } => {
                 let mod_count = manifest.files.len();
                 let mut app_state = state.lock().await;
                 if let Some(conn) = app_state.connections.get_mut(&peer_id) {
@@ -667,6 +683,15 @@ async fn handle_client(
                 let base = {
                     let app_state = state.lock().await;
 
+                    // A file shared as a link never leaves this PC, even for a
+                    // client that asks for it by name (an older one, or one
+                    // that never looked at the manifest). Checked before the
+                    // handoff grant too, so no other path can serve it.
+                    let linked = match crate::source_links::load(&app_state.active_game) {
+                        Ok(links) => crate::source_links::link_for(&links, &path).map(|_| crate::source_links::REFUSAL.to_string()),
+                        Err(_) => Some(LINKS_UNREADABLE.to_string()),
+                    };
+
                     // Validate that the requested file is in an allowed folder
                     // A take (`handoff_net`) lists its save from disk: files a scan
                     // hasn't seen yet, and saves the host doesn't share in a
@@ -675,7 +700,9 @@ async fn handle_client(
                         .map(|info| app_state.is_file_info_allowed(info))
                         .unwrap_or(false)
                         || app_state.handoff_grants.get(&peer_id).is_some_and(|g| g.contains(&path));
-                    if !allowed {
+                    if let Some(refusal) = linked {
+                        Err(refusal)
+                    } else if !allowed {
                         Err("File not available".to_string())
                     } else {
                         app_state.active_game_path()
@@ -1303,7 +1330,7 @@ pub(crate) async fn run_client_session(
 
     // Request manifest — the host may have sent GameInfoExchange first,
     // so we need to drain it before we get our ManifestResponse.
-    let (remote_manifest, host_game_info) = {
+    let (remote_manifest, remote_links, host_game_info) = {
         let mut s = stream.lock().await;
         protocol::send_message(&mut *s, &Message::ManifestRequest).await?;
 
@@ -1319,7 +1346,7 @@ pub(crate) async fn run_client_session(
                 ),
             };
             match msg {
-                Message::ManifestResponse { manifest } => break (manifest, host_gi),
+                Message::ManifestResponse { manifest, links } => break (manifest, links, host_gi),
                 Message::GameInfoExchange { game_info } => {
                     host_gi = Some(sanitize_game_info(game_info));
                 }
@@ -1347,7 +1374,7 @@ pub(crate) async fn run_client_session(
         let mut s = stream.lock().await;
         let _ = protocol::send_message(
             &mut *s,
-            &Message::ManifestResponse { manifest },
+            &Message::ManifestResponse { manifest, links: Vec::new() },
         )
         .await;
     }
@@ -1380,6 +1407,7 @@ pub(crate) async fn run_client_session(
                 info,
                 stream: stream.clone(),
                 remote_manifest: Some(remote_manifest),
+                remote_links,
                 sync_plan: None,
                 is_syncing: false,
             },
@@ -2007,7 +2035,7 @@ pub async fn refresh_remote_manifest(
             .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?
     };
 
-    let manifest = {
+    let (manifest, links) = {
         let mut s = lock_stream(&stream, state, peer_id, false).await?;
         protocol::send_message(&mut *s, &Message::ManifestRequest).await?;
         loop {
@@ -2020,7 +2048,7 @@ pub async fn refresh_remote_manifest(
                 }
             };
             match msg {
-                Message::ManifestResponse { manifest } => break manifest,
+                Message::ManifestResponse { manifest, links } => break (manifest, links),
                 Message::GameInfoExchange { game_info } => {
                     let sanitized = sanitize_game_info(game_info);
                     let mut app_state = state.lock().await;
@@ -2044,6 +2072,7 @@ pub async fn refresh_remote_manifest(
         .ok_or("Peer disconnected")?;
     conn.info.mod_count = manifest.files.len();
     conn.remote_manifest = Some(manifest.clone());
+    conn.remote_links = links;
     Ok(manifest)
 }
 

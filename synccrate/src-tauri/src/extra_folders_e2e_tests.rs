@@ -164,7 +164,7 @@ async fn host_manifest_for(port: u16, features: Vec<String>) -> Vec<String> {
     protocol::send_message(&mut s, &Message::ManifestRequest).await.unwrap();
     loop {
         let msg = tokio::time::timeout(std::time::Duration::from_secs(15), protocol::recv_message(&mut s)).await.expect("host answers").unwrap();
-        if let Message::ManifestResponse { manifest } = msg {
+        if let Message::ManifestResponse { manifest, .. } = msg {
             let _ = protocol::send_message(&mut s, &Message::Disconnect).await;
             let mut keys: Vec<String> = manifest.files.into_keys().collect();
             keys.sort();

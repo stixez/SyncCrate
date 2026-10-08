@@ -31,12 +31,15 @@ export function useSync() {
       useAppStore.getState().setPendingPackApply(null);
       setSyncPlan(plan);
       const count = plan.actions.length;
+      const linked = plan.source_links?.length ?? 0;
       if (plan.warning) {
         // e.g. an older host that seems to share a different game
         addLog(plan.warning, "warning");
         toastError(plan.warning);
       } else if (count > 0) {
         toastSuccess(`Found ${plural(count, "difference")} to sync`);
+      } else if (linked > 0) {
+        toastSuccess(`Nothing to download. Get ${plural(linked, "mod")} from the creator.`);
       } else {
         toastSuccess("Everything is in sync");
       }

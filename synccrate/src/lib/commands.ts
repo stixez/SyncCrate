@@ -40,6 +40,7 @@ import type {
   PackApplyStatus,
   PackComparison,
   PackRevertResult,
+  SourceLink,
   SyncFolderPermissions,
   SyncHistoryEntry,
   SyncPlan,
@@ -722,6 +723,36 @@ export async function takeSave(crew: string, game: string, unit: string): Promis
 
 export async function giveSave(crew: string, game: string, unit: string): Promise<void> {
   return invoke("give_save", { crew, game, unit });
+}
+
+// "Share as a link": mods the host points friends to the creator for instead
+// of copying them (src-tauri/src/source_links.rs). Demo mode keeps them in memory.
+const demoLinks = new Map<string, SourceLink[]>();
+
+export async function getSourceLinks(game: string): Promise<SourceLink[]> {
+  if (isDemoMode()) return demoLinks.get(game) ?? [];
+  return invoke("get_source_links", { game });
+}
+
+/** Adds the link, or replaces the one with the same prefix. Resolves to the game's links. */
+export async function setSourceLink(game: string, prefix: string, url: string, label: string | null): Promise<SourceLink[]> {
+  if (isDemoMode()) {
+    if (!/^https:\/\/\S+$/i.test(url.trim())) throw "Use a full https:// link (up to 300 characters, no spaces).";
+    const rest = (demoLinks.get(game) ?? []).filter((l) => l.prefix.toLowerCase() !== prefix.toLowerCase());
+    const links = [...rest, { prefix, url: url.trim(), label }];
+    demoLinks.set(game, links);
+    return links;
+  }
+  return invoke("set_source_link", { game, prefix, url, label });
+}
+
+export async function removeSourceLink(game: string, prefix: string): Promise<SourceLink[]> {
+  if (isDemoMode()) {
+    const links = (demoLinks.get(game) ?? []).filter((l) => l.prefix.toLowerCase() !== prefix.toLowerCase());
+    demoLinks.set(game, links);
+    return links;
+  }
+  return invoke("remove_source_link", { game, prefix });
 }
 
 export async function getExtraFolders(game: string): Promise<ExtraFolder[]> {

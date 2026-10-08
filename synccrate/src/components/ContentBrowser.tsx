@@ -4,7 +4,7 @@ import {
   ChevronRight, Folder, FolderTree, List, LayoutGrid, Power, PowerOff, ChevronsDownUp, ChevronsUpDown, Info, Gift, SearchCheck,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
-import { getGameDef } from "../lib/games";
+import { getGameDef, relFolder } from "../lib/games";
 import ModItem, { COL, ModIcon } from "./ModItem";
 import ModGrid, { type GridUnit } from "./ModGrid";
 import SaveItem from "./SaveItem";
@@ -19,11 +19,11 @@ import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
-import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, plural, renameInManifest } from "../lib/utils";
+import { dirOf, displayPath, fileKind, fileName, formatBytes, formatDateShort, isDisabledPath, linkLookup, plural, renameInManifest } from "../lib/utils";
 import { demoOutdatedScripts, isDemoMode } from "../lib/demoData";
 import * as cmd from "../lib/commands";
 import { manifestIsFresh } from "../lib/manifestFresh";
-import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
+import type { FileInfo, FileManifest, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
 import { clearModIconCache, metaLookup } from "../lib/modMeta";
 
 type SortBy = "name" | "size" | "date" | "status";
@@ -278,6 +278,15 @@ export default function ContentBrowser({ gameId }: Props) {
     return () => { cancelled = true; };
   }, [manifest, gameId, readOnly]);
   const metaFor = useMemo(() => metaLookup(modMetas), [modMetas]);
+  // Mods this PC shares as a link to their creator instead of copying them.
+  const [sourceLinks, setSourceLinks] = useState<SourceLink[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    cmd.getSourceLinks(gameId).then((l) => { if (!cancelled) setSourceLinks(l); }).catch(() => { if (!cancelled) setSourceLinks([]); });
+    return () => { cancelled = true; };
+  }, [gameId]);
+  const linkFor = useMemo(() => linkLookup(sourceLinks), [sourceLinks]);
+  const isLinked = useCallback((path: string) => !!linkFor(path), [linkFor]);
   const updateReport = useAppStore((s) => s.modUpdates[gameId]);
   const updateFor = useMemo(() => {
     const byKey = new Map((updateReport?.updates ?? []).map((u) => [u.key, u]));
@@ -794,6 +803,7 @@ export default function ContentBrowser({ gameId }: Props) {
         canToggle={canToggle}
         toggleBusy={!!busyPaths}
         onToggle={handleToggle}
+        linked={isLinked(p)}
       />
     );
   };
@@ -1234,6 +1244,7 @@ export default function ContentBrowser({ gameId }: Props) {
             selected={selected}
             onSelectPaths={selectPaths}
             onShowDetails={handleShowDetails}
+            isLinked={isLinked}
           />
         </div>
         ) : (
@@ -1299,6 +1310,10 @@ export default function ContentBrowser({ gameId }: Props) {
           syncStatus={getSyncStatus(detailFile.relative_path)}
           tags={modTags[detailFile.relative_path] || []}
           compatibility={compatMap.get(detailFile.relative_path)}
+          canLink={isModLike}
+          contentFolder={activeCt ? relFolder(activeCt) : ""}
+          link={linkFor(detailFile.relative_path)}
+          onLinksChanged={setSourceLinks}
           onClose={closeDetails}
         />
       )}

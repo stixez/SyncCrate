@@ -411,7 +411,19 @@ pub(crate) async fn compute_pack_sync_plan_inner(
 
     let cts = get_game_def(&app_state.game_registry, &active_game).map(|d| d.content_types.clone()).unwrap_or_default();
     let in_scope: Vec<PackFile> = pack.files.iter().filter(|pf| pack_file_in_scope(pf, &cts)).cloned().collect();
-    let (mut plan, unavailable) = crate::sync::diff::compute_pack_plan(&app_state.local_manifest, &remote, &in_scope);
+    let (mut plan, mut unavailable) = crate::sync::diff::compute_pack_plan(&app_state.local_manifest, &remote, &in_scope);
+    // Pack files the host shares only as a link: "get it from the creator",
+    // not "this host doesn't have it". Links for files outside the pack stay out.
+    let pack_keys: std::collections::HashSet<String> = in_scope.iter().map(|pf| crate::sync::diff::match_key(&pf.relative_path)).collect();
+    let links: Vec<_> = crate::sync::diff::accepted_links(&conn.remote_links, &cts)
+        .into_iter()
+        .filter(|l| pack_keys.contains(&crate::sync::diff::match_key(&l.path)))
+        .collect();
+    if !links.is_empty() {
+        let linked: std::collections::HashSet<String> = links.iter().map(|l| crate::sync::diff::match_key(&l.path)).collect();
+        unavailable.retain(|p| !linked.contains(&crate::sync::diff::match_key(p)));
+        crate::sync::diff::apply_source_links(&mut plan, &links, &app_state.local_manifest);
+    }
     plan.game_id = active_game;
     plan.base_path = base_path;
     plan.pack_unavailable = unavailable;

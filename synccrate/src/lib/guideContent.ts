@@ -244,9 +244,10 @@ export const GUIDE: GuideGroup[] = [
           "Filter by status, type or tag, and enable or disable one mod or a whole creator folder.",
           "Drag files onto the window to install them: each goes to the folder its type belongs in.",
           "Use **Find duplicates** to find identical copies, and **Check for updates** where the game supports it.",
+          "Creator doesn't allow re-uploads? Open the mod, paste their page under **Share as a link** and click **Save**. Friends get the link instead of a copy.",
         ],
         tip: "Press `/` or `Ctrl+F` to search.",
-        keywords: "content disable enable tag duplicate update install drag drop grid pictures thumbnails",
+        keywords: "content disable enable tag duplicate update install drag drop grid pictures thumbnails link creator reupload patreon early access",
         go: { label: "Open Content", page: "content" },
       },
       {

@@ -143,6 +143,22 @@ export interface SyncPlan {
   notice?: string | null;
   /** Pack files (by path) the host doesn't have with the pack's exact hash. Only set on a pack sync plan. */
   pack_unavailable?: string[];
+  /** Host files shared only as a link to their creator that you lack or have in another version. Never downloaded. */
+  source_links?: SourceLinkItem[];
+}
+
+/** Host side of "Share as a link": a file, or a folder covering every file under it. */
+export interface SourceLink {
+  prefix: string;
+  url: string;
+  label?: string | null;
+}
+
+export interface SourceLinkItem {
+  path: string;
+  url: string;
+  label?: string | null;
+  status: "missing" | "different";
 }
 
 // --- Modpacks ---

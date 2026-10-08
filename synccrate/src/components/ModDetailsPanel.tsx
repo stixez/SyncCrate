@@ -1,18 +1,18 @@
-import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle, Copy } from "lucide-react";
+import { X, FolderOpen, Puzzle, Palette, Power, PowerOff, AlertTriangle, Copy, Link2 } from "lucide-react";
 import { useDialog } from "../hooks/useDialog";
 import { friendlyError } from "../lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { FileInfo, ModCompatibility, ModMeta, ModUpdate } from "../lib/types";
+import type { FileInfo, ModCompatibility, ModMeta, ModUpdate, SourceLink } from "../lib/types";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { MOD_SOURCE_LABELS, useModIcon } from "../lib/modMeta";
 import { ModIcon } from "./ModItem";
-import { displayPath, formatBytes, formatDate, isDisabledPath, modLabel, renameInManifest } from "../lib/utils";
+import { dirOf, displayPath, formatBytes, formatDate, isDisabledPath, modLabel, renameInManifest } from "../lib/utils";
 import { useAppStore } from "../stores/useAppStore";
 import { toastSuccess, toastError } from "../lib/toast";
 import * as cmd from "../lib/commands";
 import StatusBadge from "./StatusBadge";
 import FileHistory from "./FileHistory";
-import { Badge, Banner, Button, cx } from "./ui";
+import { Badge, Banner, Button, Input, cx } from "./ui";
 
 interface ModDetailsPanelProps {
   /** The game whose content page opened this (not necessarily the active game). */
@@ -25,6 +25,13 @@ interface ModDetailsPanelProps {
   syncStatus: "synced" | "pending" | "conflict" | "local";
   tags: string[];
   compatibility?: ModCompatibility;
+  /** Offer "Share as a link" (mod-like content only). */
+  canLink?: boolean;
+  /** The content type's folder (game-relative), to tell a mod in a subfolder from a loose one. */
+  contentFolder?: string;
+  /** The link covering this file, if it's shared as one. */
+  link?: SourceLink;
+  onLinksChanged?: (links: SourceLink[]) => void;
   onClose: () => void;
 }
 
@@ -58,6 +65,10 @@ export default function ModDetailsPanel({
   syncStatus,
   tags,
   compatibility,
+  canLink,
+  contentFolder,
+  link,
+  onLinksChanged,
   onClose,
 }: ModDetailsPanelProps) {
   const gamePaths = useAppStore((s) => s.gamePaths);
@@ -85,6 +96,47 @@ export default function ModDetailsPanel({
       toastError(friendlyError(e));
     } finally {
       setToggling(false);
+    }
+  };
+
+  // "Share as a link": the creator forbids re-uploads, so friends get their page instead.
+  const path = file.relative_path;
+  const linkIsFolder = !!link && link.prefix.split("/").length < path.split("/").length;
+  const parent = dirOf(path);
+  const ctFolder = (contentFolder ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  // Only a mod in its own subfolder: the content folder itself would cover every mod.
+  const inSubfolder = !!parent && (ctFolder === "" || ctFolder === "." || parent.toLowerCase().startsWith(`${ctFolder}/`));
+  const folderPrefix = linkIsFolder ? link!.prefix : parent;
+  const website = meta?.website && /^https:\/\//i.test(meta.website) ? meta.website : "";
+  const [linkUrl, setLinkUrl] = useState(link?.url ?? website);
+  const [linkScope, setLinkScope] = useState<"file" | "folder">(linkIsFolder ? "folder" : "file");
+  const [savingLink, setSavingLink] = useState(false);
+  const saveLink = async () => {
+    const prefix = linkScope === "folder" ? folderPrefix : path;
+    setSavingLink(true);
+    try {
+      let links = await cmd.setSourceLink(gameId, prefix, linkUrl.trim(), meta?.name ?? null);
+      // A file link becoming a folder link is replaced. The other way round
+      // the folder's link stays: removing it would start copying its other mods.
+      if (link && !linkIsFolder && link.prefix.toLowerCase() !== prefix.toLowerCase()) links = await cmd.removeSourceLink(gameId, link.prefix);
+      onLinksChanged?.(links);
+      toastSuccess(linkScope === "folder" ? "Friends get the link for this folder instead of a copy" : "Friends get the link instead of a copy");
+    } catch (e) {
+      toastError(friendlyError(e));
+    } finally {
+      setSavingLink(false);
+    }
+  };
+  const removeLink = async () => {
+    if (!link) return;
+    setSavingLink(true);
+    try {
+      onLinksChanged?.(await cmd.removeSourceLink(gameId, link.prefix));
+      toastSuccess(linkIsFolder ? "Link removed for the whole folder" : "Link removed");
+    } catch (e) {
+      toastError(friendlyError(e));
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -188,6 +240,7 @@ export default function ModDetailsPanel({
                 <div className="flex items-center gap-2">
                   <StatusBadge status={syncStatus} />
                   {isDisabled && <Badge tone="neutral">Disabled</Badge>}
+                  {link && <Badge tone="neutral" title="Friends get a link to the creator's page instead of a copy">Link</Badge>}
                 </div>
               </Row>
               {tags.length > 0 && (
@@ -200,6 +253,55 @@ export default function ModDetailsPanel({
                 </Row>
               )}
             </div>
+
+            {canLink && (
+              <div className="px-5 pb-3">
+                <p className="hud-label mb-1.5">// Share as a link</p>
+                <p className="text-xs text-txt-dim mb-2">For mods the creator asks you not to re-upload. Friends get this link instead of a copy.</p>
+                <Input
+                  size="sm"
+                  mono
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && linkUrl.trim() && !savingLink && saveLink()}
+                  placeholder="https://"
+                  aria-label="Link to the creator's page"
+                  icon={<Link2 size={12} />}
+                />
+                {(inSubfolder || linkIsFolder) && (
+                  <div className="flex mt-2" role="radiogroup" aria-label="What the link covers">
+                    {(["file", "folder"] as const).map((scope, i) => (
+                      <button
+                        key={scope}
+                        role="radio"
+                        aria-checked={linkScope === scope}
+                        onClick={() => setLinkScope(scope)}
+                        className={cx(
+                          "h-7 px-3 font-mono text-[10.5px] uppercase tracking-[0.08em] border transition-colors",
+                          i > 0 && "-ml-px",
+                          linkScope === scope ? "relative z-1 bg-neon/10 border-neon text-neon" : "bg-bg border-line-hi text-txt-dim hover:text-txt",
+                        )}
+                      >
+                        {scope === "file" ? "This file" : "Whole folder"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {linkScope === "folder" && (
+                  <p className="font-mono text-[10.5px] text-txt-muted mt-1 truncate" title={folderPrefix}>Every file in {folderPrefix}/</p>
+                )}
+                <div className="flex gap-2 mt-2">
+                  <Button size="sm" variant="primary" onClick={saveLink} disabled={savingLink || !linkUrl.trim()}>
+                    Save
+                  </Button>
+                  {link && (
+                    <Button size="sm" variant="ghost" onClick={removeLink} disabled={savingLink}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="px-5 pb-3">
               <p className="hud-label mb-1.5">// Earlier versions</p>

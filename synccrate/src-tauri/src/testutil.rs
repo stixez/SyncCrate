@@ -472,7 +472,7 @@ async fn run_fake_old_host(
     loop {
         match protocol::recv_message(&mut stream).await {
             Ok(Message::ManifestRequest) => {
-                let _ = protocol::send_message(&mut stream, &Message::ManifestResponse { manifest: manifest.clone() }).await;
+                let _ = protocol::send_message(&mut stream, &Message::ManifestResponse { manifest: manifest.clone(), links: Vec::new() }).await;
             }
             Ok(Message::FileRequest { path }) => {
                 let Some(content) = files.get(&path) else {

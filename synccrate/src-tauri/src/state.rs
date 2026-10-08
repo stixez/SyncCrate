@@ -234,6 +234,11 @@ pub struct SyncPlan {
     /// the existing undo record instead of replacing it.
     #[serde(default)]
     pub auto_pull: bool,
+    /// Host files shared only as a link to their creator that this PC doesn't
+    /// have, or has in another version. Never downloaded; not part of
+    /// `actions`, `total_bytes` or `plan_hash`.
+    #[serde(default)]
+    pub source_links: Vec<crate::source_links::SourceLinkItem>,
 }
 
 /// One file in a modpack's manifest. No content — packs are shareable
@@ -375,6 +380,8 @@ pub struct PeerConnection {
     pub info: PeerInfo,
     pub stream: Arc<TokioMutex<crate::network::stream::PeerStream>>,
     pub remote_manifest: Option<FileManifest>,
+    /// Host files shared only as a link to their creator (`crate::source_links`).
+    pub remote_links: Vec<crate::source_links::LinkedFile>,
     pub sync_plan: Option<SyncPlan>,
     pub is_syncing: bool,
 }

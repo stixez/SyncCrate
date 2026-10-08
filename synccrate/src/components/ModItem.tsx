@@ -55,6 +55,8 @@ interface ModItemProps {
   canToggle?: boolean;
   toggleBusy?: boolean;
   onToggle?: (path: string, enable: boolean) => void;
+  /** Shared as a link to its creator instead of being copied to friends. */
+  linked?: boolean;
 }
 
 function ModItem({
@@ -77,6 +79,7 @@ function ModItem({
   canToggle,
   toggleBusy,
   onToggle,
+  linked,
 }: ModItemProps) {
   const isMod = file.file_type === "Mod";
   const name = fileName(file.relative_path);
@@ -148,6 +151,7 @@ function ModItem({
         </button>
         {isDisabled && !canToggle && <Badge tone="neutral" className="shrink-0">Disabled</Badge>}
         {update && <Badge tone="neon" className="shrink-0" title={`Update available: ${update.latest}`}>Update</Badge>}
+        {linked && <Badge tone="neutral" className="shrink-0" title="Friends get a link to the creator's page instead of a copy">Link</Badge>}
         {isOutdated && (
           <Badge tone="amber" className="shrink-0" title={`Script mods older than the last game update (${formatDateShort(outdatedSince)}) often break`}>
             Outdated
