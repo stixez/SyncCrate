@@ -57,7 +57,9 @@ New to it? The **Guide** page in the app's sidebar walks through every feature.
 > Can't connect? On the **host** PC click **Fix Windows Firewall** (shown while hosting and in *Network Check*). It asks for admin permission once; SyncCrate itself never needs to run as administrator.
 
 > [!NOTE]
-> **macOS:** the app isn't notarized yet, so macOS may call it "damaged". Run `xattr -cr /Applications/SyncCrate.app` once, then open it normally.
+> **macOS:** the app isn't notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. If macOS says it's "damaged" instead, run `xattr -cr /Applications/SyncCrate.app` once, then open it normally.
+>
+> **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
 
 Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, macOS 11 Big Sur or newer) · Linux `.AppImage` / `.deb` / `.rpm`. The app updates itself.
 
