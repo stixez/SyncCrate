@@ -5,10 +5,12 @@
   <!-- The website moved to its own (private) repo and domain. GitHub Pages
        keeps serving this page from docs/ so old links (README badges, chat
        messages, search results) still land on the site. Remove docs/ and turn
-       off Pages once search engines show the new domain. -->
+       off Pages once search engines show the new domain.
+       No noindex: Google drops a noindex page before it has indexed the new
+       domain (SyncCrate vanished from results for "synccrate"). An instant
+       refresh plus canonical counts as a move and passes its standing on. -->
   <title>SyncCrate has moved</title>
   <link rel="canonical" href="https://synccrate.app/">
-  <meta name="robots" content="noindex">
   <meta http-equiv="refresh" content="0; url=https://synccrate.app/">
   <script>location.replace("https://synccrate.app/" + location.hash);</script>
 </head>
