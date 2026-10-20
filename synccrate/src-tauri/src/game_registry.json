@@ -1195,10 +1195,61 @@
           ],
           "file_type": "ShaderPack",
           "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "config",
+          "extensions": [],
+          "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "defaultconfigs",
+          "label": "Default Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "defaultconfigs",
+          "extensions": [],
+          "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "datapacks",
+          "label": "Global Data Packs",
+          "icon": "boxes",
+          "color": "text-amber-400",
+          "folder": "datapacks",
+          "extensions": [],
+          "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "kubejs",
+          "label": "KubeJS Scripts",
+          "icon": "sparkles",
+          "color": "text-violet-400",
+          "folder": "kubejs",
+          "extensions": [],
+          "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "scripts",
+          "label": "CraftTweaker Scripts",
+          "icon": "sparkles",
+          "color": "text-orange-400",
+          "folder": "scripts",
+          "extensions": [],
+          "file_type": "Config",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [
-        "jar"
+        "jar",
+        "zs"
       ]
     },
     {

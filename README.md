@@ -169,7 +169,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | Game | What syncs |
 |------|------------|
 | **Garry's Mod** | Addons, Maps, Saves |
-| **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs |
+| **Minecraft Java** | Mods, Worlds, Resource Packs, Shader Packs, Mod Configs, Default Configs, Global Data Packs, KubeJS Scripts, CraftTweaker Scripts |
 | **Space Engineers** | Mods, Worlds, Blueprints |
 | **Starbound** | Mods, Characters, Universe |
 | **Terraria** | Worlds, Players, tModLoader Mods, tModLoader Worlds, tModLoader Players, Resource Packs |
@@ -407,6 +407,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Updates from Modrinth and CurseForge**, only for the same loader and Minecraft version, with a **What's new** link for CurseForge files.
 - **Missing dependencies.** After a check, a mod whose required library (such as Fabric API) isn't installed says **Needs mod**, with a link to it.
 - **Version and loader warnings.** With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods is marked **Mismatch** ("Made for 1.19.2; most of your mods are for 1.20.1").
+- **Modpack folders sync too:** mod configs (`config`, `defaultconfigs`), global data packs (`datapacks`), KubeJS and CraftTweaker scripts (`kubejs`, `scripts`), so friends' recipes and settings match the host's. `options.txt` (keybinds, video, volume) and the Distant Horizons cache stay on each PC. Like mod jars, scripts wait for a manual sync when Stay in sync is on.
+- **CurseForge, Prism or Modrinth app modpacks** live in their own instance folder, not `.minecraft`: pick it in Settings.
 
 **World of Warcraft**
 - Addons show their names from their `.toc` files; addons and addon settings (`WTF`, never `Config.wtf`) sync separately.

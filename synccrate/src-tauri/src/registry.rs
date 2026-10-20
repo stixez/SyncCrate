@@ -730,6 +730,31 @@ mod tests {
         assert!(get("rimworld").steam_workshop_app_id.is_some(), "RimWorld mods are mostly Workshop");
     }
 
+    /// Modpacks need their configs and recipe scripts to match or servers
+    /// kick players (issue #4). `options.txt` (keybinds, video, volume) and
+    /// the Distant Horizons LOD cache stay personal.
+    #[test]
+    fn minecraft_syncs_modpack_folders_but_not_personal_settings() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        let mc = registry.games.iter().find(|g| g.id == "minecraft_java").expect("minecraft_java");
+        for path in [
+            "config/jei/jei-client.ini",
+            "config/create-common.toml",
+            "defaultconfigs/ftbchunks-world.snbt",
+            "datapacks/mypack.zip",
+            "kubejs/server_scripts/recipes.js",
+            "kubejs/assets/kubejs/textures/item/coin.png",
+            "scripts/recipes.zs",
+        ] {
+            assert!(path_accepted_by(&mc.content_types, path), "{path} should sync");
+        }
+        for path in ["options.txt", "optionsof.txt", "Distant_Horizons_server_data/play.example.net/DistantHorizons.sqlite", "logs/latest.log"] {
+            assert!(!path_accepted_by(&mc.content_types, path), "{path} should not sync");
+        }
+        assert!(mc.dangerous_script_extensions.iter().any(|e| e == "zs"), "CraftTweaker scripts run code");
+    }
+
     /// The game's own files in a mods folder never sync: syncing Bethesda's
     /// `Data` copied the base game, DLC and paid Creation Club content to
     /// friends (and KSP's paid DLC sits in `GameData`).
