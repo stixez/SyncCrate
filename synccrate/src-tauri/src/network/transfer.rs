@@ -2238,18 +2238,22 @@ pub async fn receive_file(
     dest_base: &str,
     req: ReceiveRequest<'_>,
 ) -> Result<bool, String> {
-    let connection = {
+    let (connection, cts) = {
         let app_state = state.lock().await;
-        app_state
+        let cts = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
+            .map(|g| g.content_types.clone())
+            .unwrap_or_default();
+        let conn = app_state
             .connections
             .get(peer_id)
             .map(|c| c.stream.clone())
-            .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?
+            .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?;
+        (conn, cts)
     };
 
     // Block dangerous file extensions from peers
     for p in [req.remote_path, req.local_path] {
-        if crate::utils::is_dangerous_extension(p) {
+        if crate::utils::is_dangerous_in(p, &cts) {
             return Err(format!("Blocked dangerous file type: {}", p));
         }
     }

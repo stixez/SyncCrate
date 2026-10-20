@@ -749,6 +749,24 @@ pub fn is_dangerous_extension(path: &str) -> bool {
     DANGEROUS_EXTENSIONS.contains(&ext.as_str())
 }
 
+/// `is_dangerous_extension`, except for an extension the content type
+/// holding `path` allows (`allow_blocked_extensions`, KubeJS `.js`). Blocked
+/// file names stay blocked everywhere.
+pub fn is_dangerous_in(path: &str, content_types: &[crate::registry::ContentType]) -> bool {
+    if !is_dangerous_extension(path) {
+        return false;
+    }
+    let p = std::path::Path::new(path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    let name = name.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(&name);
+    if DANGEROUS_FILE_NAMES.contains(&name) {
+        return true;
+    }
+    let ext = crate::commands::files::effective_extension(p);
+    !crate::sync::diff::content_type_for(content_types, path)
+        .is_some_and(|(ct, _)| ct.allow_blocked_extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
+}
+
 /// Windows can't create (or silently alters) these names: device names like
 /// `CON`/`NUL`/`COM1` (with any extension) and names ending in a dot or
 /// space (`evil.exe.` is stored as `evil.exe` by some APIs and literally by

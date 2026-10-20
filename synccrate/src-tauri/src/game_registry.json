@@ -1218,7 +1218,13 @@
             "distanthorizons.toml",
             "voicechat/voicechat-client.properties",
             "voicechat/username-cache.json",
-            "jei/world/*"
+            "jei/world/*",
+            "jei/jei-client.ini",
+            "*-client.toml",
+            "*/*-client.toml",
+            "sodium-extra-options.json",
+            "voicechat/voicechat-volumes.properties",
+            "reauth.toml"
           ],
           "syncable": true
         },
@@ -1250,9 +1256,13 @@
           "folder": "kubejs",
           "extensions": [],
           "file_type": "KubeJS",
+          "allow_blocked_extensions": [
+            "js"
+          ],
           "exclude_patterns": [
             "probe/*",
-            "exported/*"
+            "exported/*",
+            "config/client.properties"
           ],
           "syncable": true
         },

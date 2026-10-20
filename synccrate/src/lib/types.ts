@@ -697,6 +697,10 @@ export interface ContentTypeDefinition {
   color: string;
   folder: string;
   extensions: string[];
+  /** Extensions dropped files install here by when `extensions` is `[]`. */
+  install_extensions?: string[];
+  /** Blocklisted extensions friends may still receive here (KubeJS `.js`). */
+  allow_blocked_extensions?: string[];
   file_type: string;
   classify_by_extension?: Record<string, string>;
   syncable?: boolean;

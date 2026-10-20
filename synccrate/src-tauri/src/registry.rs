@@ -195,6 +195,12 @@ pub struct ContentType {
     /// dropped `.zip` must still land in `resourcepacks`, not be refused.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub install_extensions: Vec<String>,
+    /// Blocklisted extensions (`utils::DANGEROUS_EXTENSIONS`) a friend may
+    /// still receive inside this folder: KubeJS scripts are `.js`, which
+    /// Windows runs on double-click, so it's blocked everywhere else. A test
+    /// pins the only allowed use.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_blocked_extensions: Vec<String>,
     /// Default file_type string for files in this folder.
     pub file_type: String,
     /// Map specific extensions to different file_type values within this folder.
@@ -722,7 +728,7 @@ mod tests {
         // Extensions are compared lower-cased on every side.
         for g in &registry.games {
             for c in &g.content_types {
-                for e in &c.extensions {
+                for e in c.extensions.iter().chain(&c.install_extensions).chain(&c.allow_blocked_extensions) {
                     assert!(!e.starts_with('.'), "{}/{}: extension {e} without the dot", g.id, c.id);
                 }
             }
@@ -744,7 +750,7 @@ mod tests {
         let registry = load_registry();
         let mc = registry.games.iter().find(|g| g.id == "minecraft_java").expect("minecraft_java");
         for path in [
-            "config/jei/jei-client.ini",
+            "config/ftbquests/quests/chapters/intro.snbt",
             "config/create-common.toml",
             "defaultconfigs/ftbchunks-world.snbt",
             "datapacks/mypack.zip",
@@ -769,6 +775,14 @@ mod tests {
             "config/iris.properties",
             "config/voicechat/voicechat-client.properties",
             "config/jei/world/local/bookmarks.ini",
+            "config/jei/jei-client.ini",
+            "config/create-client.toml",
+            "config/somemod/somemod-client.toml",
+            "config/sodium-extra-options.json",
+            "config/voicechat/voicechat-volumes.properties",
+            "kubejs/config/client.properties",
+            // ReAuth keeps the player's Minecraft login here.
+            "config/reauth.toml",
             // Regenerated on every launch, so it would resync each time.
             "kubejs/probe/generated/globals.d.ts",
             "kubejs/exported/tags.json",
@@ -777,8 +791,18 @@ mod tests {
         ] {
             assert!(!path_accepted_by(&mc.content_types, path), "{path} should not sync");
         }
+        // `js` also drives the plan's "script files" warning, which reads only this list.
         for ext in ["js", "zs"] {
             assert!(mc.dangerous_script_extensions.iter().any(|e| e == ext), "{ext}: KubeJS/CraftTweaker scripts run code");
+        }
+        // `.js` is blocked from peers, except KubeJS scripts in `kubejs/`:
+        // the first version planned them and then dropped every one.
+        let info = |p: &str| crate::state::FileInfo { relative_path: p.into(), size: 10, hash: "a".repeat(64), modified: 0, file_type: "KubeJS".into() };
+        let receivable = |p: &str| crate::sync::diff::receivable(p, &info(p), &mc.content_types);
+        assert!(receivable("kubejs/server_scripts/recipes.js"));
+        assert!(receivable("kubejs/startup_scripts/items.js.disabled"));
+        for blocked in ["config/evil.js", "mods/evil.js", "kubejs/run.exe", "kubejs/desktop.ini", "kubejs/x.vbs"] {
+            assert!(!receivable(blocked), "{blocked} must stay blocked");
         }
         // The Content page groups tabs by file_type: a shared one listed every
         // folder's files under each of these tabs.
@@ -792,6 +816,19 @@ mod tests {
         unique.sort_unstable();
         unique.dedup();
         assert_eq!((new_types.len(), unique.len()), (5, 5), "{new_types:?}");
+    }
+
+    /// Each exception to the peer blocklist is a security decision: adding
+    /// one means changing this list on purpose.
+    #[test]
+    fn blocked_extension_exceptions_are_pinned() {
+        let registry = load_registry();
+        let used: Vec<(String, String, String)> = registry
+            .games
+            .iter()
+            .flat_map(|g| g.content_types.iter().flat_map(move |c| c.allow_blocked_extensions.iter().map(move |e| (g.id.clone(), c.id.clone(), e.to_lowercase()))))
+            .collect();
+        assert_eq!(used, vec![("minecraft_java".to_string(), "kubejs".to_string(), "js".to_string())]);
     }
 
     /// Preloader patchers (e.g. Lethal Company's HookGenPatcher) live in

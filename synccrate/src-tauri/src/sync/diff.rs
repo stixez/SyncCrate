@@ -157,16 +157,16 @@ pub fn drop_foreign(remote: &mut FileManifest, content_types: &[ContentType]) ->
 /// Whether this PC can receive a host file at all: no blocked types, names
 /// Windows can use, within the transfer limit (files over it are refused on
 /// arrival anyway, and requesting one used to wreck every later file).
-pub fn receivable(path: &str, info: &FileInfo) -> bool {
-    !crate::utils::is_dangerous_extension(path)
+pub fn receivable(path: &str, info: &FileInfo, content_types: &[ContentType]) -> bool {
+    !crate::utils::is_dangerous_in(path, content_types)
         && crate::utils::validate_relative(path).is_ok()
         && info.size <= crate::network::transfer::MAX_FILE_SIZE
 }
 
-pub fn drop_unreceivable(remote: &mut FileManifest) -> Vec<String> {
+pub fn drop_unreceivable(remote: &mut FileManifest, content_types: &[ContentType]) -> Vec<String> {
     let mut dropped = Vec::new();
     remote.files.retain(|path, info| {
-        let ok = receivable(path, info);
+        let ok = receivable(path, info, content_types);
         if !ok {
             dropped.push(path.clone());
         }
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn drop_foreign_drops_entries_whose_key_and_path_disagree() {
         let cts = vec![crate::registry::ContentType {
-            id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], install_extensions: vec![], file_type: "CustomContent".into(),
+            id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], install_extensions: vec![], allow_blocked_extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
             must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
         }];
@@ -596,6 +596,7 @@ mod tests {
             folder: folder.to_string(),
             extensions: exts.iter().map(|e| e.to_string()).collect(),
             install_extensions: vec![],
+            allow_blocked_extensions: vec![],
             file_type: "Mod".to_string(),
             classify_by_extension: Default::default(),
             icon: String::new(),
@@ -644,7 +645,7 @@ mod tests {
             make_file("Mods/trailing.", "h", 1),
             make_file("Data/Huge - Textures.ba2", "h", crate::network::transfer::MAX_FILE_SIZE + 1),
         ]);
-        let dropped = drop_unreceivable(&mut m);
+        let dropped = drop_unreceivable(&mut m, &[]);
         assert_eq!(m.files.keys().collect::<Vec<_>>(), vec!["Mods/ok.package"]);
         assert_eq!(dropped.len(), 5, "including the file over the transfer limit");
     }
