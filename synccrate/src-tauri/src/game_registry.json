@@ -1204,6 +1204,17 @@
           "folder": "config",
           "extensions": [],
           "file_type": "Config",
+          "exclude_patterns": [
+            "sodium-options.json",
+            "embeddium-options.json",
+            "rubidium-options.json",
+            "iris.properties",
+            "oculus.properties",
+            "distanthorizons.toml",
+            "voicechat/voicechat-client.properties",
+            "voicechat/username-cache.json",
+            "jei/world/*"
+          ],
           "syncable": true
         },
         {
@@ -1213,42 +1224,47 @@
           "color": "text-txt-dim",
           "folder": "defaultconfigs",
           "extensions": [],
-          "file_type": "Config",
+          "file_type": "DefaultConfig",
           "syncable": true
         },
         {
           "id": "datapacks",
           "label": "Global Data Packs",
           "icon": "boxes",
-          "color": "text-amber-400",
+          "color": "text-amber",
           "folder": "datapacks",
           "extensions": [],
-          "file_type": "Config",
+          "file_type": "DataPack",
           "syncable": true
         },
         {
           "id": "kubejs",
           "label": "KubeJS Scripts",
           "icon": "sparkles",
-          "color": "text-violet-400",
+          "color": "text-pink-400",
           "folder": "kubejs",
           "extensions": [],
-          "file_type": "Config",
+          "file_type": "KubeJS",
+          "exclude_patterns": [
+            "probe/*",
+            "exported/*"
+          ],
           "syncable": true
         },
         {
           "id": "scripts",
           "label": "CraftTweaker Scripts",
           "icon": "sparkles",
-          "color": "text-orange-400",
+          "color": "text-blue-400",
           "folder": "scripts",
           "extensions": [],
-          "file_type": "Config",
+          "file_type": "CraftTweaker",
           "syncable": true
         }
       ],
       "dangerous_script_extensions": [
         "jar",
+        "js",
         "zs"
       ]
     },

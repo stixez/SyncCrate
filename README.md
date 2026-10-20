@@ -407,7 +407,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Updates from Modrinth and CurseForge**, only for the same loader and Minecraft version, with a **What's new** link for CurseForge files.
 - **Missing dependencies.** After a check, a mod whose required library (such as Fabric API) isn't installed says **Needs mod**, with a link to it.
 - **Version and loader warnings.** With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods is marked **Mismatch** ("Made for 1.19.2; most of your mods are for 1.20.1").
-- **Modpack folders sync too:** mod configs (`config`, `defaultconfigs`), global data packs (`datapacks`), KubeJS and CraftTweaker scripts (`kubejs`, `scripts`), so friends' recipes and settings match the host's. `options.txt` (keybinds, video, volume) and the Distant Horizons cache stay on each PC. Like mod jars, scripts wait for a manual sync when Stay in sync is on.
+- **Modpack folders sync too:** mod configs (`config`, `defaultconfigs`), global data packs (`datapacks`), KubeJS and CraftTweaker scripts (`kubejs`, `scripts`), so friends' recipes and settings match the host's. `options.txt` (keybinds, video, volume), Sodium/Embeddium video settings, the chosen Iris/Oculus shader, Simple Voice Chat's audio devices, JEI per-world bookmarks and the Distant Horizons settings and cache stay on each PC. Mods re-save some of their configs when the game starts, so with Stay in sync on, those can come back as changes to review. Like mod jars, scripts wait for a manual sync when Stay in sync is on.
 - **CurseForge, Prism or Modrinth app modpacks** live in their own instance folder, not `.minecraft`: pick it in Settings.
 
 **World of Warcraft**

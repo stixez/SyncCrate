@@ -749,10 +749,37 @@ mod tests {
         ] {
             assert!(path_accepted_by(&mc.content_types, path), "{path} should sync");
         }
-        for path in ["options.txt", "optionsof.txt", "Distant_Horizons_server_data/play.example.net/DistantHorizons.sqlite", "logs/latest.log"] {
+        for path in [
+            "options.txt",
+            "optionsof.txt",
+            "Distant_Horizons_server_data/play.example.net/DistantHorizons.sqlite",
+            "logs/latest.log",
+            // Client-only: video settings, chosen shader, the host's mic device.
+            "config/sodium-options.json",
+            "config/iris.properties",
+            "config/voicechat/voicechat-client.properties",
+            "config/jei/world/local/bookmarks.ini",
+            // Regenerated on every launch, so it would resync each time.
+            "kubejs/probe/generated/globals.d.ts",
+            "kubejs/exported/tags.json",
+        ] {
             assert!(!path_accepted_by(&mc.content_types, path), "{path} should not sync");
         }
-        assert!(mc.dangerous_script_extensions.iter().any(|e| e == "zs"), "CraftTweaker scripts run code");
+        for ext in ["js", "zs"] {
+            assert!(mc.dangerous_script_extensions.iter().any(|e| e == ext), "{ext}: KubeJS/CraftTweaker scripts run code");
+        }
+        // The Content page groups tabs by file_type: a shared one listed every
+        // folder's files under each of these tabs.
+        let new_types: Vec<&str> = mc
+            .content_types
+            .iter()
+            .filter(|c| ["config", "defaultconfigs", "datapacks", "kubejs", "scripts"].contains(&c.id.as_str()))
+            .map(|c| c.file_type.as_str())
+            .collect();
+        let mut unique = new_types.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!((new_types.len(), unique.len()), (5, 5), "{new_types:?}");
     }
 
     /// The game's own files in a mods folder never sync: syncing Bethesda's
