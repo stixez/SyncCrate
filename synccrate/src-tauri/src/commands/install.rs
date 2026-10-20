@@ -51,8 +51,13 @@ fn numbered_name(stem: &str, counter: u32, ext: &str) -> String {
     }
 }
 
+fn is_shader_pack_zip(path: &Path) -> bool {
+    crate::mod_meta::open_bounded_zip(path, u32::MAX as u64)
+        .is_some_and(|zip| zip.file_names().any(|n| n.replace('\\', "/").to_lowercase().starts_with("shaders/")))
+}
+
 /// Content type a dropped file belongs to: the first type (registry order)
-/// listing its extension; otherwise the first type if it takes any extension
+/// listing its extension (or `install_extensions`); otherwise the first type if it takes any extension
 /// (`extensions: []`). Everything used to land in the first folder, so a
 /// dropped `.wld` world ended up in Terraria's mods folder.
 fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a ContentType, String> {
@@ -61,12 +66,17 @@ fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a 
     // can't be joined onto it; drops only install into the game folder.
     let usable = |ct: &ContentType| !ct.folder.contains('%') && !ct.folder.contains(':') && !ct.is_external();
     if !ext.is_empty() {
-        if let Some(ct) = def
+        let mut matching = def
             .content_types
             .iter()
-            .find(|ct| usable(ct) && ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
-        {
-            return Ok(ct);
+            .filter(|ct| usable(ct) && ct.extensions.iter().chain(&ct.install_extensions).any(|e| e.eq_ignore_ascii_case(&ext)));
+        if let Some(first) = matching.next() {
+            // Minecraft resource and shader packs are both `.zip`; only a
+            // shader pack has a top-level `shaders/` folder (what Iris reads).
+            if let Some(shader) = matching.find(|ct| ct.file_type == "ShaderPack").filter(|_| ext == "zip" && is_shader_pack_zip(source)) {
+                return Ok(shader);
+            }
+            return Ok(first);
         }
     }
     if let Some(first) = def.content_types.first().filter(|ct| ct.extensions.is_empty() && usable(ct)) {
@@ -435,6 +445,34 @@ mod tests {
             {"id": "saves", "label": "S", "folder": "%APPDATA%/7DaysToDie/Saves", "extensions": ["ttp"], "file_type": "Save"}
         ]));
         assert!(install_folder_for(&sdtd, Path::new("a.ttp")).is_err());
+
+        // Any-file types take drops by `install_extensions`, in registry order.
+        let mc = game(serde_json::json!([
+            {"id": "mods", "label": "M", "folder": "mods", "extensions": ["jar"], "file_type": "Mod"},
+            {"id": "saves", "label": "S", "folder": "saves", "extensions": [], "file_type": "Save"},
+            {"id": "rp", "label": "R", "folder": "resourcepacks", "extensions": [], "install_extensions": ["zip"], "file_type": "ResourcePack"},
+            {"id": "sp", "label": "S", "folder": "shaderpacks", "extensions": [], "install_extensions": ["zip"], "file_type": "ShaderPack"}
+        ]));
+        let m = |name: &str| install_folder_for(&mc, Path::new(name)).map(|c| c.id.clone());
+        assert_eq!(m("Faithful.ZIP").unwrap(), "rp");
+        assert_eq!(m("sodium.jar").unwrap(), "mods");
+        assert!(m("notes.txt").unwrap_err().contains(".jar, .zip"));
+
+        // A real shader pack zip goes to shaderpacks, a resource pack zip doesn't.
+        let base = crate::testutil::temp_dir("install-shader-zip");
+        let zip = |name: &str, entry: &str| {
+            use std::io::Write;
+            let p = base.join(name);
+            let mut z = zip::ZipWriter::new(std::fs::File::create(&p).unwrap());
+            z.start_file(entry, zip::write::SimpleFileOptions::default()).unwrap();
+            z.write_all(b"x").unwrap();
+            z.finish().unwrap();
+            p
+        };
+        let shader = zip("BSL_v8.2.zip", "shaders/final.fsh");
+        let resource = zip("Faithful.zip", "pack.mcmeta");
+        assert_eq!(install_folder_for(&mc, &shader).unwrap().id, "sp");
+        assert_eq!(install_folder_for(&mc, &resource).unwrap().id, "rp");
     }
 
     #[test]

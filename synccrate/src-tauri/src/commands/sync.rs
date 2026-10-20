@@ -252,7 +252,7 @@ fn build_plan(input: PlanInputs) -> SyncPlan {
     // host sends (hosts older than 0.5.6 don't say which game they share).
     let remote_total = remote.files.len();
     let skipped_foreign = diff::drop_foreign(&mut remote, &content_types);
-    let unreceivable = diff::drop_unreceivable(&mut remote);
+    let unreceivable = diff::drop_unreceivable(&mut remote, &content_types);
     // Saves outside the game folder (`ContentType::roots`) whose folder this
     // PC doesn't have yet: every download would fail.
     let homeless: Vec<String> = remote

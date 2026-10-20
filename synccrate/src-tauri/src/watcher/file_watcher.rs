@@ -26,8 +26,8 @@ pub struct WatchSpec {
     extensions: Option<HashSet<String>>,
     /// Per content folder (lowercase, `/`-separated): file names it ignores
     /// (ReShade.ini, ...). Merged across folders, TF2's `config.cfg` rule
-    /// hid `custom/**/config.cfg` changes too.
-    excluded: Vec<(String, HashSet<String>)>,
+    /// hid `custom/**/config.cfg` changes too. Plus its `exclude_patterns`.
+    excluded: Vec<(String, HashSet<String>, Vec<String>)>,
 }
 
 pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
@@ -51,14 +51,17 @@ pub fn watch_spec(base: &str, cts: &[ContentType]) -> WatchSpec {
             .chain(["disabled".to_string()])
             .collect()
     });
-    let mut excluded: Vec<(String, HashSet<String>)> = Vec::new();
+    let mut excluded: Vec<(String, HashSet<String>, Vec<String>)> = Vec::new();
     for ct in cts {
         let Some(dir) = crate::utils::ct_dir(base, ct) else { continue };
         let key = norm_path(&dir);
         let names = ct.exclude_files.iter().map(|n| n.to_lowercase());
-        match excluded.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, set)) => set.extend(names),
-            None => excluded.push((key, names.collect())),
+        match excluded.iter_mut().find(|(k, _, _)| *k == key) {
+            Some((_, set, patterns)) => {
+                set.extend(names);
+                patterns.extend(ct.exclude_patterns.iter().cloned());
+            }
+            None => excluded.push((key, names.collect(), ct.exclude_patterns.clone())),
         }
     }
     WatchSpec { folders, extensions, excluded }
@@ -79,9 +82,13 @@ impl WatchSpec {
         let folder = self
             .excluded
             .iter()
-            .filter(|(k, _)| p.starts_with(&format!("{}/", k.trim_end_matches('/'))))
-            .max_by_key(|(k, _)| k.len());
-        if folder.is_some_and(|(_, names)| names.contains(&name)) {
+            .filter(|(k, _, _)| p.starts_with(&format!("{}/", k.trim_end_matches('/'))))
+            .max_by_key(|(k, _, _)| k.len());
+        // Patterns too: KubeJS rewrites `probe/` and JEI its bookmarks while
+        // the game runs, and each write rescanned for files the scan drops.
+        if folder.is_some_and(|(k, names, patterns)| {
+            names.contains(&name) || crate::sync::diff::excluded_by_patterns(patterns, &p[k.trim_end_matches('/').len() + 1..])
+        }) {
             return false;
         }
         let Some(exts) = &self.extensions else { return true };
@@ -319,6 +326,26 @@ mod tests {
         assert!(spec.relevant(&dir.join("gone.ini")), "a deleted file");
         std::fs::create_dir_all(dir.join("v1.2")).unwrap();
         assert!(spec.relevant(&dir.join("v1.2")), "a folder, whatever its name");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn excluded_patterns_dont_trigger_a_rescan() {
+        let reg = crate::registry::load_registry();
+        let mc = crate::commands::files::get_game_def(&reg, "minecraft_java").unwrap();
+        let dir = crate::testutil::temp_dir("watch-patterns");
+        let spec = watch_spec(&dir.to_string_lossy(), &mc.content_types);
+        let file = |rel: &str| {
+            let p = dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"x").unwrap();
+            p
+        };
+        assert!(!spec.relevant(&file("kubejs/probe/generated/globals.d.ts")), "regenerated every launch");
+        assert!(!spec.relevant(&file("config/jei/world/local/bookmarks.ini")));
+        assert!(!spec.relevant(&file("shaderpacks/BSL.zip.txt")));
+        assert!(spec.relevant(&file("kubejs/server_scripts/recipes.js")));
+        assert!(spec.relevant(&file("config/create-common.toml")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

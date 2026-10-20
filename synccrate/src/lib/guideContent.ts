@@ -285,14 +285,16 @@ export const GUIDE: GuideGroup[] = [
       {
         id: "minecraft",
         title: "Minecraft tips",
-        summary: "Updates and warnings for your mods folder.",
+        summary: "Modpack folders, updates and warnings for your mods.",
         steps: [
+          "Modpack folders sync with the mods: **Mod Configs**, **Default Configs**, **Global Data Packs**, **KubeJS Scripts** and **CraftTweaker Scripts**, plus resource and shader packs as `.zip` files or folders. Each player's own settings stay on their PC: `options.txt`, video and shader choices, voice chat devices and logins.",
+          "A modpack from the CurseForge app, Prism or the Modrinth app lives in its own instance folder, not `.minecraft`. In **Settings**, click **Browse** next to Minecraft Java and choose the folder that holds `mods`: the instance folder itself for CurseForge and Modrinth, the `minecraft` (or `.minecraft`) folder inside it for Prism and MultiMC.",
           "Jars show their real name, version and icon from the Fabric, Quilt or Forge info inside them.",
           "**Check for updates** asks Modrinth and CurseForge, and only suggests files for the same loader and Minecraft version. **What's new** opens the new file's changelog page.",
           "After a check, a mod whose required library isn't in your mods folder says **Needs mod** (for example \"Needs Fabric API\"), with a link to it on CurseForge.",
           "With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods says **Mismatch**, such as \"A Forge mod; most of your mods are Fabric\".",
         ],
-        keywords: "minecraft fabric forge neoforge quilt jar modrinth curseforge dependency library version loader",
+        keywords: "minecraft fabric forge neoforge quilt jar modrinth curseforge dependency library version loader modpack config kubejs crafttweaker datapack resource pack shader prism instance",
         go: { label: "Open Content", page: "content" },
       },
       {

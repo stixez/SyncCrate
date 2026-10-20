@@ -190,6 +190,17 @@ pub struct ContentType {
     pub folder: String,
     #[serde(default)]
     pub extensions: Vec<String>,
+    /// Extensions a dropped file is installed here by when `extensions` is
+    /// `[]` (any file). Minecraft packs sync unpacked folders too, but a
+    /// dropped `.zip` must still land in `resourcepacks`, not be refused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub install_extensions: Vec<String>,
+    /// Blocklisted extensions (`utils::DANGEROUS_EXTENSIONS`) a friend may
+    /// still receive inside this folder: KubeJS scripts are `.js`, which
+    /// Windows runs on double-click, so it's blocked everywhere else. A test
+    /// pins the only allowed use.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_blocked_extensions: Vec<String>,
     /// Default file_type string for files in this folder.
     pub file_type: String,
     /// Map specific extensions to different file_type values within this folder.
@@ -717,7 +728,7 @@ mod tests {
         // Extensions are compared lower-cased on every side.
         for g in &registry.games {
             for c in &g.content_types {
-                for e in &c.extensions {
+                for e in c.extensions.iter().chain(&c.install_extensions).chain(&c.allow_blocked_extensions) {
                     assert!(!e.starts_with('.'), "{}/{}: extension {e} without the dot", g.id, c.id);
                 }
             }
@@ -728,6 +739,120 @@ mod tests {
             assert_eq!(g.steam_workshop_app_id, expected, "{}", g.id);
         }
         assert!(get("rimworld").steam_workshop_app_id.is_some(), "RimWorld mods are mostly Workshop");
+    }
+
+    /// Modpacks need their configs and recipe scripts to match or servers
+    /// kick players (issue #4). `options.txt` (keybinds, video, volume) and
+    /// the Distant Horizons LOD cache stay personal.
+    #[test]
+    fn minecraft_syncs_modpack_folders_but_not_personal_settings() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        let mc = registry.games.iter().find(|g| g.id == "minecraft_java").expect("minecraft_java");
+        for path in [
+            "config/ftbquests/quests/chapters/intro.snbt",
+            "config/create-common.toml",
+            "defaultconfigs/ftbchunks-world.snbt",
+            "datapacks/mypack.zip",
+            "kubejs/server_scripts/recipes.js",
+            "kubejs/assets/kubejs/textures/item/coin.png",
+            "scripts/recipes.zs",
+            // Unpacked packs are folders, not zips.
+            "resourcepacks/Faithful/pack.mcmeta",
+            "resourcepacks/Faithful/assets/minecraft/textures/block/stone.png",
+            "shaderpacks/BSL/shaders/final.fsh",
+            "shaderpacks/BSL.zip",
+        ] {
+            assert!(path_accepted_by(&mc.content_types, path), "{path} should sync");
+        }
+        for path in [
+            "options.txt",
+            "optionsof.txt",
+            "Distant_Horizons_server_data/play.example.net/DistantHorizons.sqlite",
+            "logs/latest.log",
+            // Client-only: video settings, chosen shader, the host's mic device.
+            "config/sodium-options.json",
+            "config/iris.properties",
+            "config/voicechat/voicechat-client.properties",
+            "config/jei/world/local/bookmarks.ini",
+            "config/jei/jei-client.ini",
+            "config/create-client.toml",
+            "config/somemod/somemod-client.toml",
+            "config/sodium-extra-options.json",
+            "config/xaerominimap.txt",
+            "config/voicechat/voicechat-volumes.properties",
+            "kubejs/config/client.properties",
+            // ReAuth keeps the player's Minecraft login here.
+            "config/reauth.toml",
+            // Regenerated on every launch, so it would resync each time.
+            "kubejs/probe/generated/globals.d.ts",
+            "kubejs/exported/tags.json",
+            // Iris keeps each player's options for a shader next to it.
+            "shaderpacks/BSL.zip.txt",
+        ] {
+            assert!(!path_accepted_by(&mc.content_types, path), "{path} should not sync");
+        }
+        // `js` also drives the plan's "script files" warning, which reads only this list.
+        for ext in ["js", "zs"] {
+            assert!(mc.dangerous_script_extensions.iter().any(|e| e == ext), "{ext}: KubeJS/CraftTweaker scripts run code");
+        }
+        // `.js` is blocked from peers, except KubeJS scripts in `kubejs/`:
+        // the first version planned them and then dropped every one.
+        let info = |p: &str| crate::state::FileInfo { relative_path: p.into(), size: 10, hash: "a".repeat(64), modified: 0, file_type: "KubeJS".into() };
+        let receivable = |p: &str| crate::sync::diff::receivable(p, &info(p), &mc.content_types);
+        assert!(receivable("kubejs/server_scripts/recipes.js"));
+        assert!(receivable("kubejs/startup_scripts/items.js.disabled"));
+        for blocked in ["config/evil.js", "mods/evil.js", "kubejs/run.exe", "kubejs/desktop.ini", "kubejs/x.vbs"] {
+            assert!(!receivable(blocked), "{blocked} must stay blocked");
+        }
+        // The Content page groups tabs by file_type: a shared one listed every
+        // folder's files under each of these tabs.
+        let new_types: Vec<&str> = mc
+            .content_types
+            .iter()
+            .filter(|c| ["config", "defaultconfigs", "datapacks", "kubejs", "scripts"].contains(&c.id.as_str()))
+            .map(|c| c.file_type.as_str())
+            .collect();
+        let mut unique = new_types.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!((new_types.len(), unique.len()), (5, 5), "{new_types:?}");
+    }
+
+    /// Each exception to the peer blocklist is a security decision: adding
+    /// one means changing this list on purpose.
+    #[test]
+    fn blocked_extension_exceptions_are_pinned() {
+        let registry = load_registry();
+        let used: Vec<(String, String, String)> = registry
+            .games
+            .iter()
+            .flat_map(|g| g.content_types.iter().flat_map(move |c| c.allow_blocked_extensions.iter().map(move |e| (g.id.clone(), c.id.clone(), e.to_lowercase()))))
+            .collect();
+        assert_eq!(used, vec![("minecraft_java".to_string(), "kubejs".to_string(), "js".to_string())]);
+    }
+
+    /// Preloader patchers (e.g. Lethal Company's HookGenPatcher) live in
+    /// `BepInEx/patchers`: without them a friend got the plugins that need
+    /// them, which then failed to load.
+    #[test]
+    fn bepinex_games_sync_patchers_and_configs() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        let bepinex: Vec<_> = registry
+            .games
+            .iter()
+            .filter(|g| g.content_types.iter().any(|c| c.folder == "BepInEx/plugins"))
+            .collect();
+        assert!(bepinex.len() >= 12, "only {} BepInEx games", bepinex.len());
+        for g in bepinex {
+            for path in ["BepInEx/patchers/HookGenPatcher/HookGenPatcher.dll", "BepInEx/config/com.example.mod.cfg"] {
+                assert!(path_accepted_by(&g.content_types, path), "{}: {path}", g.id);
+            }
+            assert!(g.dangerous_script_extensions.iter().any(|e| e == "dll"), "{}: patchers are code", g.id);
+        }
+        let valheim = registry.games.iter().find(|g| g.id == "valheim").expect("valheim");
+        assert!(path_accepted_by(&valheim.content_types, "BepInEx/config/EpicLoot/loottables.yml"));
     }
 
     /// The game's own files in a mods folder never sync: syncing Bethesda's
