@@ -573,6 +573,7 @@ mod tests {
             label: id.to_string(),
             folder: folder.to_string(),
             extensions: Vec::new(),
+            install_extensions: Vec::new(),
             file_type: file_type.to_string(),
             classify_by_extension: classify
                 .iter()

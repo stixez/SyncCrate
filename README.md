@@ -156,10 +156,10 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | **Don't Starve Together** | Mods |
 | **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
-| **Subnautica** | Plugins (BepInEx), Save Files |
+| **Subnautica** | Plugins (BepInEx), Save Files, Mod Configs, Patchers |
 | **The Long Dark** | Mods (MelonLoader) |
-| **V Rising** | Plugins (BepInEx), Mod Configs |
-| **Valheim** | Plugins (BepInEx), Mod Configs, Worlds |
+| **V Rising** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Valheim** | Plugins (BepInEx), Mod Configs, Worlds, Patchers |
 
 </details>
 
@@ -182,7 +182,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 | Game | What syncs |
 |------|------------|
-| **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs |
+| **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs, Patchers |
 | **Factorio** | Mods, Save Files, Scenarios |
 | **Satisfactory** | Mods (SMM) |
 
@@ -327,9 +327,9 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 | Game | What syncs |
 |------|------------|
-| **Content Warning** | Plugins (BepInEx), Mod Configs |
-| **Lethal Company** | Plugins (BepInEx), Mod Configs |
-| **R.E.P.O.** | Plugins (BepInEx), Mod Configs |
+| **Content Warning** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Lethal Company** | Plugins (BepInEx), Mod Configs, Patchers |
+| **R.E.P.O.** | Plugins (BepInEx), Mod Configs, Patchers |
 
 </details>
 
@@ -339,9 +339,9 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 | Game | What syncs |
 |------|------------|
 | **Balatro** | Mods (Steamodded/Lovely), Save Profile 1, Save Profile 2, Save Profile 3 |
-| **Cult of the Lamb** | Plugins (BepInEx), Mod Configs |
+| **Cult of the Lamb** | Plugins (BepInEx), Mod Configs, Patchers |
 | **Noita** | Mods |
-| **Risk of Rain 2** | Plugins (BepInEx), Mod Configs |
+| **Risk of Rain 2** | Plugins (BepInEx), Mod Configs, Patchers |
 | **Slay the Spire** | Mods, Save Files, Preferences & Profiles |
 
 </details>
@@ -366,7 +366,7 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 |------|------------|
 | **Celeste** | Mods (Everest), Save Files |
 | **Hollow Knight** | Mods |
-| **Hollow Knight: Silksong** | Plugins (BepInEx), Mod Configs |
+| **Hollow Knight: Silksong** | Plugins (BepInEx), Mod Configs, Patchers |
 
 </details>
 
@@ -375,8 +375,8 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 
 | Game | What syncs |
 |------|------------|
-| **Among Us** | Plugins (BepInEx), Mod Configs |
-| **Peak** | Plugins (BepInEx), Mod Configs |
+| **Among Us** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Peak** | Plugins (BepInEx), Mod Configs, Patchers |
 | **Tabletop Simulator** | Save Files, Workshop Mods |
 
 </details>
@@ -408,12 +408,15 @@ Downloads: Windows `.exe` / `.msi` · macOS `.dmg` (Apple Silicon and Intel, mac
 - **Missing dependencies.** After a check, a mod whose required library (such as Fabric API) isn't installed says **Needs mod**, with a link to it.
 - **Version and loader warnings.** With three or more mods found on CurseForge, a jar made for another Minecraft version or loader than most of your mods is marked **Mismatch** ("Made for 1.19.2; most of your mods are for 1.20.1").
 - **Modpack folders sync too:** mod configs (`config`, `defaultconfigs`), global data packs (`datapacks`), KubeJS and CraftTweaker scripts (`kubejs`, `scripts`), so friends' recipes and settings match the host's. `options.txt` (keybinds, video, volume), Sodium/Embeddium video settings, the chosen Iris/Oculus shader, Simple Voice Chat's audio devices, JEI per-world bookmarks and the Distant Horizons settings and cache stay on each PC. Mods re-save some of their configs when the game starts, so with Stay in sync on, those can come back as changes to review. Like mod jars, scripts wait for a manual sync when Stay in sync is on.
+- **Unpacked resource and shader packs** (folders, not `.zip`) sync too. Iris's per-shader options (`shaderpacks/*.txt`) stay on each PC.
 - **CurseForge, Prism or Modrinth app modpacks** live in their own instance folder, not `.minecraft`: pick it in Settings.
 
 **World of Warcraft**
 - Addons show their names from their `.toc` files; addons and addon settings (`WTF`, never `Config.wtf`) sync separately.
 - **Check for updates** finds Retail, Classic, Classic Era and WoW Forever addons on CurseForge by folder (names, authors, pictures) and only suggests updates built for your client.
 - **WoW Forever** is supported. Its install folder will be confirmed when it launches; until then, if it isn't found automatically, choose the folder that holds `Interface` yourself.
+
+**BepInEx games** (Valheim, Lethal Company, R.E.P.O., PEAK, Risk of Rain 2, …): plugins, mod configs and preloader patchers (`BepInEx/patchers`) sync, so mods that need a patcher (like HookGenPatcher) load on friends' PCs too. Valheim configs include `.json` and `.yml` files.
 
 **Bethesda games, KSP and Mount & Blade:** only mods sync. The game's own files in `Data`, `GameData` or `Modules` (the base game, DLC and Creation Club content) are skipped, so a sync never copies paid content to someone who doesn't own it or replaces base files across game versions. Paid Creations that don't follow Bethesda's `cc…` naming can't be told apart from mods yet. The load order (`plugins.txt`) is outside the game folder and isn't synced either.
 
@@ -514,7 +517,7 @@ Games live in one [JSON file](synccrate/src-tauri/src/game_registry.json): detec
 | `steam_library` | `{"type": "steam_library", "folders": ["Fallout 4/Data"]}` (checked in every Steam library) |
 | `windows_registry` | `{"type": "windows_registry", "keys": ["HKLM\\SOFTWARE\\Maxis\\The Sims 4"], "value": "Install Dir", "subpath": "Game\\Bin"}` |
 
-Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`). Content type folders must not overlap (one nested in another), which a test checks. If the game keeps its own files next to the mods (Bethesda's `Data`, KSP's `GameData`), add `"exclude_patterns"` to the content type so they never sync: `*` and `?` wildcards, a file name without `/` (`"cc???sse*"`) or a path inside the folder with one (`"SquadExpansion/*"`). Set `"disable_method": "rename"` if the game loads mods from subfolders (disabling then renames to `.disabled`), `"none"` if mods are whole folders that can't be toggled per file, and `"duplicate_finder": true` only if identical files in different mod folders are genuinely a problem for the game.
+Add `"require_any": ["SomeMarker.ini"]` next to `strategies` to only match folders containing one of those files or folders (used for ReShade/GShade). Each content type needs a real subfolder, and its `icon` must exist in `ICON_MAP` in `synccrate/src/components/Sidebar.tsx`. Add `"steam_app_id"` (the number in the game's Steam store URL) so the game gets box art. For games not on Steam, add `"art_urls": {"hero": "https://…"}` pointing to official publisher-hosted key art. Tag the game with `"genres"` from the list in `registry.rs` (`GENRES`). "Detected" also needs install evidence: the Steam app id, or a Windows uninstall / Epic / GOG entry matching the game's `label`. If the installed name differs, add `"install_names": ["World of Warcraft"]`. For games found neither way, add `"install_markers"`: a file relative to the game folder (`"Wow.exe"`), an absolute path (`"%ProgramFiles(x86)%/Game/Game.exe"`) or a registry directory (`"HKLM\\SOFTWARE\\Maxis\\The Sims 4::Install Dir"`). Content type folders must not overlap (one nested in another), which a test checks. A content type with `"extensions": []` takes any file; add `"install_extensions": ["zip"]` so dropped files of that kind still install into it. If the game keeps its own files next to the mods (Bethesda's `Data`, KSP's `GameData`), add `"exclude_patterns"` to the content type so they never sync: `*` and `?` wildcards, a file name without `/` (`"cc???sse*"`) or a path inside the folder with one (`"SquadExpansion/*"`). Set `"disable_method": "rename"` if the game loads mods from subfolders (disabling then renames to `.disabled`), `"none"` if mods are whole folders that can't be toggled per file, and `"duplicate_finder": true` only if identical files in different mod folders are genuinely a problem for the game.
 
 ### Building from Source
 

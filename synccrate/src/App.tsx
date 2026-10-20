@@ -193,8 +193,8 @@ function App() {
           content_types: [
             { id: "mods", label: "Mods", icon: "package", color: "text-green-400", folder: "mods", extensions: ["jar"], file_type: "Mod", syncable: true },
             { id: "saves", label: "Worlds", icon: "globe", color: "text-status-green", folder: "saves", extensions: [], file_type: "Save", syncable: true },
-            { id: "resourcepacks", label: "Resource Packs", icon: "palette", color: "text-purple-400", folder: "resourcepacks", extensions: ["zip"], file_type: "ResourcePack", syncable: true },
-            { id: "shaderpacks", label: "Shader Packs", icon: "sun", color: "text-sky-400", folder: "shaderpacks", extensions: ["zip"], file_type: "ShaderPack", syncable: true },
+            { id: "resourcepacks", label: "Resource Packs", icon: "palette", color: "text-purple-400", folder: "resourcepacks", extensions: [], install_extensions: ["zip"], file_type: "ResourcePack", syncable: true },
+            { id: "shaderpacks", label: "Shader Packs", icon: "sun", color: "text-sky-400", folder: "shaderpacks", extensions: [], install_extensions: ["zip"], exclude_patterns: ["*.txt"], file_type: "ShaderPack", syncable: true },
             { id: "config", label: "Mod Configs", icon: "settings", color: "text-txt-dim", folder: "config", extensions: [], file_type: "Config", syncable: true },
             { id: "defaultconfigs", label: "Default Configs", icon: "settings", color: "text-txt-dim", folder: "defaultconfigs", extensions: [], file_type: "DefaultConfig", syncable: true },
             { id: "datapacks", label: "Global Data Packs", icon: "boxes", color: "text-amber", folder: "datapacks", extensions: [], file_type: "DataPack", syncable: true },

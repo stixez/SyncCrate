@@ -111,7 +111,7 @@ mod tests {
 
     fn ct(id: &str, folder: &str) -> ContentType {
         ContentType {
-            id: id.into(), label: id.into(), folder: folder.into(), extensions: vec![], file_type: "CustomContent".into(),
+            id: id.into(), label: id.into(), folder: folder.into(), extensions: vec![], install_extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
             must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
         }

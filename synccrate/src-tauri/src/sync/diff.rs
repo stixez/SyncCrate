@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn drop_foreign_drops_entries_whose_key_and_path_disagree() {
         let cts = vec![crate::registry::ContentType {
-            id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], file_type: "CustomContent".into(),
+            id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], install_extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
             must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
         }];
@@ -595,6 +595,7 @@ mod tests {
             label: folder.to_string(),
             folder: folder.to_string(),
             extensions: exts.iter().map(|e| e.to_string()).collect(),
+            install_extensions: vec![],
             file_type: "Mod".to_string(),
             classify_by_extension: Default::default(),
             icon: String::new(),

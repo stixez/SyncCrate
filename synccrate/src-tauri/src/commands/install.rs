@@ -52,7 +52,7 @@ fn numbered_name(stem: &str, counter: u32, ext: &str) -> String {
 }
 
 /// Content type a dropped file belongs to: the first type (registry order)
-/// listing its extension; otherwise the first type if it takes any extension
+/// listing its extension (or `install_extensions`); otherwise the first type if it takes any extension
 /// (`extensions: []`). Everything used to land in the first folder, so a
 /// dropped `.wld` world ended up in Terraria's mods folder.
 fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a ContentType, String> {
@@ -64,7 +64,7 @@ fn install_folder_for<'a>(def: &'a GameDefinition, source: &Path) -> Result<&'a 
         if let Some(ct) = def
             .content_types
             .iter()
-            .find(|ct| usable(ct) && ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
+            .find(|ct| usable(ct) && ct.extensions.iter().chain(&ct.install_extensions).any(|e| e.eq_ignore_ascii_case(&ext)))
         {
             return Ok(ct);
         }
@@ -435,6 +435,18 @@ mod tests {
             {"id": "saves", "label": "S", "folder": "%APPDATA%/7DaysToDie/Saves", "extensions": ["ttp"], "file_type": "Save"}
         ]));
         assert!(install_folder_for(&sdtd, Path::new("a.ttp")).is_err());
+
+        // Any-file types take drops by `install_extensions`, in registry order.
+        let mc = game(serde_json::json!([
+            {"id": "mods", "label": "M", "folder": "mods", "extensions": ["jar"], "file_type": "Mod"},
+            {"id": "saves", "label": "S", "folder": "saves", "extensions": [], "file_type": "Save"},
+            {"id": "rp", "label": "R", "folder": "resourcepacks", "extensions": [], "install_extensions": ["zip"], "file_type": "ResourcePack"},
+            {"id": "sp", "label": "S", "folder": "shaderpacks", "extensions": [], "install_extensions": ["zip"], "file_type": "ShaderPack"}
+        ]));
+        let m = |name: &str| install_folder_for(&mc, Path::new(name)).map(|c| c.id.clone());
+        assert_eq!(m("Faithful.ZIP").unwrap(), "rp");
+        assert_eq!(m("sodium.jar").unwrap(), "mods");
+        assert!(m("notes.txt").unwrap_err().contains(".jar, .zip"));
     }
 
     #[test]

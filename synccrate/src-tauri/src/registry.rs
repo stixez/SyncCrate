@@ -190,6 +190,11 @@ pub struct ContentType {
     pub folder: String,
     #[serde(default)]
     pub extensions: Vec<String>,
+    /// Extensions a dropped file is installed here by when `extensions` is
+    /// `[]` (any file). Minecraft packs sync unpacked folders too, but a
+    /// dropped `.zip` must still land in `resourcepacks`, not be refused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub install_extensions: Vec<String>,
     /// Default file_type string for files in this folder.
     pub file_type: String,
     /// Map specific extensions to different file_type values within this folder.
@@ -746,6 +751,11 @@ mod tests {
             "kubejs/server_scripts/recipes.js",
             "kubejs/assets/kubejs/textures/item/coin.png",
             "scripts/recipes.zs",
+            // Unpacked packs are folders, not zips.
+            "resourcepacks/Faithful/pack.mcmeta",
+            "resourcepacks/Faithful/assets/minecraft/textures/block/stone.png",
+            "shaderpacks/BSL/shaders/final.fsh",
+            "shaderpacks/BSL.zip",
         ] {
             assert!(path_accepted_by(&mc.content_types, path), "{path} should sync");
         }
@@ -762,6 +772,8 @@ mod tests {
             // Regenerated on every launch, so it would resync each time.
             "kubejs/probe/generated/globals.d.ts",
             "kubejs/exported/tags.json",
+            // Iris keeps each player's options for a shader next to it.
+            "shaderpacks/BSL.zip.txt",
         ] {
             assert!(!path_accepted_by(&mc.content_types, path), "{path} should not sync");
         }
@@ -780,6 +792,29 @@ mod tests {
         unique.sort_unstable();
         unique.dedup();
         assert_eq!((new_types.len(), unique.len()), (5, 5), "{new_types:?}");
+    }
+
+    /// Preloader patchers (e.g. Lethal Company's HookGenPatcher) live in
+    /// `BepInEx/patchers`: without them a friend got the plugins that need
+    /// them, which then failed to load.
+    #[test]
+    fn bepinex_games_sync_patchers_and_configs() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        let bepinex: Vec<_> = registry
+            .games
+            .iter()
+            .filter(|g| g.content_types.iter().any(|c| c.folder == "BepInEx/plugins"))
+            .collect();
+        assert!(bepinex.len() >= 12, "only {} BepInEx games", bepinex.len());
+        for g in bepinex {
+            for path in ["BepInEx/patchers/HookGenPatcher/HookGenPatcher.dll", "BepInEx/config/com.example.mod.cfg"] {
+                assert!(path_accepted_by(&g.content_types, path), "{}: {path}", g.id);
+            }
+            assert!(g.dangerous_script_extensions.iter().any(|e| e == "dll"), "{}: patchers are code", g.id);
+        }
+        let valheim = registry.games.iter().find(|g| g.id == "valheim").expect("valheim");
+        assert!(path_accepted_by(&valheim.content_types, "BepInEx/config/EpicLoot/loottables.yml"));
     }
 
     /// The game's own files in a mods folder never sync: syncing Bethesda's

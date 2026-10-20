@@ -360,7 +360,7 @@ pub fn detect_game_path_from_registry(game_id: &str, registry: &GameRegistry) ->
 /// Every extension listed by any of the game's content types (for messages).
 pub fn valid_extensions_for_game(game_def: &GameDefinition) -> Vec<String> {
     let mut exts: Vec<String> = Vec::new();
-    for e in game_def.content_types.iter().flat_map(|ct| ct.extensions.iter()) {
+    for e in game_def.content_types.iter().flat_map(|ct| ct.extensions.iter().chain(&ct.install_extensions)) {
         let e = e.to_lowercase();
         if !exts.contains(&e) {
             exts.push(e);

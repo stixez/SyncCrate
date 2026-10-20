@@ -1178,7 +1178,8 @@
           "icon": "palette",
           "color": "text-purple-400",
           "folder": "resourcepacks",
-          "extensions": [
+          "extensions": [],
+          "install_extensions": [
             "zip"
           ],
           "file_type": "ResourcePack",
@@ -1190,8 +1191,12 @@
           "icon": "sun",
           "color": "text-sky-400",
           "folder": "shaderpacks",
-          "extensions": [
+          "extensions": [],
+          "install_extensions": [
             "zip"
+          ],
+          "exclude_patterns": [
+            "*.txt"
           ],
           "file_type": "ShaderPack",
           "syncable": true
@@ -1531,7 +1536,7 @@
           "icon": "settings",
           "color": "text-status-green",
           "folder": "BepInEx/config",
-          "extensions": ["cfg"],
+          "extensions": ["cfg", "json", "yml", "yaml"],
           "file_type": "Config",
           "syncable": true
         },
@@ -1547,6 +1552,16 @@
           "recursive": false,
           "exclude_patterns": ["*_backup_*"],
           "save_unit_depth": 0
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -3080,6 +3095,29 @@
           "folder": "SNAppData/SavedGames",
           "extensions": [],
           "file_type": "Save",
+          "syncable": true
+        },
+        {
+          "id": "config",
+          "label": "Mod Configs",
+          "icon": "settings",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/config",
+          "extensions": [
+            "cfg",
+            "json"
+          ],
+          "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
@@ -5333,6 +5371,16 @@
           "extensions": ["cfg", "json"],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -5389,6 +5437,16 @@
           "folder": "BepInEx/config",
           "extensions": ["cfg", "json"],
           "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
@@ -5793,6 +5851,16 @@
           "folder": "BepInEx/config",
           "extensions": ["cfg", "json"],
           "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
@@ -6334,6 +6402,16 @@
           "extensions": ["cfg", "json"],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -6391,6 +6469,16 @@
           "extensions": ["cfg", "json"],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -6447,6 +6535,16 @@
           "folder": "BepInEx/config",
           "extensions": ["cfg", "json"],
           "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
@@ -7524,6 +7622,16 @@
           ],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [
@@ -7601,6 +7709,16 @@
             "json"
           ],
           "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
@@ -8469,6 +8587,16 @@
           ],
           "file_type": "Config",
           "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [
@@ -8559,6 +8687,16 @@
             "json"
           ],
           "file_type": "Config",
+          "syncable": true
+        },
+        {
+          "id": "patchers",
+          "label": "Patchers",
+          "icon": "package",
+          "color": "text-txt-dim",
+          "folder": "BepInEx/patchers",
+          "extensions": [],
+          "file_type": "Patcher",
           "syncable": true
         }
       ],
