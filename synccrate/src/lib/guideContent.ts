@@ -288,7 +288,7 @@ export const GUIDE: GuideGroup[] = [
         summary: "Modpack folders, updates and warnings for your mods.",
         steps: [
           "Modpack folders sync with the mods: **Mod Configs**, **Default Configs**, **Global Data Packs**, **KubeJS Scripts** and **CraftTweaker Scripts**, plus resource and shader packs as `.zip` files or folders. Each player's own settings stay on their PC: `options.txt`, video and shader choices, voice chat devices and logins.",
-          "A modpack from the CurseForge app, Prism or the Modrinth app lives in its own instance folder, not `.minecraft`. In **Settings**, click **Browse** next to Minecraft Java and choose that folder.",
+          "A modpack from the CurseForge app, Prism or the Modrinth app lives in its own instance folder, not `.minecraft`. In **Settings**, click **Browse** next to Minecraft Java and choose the folder that holds `mods`: the instance folder itself for CurseForge and Modrinth, the `minecraft` (or `.minecraft`) folder inside it for Prism and MultiMC.",
           "Jars show their real name, version and icon from the Fabric, Quilt or Forge info inside them.",
           "**Check for updates** asks Modrinth and CurseForge, and only suggests files for the same loader and Minecraft version. **What's new** opens the new file's changelog page.",
           "After a check, a mod whose required library isn't in your mods folder says **Needs mod** (for example \"Needs Fabric API\"), with a link to it on CurseForge.",

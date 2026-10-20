@@ -735,36 +735,36 @@ const DANGEROUS_EXTENSIONS: &[&str] = &[
 /// Whole file names blocked the same way (Explorer reads them on open).
 const DANGEROUS_FILE_NAMES: &[&str] = &["desktop.ini", "autorun.inf"];
 
-/// Returns true if the file extension is on the blocklist of dangerous executables.
-/// Sees through a `.disabled` suffix: `evil.exe.disabled` is one rename away
-/// from running, so it's blocked like `evil.exe`.
-pub fn is_dangerous_extension(path: &str) -> bool {
+/// Why a path is on the blocklist: `Some(None)` for a blocked file name,
+/// `Some(Some(ext))` for a blocked extension, `None` if it isn't. Sees
+/// through a `.disabled` suffix: `evil.exe.disabled` is one rename away from
+/// running, so it's blocked like `evil.exe`.
+fn blocked_reason(path: &str) -> Option<Option<String>> {
     let p = std::path::Path::new(path);
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
     let name = name.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(&name);
     if DANGEROUS_FILE_NAMES.contains(&name) {
-        return true;
+        return Some(None);
     }
     let ext = crate::commands::files::effective_extension(p);
-    DANGEROUS_EXTENSIONS.contains(&ext.as_str())
+    DANGEROUS_EXTENSIONS.contains(&ext.as_str()).then_some(Some(ext))
+}
+
+/// Returns true if the file extension is on the blocklist of dangerous executables.
+pub fn is_dangerous_extension(path: &str) -> bool {
+    blocked_reason(path).is_some()
 }
 
 /// `is_dangerous_extension`, except for an extension the content type
 /// holding `path` allows (`allow_blocked_extensions`, KubeJS `.js`). Blocked
 /// file names stay blocked everywhere.
 pub fn is_dangerous_in(path: &str, content_types: &[crate::registry::ContentType]) -> bool {
-    if !is_dangerous_extension(path) {
-        return false;
+    match blocked_reason(path) {
+        None => false,
+        Some(None) => true,
+        Some(Some(ext)) => !crate::sync::diff::content_type_for(content_types, path)
+            .is_some_and(|(ct, _)| ct.allow_blocked_extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext))),
     }
-    let p = std::path::Path::new(path);
-    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
-    let name = name.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(&name);
-    if DANGEROUS_FILE_NAMES.contains(&name) {
-        return true;
-    }
-    let ext = crate::commands::files::effective_extension(p);
-    !crate::sync::diff::content_type_for(content_types, path)
-        .is_some_and(|(ct, _)| ct.allow_blocked_extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
 }
 
 /// Windows can't create (or silently alters) these names: device names like

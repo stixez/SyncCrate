@@ -779,6 +779,7 @@ mod tests {
             "config/create-client.toml",
             "config/somemod/somemod-client.toml",
             "config/sodium-extra-options.json",
+            "config/xaerominimap.txt",
             "config/voicechat/voicechat-volumes.properties",
             "kubejs/config/client.properties",
             // ReAuth keeps the player's Minecraft login here.

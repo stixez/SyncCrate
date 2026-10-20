@@ -2238,25 +2238,26 @@ pub async fn receive_file(
     dest_base: &str,
     req: ReceiveRequest<'_>,
 ) -> Result<bool, String> {
-    let (connection, cts) = {
+    let connection = {
         let app_state = state.lock().await;
-        let cts = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
-            .map(|g| g.content_types.clone())
-            .unwrap_or_default();
-        let conn = app_state
+        // Content types only matter for a blocklisted type (KubeJS `.js`):
+        // cloning them for every file of a big sync held the lock for nothing.
+        for p in [req.remote_path, req.local_path] {
+            if crate::utils::is_dangerous_extension(p) {
+                let cts = crate::commands::files::get_game_def(&app_state.game_registry, &app_state.active_game)
+                    .map(|g| g.content_types.as_slice())
+                    .unwrap_or_default();
+                if crate::utils::is_dangerous_in(p, cts) {
+                    return Err(format!("Blocked dangerous file type: {}", p));
+                }
+            }
+        }
+        app_state
             .connections
             .get(peer_id)
             .map(|c| c.stream.clone())
-            .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?;
-        (conn, cts)
+            .ok_or_else(|| format!("No connection for peer '{}'", peer_id))?
     };
-
-    // Block dangerous file extensions from peers
-    for p in [req.remote_path, req.local_path] {
-        if crate::utils::is_dangerous_in(p, &cts) {
-            return Err(format!("Blocked dangerous file type: {}", p));
-        }
-    }
 
     // Validate path stays within base directory before writing
     let mut dest_path = crate::utils::safe_join(dest_base, req.local_path)

@@ -1056,7 +1056,8 @@ export default function GameDashboard({ gameId }: Props) {
         <section className="space-y-3" aria-label="Sync plan">
           {gameDef?.dangerous_script_extensions && gameDef.dangerous_script_extensions.length > 0 && syncPlan.actions.some((a) => {
             const p = a.ReceiveFromRemote?.relative_path ?? a.Conflict?.remote.relative_path ?? "";
-            const ext = p.split(".").pop()?.toLowerCase() ?? "";
+            // `x.js.disabled` is one rename from running: judge it by `js`.
+            const ext = p.toLowerCase().replace(/\.disabled$/, "").split(".").pop() ?? "";
             return gameDef.dangerous_script_extensions.includes(ext);
           }) && (
             <Banner tone="warn" icon={<AlertTriangle size={16} />}>

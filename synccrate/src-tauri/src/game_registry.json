@@ -1224,7 +1224,10 @@
             "*/*-client.toml",
             "sodium-extra-options.json",
             "voicechat/voicechat-volumes.properties",
-            "reauth.toml"
+            "reauth.toml",
+            "xaerominimap.txt",
+            "xaeroworldmap.txt",
+            "modmenu.json"
           ],
           "syncable": true
         },
