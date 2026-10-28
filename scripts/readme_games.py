@@ -1,4 +1,4 @@
-"""Regenerate the Supported Games section of README.md from the game registry.
+"""Regenerate the Supported Games section of GAMES.md from the game registry.
 
 Usage (from the repo root):  python scripts/readme_games.py
 
@@ -12,7 +12,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "synccrate" / "src-tauri" / "src" / "game_registry.json"
-README = ROOT / "README.md"
+README = ROOT / "GAMES.md"
 START, END = "<!-- GAMES:START -->", "<!-- GAMES:END -->"
 
 # Order and labels for the README groups (matches GENRE_LABELS in src/lib/games.ts).
@@ -49,7 +49,7 @@ def main() -> None:
     lines = [
         f"**{len(games)} games across {families} families**, defined in a "
         "[JSON registry](synccrate/src-tauri/src/game_registry.json). "
-        "Missing one? [Add it](#adding-a-game), no code needed.",
+        "Missing one? [Add it](CONTRIBUTING.md#adding-a-game), no code needed.",
         "",
     ]
     labels = dict(GROUPS)
@@ -75,7 +75,7 @@ def main() -> None:
     _, tail = rest.split(END, 1)
     body = nl.join(lines).rstrip() + nl
     README.write_text(head + START + nl + body + END + tail, encoding="utf-8", newline="")
-    print(f"README games section updated: {len(games)} games")
+    print(f"GAMES.md games section updated: {len(games)} games")
 
 
 if __name__ == "__main__":
