@@ -191,3 +191,34 @@ jobs:
           release-tag: ${{ inputs.tag || github.ref_name }}
           max-versions-to-keep: 3
           token: ${{ secrets.WINGET_TOKEN }}
+
+  # Posts the release to #announcements on the SyncCrate Discord and pings
+  # the opt-in Updates role. Runs here, not as its own `release: published`
+  # workflow: a release made with GITHUB_TOKEN doesn't trigger other
+  # workflows. Does nothing until the DISCORD_RELEASE_WEBHOOK secret exists.
+  discord:
+    name: Announce on Discord
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Post to #announcements
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+          UPDATES_ROLE: "1565000145802895427"
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "No DISCORD_RELEASE_WEBHOOK secret: skipping Discord."; exit 0; fi
+          jq -n --arg tag "$TAG" --arg repo "$REPO" --arg role "$UPDATES_ROLE" '{
+            content: "<@&\($role)> SyncCrate \($tag) is out!",
+            allowed_mentions: { roles: [$role] },
+            embeds: [{
+              title: "SyncCrate \($tag)",
+              url: "https://github.com/\($repo)/releases/tag/\($tag)",
+              description: "The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app",
+              color: 2078846,
+              thumbnail: { url: "https://synccrate.app/apple-touch-icon.png" },
+              footer: { text: "Windows · macOS · Linux" }
+            }]
+          }' | curl -fsS -H "Content-Type: application/json" -d @- "$WEBHOOK"
