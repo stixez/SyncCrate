@@ -18,7 +18,7 @@ Five new co-op games, saves for 28 more, and SyncCrate now tells you what change
 ### Fixes
 - Euro Truck Simulator 2 and American Truck Simulator profiles kept by Steam Cloud (`steam_profiles`) now sync.
 - Celeste saves sync on macOS and Linux, 7 Days to Die mods in your user folder sync, Heroes of Might and Magic III's Steam HD Edition is found, and Torchlight II is found on macOS and Linux.
-- SyncCrate knows when RimWorld 1.6, PAYDAY 2 and 64-bit Garry's Mod are running.
+- SyncCrate knows when newer RimWorld builds, PAYDAY 2 and 64-bit Garry's Mod are running.
 
 ## 0.8.6 — 2026-10-20
 

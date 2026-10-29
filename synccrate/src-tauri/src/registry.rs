@@ -784,7 +784,7 @@ mod tests {
         ] {
             assert!(steam_folders(id).iter().any(|f| f == folder), "{id}: Steam folder {folder}");
         }
-        // RimWorld 1.6+ runs as RimWorld.exe.
+        // RimWorld's newer builds (the 1.7 and Phoenix branches) run as RimWorld.exe.
         assert!(get("rimworld").process_names.iter().any(|p| p == "RimWorld.exe"));
         // Saves in Documents use %DOCUMENTS% (OneDrive/moved Documents), never a fixed path.
         for g in &registry.games {

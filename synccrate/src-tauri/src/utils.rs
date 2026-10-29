@@ -476,13 +476,20 @@ fn roots_key(base: &str) -> String {
 }
 
 /// Where a `roots` candidate can be on this PC. `%DOCUMENTS%` is the user's
-/// real Documents folder, found like documents_relative detection finds it
-/// (Known Folder redirection, OneDrive and its localized names):
-/// `%USERPROFILE%/Documents` missed every save there.
+/// real Windows Documents folder, found like documents_relative detection
+/// finds it (Known Folder redirection, OneDrive and its localized names):
+/// `%USERPROFILE%/Documents` missed every save there. It's a Windows-only
+/// candidate, like `%USERPROFILE%`: macOS/Linux saves have their own entries,
+/// and resolving it there made the watcher wait on a folder no game creates.
 pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
     let norm = candidate.replace('\\', "/");
     match norm.strip_prefix("%DOCUMENTS%") {
-        Some(rest) => build_candidates_str(rest.trim_start_matches('/'), &[""]),
+        Some(rest) if cfg!(target_os = "windows") => {
+            let rest = rest.trim_matches('/');
+            let (base, last) = rest.rsplit_once('/').unwrap_or(("", rest));
+            build_candidates_str(base, &[last])
+        }
+        Some(_) => Vec::new(),
         None => vec![PathBuf::from(expand_path_vars(candidate))],
     }
 }
@@ -977,12 +984,14 @@ mod tests {
 
     #[test]
     fn documents_roots_follow_the_real_documents_folder() {
-        let docs = dirs::document_dir().expect("a Documents folder");
-        let first = root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves").into_iter().next().unwrap();
-        assert_eq!(first.components().collect::<Vec<_>>(), docs.join("My Games/Skyrim/Saves").components().collect::<Vec<_>>());
-        // Backslashes and other candidates are unchanged.
-        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves")[0].components().collect::<Vec<_>>(), docs.join("The Witcher 3/gamesaves").components().collect::<Vec<_>>());
         assert_eq!(root_candidates("~/x"), vec![PathBuf::from(expand_path_vars("~/x"))]);
+        if !cfg!(target_os = "windows") {
+            assert!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves").is_empty(), "Windows-only candidate");
+            return;
+        }
+        let docs = dirs::document_dir().expect("a Documents folder");
+        assert_eq!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves")[0], docs.join("My Games").join("Skyrim/Saves"));
+        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves")[0], docs.join("The Witcher 3").join("gamesaves"));
     }
 
     #[test]

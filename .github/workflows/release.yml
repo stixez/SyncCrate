@@ -25,9 +25,10 @@ jobs:
       contents: write
     outputs:
       release_id: ${{ steps.create.outputs.result }}
-      # This version's CHANGELOG section: the updater's notes (latest.json),
-      # which the app's update prompt shows as highlights.
-      notes: ${{ steps.create.outputs.notes }}
+      # The updater's notes (latest.json): the summary and plain "• headline"
+      # lines. Plain text, since apps before 0.8.7 show it raw in a dialog;
+      # newer ones list the headlines in their update prompt.
+      updater_notes: ${{ steps.create.outputs.updater_notes }}
       # The Discord announcement text: summary and highlight headlines.
       announce: ${{ steps.create.outputs.announce }}
     steps:
@@ -99,7 +100,7 @@ jobs:
             }
             const announce = [summary, heads.join('\n'), 'The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app']
               .filter(Boolean).join('\n\n').slice(0, 4000);
-            core.setOutput('notes', notes);
+            core.setOutput('updater_notes', [summary, heads.join('\n')].filter(Boolean).join('\n\n'));
             core.setOutput('announce', announce);
             // Notes written on GitHub by hand are kept when the changelog has none.
             const releaseBody = (current) => notes
@@ -218,7 +219,7 @@ jobs:
         with:
           projectPath: synccrate
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          releaseBody: ${{ needs.create-release.outputs.notes }}
+          releaseBody: ${{ needs.create-release.outputs.updater_notes }}
           updaterJsonKeepUniversal: true
           args: --target ${{ matrix.target }}
 

@@ -44,17 +44,14 @@ export function digest(body: string, max = HIGHLIGHTS_SHOWN): Digest {
   }
   const summary = firstBlock.length && !BLOCK_START.test(firstBlock[0]) ? firstBlock.join(" ") : null;
 
-  const bulletsAfter = (start: number) => {
-    const out: string[] = [];
-    for (let i = start; i < lines.length && out.length < max; i++) {
-      const l = lines[i];
-      if (/^#{1,3} /.test(l) && out.length) break;
-      if (/^- /.test(l)) out.push(l.slice(2).trim());
-    }
-    return out;
-  };
   const hl = lines.findIndex((l) => /^###[^\n]*highlights/i.test(l));
-  const items = bulletsAfter(hl >= 0 ? hl + 1 : 0);
+  const items: string[] = [];
+  for (let i = hl >= 0 ? hl + 1 : 0; i < lines.length && items.length < max; i++) {
+    const l = lines[i];
+    // Under Highlights, stop at the next heading; without one, take the first list.
+    if (/^#{1,3} /.test(l) && (hl >= 0 || items.length)) break;
+    if (/^- /.test(l)) items.push(l.slice(2).trim());
+  }
   return { summary, items };
 }
 
@@ -77,10 +74,15 @@ export function headline(item: string): string {
 }
 
 /** What an available update brings, as plain lines for the update prompt.
- *  `body` is the notes the updater got (the version's CHANGELOG section).
+ *  `body` is the notes the updater got: plain "• headline" lines from the
+ *  release workflow, or (older releases) a GitHub release body.
  *  Null unless there are highlights or a real summary paragraph. */
 export function updateSummary(body: string | null | undefined): string | null {
   if (!body) return null;
+  // The updater's notes: a summary and plain "• headline" lines (plain text,
+  // so versions before 0.8.7 show them cleanly in their dialog too).
+  const dots = body.split("\n").filter((l) => l.startsWith("• "));
+  if (dots.length) return dots.slice(0, HIGHLIGHTS_SHOWN).join("\n");
   const notes = body.split(/\n---\s*\n|^## Downloads|\n## Downloads/m)[0].replace(/^## .*\n/, "");
   const d = digest(notes);
   if (d.items.length) return d.items.map((i) => `• ${headline(i)}`).join("\n");
