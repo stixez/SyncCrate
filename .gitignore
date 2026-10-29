@@ -28,8 +28,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Claude Code
-CLAUDE.md
+# Claude Code (CLAUDE.md and .steering/ are shared; these are per machine)
+CLAUDE.local.md
 .claude/
 
 # Superpowers docs

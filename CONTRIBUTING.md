@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. For questions or to talk an idea through first, join the [Discord](https://discord.gg/NY2P9u6v7Z).
 
 ## Adding a game
 
@@ -28,3 +28,12 @@ npm run tauri build   # installer in src-tauri/target/release/bundle/
 ```
 
 Stack: Tauri v2 · Rust · React 19 + TypeScript + Vite · Tailwind CSS · Zustand · TCP transfer with mDNS + UDP discovery.
+
+## Release notes
+
+[CHANGELOG.md](CHANGELOG.md) is the only place to write them. Add changes under `## Unreleased`; when releasing, rename it to `## X.Y.Z — YYYY-MM-DD` (the version in `package.json` and `tauri.conf.json`) before pushing the tag. Start with a one-paragraph summary, then a `### Highlights` list whose items begin with a **bold headline.**
+
+From that one section:
+- the release workflow writes the GitHub release notes and the Discord announcement,
+- the app's update prompt lists the highlights' headlines,
+- after updating, the app shows the summary and first four highlights once, and every version under **Release notes** (the version number at the bottom of the sidebar).

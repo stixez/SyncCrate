@@ -1,5 +1,7 @@
 # FAQ
 
+Didn't find your answer? Ask in #help on the [SyncCrate Discord](https://discord.gg/NY2P9u6v7Z) or [open an issue](https://github.com/stixez/SyncCrate/issues/new/choose).
+
 <details>
 <summary><strong>Does it work at a LAN party with no internet?</strong></summary>
 

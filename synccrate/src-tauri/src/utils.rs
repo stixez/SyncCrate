@@ -475,6 +475,25 @@ fn roots_key(base: &str) -> String {
     if cfg!(target_os = "windows") { b.to_lowercase() } else { b.to_string() }
 }
 
+/// Where a `roots` candidate can be on this PC. `%DOCUMENTS%` is the user's
+/// real Windows Documents folder, found like documents_relative detection
+/// finds it (Known Folder redirection, OneDrive and its localized names):
+/// `%USERPROFILE%/Documents` missed every save there. It's a Windows-only
+/// candidate, like `%USERPROFILE%`: macOS/Linux saves have their own entries,
+/// and resolving it there made the watcher wait on a folder no game creates.
+pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
+    let norm = candidate.replace('\\', "/");
+    match norm.strip_prefix("%DOCUMENTS%") {
+        Some(rest) if cfg!(target_os = "windows") => {
+            let rest = rest.trim_matches('/');
+            let (base, last) = rest.rsplit_once('/').unwrap_or(("", rest));
+            build_candidates_str(base, &[last])
+        }
+        Some(_) => Vec::new(),
+        None => vec![PathBuf::from(expand_path_vars(candidate))],
+    }
+}
+
 /// Where each external content folder of `cts` is on this PC: the user's
 /// choice (`overrides`, by content type id) or the first candidate that
 /// exists. Folders that aren't there are left out (the game never ran).
@@ -486,7 +505,7 @@ pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::coll
             // silently swapped for the auto-found folder sent downloads there.
             let found = match overrides.get(&ct.id) {
                 Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
-                None => ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute() && p.is_dir()),
+                None => ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute() && p.is_dir()),
             }?;
             Some((prefix, found))
         })
@@ -554,7 +573,7 @@ fn split_root(base: &str, relative: &str) -> Result<Option<(PathBuf, String)>, S
 /// Where an external content type's folder would be (its first candidate
 /// for this OS), for watching it before the game has created it.
 pub fn expected_root(ct: &crate::registry::ContentType) -> Option<PathBuf> {
-    let root = ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute())?;
+    let root = ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute())?;
     Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
@@ -962,6 +981,18 @@ pub fn sanitize_id(id: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn documents_roots_follow_the_real_documents_folder() {
+        assert_eq!(root_candidates("~/x"), vec![PathBuf::from(expand_path_vars("~/x"))]);
+        if !cfg!(target_os = "windows") {
+            assert!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves").is_empty(), "Windows-only candidate");
+            return;
+        }
+        let docs = dirs::document_dir().expect("a Documents folder");
+        assert_eq!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves")[0], docs.join("My Games").join("Skyrim/Saves"));
+        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves")[0], docs.join("The Witcher 3").join("gamesaves"));
+    }
 
     #[test]
     fn read_only_files_can_be_replaced() {

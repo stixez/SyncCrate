@@ -606,8 +606,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 124,
-            "expected at least 124 games, found {}",
+            registry.games.len() >= 129,
+            "expected at least 129 games, found {}",
             registry.games.len()
         );
 
@@ -739,6 +739,65 @@ mod tests {
             assert_eq!(g.steam_workshop_app_id, expected, "{}", g.id);
         }
         assert!(get("rimworld").steam_workshop_app_id.is_some(), "RimWorld mods are mostly Workshop");
+    }
+
+    /// Save folders and launch exes from the games' own Steam configs (cloud
+    /// save roots and launch options, checked 2026-10-29), so they don't regress.
+    #[test]
+    fn steam_config_facts_stay_fixed() {
+        let registry = load_registry();
+        let get = |id: &str| registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+        let ct = |id: &str, ct: &str| get(id).content_types.iter().find(|c| c.id == ct).cloned().unwrap_or_else(|| panic!("{id}/{ct}"));
+        for (id, root) in [
+            ("skyrim_se", "%DOCUMENTS%/My Games/Skyrim Special Edition/Saves"),
+            ("fallout4", "%DOCUMENTS%/My Games/Fallout4/Saves"),
+            ("witcher3", "%DOCUMENTS%/The Witcher 3/gamesaves"),
+            ("cyberpunk2077", "%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077"),
+            ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
+        ] {
+            assert_eq!(ct(id, "saves").roots.first().map(String::as_str), Some(root), "{id}");
+        }
+        // Celeste saves next to the game only on Windows.
+        assert_eq!(ct("celeste", "saves").folder, "Saves");
+        assert!(ct("celeste", "user_saves").roots.iter().any(|r| r == "~/.local/share/Celeste/Saves"));
+        // Steam Cloud keeps truck sim profiles in steam_profiles.
+        for id in ["ets2", "american_truck_simulator"] {
+            assert_eq!(ct(id, "steam_profiles").folder, "steam_profiles", "{id}");
+        }
+        // Steam installs Heroes III as the HD Edition; Torchlight II keeps its
+        // macOS/Linux data inside the Steam install.
+        let steam_folders = |id: &str| -> Vec<String> {
+            get(id).detection.iter().flat_map(|d| &d.strategies).filter_map(|s| match s {
+                DetectionStrategy::SteamLibrary { folders } => Some(folders.clone()),
+                _ => None,
+            }).flatten().collect()
+        };
+        assert!(steam_folders("heroes_3").iter().any(|f| f == "Heroes of Might & Magic III - HD Edition"));
+        assert!(steam_folders("torchlight2").iter().any(|f| f == "Torchlight II/my games/runic games/torchlight 2"));
+        // Added 2026-10-29: install folders are Steam's installdir.
+        for (id, folder) in [
+            ("schedule_i", "Schedule I"),
+            ("sons_of_the_forest", "Sons Of The Forest"),
+            ("raft", "Raft"),
+            ("abiotic_factor", "AbioticFactor"),
+            ("grounded", "Grounded"),
+        ] {
+            assert!(steam_folders(id).iter().any(|f| f == folder), "{id}: Steam folder {folder}");
+        }
+        // RimWorld's newer builds (the 1.7 and Phoenix branches) run as RimWorld.exe.
+        assert!(get("rimworld").process_names.iter().any(|p| p == "RimWorld.exe"));
+        // Saves in Documents use %DOCUMENTS% (OneDrive/moved Documents), never a fixed path.
+        for g in &registry.games {
+            for c in &g.content_types {
+                assert!(c.roots.iter().all(|r| !r.to_lowercase().contains("%userprofile%/documents")), "{}/{}: use %DOCUMENTS%", g.id, c.id);
+                // Steam writes steam_autocloud.vdf (the account id) into cloud save folders.
+                if c.is_external() && c.extensions.is_empty() && c.file_type != "Mod" {
+                    assert!(c.exclude_files.iter().any(|f| f == "steam_autocloud.vdf"), "{}/{}: exclude steam_autocloud.vdf", g.id, c.id);
+                }
+            }
+        }
+        // Torchlight II on Steam keeps saves per account (save/<SteamID>/).
+        assert!(!ct("torchlight2", "saves").recursive);
     }
 
     /// Modpacks need their configs and recipe scripts to match or servers

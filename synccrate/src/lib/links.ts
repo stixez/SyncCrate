@@ -13,3 +13,11 @@ export function openCreatorLink(url?: string | null) {
   if (!isHttps(url)) return;
   openUrl(url).catch((e) => toastError(`Couldn't open the link: ${e}`));
 }
+
+/** The SyncCrate community server (a permanent invite). */
+export const DISCORD_INVITE = "https://discord.gg/NY2P9u6v7Z";
+
+/** Opens the SyncCrate Discord in the browser (or the Discord app). */
+export function openDiscord() {
+  openUrl(DISCORD_INVITE).catch((e) => toastError(`Couldn't open the link: ${e}`));
+}

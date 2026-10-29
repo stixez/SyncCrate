@@ -29,5 +29,9 @@ export default defineConfig(async () => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+    // The release notes are the repo's CHANGELOG.md, one folder up.
+    fs: {
+      allow: [".", "../CHANGELOG.md"],
+    },
   },
 }));

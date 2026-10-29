@@ -12,11 +12,12 @@
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stixez/SyncCrate?color=1fb87e&label=download&style=flat-square" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1e2d38?style=flat-square" alt="Platforms" />
   <img src="https://img.shields.io/github/license/stixez/SyncCrate?color=1e2d38&style=flat-square" alt="License" />
+  <a href="https://discord.gg/NY2P9u6v7Z"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white&style=flat-square" alt="Join the Discord" /></a>
   <a href="https://buymeacoffee.com/stixe"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black&style=flat-square" alt="Buy Me a Coffee" /></a>
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><strong>Download</strong></a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://synccrate.app">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#get-started">Get started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="GAMES.md">Games</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="FAQ.md">FAQ</a>
+  <a href="../../releases/latest"><strong>Download</strong></a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://synccrate.app">Website</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="https://discord.gg/NY2P9u6v7Z">Discord</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="#get-started">Get started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="GAMES.md">Games</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;<a href="FAQ.md">FAQ</a>
 </p>
 
 <p align="center">
@@ -43,7 +44,7 @@ New mods reach everyone automatically. At a LAN party it works without internet.
 
 <img src="assets/gifs/keep-synced.gif" width="100%" alt="Turning on Stay in sync pulls the host's six new mods automatically" />
 
-**Works with the games you already mod:** The Sims 4, Minecraft, Valheim, Stardew Valley, World of Warcraft, Lethal Company, Terraria and [117 more](GAMES.md).
+**Works with the games you already mod:** The Sims 4, Minecraft, Valheim, Stardew Valley, World of Warcraft, Lethal Company, Terraria and [122 more](GAMES.md).
 
 ## Get started
 
@@ -57,10 +58,11 @@ New mods reach everyone automatically. At a LAN party it works without internet.
 > **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
 > **macOS:** System Settings → Privacy & Security → **Open Anyway**. If it says "damaged", run `xattr -cr /Applications/SyncCrate.app` once.
 
-Can't connect? Click **Fix Windows Firewall** on the host PC. More help in the [FAQ](FAQ.md).
+Can't connect? Click **Fix Windows Firewall** on the host PC. More help in the [FAQ](FAQ.md), or ask in #help on [Discord](https://discord.gg/NY2P9u6v7Z).
 
 ## More
 
+- [Discord](https://discord.gg/NY2P9u6v7Z): get help, share packs, find a crew and see what's coming next
 - [All features](FEATURES.md): sync, backups, crews, mod health check, the 50/50 broken-mod finder and more
 - [Supported games](GAMES.md) and what syncs for each
 - [FAQ](FAQ.md)

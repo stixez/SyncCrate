@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import StoragePanel from "./StoragePanel";
 import { friendlyError } from "../lib/errors";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff, ScrollText, MessageCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -21,6 +21,8 @@ import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useG
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
 import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
+import { updateSummary } from "../lib/releaseNotes";
+import { openDiscord } from "../lib/links";
 import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
@@ -604,7 +606,7 @@ export default function Settings() {
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
-              SyncCrate is free, open-source, and ad-free. One-time support helps keep development going.
+              SyncCrate is free, open source and has no ads. Coffees keep it that way: they pay for the website, testing hardware and the time to add your games.
             </p>
             {getSyncCount() > 0 && (
               <p className="font-mono text-[11px] text-txt-muted mb-3">
@@ -633,8 +635,9 @@ export default function Settings() {
                 try {
                   const update = await check();
                   if (update?.available) {
+                    const brings = updateSummary(update.body);
                     const yes = await ask(
-                      `Update to v${update.version} is available!\n\n${update.body ?? ""}`,
+                      `Update to v${update.version} is available!${brings ? `\n\nWhat's in it:\n${brings}` : ""}`,
                       {
                         title: "Update Available",
                         kind: "info",
@@ -681,12 +684,31 @@ export default function Settings() {
             >
               {updating ? "Checking..." : "Check for Updates"}
             </Button>
+            <Button
+              variant="ghost"
+              className="mt-2"
+              onClick={() => useAppStore.getState().navigateToGlobal("release-notes")}
+              icon={<ScrollText size={14} />}
+            >
+              Release notes
+            </Button>
+          </Panel>
+
+          <Panel title="SyncCrate Discord" label="// Community" className="col-span-2">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs text-txt-dim">
+                Get help, share your packs, find a crew to play with, and tell us what to build next.
+              </p>
+              <Button variant="primary" onClick={openDiscord} icon={<MessageCircle size={14} />} className="shrink-0">
+                Join the Discord
+              </Button>
+            </div>
           </Panel>
 
           <Panel title="Report a problem" label="// Diagnostics" className="col-span-2">
             <div className="flex items-center justify-between gap-4">
               <p className="text-xs text-txt-dim">
-                Something not working? Copy a short report and paste it into a GitHub issue. It has your app version,
+                Something not working? Copy a short report and paste it into a GitHub issue or a post in #help on Discord. It has your app version,
                 system and connection status, and recent errors. No files, join codes, PINs or friends' names, and
                 nothing is sent anywhere.
               </p>
