@@ -282,6 +282,19 @@
     outline-color: rgb(var(--color-on-neon));
   }
 
+  /* Discord's own blurple, in both themes: buttons that open the SyncCrate Discord. */
+  .btn-discord {
+    background: #5865f2;
+    color: #fff;
+  }
+  .btn-discord:not(:disabled):hover {
+    background: #4752c4;
+    transform: translateY(-1px);
+  }
+  .btn-discord:focus-visible {
+    outline-color: #fff;
+  }
+
   /* Hairline outline that follows the cut (same trick as .panel). */
   .btn-secondary,
   .btn-danger {

@@ -46,7 +46,8 @@ import { useAppStore } from "../stores/useAppStore";
 import { resolveTheme, useMediaPreference } from "../lib/appearance";
 import * as cmd from "../lib/commands";
 import type { Page } from "../lib/types";
-import { GameArt, LiveDot, cx } from "./ui";
+import { Button, DiscordLogo, GameArt, LiveDot, cx } from "./ui";
+import { openDiscord } from "../lib/links";
 import { toastAction, toastError } from "../lib/toast";
 import { friendlyError } from "../lib/errors";
 import { plural } from "../lib/utils";
@@ -396,6 +397,9 @@ export default function Sidebar() {
       </div>
 
       <div className="border-t border-border p-3 shrink-0">
+        <Button variant="discord" size="sm" block onClick={openDiscord} icon={<DiscordLogo size={14} />} className="mb-2" title="Help, packs and crews on the SyncCrate Discord">
+          Join the Discord
+        </Button>
         <div className="bg-bg px-3 py-2.5 border border-border">
           <div className="flex items-center gap-2">
             <LiveDot tone={isConnected ? "neon" : isConnecting ? "amber" : "idle"} />

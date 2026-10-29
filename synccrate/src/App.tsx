@@ -298,6 +298,10 @@ function App() {
           else state.setManifest({ files: {}, generated_at: Math.floor(Date.now() / 1000) });
         }
       });
+      // &game=minecraft_java opens that game (with &page, on that page). After
+      // the subscription above, so the game gets its demo files.
+      const demoGame = q.get("game");
+      if (demoGame) useAppStore.getState().navigateToGame(demoGame, (demoPage ?? undefined) as any);
 
     } else {
       init();

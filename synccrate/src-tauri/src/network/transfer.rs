@@ -2151,31 +2151,7 @@ pub(crate) fn precheck(existing_hash: Option<&str>, expected_hash: &str, policy:
     }
 }
 
-/// Name comparison the way Windows sees it: case-insensitive, trailing dots
-/// and spaces ignored.
-fn same_file_name(a: &str, b: &str) -> bool {
-    a.trim_end_matches(['.', ' ']).to_lowercase() == b.trim_end_matches(['.', ' ']).to_lowercase()
-}
-
-/// The file already occupying `dest`, matched case-insensitively among its
-/// siblings so behavior is the same on case-sensitive file systems.
-pub(crate) fn find_existing(dest: &std::path::Path) -> Option<std::path::PathBuf> {
-    if std::fs::symlink_metadata(dest).is_ok() {
-        return Some(dest.to_path_buf());
-    }
-    // Windows lookups already ignore case and trailing dots/spaces, so a
-    // miss is final. Listing the folder anyway ran for every new file (the
-    // normal case), twice: O(n²) on a first sync of 50k files into one folder.
-    if cfg!(windows) {
-        return None;
-    }
-    let name = dest.file_name()?.to_str()?;
-    std::fs::read_dir(dest.parent()?)
-        .ok()?
-        .flatten()
-        .find(|e| e.file_name().to_str().map_or(false, |n| same_file_name(n, name)))
-        .map(|e| e.path())
-}
+use crate::utils::find_existing;
 
 struct ExistingFile {
     path: std::path::PathBuf,

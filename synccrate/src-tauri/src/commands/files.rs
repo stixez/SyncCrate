@@ -158,7 +158,9 @@ pub(crate) fn set_extra_folder_override(game_id: &str, ct_id: &str, folder: Opti
 /// folder appears the first time the game runs.
 pub(crate) fn refresh_extra_roots(def: &GameDefinition, base: &str) {
     if def.content_types.iter().any(|ct| ct.is_external()) {
-        utils::set_extra_roots(base, utils::resolve_roots(&def.content_types, &extra_folder_overrides(&def.id)));
+        let proton = utils::game_proton_prefix(def);
+        utils::set_extra_roots(base, utils::resolve_roots(&def.content_types, &extra_folder_overrides(&def.id), proton.as_deref()));
+        utils::set_proton_prefix(base, proton);
     }
 }
 

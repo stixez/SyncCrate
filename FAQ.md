@@ -55,6 +55,12 @@ Set the folder manually in Settings; any install with the expected folder struct
 </details>
 
 <details>
+<summary><strong>Does it work on Linux with Proton (Steam Play)?</strong></summary>
+
+Yes. For a Windows game you play through Proton, SyncCrate looks in the game's Proton prefix (`steamapps/compatdata/<app id>/pfx`, in any Steam library) for the folders it keeps in Documents and AppData, like The Sims 4's Mods or Bethesda's saves. Start the game once first, so Proton creates the prefix. If you've played a game both natively and through Proton, SyncCrate uses whichever you played last. Mods inside the game folder (`steamapps/common/...`) are found the same way as on Windows. Games run through Lutris, Heroic or Bottles use their own Wine prefixes: set those folders by hand in **Settings → Games**.
+</details>
+
+<details>
 <summary><strong>My tModLoader (Terraria) mods don't show up.</strong></summary>
 
 Mods you subscribed to on the Steam Workshop are kept by Steam in its own folder, not in Terraria's, so SyncCrate can't list, sync or back them up; the Content page tells you how many there are. Friends can subscribe to the same Workshop mods. SyncCrate syncs tModLoader's worlds and players, `enabled.json` (which mods are on) and any `.tmod` files in `Documents/My Games/Terraria/tModLoader/Mods`.
