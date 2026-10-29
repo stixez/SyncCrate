@@ -3,7 +3,7 @@
 ## Demo mode (screenshots, GIFs, previews)
 
 - `npm run dev`, then open `http://localhost:1420/?demo`: the UI runs on demo data (`src/lib/demoData.ts`), no backend needed.
-- Variants: `&offline`, `&welcome`, `&light`, `&page=<page>`, `&big`, `&issues`, `&releasenotes`.
+- Variants: `&offline`, `&welcome`, `&light`, `&page=<page>`, `&game=<registry id>` (opens that game, with `&page` on that page), `&big`, `&issues`, `&releasenotes`.
 - State can be driven from a headless browser with `await import("/src/stores/useAppStore.ts")` (the same module instance the app uses).
 - `scripts/make_gif.sh` turns a recording into a README GIF.
 
