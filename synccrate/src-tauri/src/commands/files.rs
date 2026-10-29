@@ -158,8 +158,13 @@ pub(crate) fn set_extra_folder_override(game_id: &str, ct_id: &str, folder: Opti
 /// folder appears the first time the game runs.
 pub(crate) fn refresh_extra_roots(def: &GameDefinition, base: &str) {
     if def.content_types.iter().any(|ct| ct.is_external()) {
-        let proton = utils::proton_prefix(def.steam_app_id);
-        utils::set_extra_roots(base, utils::resolve_roots(&def.content_types, &extra_folder_overrides(&def.id), proton.as_deref()));
+        // The Proton prefix is only looked up when a folder isn't found natively.
+        let proton = std::cell::OnceCell::new();
+        let roots = utils::resolve_roots(&def.content_types, &extra_folder_overrides(&def.id), || {
+            proton.get_or_init(|| utils::proton_prefix(def.steam_app_id)).clone()
+        });
+        utils::set_extra_roots(base, roots);
+        utils::set_proton_prefix(base, proton.get().cloned().flatten());
     }
 }
 

@@ -52,8 +52,8 @@ fn external_paths_resolve_through_safe_join() {
             c.roots = vec![worlds.to_string_lossy().to_string()];
         }
     }
-    assert!(crate::utils::resolve_roots(&def_cts, &picked, None).is_empty());
-    assert_eq!(crate::utils::resolve_roots(&def_cts, &HashMap::new(), None).get("@worlds"), Some(&worlds));
+    assert!(crate::utils::resolve_roots(&def_cts, &picked, || None).is_empty());
+    assert_eq!(crate::utils::resolve_roots(&def_cts, &HashMap::new(), || None).get("@worlds"), Some(&worlds));
     // Other games' folders never resolve against this one.
     assert!(crate::utils::safe_join(&temp_dir("roots-other").to_string_lossy(), "@worlds/Midgard.db").is_err());
     let _ = std::fs::remove_dir_all(&game);

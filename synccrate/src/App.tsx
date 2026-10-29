@@ -279,11 +279,8 @@ function App() {
         ...(q.has("compact") ? { density: "compact" as const } : {}),
         ...(q.has("nofx") ? { effects: false } : {}),
       });
-      // &game=minecraft_java opens that game (with &page, on that page).
       const demoPage = q.get("page");
-      const demoGame = q.get("game");
-      if (demoGame) useAppStore.getState().navigateToGame(demoGame, (demoPage ?? undefined) as any);
-      else if (demoPage) useAppStore.setState({ page: demoPage as any });
+      if (demoPage) useAppStore.setState({ page: demoPage as any });
       // &scroll=4000: start scrolled down (headless screenshots of long lists).
       const scrollTo = Number(q.get("scroll"));
       // Headless Edge only dispatches scroll events on real frames, so fire one by hand.
@@ -301,6 +298,10 @@ function App() {
           else state.setManifest({ files: {}, generated_at: Math.floor(Date.now() / 1000) });
         }
       });
+      // &game=minecraft_java opens that game (with &page, on that page). After
+      // the subscription above, so the game gets its demo files.
+      const demoGame = q.get("game");
+      if (demoGame) useAppStore.getState().navigateToGame(demoGame, (demoPage ?? undefined) as any);
 
     } else {
       init();
