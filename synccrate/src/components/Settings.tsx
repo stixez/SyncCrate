@@ -606,7 +606,7 @@ export default function Settings() {
         <div className="grid grid-cols-2 gap-3 items-stretch">
           <Panel title="Support SyncCrate" label="// Free forever" icon={<Heart size={14} className="text-neon" />}>
             <p className="text-xs text-txt-dim mb-3">
-              SyncCrate is free, open-source, and ad-free. One-time support helps keep development going.
+              SyncCrate is free, open source and has no ads. Coffees keep it that way: they pay for the website, testing hardware and the time to add your games.
             </p>
             {getSyncCount() > 0 && (
               <p className="font-mono text-[11px] text-txt-muted mb-3">

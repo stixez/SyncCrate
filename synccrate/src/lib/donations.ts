@@ -69,22 +69,22 @@ export function getMilestoneMessage(milestone: number): { title: string; message
     case 10:
       return {
         title: "Thanks for using SyncCrate!",
-        message: `You've synced 10 times, saving yourself ${timeSaved} of manual work. SyncCrate is free forever, and donations help fund future updates.`,
+        message: `You've synced 10 times, saving yourself ${timeSaved} of manual work. SyncCrate is free, open source and has no ads, and coffees keep it that way.`,
       };
     case 50:
       return {
         title: "You're a power user!",
-        message: `50 syncs and ${timeSaved} saved! If SyncCrate has been useful, consider chipping in.`,
+        message: `50 syncs and ${timeSaved} saved! If SyncCrate has been useful, a coffee pays for testing hardware and the time to add your games.`,
       };
     case 100:
       return {
         title: "100 syncs!",
-        message: `That's ${timeSaved} you didn't spend copying files manually. A one-time coffee helps keep development going.`,
+        message: `That's ${timeSaved} you didn't spend copying files manually. A coffee keeps SyncCrate free and ad-free.`,
       };
     default:
       return {
         title: "Thanks for using SyncCrate!",
-        message: "SyncCrate is free forever. Donations help fund future updates.",
+        message: "SyncCrate is free, open source and has no ads. Coffees keep it that way.",
       };
   }
 }

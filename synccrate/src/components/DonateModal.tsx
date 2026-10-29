@@ -34,10 +34,10 @@ export default function DonateModal() {
             </div>
 
             <p className="text-sm text-txt-dim mb-1.5">
-              SyncCrate is free, open-source, and ad-free forever.
+              SyncCrate is free, open source and has no ads.
             </p>
             <p className="text-sm text-txt-dim mb-5">
-              One coffee funds 2 hours of development.
+              Coffees keep it that way: they pay for the website, testing hardware and the time to add your games.
             </p>
 
             {syncCount > 0 && (
