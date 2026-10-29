@@ -93,11 +93,11 @@ fn build_candidates_str(base: &str, folders: &[&str]) -> Vec<PathBuf> {
 }
 
 /// Detect a game path using the detection strategies from a GameDefinition.
-/// On Linux a Windows game run through Proton is then looked for in its
-/// Proton prefix, only when no native folder was found: a prefix left over
-/// from trying Proton once must never beat the native install.
+/// On Linux, for a game played through Proton (`game_proton_prefix`), each
+/// strategy also looks in the game's Proton prefix, in the strategies' order:
+/// a Windows game's Documents folder still comes before its install folder.
 pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
-    detect_native(game_def).or_else(|| detect_in_proton(game_def, &proton_prefix(game_def.steam_app_id)?))
+    detect_game_path_in(game_def, game_proton_prefix(game_def).as_deref())
 }
 
 /// Whether `p` can be this game's folder: it exists and has one of the
@@ -106,68 +106,70 @@ fn accepts(detection: &crate::registry::DetectionConfig, p: &std::path::Path) ->
     p.exists() && (detection.require_any.is_empty() || detection.require_any.iter().any(|r| p.join(r).exists()))
 }
 
-/// The Windows folders the detection names (Documents, `%APPDATA%`, `C:`...)
-/// inside the Proton prefix `pfx`.
-pub(crate) fn detect_in_proton(game_def: &GameDefinition, pfx: &std::path::Path) -> Option<String> {
-    let detection = game_def.detection.as_ref()?;
-    detection
-        .strategies
-        .iter()
-        .flat_map(|strategy| match strategy {
-            DetectionStrategy::DocumentsRelative { base, folders } => proton_bases("%DOCUMENTS%", pfx)
-                .into_iter()
-                .flat_map(|docs| folders.iter().map(move |f| join_ci(&docs, &format!("{base}/{f}"), &pfx.join("drive_c"))))
-                .collect::<Vec<_>>(),
-            DetectionStrategy::AbsolutePaths { paths } => paths.windows.iter().flat_map(|p| proton_candidates(p, pfx)).collect(),
-            _ => Vec::new(),
-        })
-        .find(|p| accepts(detection, p))
-        .map(|p| p.to_string_lossy().to_string())
-}
-
-fn detect_native(game_def: &GameDefinition) -> Option<String> {
+/// Detection with `proton` (the game's Proton prefix, when it's played
+/// through Proton): a strategy's Windows folders in there come before its
+/// native ones.
+pub(crate) fn detect_game_path_in(game_def: &GameDefinition, proton: Option<&std::path::Path>) -> Option<String> {
     let detection = game_def.detection.as_ref()?;
     let accept = |p: &std::path::Path| accepts(detection, p);
 
     for strategy in &detection.strategies {
-        match strategy {
-            DetectionStrategy::DocumentsRelative { base, folders } => {
-                let candidates = build_candidates(base, folders);
-                if let Some(found) = candidates.into_iter().find(|p| accept(p)) {
-                    return Some(found.to_string_lossy().to_string());
+        let in_prefix: Vec<PathBuf> = match (proton, strategy) {
+            (Some(pfx), DetectionStrategy::DocumentsRelative { base, folders }) => {
+                folders.iter().flat_map(|f| proton_candidates(&format!("%DOCUMENTS%/{base}/{f}"), pfx)).collect()
+            }
+            (Some(pfx), DetectionStrategy::AbsolutePaths { paths }) => paths.windows.iter().flat_map(|p| proton_candidates(p, pfx)).collect(),
+            _ => Vec::new(),
+        };
+        if let Some(found) = in_prefix.into_iter().find(|p| accept(p)) {
+            return Some(found.to_string_lossy().to_string());
+        }
+        if let Some(found) = detect_with(strategy, &accept) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// One detection strategy, native folders only.
+fn detect_with(strategy: &DetectionStrategy, accept: &dyn Fn(&std::path::Path) -> bool) -> Option<String> {
+    match strategy {
+        DetectionStrategy::DocumentsRelative { base, folders } => {
+            let candidates = build_candidates(base, folders);
+            if let Some(found) = candidates.into_iter().find(|p| accept(p)) {
+                return Some(found.to_string_lossy().to_string());
+            }
+        }
+        DetectionStrategy::AbsolutePaths { paths } => {
+            let platform_paths = get_platform_paths(paths);
+            for path_str in platform_paths {
+                let expanded = expand_path_vars(path_str);
+                let path = PathBuf::from(&expanded);
+                if accept(&path) {
+                    return Some(path.to_string_lossy().to_string());
                 }
             }
-            DetectionStrategy::AbsolutePaths { paths } => {
-                let platform_paths = get_platform_paths(paths);
-                for path_str in platform_paths {
-                    let expanded = expand_path_vars(path_str);
-                    let path = PathBuf::from(&expanded);
+        }
+        DetectionStrategy::SteamLibrary { folders } => {
+            for common in steam_common_dirs() {
+                for folder in folders {
+                    let path = common.join(folder);
                     if accept(&path) {
                         return Some(path.to_string_lossy().to_string());
                     }
                 }
             }
-            DetectionStrategy::SteamLibrary { folders } => {
-                for common in steam_common_dirs() {
-                    for folder in folders {
-                        let path = common.join(folder);
-                        if accept(&path) {
-                            return Some(path.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-            DetectionStrategy::WindowsRegistry { keys, value, subpath } => {
-                for key in keys {
-                    if let Some(dir) = read_registry_string(key, value) {
-                        let path = if subpath.is_empty() {
-                            PathBuf::from(&dir)
-                        } else {
-                            PathBuf::from(&dir).join(subpath)
-                        };
-                        if accept(&path) {
-                            return Some(path.to_string_lossy().to_string());
-                        }
+        }
+        DetectionStrategy::WindowsRegistry { keys, value, subpath } => {
+            for key in keys {
+                if let Some(dir) = read_registry_string(key, value) {
+                    let path = if subpath.is_empty() {
+                        PathBuf::from(&dir)
+                    } else {
+                        PathBuf::from(&dir).join(subpath)
+                    };
+                    if accept(&path) {
+                        return Some(path.to_string_lossy().to_string());
                     }
                 }
             }
@@ -262,23 +264,23 @@ pub fn steam_steamapps_dirs() -> Vec<PathBuf> {
     // reads, two VDF files and an existence check per library each time, and
     // seconds when a library is on an unplugged or network drive. Libraries
     // rarely change, so a short cache.
-    let mut cache = STEAMAPPS_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((at, dirs)) = cache.as_ref() {
+    // The lock isn't held during the scan: `steam_steamapps_dirs_any_age`
+    // must not wait behind a slow one.
+    let cached = STEAMAPPS_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if let Some((at, dirs)) = cached {
         if at.elapsed() < std::time::Duration::from_secs(30) {
-            return dirs.clone();
+            return dirs;
         }
     }
     let dirs = scan_steam_steamapps_dirs();
-    *cache = Some((std::time::Instant::now(), dirs.clone()));
+    *STEAMAPPS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), dirs.clone()));
     dirs
 }
 
 /// `steam_steamapps_dirs`, but any cached result will do, however old.
 fn steam_steamapps_dirs_any_age() -> Vec<PathBuf> {
-    if let Some((_, dirs)) = STEAMAPPS_CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        return dirs.clone();
-    }
-    steam_steamapps_dirs()
+    let cached = STEAMAPPS_CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(_, dirs)| dirs.clone());
+    cached.unwrap_or_else(steam_steamapps_dirs)
 }
 
 fn scan_steam_steamapps_dirs() -> Vec<PathBuf> {
@@ -323,13 +325,64 @@ pub fn proton_prefix(app_id: Option<u32>) -> Option<PathBuf> {
 /// The prefix in the library the game is installed in comes first: Steam
 /// leaves the old prefix behind when a game moves to another library.
 pub(crate) fn proton_prefix_in(steamapps: &[PathBuf], app_id: u32) -> Option<PathBuf> {
-    let installed = |s: &PathBuf| s.join(format!("appmanifest_{app_id}.acf")).is_file();
-    steamapps
-        .iter()
-        .filter(|s| installed(s))
-        .chain(steamapps.iter().filter(|s| !installed(s)))
+    let (installed, others): (Vec<&PathBuf>, Vec<&PathBuf>) =
+        steamapps.iter().partition(|s| s.join(format!("appmanifest_{app_id}.acf")).is_file());
+    installed
+        .into_iter()
+        .chain(others)
         .map(|s| s.join("compatdata").join(app_id.to_string()).join("pfx"))
         .find(|p| p.join("drive_c").is_dir())
+}
+
+/// The Proton prefix of a game played through Proton (see `proton_in_use`).
+/// All of the game's folders then come from there first, so one game never
+/// syncs some folders from the prefix and others from a native install.
+pub fn game_proton_prefix(game_def: &GameDefinition) -> Option<PathBuf> {
+    let pfx = proton_prefix(game_def.steam_app_id)?;
+    proton_in_use(game_def, &pfx).then_some(pfx)
+}
+
+/// Whether the game is played through Proton rather than natively: there's
+/// no native folder of it, or its prefix was used more recently. Wine
+/// rewrites `user.reg` in the prefix on every run; a native folder counts
+/// when its own date or one of its entries' is newer. Folders left over
+/// from trying the other way once lose to the one in use.
+pub(crate) fn proton_in_use(game_def: &GameDefinition, pfx: &std::path::Path) -> bool {
+    let native = native_folders(game_def).iter().filter_map(|p| last_changed(p)).max();
+    let Some(native) = native else { return true };
+    last_changed(&pfx.join("user.reg")).or_else(|| last_changed(pfx)).is_some_and(|proton| proton > native)
+}
+
+/// The game's native folders on this PC that exist: the Documents and
+/// per-OS paths its detection names (not `steamapps/common`, which a
+/// Proton install uses too) and its save folders for this OS.
+fn native_folders(game_def: &GameDefinition) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    if let Some(detection) = &game_def.detection {
+        for strategy in &detection.strategies {
+            match strategy {
+                DetectionStrategy::DocumentsRelative { base, folders } => out.extend(build_candidates(base, folders)),
+                DetectionStrategy::AbsolutePaths { paths } => out.extend(get_platform_paths(paths).iter().map(|p| PathBuf::from(expand_path_vars(p)))),
+                _ => {}
+            }
+        }
+    }
+    for ct in &game_def.content_types {
+        out.extend(ct.roots.iter().filter(|c| root_for_this_os(c)).flat_map(|c| root_candidates(c)));
+    }
+    out.retain(|p| p.is_absolute() && p.exists());
+    out
+}
+
+/// When `path` (or, for a folder, one of its entries) last changed.
+fn last_changed(path: &std::path::Path) -> Option<std::time::SystemTime> {
+    let own = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    let entries = std::fs::read_dir(path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.metadata().and_then(|m| m.modified()).ok());
+    entries.chain(std::iter::once(own)).max()
 }
 
 /// Where a Windows path (`%APPDATA%/x`, `%DOCUMENTS%/x`, `C:/Program Files/x`)
@@ -344,7 +397,10 @@ pub(crate) fn proton_candidates(candidate: &str, pfx: &std::path::Path) -> Vec<P
         None => return Vec::new(),
     };
     let drive_c = pfx.join("drive_c");
-    proton_bases(token, pfx).into_iter().map(|b| join_ci(&b, rest, &drive_c)).collect()
+    // The spelling this prefix's Wine actually made comes first.
+    let mut bases = proton_bases(token, pfx);
+    bases.sort_by_key(|b| !b.is_dir());
+    bases.into_iter().map(|b| join_ci(&b, rest, &drive_c)).collect()
 }
 
 /// The folders a Windows path token (`%APPDATA%`, `C:`) stands for in the
@@ -380,9 +436,35 @@ fn join_ci(base: &std::path::Path, rest: &str, floor: &std::path::Path) -> PathB
             continue;
         }
         let next = path.join(seg);
-        path = crate::network::transfer::find_existing(&next).unwrap_or(next);
+        path = find_existing(&next).unwrap_or(next);
     }
     path
+}
+
+/// Name comparison the way Windows sees it: case-insensitive, trailing dots
+/// and spaces ignored.
+pub(crate) fn same_file_name(a: &str, b: &str) -> bool {
+    a.trim_end_matches(['.', ' ']).to_lowercase() == b.trim_end_matches(['.', ' ']).to_lowercase()
+}
+
+/// The file already occupying `dest`, matched case-insensitively among its
+/// siblings so behavior is the same on case-sensitive file systems.
+pub(crate) fn find_existing(dest: &std::path::Path) -> Option<PathBuf> {
+    if std::fs::symlink_metadata(dest).is_ok() {
+        return Some(dest.to_path_buf());
+    }
+    // Windows lookups already ignore case and trailing dots/spaces, so a
+    // miss is final. Listing the folder anyway ran for every new file (the
+    // normal case), twice: O(n²) on a first sync of 50k files into one folder.
+    if cfg!(windows) {
+        return None;
+    }
+    let name = dest.file_name()?.to_str()?;
+    std::fs::read_dir(dest.parent()?)
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_str().is_some_and(|n| same_file_name(n, name)))
+        .map(|e| e.path())
 }
 
 /// Read a REG_SZ / REG_EXPAND_SZ value (`key` like `HKLM\SOFTWARE\...`),
@@ -612,16 +694,14 @@ pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
 
 /// Where each external content folder of `cts` is on this PC: the user's
 /// choice (`overrides`, by content type id) or the first candidate that
-/// exists. Only when no native candidate exists does it look in `proton()`
-/// (the game's Proton prefix, asked for once and only then): a prefix left
-/// over from trying Proton must never beat the native save folder. Folders
+/// exists. For a game played through Proton (`proton`: its prefix, from
+/// `game_proton_prefix`), the candidates in the prefix come first. Folders
 /// that aren't there are left out (the game never ran).
 pub fn resolve_roots(
     cts: &[crate::registry::ContentType],
     overrides: &std::collections::HashMap<String, String>,
-    proton: impl Fn() -> Option<PathBuf>,
+    proton: Option<&std::path::Path>,
 ) -> std::collections::HashMap<String, PathBuf> {
-    let pfx = std::cell::OnceCell::new();
     cts.iter()
         .filter_map(|ct| {
             let prefix = ct.root_prefix()?;
@@ -629,10 +709,11 @@ pub fn resolve_roots(
             // silently swapped for the auto-found folder sent downloads there.
             let found = match overrides.get(&ct.id) {
                 Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
-                None => ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute() && p.is_dir()).or_else(|| {
-                    let pfx = pfx.get_or_init(&proton).as_ref()?;
-                    ct.roots.iter().flat_map(|c| proton_candidates(c, pfx)).find(|p| p.is_dir())
-                }),
+                None => {
+                    let in_prefix = proton.into_iter().flat_map(|pfx| ct.roots.iter().flat_map(move |c| proton_candidates(c, pfx)));
+                    let native = ct.roots.iter().flat_map(|c| root_candidates(c)).filter(|p| p.is_absolute());
+                    in_prefix.chain(native).find(|p| p.is_dir())
+                }
             }?;
             Some((prefix, found))
         })
@@ -651,12 +732,16 @@ pub fn pin_extra_roots(base: &str, roots: std::collections::HashMap<String, Path
     map.insert(roots_key(base), roots);
 }
 
-/// The Proton prefix of the game at `base`, when its folders were looked for
-/// in there (`commands::files::refresh_extra_roots`).
+/// The Proton prefix of the game at `base`, when it's played through Proton
+/// (`commands::files::refresh_extra_roots`), for `expected_root`.
 static PROTON_PREFIXES: std::sync::LazyLock<std::sync::RwLock<std::collections::HashMap<String, PathBuf>>> =
     std::sync::LazyLock::new(Default::default);
 
 pub fn set_proton_prefix(base: &str, pfx: Option<PathBuf>) {
+    #[cfg(test)]
+    if PINNED.lock().unwrap().contains(&roots_key(base)) {
+        return;
+    }
     let mut map = PROTON_PREFIXES.write().unwrap_or_else(|e| e.into_inner());
     match pfx {
         Some(p) => map.insert(roots_key(base), p),
@@ -714,33 +799,26 @@ fn split_root(base: &str, relative: &str) -> Result<Option<(PathBuf, String)>, S
     }
 }
 
-/// Whether a `roots` candidate can be for this OS: `~/...` ones are macOS or
-/// Linux folders, `~/Library/...` macOS ones, `%VAR%` ones Windows ones.
+/// Whether a `roots` candidate can be for this OS: `%VAR%` ones are Windows
+/// folders, `~/...` ones macOS or Linux ones, `~/Library/...` macOS only.
+/// (`~/.config/...` is both: Stardew Valley keeps its saves there on a Mac.)
 fn root_for_this_os(candidate: &str) -> bool {
     let c = candidate.replace('\\', "/");
     if cfg!(target_os = "windows") {
         !c.starts_with("~/")
     } else if cfg!(target_os = "macos") {
-        !c.starts_with('%') && !c.starts_with("~/.config/") && !c.starts_with("~/.local/")
+        !c.starts_with('%')
     } else {
         !c.starts_with('%') && !c.starts_with("~/Library/")
     }
 }
 
-/// Where an external content type's folder would be (its first candidate
-/// for this OS, else where it would be in the game's Proton prefix), for
-/// watching it before the game has created it.
+/// Where an external content type's folder would be, for watching it before
+/// the game has created it: in the game's Proton prefix when it's played
+/// through Proton, else its first candidate for this OS.
 pub fn expected_root(base: &str, ct: &crate::registry::ContentType) -> Option<PathBuf> {
-    let root = ct
-        .roots
-        .iter()
-        .filter(|c| root_for_this_os(c))
-        .flat_map(|c| root_candidates(c))
-        .find(|p| p.is_absolute())
-        .or_else(|| {
-            let pfx = proton_prefix_of(base)?;
-            ct.roots.iter().flat_map(|c| proton_candidates(c, &pfx)).next()
-        })?;
+    let in_prefix = proton_prefix_of(base).and_then(|pfx| ct.roots.iter().flat_map(|c| proton_candidates(c, &pfx)).next());
+    let root = in_prefix.or_else(|| ct.roots.iter().filter(|c| root_for_this_os(c)).flat_map(|c| root_candidates(c)).find(|p| p.is_absolute()))?;
     Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
@@ -1203,53 +1281,102 @@ mod tests {
     }
 
     #[test]
-    fn windows_save_folders_are_found_in_the_proton_prefix() {
+    fn a_proton_games_save_folders_come_from_its_prefix_first() {
         let root = crate::testutil::temp_dir("proton-roots");
         let pfx = root.join("pfx");
         let saves = pfx.join("drive_c").join("users").join("steamuser").join("AppData").join("LocalLow").join("SyncCrate Test").join("Saves");
         std::fs::create_dir_all(&saves).unwrap();
-        let ct: crate::registry::ContentType = serde_json::from_str(
-            r#"{"id":"saves","label":"Saves","folder":".","file_type":"Save","roots":["%USERPROFILE%/AppData/LocalLow/SyncCrate Test/Saves"]}"#,
-        )
+        let native = root.join("native-saves");
+        std::fs::create_dir_all(&native).unwrap();
+        let ct: crate::registry::ContentType = serde_json::from_str(&format!(
+            r#"{{"id":"saves","label":"Saves","folder":".","file_type":"Save","roots":["%USERPROFILE%/AppData/LocalLow/SyncCrate Test/Saves",{n:?}]}}"#,
+            n = native.to_string_lossy()
+        ))
         .unwrap();
         let none = std::collections::HashMap::new();
-        assert_eq!(resolve_roots(std::slice::from_ref(&ct), &none, || Some(pfx.clone())).get("@saves"), Some(&saves));
-        assert!(resolve_roots(std::slice::from_ref(&ct), &none, || None).is_empty());
-        // A native save folder wins over a prefix left over from trying Proton.
-        let native = root.join("native");
-        std::fs::create_dir_all(&native).unwrap();
-        let mut both = ct.clone();
-        both.roots.push(native.to_string_lossy().to_string());
-        assert_eq!(resolve_roots(&[both], &none, || panic!("the prefix isn't needed")).get("@saves"), Some(&native));
+        // Played through Proton: the prefix's folder, even with a native one left over.
+        assert_eq!(resolve_roots(std::slice::from_ref(&ct), &none, Some(&pfx)).get("@saves"), Some(&saves));
+        // Played natively: the native folder.
+        assert_eq!(resolve_roots(&[ct], &none, None).get("@saves"), Some(&native));
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
-    fn a_windows_game_is_detected_in_its_proton_prefix() {
+    fn the_most_recently_used_install_decides_native_or_proton() {
+        let root = crate::testutil::temp_dir("proton-in-use");
+        let pfx = root.join("pfx");
+        std::fs::create_dir_all(pfx.join("drive_c")).unwrap();
+        let native = root.join("native-saves");
+        let game = |roots: &str| -> GameDefinition {
+            serde_json::from_str(&format!(
+                r#"{{"id":"t","label":"T","family":"t","content_types":[{{"id":"saves","label":"Saves","folder":".","file_type":"Save","roots":[{roots}]}}]}}"#
+            ))
+            .unwrap()
+        };
+        let def = game(&format!("{:?}", native.to_string_lossy()));
+        // No native folder at all: Proton.
+        assert!(proton_in_use(&def, &pfx));
+        std::fs::create_dir_all(&native).unwrap();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        // The prefix was used after the native folder last changed: Proton.
+        crate::testutil::write_file_mtime(&pfx, "user.reg", b"", now + 3600);
+        assert!(proton_in_use(&def, &pfx));
+        // A prefix left over from trying Proton long ago: native.
+        crate::testutil::set_mtime(&pfx, "user.reg", 1_000_000);
+        assert!(!proton_in_use(&def, &pfx));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_proton_game_is_detected_in_its_prefix_in_strategy_order() {
         let root = crate::testutil::temp_dir("proton-detect");
         let pfx = root.join("pfx");
         let user = pfx.join("drive_c").join("users").join("steamuser");
         let docs_game = user.join("Documents").join("SyncCrate Test Co").join("Proton Game");
         let appdata_game = user.join("AppData").join("Roaming").join("SyncCrateProtonTest");
-        std::fs::create_dir_all(&docs_game).unwrap();
-        std::fs::create_dir_all(&appdata_game).unwrap();
-        let def = |strategy: &str| -> GameDefinition {
-            serde_json::from_str(&format!(r#"{{"id":"t","label":"T","family":"t","content_types":[],"detection":{{"strategies":[{strategy}]}}}}"#)).unwrap()
+        let install = root.join("install");
+        for d in [&docs_game, &appdata_game, &install] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let def = |strategies: &str| -> GameDefinition {
+            serde_json::from_str(&format!(r#"{{"id":"t","label":"T","family":"t","content_types":[],"detection":{{"strategies":[{strategies}]}}}}"#)).unwrap()
         };
         let docs = def(r#"{"type":"documents_relative","base":"SyncCrate Test Co","folders":["Proton Game"]}"#);
-        assert_eq!(detect_in_proton(&docs, &pfx).map(PathBuf::from), Some(docs_game));
-        assert_eq!(detect_native(&docs), None);
+        assert_eq!(detect_game_path_in(&docs, Some(&pfx)).map(PathBuf::from), Some(docs_game.clone()));
+        assert_eq!(detect_game_path_in(&docs, None), None);
         let appdata = def(r#"{"type":"absolute_paths","paths":{"windows":["%APPDATA%\\SyncCrateProtonTest"]}}"#);
-        assert_eq!(detect_in_proton(&appdata, &pfx).map(PathBuf::from), Some(appdata_game));
-        assert_eq!(detect_native(&appdata), None);
-        // Native folders are tried first: the same game's native folder wins.
-        let native = root.join("native-game");
-        std::fs::create_dir_all(&native).unwrap();
+        assert_eq!(detect_game_path_in(&appdata, Some(&pfx)).map(PathBuf::from), Some(appdata_game));
+        // Documents first, then the install folder (like the Stronghold games):
+        // through Proton the Documents folder in the prefix wins, natively the
+        // install folder does.
         let both = def(&format!(
             r#"{{"type":"documents_relative","base":"SyncCrate Test Co","folders":["Proton Game"]}},{{"type":"absolute_paths","paths":{{"windows":[{n:?}],"macos":[{n:?}],"linux":[{n:?}]}}}}"#,
-            n = native.to_string_lossy()
+            n = install.to_string_lossy()
         ));
-        assert_eq!(detect_native(&both).map(PathBuf::from), Some(native));
+        assert_eq!(detect_game_path_in(&both, Some(&pfx)).map(PathBuf::from), Some(docs_game));
+        assert_eq!(detect_game_path_in(&both, None).map(PathBuf::from), Some(install));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_proton_games_unmade_save_folder_is_watched_where_its_wine_puts_it() {
+        let root = crate::testutil::temp_dir("proton-expected");
+        let pfx = root.join("pfx");
+        // An older Proton: "My Documents", not "Documents".
+        let my_docs = pfx.join("drive_c").join("users").join("steamuser").join("My Documents");
+        std::fs::create_dir_all(&my_docs).unwrap();
+        let ct: crate::registry::ContentType = serde_json::from_str(
+            r#"{"id":"saves","label":"Saves","folder":".","file_type":"Save","roots":["%DOCUMENTS%/My Games/SyncCrate Test/Saves","~/.config/SyncCrateTest/Saves"]}"#,
+        )
+        .unwrap();
+        let base = root.join("game").to_string_lossy().to_string();
+        set_proton_prefix(&base, Some(pfx.clone()));
+        assert_eq!(expected_root(&base, &ct), Some(my_docs.join("My Games").join("SyncCrate Test").join("Saves")));
+        set_proton_prefix(&base, None);
+        if !cfg!(target_os = "windows") {
+            // `~/.config` is a macOS folder too (Stardew Valley's saves).
+            assert_eq!(expected_root(&base, &ct), Some(PathBuf::from(expand_path_vars("~/.config/SyncCrateTest/Saves"))));
+        }
         let _ = std::fs::remove_dir_all(&root);
     }
 
