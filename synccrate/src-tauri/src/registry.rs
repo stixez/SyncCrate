@@ -741,6 +741,43 @@ mod tests {
         assert!(get("rimworld").steam_workshop_app_id.is_some(), "RimWorld mods are mostly Workshop");
     }
 
+    /// Save folders and launch exes from the games' own Steam configs (cloud
+    /// save roots and launch options, checked 2026-10-29), so they don't regress.
+    #[test]
+    fn steam_config_facts_stay_fixed() {
+        let registry = load_registry();
+        let get = |id: &str| registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+        let ct = |id: &str, ct: &str| get(id).content_types.iter().find(|c| c.id == ct).cloned().unwrap_or_else(|| panic!("{id}/{ct}"));
+        for (id, root) in [
+            ("skyrim_se", "%USERPROFILE%/Documents/My Games/Skyrim Special Edition/Saves"),
+            ("fallout4", "%USERPROFILE%/Documents/My Games/Fallout4/Saves"),
+            ("witcher3", "%USERPROFILE%/Documents/The Witcher 3/gamesaves"),
+            ("cyberpunk2077", "%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077"),
+            ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
+        ] {
+            assert_eq!(ct(id, "saves").roots.first().map(String::as_str), Some(root), "{id}");
+        }
+        // Celeste saves next to the game only on Windows.
+        assert_eq!(ct("celeste", "saves").folder, "Saves");
+        assert!(ct("celeste", "user_saves").roots.iter().any(|r| r == "~/.local/share/Celeste/Saves"));
+        // Steam Cloud keeps truck sim profiles in steam_profiles.
+        for id in ["ets2", "american_truck_simulator"] {
+            assert_eq!(ct(id, "steam_profiles").folder, "steam_profiles", "{id}");
+        }
+        // Steam installs Heroes III as the HD Edition; Torchlight II keeps its
+        // macOS/Linux data inside the Steam install.
+        let steam_folders = |id: &str| -> Vec<String> {
+            get(id).detection.iter().flat_map(|d| &d.strategies).filter_map(|s| match s {
+                DetectionStrategy::SteamLibrary { folders } => Some(folders.clone()),
+                _ => None,
+            }).flatten().collect()
+        };
+        assert!(steam_folders("heroes_3").iter().any(|f| f == "Heroes of Might & Magic III - HD Edition"));
+        assert!(steam_folders("torchlight2").iter().any(|f| f == "Torchlight II/my games/runic games/torchlight 2"));
+        // RimWorld 1.6+ runs as RimWorld.exe.
+        assert!(get("rimworld").process_names.iter().any(|p| p == "RimWorld.exe"));
+    }
+
     /// Modpacks need their configs and recipe scripts to match or servers
     /// kick players (issue #4). `options.txt` (keybinds, video, volume) and
     /// the Distant Horizons LOD cache stay personal.

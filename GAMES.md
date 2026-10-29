@@ -21,18 +21,18 @@
 
 | Game | What syncs |
 |------|------------|
-| **7 Days to Die** | Mods |
+| **7 Days to Die** | Mods, Mods (user folder) |
 | **ARK: Survival Evolved** | Mods, Save Files |
-| **Barotrauma** | Local Mods |
+| **Barotrauma** | Local Mods, Saves |
 | **Conan Exiles** | Mods |
 | **Don't Starve** | Mods |
 | **Don't Starve Together** | Mods |
 | **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
 | **Subnautica** | Plugins (BepInEx), Save Files, Mod Configs, Patchers |
-| **The Long Dark** | Mods (MelonLoader) |
+| **The Long Dark** | Mods (MelonLoader), Saves |
 | **V Rising** | Plugins (BepInEx), Mod Configs, Patchers |
-| **Valheim** | Plugins (BepInEx), Mod Configs, Worlds, Patchers |
+| **Valheim** | Plugins (BepInEx), Mod Configs, Worlds, Patchers, Characters |
 
 </details>
 
@@ -55,7 +55,7 @@
 
 | Game | What syncs |
 |------|------------|
-| **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs, Patchers, Blueprints |
 | **Factorio** | Mods, Save Files, Scenarios |
 | **Satisfactory** | Mods (SMM) |
 
@@ -67,26 +67,26 @@
 | Game | What syncs |
 |------|------------|
 | **Baldur's Gate 3** | Mods, Mod Load Order, Save Files |
-| **Cyberpunk 2077** | Archive Mods, Redscript Mods, TweakXL Tweaks, Cyber Engine Tweaks Mods, RED4ext Plugins |
+| **Cyberpunk 2077** | Archive Mods, Redscript Mods, TweakXL Tweaks, Cyber Engine Tweaks Mods, RED4ext Plugins, Saves |
 | **Darkest Dungeon** | Mods |
 | **Divinity: Original Sin 2** | Mods |
 | **Dragon Age: Origins** | Override Mods, AddIns (DAZip), Save Files |
-| **Fallout 3** | Mods & Plugins |
-| **Fallout 4** | Mods & Plugins |
-| **Fallout: New Vegas** | Mods & Plugins |
+| **Fallout 3** | Mods & Plugins, Saves |
+| **Fallout 4** | Mods & Plugins, Saves |
+| **Fallout: New Vegas** | Mods & Plugins, Saves |
 | **Grim Dawn** | Mods |
 | **Hogwarts Legacy** | Pak Mods |
 | **Kenshi** | Mods |
-| **Kingdom Come: Deliverance** | Mods |
-| **Kingdom Come: Deliverance II** | Mods |
+| **Kingdom Come: Deliverance** | Mods, Saves |
+| **Kingdom Come: Deliverance II** | Mods, Saves |
 | **Neverwinter Nights: Enhanced Edition** | Hak Paks, Override, Modules, Custom Talk Tables, Portraits, Characters (local vault), Save Files |
-| **Oblivion Remastered** | Plugins (Data), Pak Mods, OBSE Plugins, UE4SS Mods |
-| **Skyrim (Legendary Edition)** | Mods & Plugins |
-| **Skyrim Special Edition** | Mods & Plugins |
+| **Oblivion Remastered** | Plugins (Data), Pak Mods, OBSE Plugins, UE4SS Mods, Saves |
+| **Skyrim (Legendary Edition)** | Mods & Plugins, Saves |
+| **Skyrim Special Edition** | Mods & Plugins, Saves |
 | **Starfield** | Mods & Plugins |
-| **The Elder Scrolls III: Morrowind** | Mods & Plugins |
-| **The Elder Scrolls IV: Oblivion** | Mods & Plugins |
-| **The Witcher 3: Wild Hunt** | Mods, Mod Menus |
+| **The Elder Scrolls III: Morrowind** | Mods & Plugins, Saves |
+| **The Elder Scrolls IV: Oblivion** | Mods & Plugins, Saves |
+| **The Witcher 3: Wild Hunt** | Mods, Mod Menus, Saves |
 | **Titan Quest Anniversary Edition** | Custom Maps & Mods, Save Files |
 | **Torchlight II** | Mods, Save Files |
 
@@ -119,20 +119,20 @@
 | **Europa Universalis V** | Mods, Save Files |
 | **Hearts of Iron IV** | Mods, Save Files |
 | **Heroes of Might and Magic III** | Maps, Save Files |
-| **Mount & Blade II: Bannerlord** | Modules |
+| **Mount & Blade II: Bannerlord** | Modules, Saves |
 | **Mount & Blade: Warband** | Modules |
 | **RimWorld** | Mods, Saves |
 | **Sid Meier's Civilization VI** | Mods, Save Files |
 | **Sid Meier's Civilization VII** | Mods |
 | **Stellaris** | Mods, Save Files |
-| **Stronghold 2** | Custom Maps |
-| **Stronghold Crusader 2** | Custom Maps |
-| **Stronghold HD** | Custom Maps |
-| **Stronghold: Crusader HD** | Custom Maps |
+| **Stronghold 2** | Custom Maps, Saves |
+| **Stronghold Crusader 2** | Custom Maps, Saves |
+| **Stronghold HD** | Custom Maps, Saves |
+| **Stronghold: Crusader HD** | Custom Maps, Saves |
 | **The Riftbreaker** | Mods |
 | **Victoria 3** | Mods, Save Files |
 | **Warcraft III** | Custom Maps |
-| **XCOM 2** | Mods (Base Game), Mods (War of the Chosen) |
+| **XCOM 2** | Mods (Base Game), Mods (War of the Chosen), Saves, War of the Chosen saves |
 
 </details>
 
@@ -152,11 +152,11 @@
 
 | Game | What syncs |
 |------|------------|
-| **American Truck Simulator** | Mods, Profiles |
-| **Euro Truck Simulator 2** | Mods, Profiles |
+| **American Truck Simulator** | Mods, Profiles, Steam Cloud profiles |
+| **Euro Truck Simulator 2** | Mods, Profiles, Steam Cloud profiles |
 | **Farming Simulator 22** | Mods |
 | **Farming Simulator 25** | Mods |
-| **Football Manager 26** | Graphics (faces, logos, kits), Editor Data |
+| **Football Manager 26** | Graphics (faces, logos, kits), Editor Data, Saves |
 | **Kerbal Space Program** | Mods, Save Files |
 | **Oxygen Not Included** | Local Mods, Save Files |
 | **Stardew Valley** | SMAPI Mods, Saves |
@@ -175,7 +175,7 @@
 | **Counter-Strike 2** | Configs |
 | **Left 4 Dead 2** | Addons & Maps, Configs |
 | **Payday 2** | Mods (SuperBLT), Mod Overrides, Custom Heists |
-| **Ready or Not** | Pak Mods |
+| **Ready or Not** | Pak Mods, Saves |
 | **Team Fortress 2** | Custom (HUDs, Skins, Sounds), Maps, Configs |
 
 </details>
@@ -200,9 +200,9 @@
 
 | Game | What syncs |
 |------|------------|
-| **Content Warning** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Content Warning** | Plugins (BepInEx), Mod Configs, Patchers, Saves |
 | **Lethal Company** | Plugins (BepInEx), Mod Configs, Patchers |
-| **R.E.P.O.** | Plugins (BepInEx), Mod Configs, Patchers |
+| **R.E.P.O.** | Plugins (BepInEx), Mod Configs, Patchers, Saves |
 
 </details>
 
@@ -212,8 +212,8 @@
 | Game | What syncs |
 |------|------------|
 | **Balatro** | Mods (Steamodded/Lovely), Save Profile 1, Save Profile 2, Save Profile 3 |
-| **Cult of the Lamb** | Plugins (BepInEx), Mod Configs, Patchers |
-| **Noita** | Mods |
+| **Cult of the Lamb** | Plugins (BepInEx), Mod Configs, Patchers, Saves |
+| **Noita** | Mods, Saves |
 | **Risk of Rain 2** | Plugins (BepInEx), Mod Configs, Patchers |
 | **Slay the Spire** | Mods, Save Files, Preferences & Profiles |
 
@@ -237,8 +237,8 @@
 
 | Game | What syncs |
 |------|------------|
-| **Celeste** | Mods (Everest), Save Files |
-| **Hollow Knight** | Mods |
+| **Celeste** | Mods (Everest), Save Files, Saves (macOS/Linux) |
+| **Hollow Knight** | Mods, Saves |
 | **Hollow Knight: Silksong** | Plugins (BepInEx), Mod Configs, Patchers |
 
 </details>
@@ -249,7 +249,7 @@
 | Game | What syncs |
 |------|------------|
 | **Among Us** | Plugins (BepInEx), Mod Configs, Patchers |
-| **Peak** | Plugins (BepInEx), Mod Configs, Patchers |
+| **Peak** | Plugins (BepInEx), Mod Configs, Patchers, Saves |
 | **Tabletop Simulator** | Save Files, Workshop Mods |
 
 </details>
