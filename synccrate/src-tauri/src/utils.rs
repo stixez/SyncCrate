@@ -1301,6 +1301,46 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// Every registry game's Windows folders map into a Proton prefix and are
+    /// found there: detection (when Windows paths are its first strategy) and
+    /// every Windows save folder. Real folder names, so a registry spelling
+    /// that can't map shows up here, not on someone's Steam Deck.
+    #[test]
+    fn every_registry_games_windows_folders_are_found_in_a_proton_prefix() {
+        let root = crate::testutil::temp_dir("proton-registry");
+        let (mut detected, mut saves) = (0, 0);
+        for game in crate::registry::load_registry().games.iter().filter(|g| g.steam_app_id.is_some()) {
+            let pfx = root.join(&game.id).join("pfx");
+            std::fs::create_dir_all(pfx.join("drive_c")).unwrap();
+            for ct in &game.content_types {
+                let Some(first) = ct.roots.iter().flat_map(|c| proton_candidates(c, &pfx)).next() else { continue };
+                assert!(first.starts_with(&pfx), "{}/{}: {first:?}", game.id, ct.id);
+                std::fs::create_dir_all(&first).unwrap();
+                let found = resolve_roots(std::slice::from_ref(ct), &std::collections::HashMap::new(), Some(&pfx));
+                assert_eq!(found.get(&ct.root_prefix().unwrap()), Some(&first), "{}/{}", game.id, ct.id);
+                saves += 1;
+            }
+            let Some(detection) = &game.detection else { continue };
+            let first_strategy = detection.strategies.first();
+            let candidate = match first_strategy {
+                Some(DetectionStrategy::DocumentsRelative { base, folders }) => proton_candidates(&format!("%DOCUMENTS%/{base}/{}", folders[0]), &pfx).into_iter().next(),
+                Some(DetectionStrategy::AbsolutePaths { paths }) => paths.windows.iter().flat_map(|p| proton_candidates(p, &pfx)).next(),
+                _ => None,
+            };
+            let Some(candidate) = candidate else { continue };
+            assert!(candidate.starts_with(&pfx), "{}: {candidate:?}", game.id);
+            std::fs::create_dir_all(&candidate).unwrap();
+            if let Some(marker) = detection.require_any.first() {
+                std::fs::write(candidate.join(marker), b"").unwrap();
+            }
+            let path = detect_game_path_in(game, Some(&pfx)).map(PathBuf::from);
+            assert_eq!(path.as_deref(), Some(candidate.as_path()), "{} isn't detected in its prefix", game.id);
+            detected += 1;
+        }
+        assert!(detected >= 30 && saves >= 30, "only {detected} detections and {saves} save folders checked");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn the_most_recently_used_install_decides_native_or_proton() {
         let root = crate::testutil::temp_dir("proton-in-use");
