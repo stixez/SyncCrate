@@ -13,6 +13,7 @@ const ActivityLog = lazy(() => import("./components/ActivityLog"));
 const Settings = lazy(() => import("./components/Settings"));
 const GameBrowser = lazy(() => import("./components/GameBrowser"));
 const Guide = lazy(() => import("./components/Guide"));
+const ReleaseNotes = lazy(() => import("./components/ReleaseNotes"));
 import WelcomeScreen, { isOnboardingComplete } from "./components/WelcomeScreen";
 import DropZoneOverlay from "./components/DropZoneOverlay";
 import InstallResultsModal from "./components/InstallResultsModal";
@@ -41,6 +42,7 @@ import { plural } from "./lib/utils";
 import { gameLabel } from "./lib/games";
 import { toast } from "sonner";
 import { check } from "@tauri-apps/plugin-updater";
+import { updateSummary } from "./lib/releaseNotes";
 import { relaunch } from "@tauri-apps/plugin-process";
 import * as cmd from "./lib/commands";
 
@@ -150,6 +152,7 @@ function App() {
         const update = await check();
         if (update) {
           toast(`Update v${update.version} available`, {
+            description: updateSummary(update.body) ?? undefined,
             duration: Infinity,
             action: {
               label: "Update Now",
@@ -395,6 +398,8 @@ function App() {
         return <Settings />;
       case "guide":
         return <Guide />;
+      case "release-notes":
+        return <ReleaseNotes />;
       case "game-browser":
         return <GameBrowser />;
     }
