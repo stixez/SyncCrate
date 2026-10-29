@@ -1,8 +1,9 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, BookOpen, Lightbulb, Search } from "lucide-react";
+import { ArrowRight, BookOpen, Lightbulb, MessageCircle, Search } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { GUIDE, searchGuide, type GuideSection } from "../lib/guideContent";
 import { toastInfo } from "../lib/toast";
+import { openDiscord } from "../lib/links";
 import { Button, EmptyState, Input, Panel, SectionHeader, cx } from "./ui";
 import type { Page } from "../lib/types";
 
@@ -72,6 +73,11 @@ export default function Guide() {
         label={<><b>// Guide</b> &nbsp;How it works</>}
         title={<>How to use <span className="text-neon">SyncCrate</span></>}
         description="Everything SyncCrate can do, one task at a time. Each section ends with a button that takes you to the right page."
+        actions={
+          <Button size="sm" variant="ghost" onClick={openDiscord} icon={<MessageCircle size={12} />}>
+            Ask on Discord
+          </Button>
+        }
       />
 
       <div className="space-y-3">

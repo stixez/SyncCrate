@@ -9,7 +9,7 @@ import * as cmd from "./commands";
 const MAX_LINES = 30;
 
 /** Build the "Copy diagnostics" report and put it on the clipboard. Nothing
- * is sent anywhere: the user pastes it into a GitHub issue themselves. */
+ * is sent anywhere: the user pastes it into a GitHub issue or Discord themselves. */
 export async function copyDiagnostics(): Promise<void> {
   const s = useAppStore.getState();
   const log = useLogStore
@@ -27,7 +27,7 @@ export async function copyDiagnostics(): Promise<void> {
   ].filter((n) => n.trim().length > 0);
   try {
     const report = isDemoMode()
-      ? "SyncCrate diagnostics (demo)\nPaste this into a GitHub issue: https://github.com/stixez/SyncCrate/issues/new/choose. It contains no files, codes or friends' names.\n"
+      ? "SyncCrate diagnostics (demo)\nPaste this into a GitHub issue (https://github.com/stixez/SyncCrate/issues/new/choose) or a #help post on Discord (https://discord.gg/NY2P9u6v7Z). It contains no files, codes or friends' names.\n"
       : await cmd.diagnosticsReport(log, s.stayInSync, loadDiscordPresence(), names);
     await navigator.clipboard.writeText(report);
     toastSuccess("Diagnostics copied");

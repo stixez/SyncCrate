@@ -13,6 +13,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub const ISSUE_URL: &str = "https://github.com/stixez/SyncCrate/issues/new/choose";
+pub const DISCORD_URL: &str = "https://discord.gg/NY2P9u6v7Z";
 /// Enough to see what went wrong before the report, short enough to read.
 pub const MAX_LOG_LINES: usize = 30;
 const MAX_LOG_LINE_CHARS: usize = 300;
@@ -432,7 +433,7 @@ fn format_time(ms: u64) -> String {
 pub fn format_report(d: &DiagnosticsInput, scrub: &Scrubber) -> String {
     let mut lines: Vec<String> = Vec::new();
     lines.push("SyncCrate diagnostics".to_string());
-    lines.push(format!("Paste this into a GitHub issue: {ISSUE_URL}. It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
+    lines.push(format!("Paste this into a GitHub issue ({ISSUE_URL}) or a #help post on Discord ({DISCORD_URL}). It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
     lines.push(String::new());
 
     lines.push(format!("App version:   {}", d.app_version));
@@ -727,7 +728,7 @@ mod tests {
     #[test]
     fn report_has_header_and_settings_and_scrubs_the_path() {
         let r = format_report(&input(), &scrubber());
-        assert!(r.starts_with("SyncCrate diagnostics\nPaste this into a GitHub issue: https://github.com/stixez/SyncCrate/issues/new/choose."));
+        assert!(r.starts_with("SyncCrate diagnostics\nPaste this into a GitHub issue (https://github.com/stixez/SyncCrate/issues/new/choose) or a #help post on Discord (https://discord.gg/NY2P9u6v7Z)."));
         assert!(r.contains("It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
         assert!(r.contains("App version:   0.8.5"));
         assert!(r.contains(r"Game folder:   ~\Documents\Electronic Arts\The Sims 4"));

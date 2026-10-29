@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import StoragePanel from "./StoragePanel";
 import { friendlyError } from "../lib/errors";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff, ScrollText } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff, ScrollText, MessageCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -22,6 +22,7 @@ import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
 import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
 import { updateSummary } from "../lib/releaseNotes";
+import { openDiscord } from "../lib/links";
 import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
@@ -693,10 +694,21 @@ export default function Settings() {
             </Button>
           </Panel>
 
+          <Panel title="SyncCrate Discord" label="// Community" className="col-span-2">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs text-txt-dim">
+                Get help, share your packs, find a crew to play with, and tell us what to build next.
+              </p>
+              <Button variant="primary" onClick={openDiscord} icon={<MessageCircle size={14} />} className="shrink-0">
+                Join the Discord
+              </Button>
+            </div>
+          </Panel>
+
           <Panel title="Report a problem" label="// Diagnostics" className="col-span-2">
             <div className="flex items-center justify-between gap-4">
               <p className="text-xs text-txt-dim">
-                Something not working? Copy a short report and paste it into a GitHub issue. It has your app version,
+                Something not working? Copy a short report and paste it into a GitHub issue or a post in #help on Discord. It has your app version,
                 system and connection status, and recent errors. No files, join codes, PINs or friends' names, and
                 nothing is sent anywhere.
               </p>

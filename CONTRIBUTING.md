@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. For questions or to talk an idea through first, join the [Discord](https://discord.gg/NY2P9u6v7Z).
 
 ## Adding a game
 

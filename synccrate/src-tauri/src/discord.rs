@@ -24,6 +24,8 @@ const RETRY: Duration = Duration::from_secs(20);
 const REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBSITE: &str = "https://synccrate.app";
 const ICON: &str = "https://synccrate.app/apple-touch-icon.png";
+/// The SyncCrate community server, the status's second button.
+const COMMUNITY: &str = "https://discord.gg/NY2P9u6v7Z";
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Presence {
@@ -48,7 +50,7 @@ pub fn activity_payload(presence: Option<&Presence>, pid: u32, nonce: u64) -> se
             "details": fit(&p.details),
             "state": fit(&p.state),
             "assets": { "large_image": ICON, "large_text": "SyncCrate" },
-            "buttons": [{ "label": "Get SyncCrate", "url": WEBSITE }],
+            "buttons": [{ "label": "Get SyncCrate", "url": WEBSITE }, { "label": "Join the community", "url": COMMUNITY }],
         });
         if let Some(start) = p.start {
             a["timestamps"] = json!({ "start": start });
@@ -375,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn payload_shows_two_lines_a_button_and_clears_with_none() {
+    fn payload_shows_two_lines_two_buttons_and_clears_with_none() {
         let p = Presence { details: "Hosting The Sims 4".into(), state: "2 friends connected".into(), start: Some(1_700_000_000) };
         let v = activity_payload(Some(&p), 42, 7);
         assert_eq!(v["cmd"], "SET_ACTIVITY");
@@ -383,6 +385,7 @@ mod tests {
         assert_eq!(v["args"]["activity"]["details"], "Hosting The Sims 4");
         assert_eq!(v["args"]["activity"]["timestamps"]["start"], 1_700_000_000u64);
         assert_eq!(v["args"]["activity"]["buttons"][0]["url"], WEBSITE);
+        assert_eq!(v["args"]["activity"]["buttons"][1]["url"], COMMUNITY);
         assert!(activity_payload(None, 42, 8)["args"]["activity"].is_null());
     }
 
