@@ -1,10 +1,16 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import { Heart } from "lucide-react";
+import pkg from "../../package.json";
 import { useAppStore } from "../stores/useAppStore";
 import { gamePrimaryColor, getGameDef } from "../lib/games";
 import { applyAccent, applyAppearanceRoot, applyThemeClass, useMediaPreference } from "../lib/appearance";
+import { isDemoMode } from "../lib/demoData";
+import { markReleaseNotesSeen, releaseFor, releaseToAnnounce, RELEASES, type Release } from "../lib/releaseNotes";
+import * as cmd from "../lib/commands";
 import DonateModal from "./DonateModal";
+import ReleaseNotesModal from "./ReleaseNotesModal";
+import { isOnboardingComplete } from "./WelcomeScreen";
 import { GameArt, LiveDot } from "./ui";
 import { plural } from "../lib/utils";
 
@@ -17,6 +23,7 @@ const PAGE_LABELS: Record<string, string> = {
   crews: "Crews",
   activity: "Activity Log",
   guide: "Guide",
+  "release-notes": "Release Notes",
   settings: "Settings",
   "game-browser": "Game Browser",
 };
@@ -49,7 +56,21 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, [accentSource]);
 
   const isConnected = session && session.session_type !== "None";
-  const isGlobal = page === "activity" || page === "settings" || page === "game-browser" || page === "crews" || page === "guide" || !selectedGame;
+  const isGlobal = page === "activity" || page === "settings" || page === "game-browser" || page === "crews" || page === "guide" || page === "release-notes" || !selectedGame;
+
+  // What changed, once after SyncCrate updates (?demo&releasenotes previews it).
+  const [announce, setAnnounce] = useState<Release | null>(null);
+  useEffect(() => {
+    const demo = isDemoMode();
+    if (demo && !new URLSearchParams(window.location.search).has("releasenotes")) return;
+    cmd.getAppVersion()
+      .catch(() => pkg.version)
+      .then((v) => setAnnounce(demo ? releaseFor(v) ?? RELEASES[0] ?? null : releaseToAnnounce(v, !isOnboardingComplete())));
+  }, []);
+  const closeAnnounce = () => {
+    if (announce && !isDemoMode()) markReleaseNotesSeen(announce.version);
+    setAnnounce(null);
+  };
   const crumbGame = !isGlobal && selectedGame ? getGameDef(selectedGame)?.label ?? selectedGame : null;
 
   return (
@@ -107,6 +128,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
       {showDonate && <DonateModal />}
+      {announce && !showDonate && <ReleaseNotesModal release={announce} onClose={closeAnnounce} />}
     </div>
   );
 }

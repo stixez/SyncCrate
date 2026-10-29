@@ -562,6 +562,7 @@ export type Page =
   | "activity"
   | "settings"
   | "guide"
+  | "release-notes"
   | "game-browser";
 
 export interface BackupInfo {

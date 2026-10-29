@@ -418,7 +418,16 @@ export default function Sidebar() {
           )}
         </div>
         <div className="flex items-center justify-between mt-2 px-1">
-          <span className="font-mono text-[10px] text-txt-muted tracking-[0.08em]">v{version}</span>
+          <button
+            onClick={() => navigateToGlobal("release-notes")}
+            className={cx(
+              "font-mono text-[10px] tracking-[0.08em] transition-colors hover:text-neon",
+              page === "release-notes" && !selectedGame ? "text-neon" : "text-txt-muted",
+            )}
+            title="Release notes: what changed in each version"
+          >
+            v{version}
+          </button>
           <button
             onClick={() => setTheme(shownTheme === "dark" ? "light" : "dark")}
             className="p-1.5 text-txt-muted hover:text-txt hover:bg-bg-card transition-colors"

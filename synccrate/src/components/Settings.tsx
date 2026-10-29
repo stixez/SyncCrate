@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import StoragePanel from "./StoragePanel";
 import { friendlyError } from "../lib/errors";
-import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, X, Heart, Coffee, ExternalLink, ImagePlus, RotateCcw, Check, Pipette, Moon, Sun, Monitor, Eye, EyeOff, ScrollText } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -21,6 +21,7 @@ import { getShowGameArt, invalidateGameArt, setShowGameArt } from "../hooks/useG
 import * as cmd from "../lib/commands";
 import { saveGamePath } from "../lib/gamePath";
 import CopyDiagnosticsButton from "./CopyDiagnosticsButton";
+import { updateSummary } from "../lib/releaseNotes";
 import type { AutoBackupConfig, ExtraFolder } from "../lib/types";
 
 export default function Settings() {
@@ -633,8 +634,9 @@ export default function Settings() {
                 try {
                   const update = await check();
                   if (update?.available) {
+                    const brings = updateSummary(update.body);
                     const yes = await ask(
-                      `Update to v${update.version} is available!\n\n${update.body ?? ""}`,
+                      `Update to v${update.version} is available!${brings ? `\n\nWhat's in it:\n${brings}` : ""}`,
                       {
                         title: "Update Available",
                         kind: "info",
@@ -680,6 +682,14 @@ export default function Settings() {
               icon={<RefreshCw size={14} className={updating ? "animate-spin" : ""} />}
             >
               {updating ? "Checking..." : "Check for Updates"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="mt-2"
+              onClick={() => useAppStore.getState().navigateToGlobal("release-notes")}
+              icon={<ScrollText size={14} />}
+            >
+              Release notes
             </Button>
           </Panel>
 

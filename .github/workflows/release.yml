@@ -37,6 +37,16 @@ jobs:
             exit 1
           fi
 
+      # The release notes are CHANGELOG.md's section for this version, at the
+      # tag being released. Only that file is checked out, without credentials.
+      - name: Checkout CHANGELOG.md
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - name: Create GitHub Release
         id: create
         env:
@@ -44,9 +54,28 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
+            const fs = require('fs');
             const workflowTag = (process.env.INPUT_TAG || '').trim();
             const tag = workflowTag || context.ref.replace('refs/tags/', '');
-            const releaseBody = `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n> **macOS:** SyncCrate isn't notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to SyncCrate.\n> If macOS says the app "is damaged" instead, open Terminal and run \`xattr -cr /Applications/SyncCrate.app\`, then open SyncCrate normally.\n\n> **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.`;
+            const version = tag.replace(/^v/, '');
+            const downloads = `## Downloads\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` installer |\n| macOS (Apple Silicon) | \`.dmg\` |\n| macOS (Intel) | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n> **macOS:** SyncCrate isn't notarized by Apple, so macOS blocks it the first time. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to SyncCrate.\n> If macOS says the app "is damaged" instead, open Terminal and run \`xattr -cr /Applications/SyncCrate.app\`, then open SyncCrate normally.\n\n> **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.`;
+
+            // This version's section of CHANGELOG.md, without its heading.
+            let notes = '';
+            try {
+              const log = fs.readFileSync('CHANGELOG.md', 'utf8').replace(/\r\n/g, '\n');
+              const start = log.search(new RegExp(`^## ${version.replace(/\./g, '\\.')} — `, 'm'));
+              if (start >= 0) {
+                const rest = log.slice(start);
+                const next = rest.slice(3).search(/^## /m);
+                notes = (next >= 0 ? rest.slice(0, next + 3) : rest).replace(/^## .*\n/, '').trim();
+              }
+            } catch {}
+            if (!notes) core.warning(`CHANGELOG.md has no "## ${version} — <date>" section: the release keeps its current notes.`);
+            // Notes written on GitHub by hand are kept when the changelog has none.
+            const releaseBody = (current) => notes
+              ? `## SyncCrate ${version}\n\n${notes}\n\n---\n\n${downloads}`
+              : (current && current.trim() ? current : downloads);
 
             let release;
             try {
@@ -62,7 +91,7 @@ jobs:
                 release_id: existing.data.id,
                 tag_name: tag,
                 name: `SyncCrate ${tag}`,
-                body: releaseBody,
+                body: releaseBody(existing.data.body),
                 draft: false,
                 prerelease: false,
               });
@@ -78,7 +107,7 @@ jobs:
                 repo: context.repo.repo,
                 tag_name: tag,
                 name: `SyncCrate ${tag}`,
-                body: releaseBody,
+                body: releaseBody(null),
                 draft: false,
                 prerelease: false,
               });
@@ -202,7 +231,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Post to #announcements
+      - name: Checkout CHANGELOG.md
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
+      - name: "Post to #announcements"
         env:
           WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
           TAG: ${{ inputs.tag || github.ref_name }}
@@ -210,13 +247,34 @@ jobs:
           UPDATES_ROLE: "1565000145802895427"
         run: |
           if [ -z "$WEBHOOK" ]; then echo "No DISCORD_RELEASE_WEBHOOK secret: skipping Discord."; exit 0; fi
-          jq -n --arg tag "$TAG" --arg repo "$REPO" --arg role "$UPDATES_ROLE" '{
+          # The version's summary and highlight headlines from CHANGELOG.md.
+          python3 - "$TAG" > notes.txt <<'PY'
+          import re, sys
+          version = sys.argv[1].lstrip("v")
+          try:
+              log = open("CHANGELOG.md", encoding="utf-8").read()
+          except OSError:
+              log = ""
+          m = re.search(r"^## " + re.escape(version) + r" — .*?\n(.*?)(?=^## |\Z)", log, re.M | re.S)
+          body = m.group(1).strip() if m else ""
+          summary = body.split("\n\n")[0].strip() if body and not body.startswith(("#", "-", ">")) else ""
+          hl = re.search(r"^### .*Highlights.*?\n(.*?)(?=^#|\Z)", body, re.M | re.S | re.I)
+          heads = []
+          for line in (hl.group(1) if hl else "").splitlines():
+              if line.startswith("- "):
+                  bold = re.match(r"- \*\*(.+?)\*\*", line)
+                  heads.append("• " + (bold.group(1) if bold else line[2:]).rstrip(".:"))
+          parts = [p for p in [summary, "\n".join(heads[:5])] if p]
+          parts.append("The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app")
+          print("\n\n".join(parts)[:4000])
+          PY
+          jq -n --arg tag "$TAG" --arg repo "$REPO" --arg role "$UPDATES_ROLE" --rawfile notes notes.txt '{
             content: "<@&\($role)> SyncCrate \($tag) is out!",
             allowed_mentions: { roles: [$role] },
             embeds: [{
               title: "SyncCrate \($tag)",
               url: "https://github.com/\($repo)/releases/tag/\($tag)",
-              description: "The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app",
+              description: ($notes | rtrimstr("\n")),
               color: 2078846,
               thumbnail: { url: "https://synccrate.app/apple-touch-icon.png" },
               footer: { text: "Windows · macOS · Linux" }
