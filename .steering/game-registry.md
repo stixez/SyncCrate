@@ -12,6 +12,7 @@ Every supported game is one entry in `synccrate/src-tauri/src/game_registry.json
 
 - A save path containing `{64BitSteamID}` or `{Steam3AccountID}` is per Steam account: don't add it. A friend's game only reads its own account's folder. Those games sync mods, not saves (FAQ and the site say so).
 - Saves outside the game folder use `roots`: Windows, then macOS, then Linux candidates; the first existing one wins.
+- On Linux, a game's Windows paths (`%DOCUMENTS%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%`, `C:`…) are also looked up in its Proton prefix by `steam_app_id` (`utils::proton_candidates`), so a Windows-only Steam game needs no Linux entries for that.
 - Write Windows Documents as `%DOCUMENTS%` (resolved like `documents_relative`, so OneDrive and moved Documents work). It's Windows-only, so give macOS and Linux their own entries. Never `%USERPROFILE%/Documents`.
 - An external save type with `"extensions": []` must exclude `steam_autocloud.vdf` (Steam's account file). A test enforces it.
 

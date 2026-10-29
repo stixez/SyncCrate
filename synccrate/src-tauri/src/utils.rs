@@ -94,6 +94,12 @@ fn build_candidates_str(base: &str, folders: &[&str]) -> Vec<PathBuf> {
 
 /// Detect a game path using the detection strategies from a GameDefinition.
 pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
+    detect_game_path_in(game_def, proton_prefix(game_def.steam_app_id).as_deref())
+}
+
+/// Detection, also looking inside `proton` (the game's Proton prefix) for
+/// Windows folders a Windows-only game uses on Linux.
+pub(crate) fn detect_game_path_in(game_def: &GameDefinition, proton: Option<&std::path::Path>) -> Option<String> {
     let detection = game_def.detection.as_ref()?;
     let accept = |p: &std::path::Path| -> bool {
         p.exists()
@@ -104,7 +110,12 @@ pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
     for strategy in &detection.strategies {
         match strategy {
             DetectionStrategy::DocumentsRelative { base, folders } => {
-                let candidates = build_candidates(base, folders);
+                let mut candidates = build_candidates(base, folders);
+                if let Some(pfx) = proton {
+                    for folder in folders {
+                        candidates.extend(proton_candidates(&format!("%DOCUMENTS%/{base}/{folder}"), pfx));
+                    }
+                }
                 if let Some(found) = candidates.into_iter().find(|p| accept(p)) {
                     return Some(found.to_string_lossy().to_string());
                 }
@@ -116,6 +127,14 @@ pub fn detect_game_path_from_def(game_def: &GameDefinition) -> Option<String> {
                     let path = PathBuf::from(&expanded);
                     if accept(&path) {
                         return Some(path.to_string_lossy().to_string());
+                    }
+                }
+                // The Windows version's folders, in the Proton prefix.
+                if let Some(pfx) = proton {
+                    for path in paths.windows.iter().flat_map(|p| proton_candidates(p, pfx)) {
+                        if accept(&path) {
+                            return Some(path.to_string_lossy().to_string());
+                        }
                     }
                 }
             }
@@ -267,6 +286,76 @@ fn scan_steam_steamapps_dirs() -> Vec<PathBuf> {
         }
     }
     result
+}
+
+/// Linux: the Wine prefix Steam Play (Proton) made for a Windows game,
+/// `steamapps/compatdata/<app id>/pfx` in any Steam library. A Windows game
+/// keeps its Documents and AppData folders in there, not in the Linux home.
+/// None elsewhere, and before the game's first run.
+pub fn proton_prefix(app_id: Option<u32>) -> Option<PathBuf> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    proton_prefix_in(&steam_steamapps_dirs(), app_id?)
+}
+
+pub(crate) fn proton_prefix_in(steamapps: &[PathBuf], app_id: u32) -> Option<PathBuf> {
+    steamapps
+        .iter()
+        .map(|s| s.join("compatdata").join(app_id.to_string()).join("pfx"))
+        .find(|p| p.join("drive_c").is_dir())
+}
+
+/// Where a Windows path (`%APPDATA%/x`, `%DOCUMENTS%/x`, `C:/Program Files/x`)
+/// is inside the Proton prefix `pfx`: Proton's user is always `steamuser`,
+/// and older Wine versions spell some folders differently, so a path can
+/// have two places. Empty for a path that isn't a Windows one.
+pub(crate) fn proton_candidates(candidate: &str, pfx: &std::path::Path) -> Vec<PathBuf> {
+    let norm = candidate.replace('\\', "/");
+    let (token, rest) = match norm.strip_prefix('%').and_then(|r| r.find('%')) {
+        Some(end) => (norm[..end + 2].to_ascii_uppercase(), &norm[end + 2..]),
+        None if norm.len() >= 2 && norm[..2].eq_ignore_ascii_case("c:") => ("C:".to_string(), &norm[2..]),
+        None => return Vec::new(),
+    };
+    let drive_c = pfx.join("drive_c");
+    let user = drive_c.join("users").join("steamuser");
+    let bases = match token.as_str() {
+        "%DOCUMENTS%" => vec![user.join("Documents"), user.join("My Documents")],
+        "%APPDATA%" => vec![user.join("AppData").join("Roaming"), user.join("Application Data")],
+        "%LOCALAPPDATA%" => vec![user.join("AppData").join("Local"), user.join("Local Settings").join("Application Data")],
+        "%USERPROFILE%" => vec![user],
+        "%PROGRAMFILES%" => vec![drive_c.join("Program Files")],
+        "%PROGRAMFILES(X86)%" => vec![drive_c.join("Program Files (x86)")],
+        "%PROGRAMDATA%" => vec![drive_c.join("ProgramData")],
+        "%PUBLIC%" => vec![drive_c.join("users").join("Public")],
+        "C:" => vec![drive_c],
+        _ => return Vec::new(),
+    };
+    bases.into_iter().map(|b| join_ci(&b, rest)).collect()
+}
+
+/// `base` joined with the `/`-separated `rest`, matching each folder name
+/// regardless of case when the exact spelling isn't there: a Windows game
+/// doesn't care how a folder is spelled, Linux does. Spelled as given from
+/// the first folder that doesn't exist.
+fn join_ci(base: &std::path::Path, rest: &str) -> PathBuf {
+    let mut path = base.to_path_buf();
+    let mut exists = path.is_dir();
+    for seg in rest.split('/').filter(|s| !s.is_empty() && *s != "." && *s != "..") {
+        if exists && !path.join(seg).exists() {
+            let found = std::fs::read_dir(&path)
+                .ok()
+                .and_then(|entries| entries.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(seg)));
+            if let Some(entry) = found {
+                path = entry.path();
+                continue;
+            }
+            exists = false;
+        }
+        path.push(seg);
+        exists = exists && path.exists();
+    }
+    path
 }
 
 /// Read a REG_SZ / REG_EXPAND_SZ value (`key` like `HKLM\SOFTWARE\...`),
@@ -481,9 +570,11 @@ fn roots_key(base: &str) -> String {
 /// `%USERPROFILE%/Documents` missed every save there. It's a Windows-only
 /// candidate, like `%USERPROFILE%`: macOS/Linux saves have their own entries,
 /// and resolving it there made the watcher wait on a folder no game creates.
-pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
+/// With `proton` (the game's Proton prefix on Linux), a Windows candidate
+/// also has its place in there, after the native ones.
+pub(crate) fn root_candidates(candidate: &str, proton: Option<&std::path::Path>) -> Vec<PathBuf> {
     let norm = candidate.replace('\\', "/");
-    match norm.strip_prefix("%DOCUMENTS%") {
+    let mut out = match norm.strip_prefix("%DOCUMENTS%") {
         Some(rest) if cfg!(target_os = "windows") => {
             let rest = rest.trim_matches('/');
             let (base, last) = rest.rsplit_once('/').unwrap_or(("", rest));
@@ -491,13 +582,22 @@ pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
         }
         Some(_) => Vec::new(),
         None => vec![PathBuf::from(expand_path_vars(candidate))],
+    };
+    if let Some(pfx) = proton {
+        out.extend(proton_candidates(candidate, pfx));
     }
+    out
 }
 
 /// Where each external content folder of `cts` is on this PC: the user's
 /// choice (`overrides`, by content type id) or the first candidate that
-/// exists. Folders that aren't there are left out (the game never ran).
-pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::collections::HashMap<String, String>) -> std::collections::HashMap<String, PathBuf> {
+/// exists, `proton` (the game's Proton prefix) included. Folders that aren't
+/// there are left out (the game never ran).
+pub fn resolve_roots(
+    cts: &[crate::registry::ContentType],
+    overrides: &std::collections::HashMap<String, String>,
+    proton: Option<&std::path::Path>,
+) -> std::collections::HashMap<String, PathBuf> {
     cts.iter()
         .filter_map(|ct| {
             let prefix = ct.root_prefix()?;
@@ -505,7 +605,7 @@ pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::coll
             // silently swapped for the auto-found folder sent downloads there.
             let found = match overrides.get(&ct.id) {
                 Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
-                None => ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute() && p.is_dir()),
+                None => ct.roots.iter().flat_map(|c| root_candidates(c, proton)).find(|p| p.is_absolute() && p.is_dir()),
             }?;
             Some((prefix, found))
         })
@@ -571,9 +671,10 @@ fn split_root(base: &str, relative: &str) -> Result<Option<(PathBuf, String)>, S
 }
 
 /// Where an external content type's folder would be (its first candidate
-/// for this OS), for watching it before the game has created it.
+/// for this OS), for watching it before the game has created it. Not in a
+/// Proton prefix: a save folder there is watched once a rescan finds it.
 pub fn expected_root(ct: &crate::registry::ContentType) -> Option<PathBuf> {
-    let root = ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute())?;
+    let root = ct.roots.iter().flat_map(|c| root_candidates(c, None)).find(|p| p.is_absolute())?;
     Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
@@ -984,14 +1085,84 @@ mod tests {
 
     #[test]
     fn documents_roots_follow_the_real_documents_folder() {
-        assert_eq!(root_candidates("~/x"), vec![PathBuf::from(expand_path_vars("~/x"))]);
+        assert_eq!(root_candidates("~/x", None), vec![PathBuf::from(expand_path_vars("~/x"))]);
         if !cfg!(target_os = "windows") {
-            assert!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves").is_empty(), "Windows-only candidate");
+            assert!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves", None).is_empty(), "Windows-only candidate");
             return;
         }
         let docs = dirs::document_dir().expect("a Documents folder");
-        assert_eq!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves")[0], docs.join("My Games").join("Skyrim/Saves"));
-        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves")[0], docs.join("The Witcher 3").join("gamesaves"));
+        assert_eq!(root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves", None)[0], docs.join("My Games").join("Skyrim/Saves"));
+        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves", None)[0], docs.join("The Witcher 3").join("gamesaves"));
+    }
+
+    #[test]
+    fn proton_maps_windows_folders_into_the_prefix() {
+        let pfx = PathBuf::from("/lib/steamapps/compatdata/1/pfx");
+        let drive_c = pfx.join("drive_c");
+        let user = drive_c.join("users").join("steamuser");
+        let c = |p: &str| proton_candidates(p, &pfx);
+        assert_eq!(c("%DOCUMENTS%/My Games/Skyrim/Saves")[0], user.join("Documents").join("My Games").join("Skyrim").join("Saves"));
+        assert_eq!(c("%DOCUMENTS%/x")[1], user.join("My Documents").join("x"), "older Wine");
+        assert_eq!(c("%AppData%\\Game\\Saves")[0], user.join("AppData").join("Roaming").join("Game").join("Saves"));
+        assert_eq!(c("%LOCALAPPDATA%/Game")[0], user.join("AppData").join("Local").join("Game"));
+        assert_eq!(c("%USERPROFILE%/AppData/LocalLow/Dev/Game"), vec![user.join("AppData").join("LocalLow").join("Dev").join("Game")]);
+        assert_eq!(c("C:\\Program Files\\Game"), vec![drive_c.join("Program Files").join("Game")]);
+        assert_eq!(c("%ProgramFiles(x86)%/Game"), vec![drive_c.join("Program Files (x86)").join("Game")]);
+        for not_windows in ["~/.config/game", "/home/u/game", "D:/Games/game", "%UNKNOWN%/game"] {
+            assert!(c(not_windows).is_empty(), "{not_windows}");
+        }
+        assert!(c("%DOCUMENTS%/../../escape").iter().all(|p| p.starts_with(&user)));
+    }
+
+    #[test]
+    fn proton_prefix_is_found_in_any_library_whatever_the_folder_case() {
+        let root = crate::testutil::temp_dir("proton-prefix");
+        let (lib1, lib2) = (root.join("a").join("steamapps"), root.join("b").join("steamapps"));
+        std::fs::create_dir_all(&lib1).unwrap();
+        let pfx = lib2.join("compatdata").join("1222670").join("pfx");
+        // The game made "electronic arts"; the registry spells it "Electronic Arts".
+        std::fs::create_dir_all(pfx.join("drive_c/users/steamuser/Documents/electronic arts/The Sims 4")).unwrap();
+        assert_eq!(proton_prefix_in(&[lib1.clone(), lib2.clone()], 1222670), Some(pfx.clone()));
+        assert_eq!(proton_prefix_in(&[lib1, lib2], 945360), None);
+        assert!(proton_candidates("%DOCUMENTS%/Electronic Arts/The Sims 4", &pfx)[0].is_dir());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn windows_save_folders_are_found_in_the_proton_prefix() {
+        let root = crate::testutil::temp_dir("proton-roots");
+        let pfx = root.join("pfx");
+        let saves = pfx.join("drive_c").join("users").join("steamuser").join("AppData").join("LocalLow").join("SyncCrate Test").join("Saves");
+        std::fs::create_dir_all(&saves).unwrap();
+        let ct: crate::registry::ContentType = serde_json::from_str(
+            r#"{"id":"saves","label":"Saves","folder":".","file_type":"Save","roots":["%USERPROFILE%/AppData/LocalLow/SyncCrate Test/Saves"]}"#,
+        )
+        .unwrap();
+        let none = std::collections::HashMap::new();
+        assert_eq!(resolve_roots(std::slice::from_ref(&ct), &none, Some(&pfx)).get("@saves"), Some(&saves));
+        assert!(resolve_roots(&[ct], &none, None).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_windows_game_is_detected_in_its_proton_prefix() {
+        let root = crate::testutil::temp_dir("proton-detect");
+        let pfx = root.join("pfx");
+        let user = pfx.join("drive_c").join("users").join("steamuser");
+        let docs_game = user.join("Documents").join("SyncCrate Test Co").join("Proton Game");
+        let appdata_game = user.join("AppData").join("Roaming").join("SyncCrateProtonTest");
+        std::fs::create_dir_all(&docs_game).unwrap();
+        std::fs::create_dir_all(&appdata_game).unwrap();
+        let def = |strategy: &str| -> GameDefinition {
+            serde_json::from_str(&format!(r#"{{"id":"t","label":"T","family":"t","content_types":[],"detection":{{"strategies":[{strategy}]}}}}"#)).unwrap()
+        };
+        let docs = def(r#"{"type":"documents_relative","base":"SyncCrate Test Co","folders":["Proton Game"]}"#);
+        assert_eq!(detect_game_path_in(&docs, Some(&pfx)).map(PathBuf::from), Some(docs_game));
+        assert_eq!(detect_game_path_in(&docs, None), None);
+        let appdata = def(r#"{"type":"absolute_paths","paths":{"windows":["%APPDATA%\\SyncCrateProtonTest"]}}"#);
+        assert_eq!(detect_game_path_in(&appdata, Some(&pfx)).map(PathBuf::from), Some(appdata_game));
+        assert_eq!(detect_game_path_in(&appdata, None), None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
