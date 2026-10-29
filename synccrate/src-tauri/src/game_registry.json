@@ -9188,6 +9188,333 @@
         "url": "https://github.com/LavaGang/MelonLoader/releases"
       },
       "disable_method": "rename"
+    },
+    {
+      "id": "schedule_i",
+      "label": "Schedule I",
+      "family": "schedulei",
+      "icon": "factory",
+      "color": "text-lime-400",
+      "primary_color": "#a3e635",
+      "genres": [
+        "simulation"
+      ],
+      "steam_app_id": 3164500,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Schedule I"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Schedule I_Data"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (MelonLoader)",
+          "icon": "package",
+          "color": "text-lime-400",
+          "folder": "Mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "userlibs",
+          "label": "Mod Libraries",
+          "icon": "package",
+          "color": "text-sky-400",
+          "folder": "UserLibs",
+          "extensions": [
+            "dll"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "plugins",
+          "label": "MelonLoader Plugins",
+          "icon": "package",
+          "color": "text-purple-400",
+          "folder": "Plugins",
+          "extensions": [
+            "dll"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "Schedule I.exe"
+      ],
+      "mod_loader": {
+        "name": "MelonLoader",
+        "content_type": "mods",
+        "any_of": [
+          "MelonLoader"
+        ],
+        "url": "https://github.com/LavaGang/MelonLoader/releases"
+      },
+      "disable_method": "rename"
+    },
+    {
+      "id": "sons_of_the_forest",
+      "label": "Sons of the Forest",
+      "family": "sonsoftheforest",
+      "icon": "axe",
+      "color": "text-red-500",
+      "primary_color": "#ef4444",
+      "genres": [
+        "survival",
+        "horror"
+      ],
+      "steam_app_id": 1326470,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Sons Of The Forest"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "SonsOfTheForest_Data"
+        ],
+        "auto_create_dirs": [
+          "Mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (RedLoader)",
+          "icon": "package",
+          "color": "text-red-500",
+          "folder": "Mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll"
+      ],
+      "process_names": [
+        "SonsOfTheForest.exe"
+      ],
+      "mod_loader": {
+        "name": "RedLoader",
+        "content_type": "mods",
+        "any_of": [
+          "_Redloader"
+        ],
+        "url": "https://github.com/ToniMacaroni/RedLoader/releases"
+      },
+      "disable_method": "rename"
+    },
+    {
+      "id": "raft",
+      "label": "Raft",
+      "family": "raft",
+      "icon": "waves",
+      "color": "text-cyan-400",
+      "primary_color": "#22d3ee",
+      "genres": [
+        "survival"
+      ],
+      "steam_app_id": 648800,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Raft"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Raft_Data"
+        ],
+        "auto_create_dirs": [
+          "mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "mods",
+          "label": "Mods (Raft Mod Loader)",
+          "icon": "package",
+          "color": "text-cyan-400",
+          "folder": "mods",
+          "extensions": [
+            "rmod"
+          ],
+          "file_type": "Mod",
+          "syncable": true,
+          "recursive": false
+        }
+      ],
+      "dangerous_script_extensions": [
+        "rmod"
+      ],
+      "process_names": [
+        "Raft.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "abiotic_factor",
+      "label": "Abiotic Factor",
+      "family": "abioticfactor",
+      "icon": "biohazard",
+      "color": "text-yellow-400",
+      "primary_color": "#facc15",
+      "genres": [
+        "survival"
+      ],
+      "steam_app_id": 427410,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "AbioticFactor"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "AbioticFactor"
+        ],
+        "auto_create_dirs": [
+          "AbioticFactor/Content/Paks/~mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-yellow-400",
+          "folder": "AbioticFactor/Content/Paks/~mods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "logicmods",
+          "label": "Logic Mods",
+          "icon": "package",
+          "color": "text-orange-400",
+          "folder": "AbioticFactor/Content/Paks/LogicMods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "ue4ss",
+          "label": "UE4SS Mods",
+          "icon": "package",
+          "color": "text-sky-400",
+          "folder": "AbioticFactor/Binaries/Win64/ue4ss/Mods",
+          "extensions": [],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [
+        "dll",
+        "lua"
+      ],
+      "process_names": [
+        "AbioticFactor.exe",
+        "AbioticFactor-Win64-Shipping.exe"
+      ],
+      "disable_method": "rename"
+    },
+    {
+      "id": "grounded",
+      "label": "Grounded",
+      "family": "grounded",
+      "icon": "sprout",
+      "color": "text-green-500",
+      "primary_color": "#22c55e",
+      "genres": [
+        "survival"
+      ],
+      "steam_app_id": 962130,
+      "auto_detect": true,
+      "detection": {
+        "strategies": [
+          {
+            "type": "steam_library",
+            "folders": [
+              "Grounded"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "check_dirs": [
+          "Maine"
+        ],
+        "auto_create_dirs": [
+          "Maine/Content/Paks/~mods"
+        ]
+      },
+      "content_types": [
+        {
+          "id": "pakmods",
+          "label": "Pak Mods",
+          "icon": "package",
+          "color": "text-green-500",
+          "folder": "Maine/Content/Paks/~mods",
+          "extensions": [
+            "pak",
+            "ucas",
+            "utoc"
+          ],
+          "file_type": "Mod",
+          "syncable": true
+        }
+      ],
+      "dangerous_script_extensions": [],
+      "process_names": [
+        "Grounded.exe",
+        "Maine-Win64-Shipping.exe"
+      ],
+      "disable_method": "rename"
     }
   ]
 }

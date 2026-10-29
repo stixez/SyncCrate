@@ -1,7 +1,7 @@
 # Supported games
 
 <!-- GAMES:START -->
-**124 games across 80 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](CONTRIBUTING.md#adding-a-game), no code needed.
+**129 games across 85 families**, defined in a [JSON registry](synccrate/src-tauri/src/game_registry.json). Missing one? [Add it](CONTRIBUTING.md#adding-a-game), no code needed.
 
 <details>
 <summary><strong>Life sim</strong> — 5 games</summary>
@@ -17,18 +17,22 @@
 </details>
 
 <details>
-<summary><strong>Survival & co-op</strong> — 12 games</summary>
+<summary><strong>Survival & co-op</strong> — 16 games</summary>
 
 | Game | What syncs |
 |------|------------|
 | **7 Days to Die** | Mods, Mods (user folder) |
+| **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods |
 | **ARK: Survival Evolved** | Mods, Save Files |
 | **Barotrauma** | Local Mods, Saves |
 | **Conan Exiles** | Mods |
 | **Don't Starve** | Mods |
 | **Don't Starve Together** | Mods |
+| **Grounded** | Pak Mods |
 | **Palworld** | Mods, Pak Mods |
 | **Project Zomboid** | Mods, Save Files |
+| **Raft** | Mods (Raft Mod Loader) |
+| **Sons of the Forest** | Mods (RedLoader) |
 | **Subnautica** | Plugins (BepInEx), Save Files, Mod Configs, Patchers |
 | **The Long Dark** | Mods (MelonLoader), Saves |
 | **V Rising** | Plugins (BepInEx), Mod Configs, Patchers |
@@ -148,7 +152,7 @@
 </details>
 
 <details>
-<summary><strong>Simulation</strong> — 8 games</summary>
+<summary><strong>Simulation</strong> — 9 games</summary>
 
 | Game | What syncs |
 |------|------------|
@@ -159,6 +163,7 @@
 | **Football Manager 26** | Graphics (faces, logos, kits), Editor Data, Saves |
 | **Kerbal Space Program** | Mods, Save Files |
 | **Oxygen Not Included** | Local Mods, Save Files |
+| **Schedule I** | Mods (MelonLoader), Mod Libraries, MelonLoader Plugins |
 | **Stardew Valley** | SMAPI Mods, Saves |
 
 </details>

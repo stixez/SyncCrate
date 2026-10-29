@@ -606,8 +606,8 @@ mod tests {
     fn registry_includes_expanded_game_catalog() {
         let registry = load_registry();
         assert!(
-            registry.games.len() >= 124,
-            "expected at least 124 games, found {}",
+            registry.games.len() >= 129,
+            "expected at least 129 games, found {}",
             registry.games.len()
         );
 
@@ -774,6 +774,16 @@ mod tests {
         };
         assert!(steam_folders("heroes_3").iter().any(|f| f == "Heroes of Might & Magic III - HD Edition"));
         assert!(steam_folders("torchlight2").iter().any(|f| f == "Torchlight II/my games/runic games/torchlight 2"));
+        // Added 2026-10-29: install folders are Steam's installdir.
+        for (id, folder) in [
+            ("schedule_i", "Schedule I"),
+            ("sons_of_the_forest", "Sons Of The Forest"),
+            ("raft", "Raft"),
+            ("abiotic_factor", "AbioticFactor"),
+            ("grounded", "Grounded"),
+        ] {
+            assert!(steam_folders(id).iter().any(|f| f == folder), "{id}: Steam folder {folder}");
+        }
         // RimWorld 1.6+ runs as RimWorld.exe.
         assert!(get("rimworld").process_names.iter().any(|p| p == "RimWorld.exe"));
     }

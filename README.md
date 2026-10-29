@@ -43,7 +43,7 @@ New mods reach everyone automatically. At a LAN party it works without internet.
 
 <img src="assets/gifs/keep-synced.gif" width="100%" alt="Turning on Stay in sync pulls the host's six new mods automatically" />
 
-**Works with the games you already mod:** The Sims 4, Minecraft, Valheim, Stardew Valley, World of Warcraft, Lethal Company, Terraria and [117 more](GAMES.md).
+**Works with the games you already mod:** The Sims 4, Minecraft, Valheim, Stardew Valley, World of Warcraft, Lethal Company, Terraria and [122 more](GAMES.md).
 
 ## Get started
 

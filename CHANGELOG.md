@@ -6,9 +6,10 @@ Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. S
 
 ## Unreleased
 
-Saves now sync for 28 more games, and SyncCrate tells you what changed after it updates.
+Five new co-op games, saves for 28 more, and SyncCrate now tells you what changed after it updates. It supports 129 games.
 
 ### Highlights
+- **Five new games.** Schedule I (MelonLoader mods and their libraries), Sons of the Forest (RedLoader), Raft (Raft Mod Loader), Abiotic Factor (pak, Logic and UE4SS mods) and Grounded (pak mods) join the list, so a co-op group can get the host's exact mods in one sync.
 - **Saves for 28 more games.** Skyrim, Fallout 3, 4 and New Vegas, Oblivion (and Remastered), Morrowind, The Witcher 3, Cyberpunk 2077, XCOM 2, Bannerlord, Kingdom Come 1 and 2, Hollow Knight, Cult of the Lamb, R.E.P.O., PEAK, Barotrauma and more now sync their saves along with the mods. Valheim characters and Dyson Sphere Program blueprints sync too. The folders come from each game's own Steam Cloud setup.
 - **Release notes in the app.** After an update, a short summary of what changed shows once. Every version's notes are a click away: click the version number at the bottom of the sidebar, or open Settings → Application.
 - **See what an update brings before installing it.** The update prompt lists the new version's highlights.
