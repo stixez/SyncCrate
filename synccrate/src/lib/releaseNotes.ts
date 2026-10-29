@@ -1,6 +1,5 @@
-import changelog from "../../../CHANGELOG.md?raw";
-
-/** One version's section of CHANGELOG.md (the repo root, bundled at build time). */
+/** One version's section of CHANGELOG.md (parsed in ./changelog, which is
+ *  loaded only when needed: the changelog grows with every release). */
 export interface Release {
   version: string;
   /** YYYY-MM-DD, or null for the Unreleased section. */
@@ -9,31 +8,8 @@ export interface Release {
   body: string;
 }
 
-const HEADING = /^## (?:(\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})|(Unreleased))\s*$/;
-
-export function parseChangelog(text: string): Release[] {
-  const releases: Release[] = [];
-  let current: Release | null = null;
-  let lines: string[] = [];
-  const flush = () => {
-    if (current) releases.push({ ...current, body: lines.join("\n").trim() });
-  };
-  for (const line of text.replace(/\r\n/g, "\n").split("\n")) {
-    const m = HEADING.exec(line);
-    if (m) {
-      flush();
-      current = m[3] ? { version: "Unreleased", date: null, body: "" } : { version: m[1], date: m[2], body: "" };
-      lines = [];
-    } else if (current) {
-      lines.push(line);
-    }
-  }
-  flush();
-  return releases;
-}
-
-/** Released versions, newest first (Unreleased is never shown in the app). */
-export const RELEASES: Release[] = parseChangelog(changelog).filter((r) => r.date !== null);
+/** How many highlights the update popup, update prompt and Discord post show. */
+export const HIGHLIGHTS_SHOWN = 4;
 
 /** -1, 0 or 1, comparing dotted numbers ("0.10.0" > "0.9.2"). */
 export function compareVersions(a: string, b: string): number {
@@ -46,10 +22,6 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export function releaseFor(version: string): Release | undefined {
-  return RELEASES.find((r) => r.version === version);
-}
-
 /** A release in a few lines: its opening paragraph and its first highlights. */
 export interface Digest {
   summary: string | null;
@@ -57,7 +29,10 @@ export interface Digest {
   items: string[];
 }
 
-export function digest(body: string, max = 4): Digest {
+/** Not a summary paragraph: a heading, list item, quote or table row. */
+const BLOCK_START = /^(#|[-*] |>|\|)/;
+
+export function digest(body: string, max = HIGHLIGHTS_SHOWN): Digest {
   const lines = body.replace(/\r\n/g, "\n").split("\n");
   const firstBlock: string[] = [];
   for (const l of lines) {
@@ -67,7 +42,7 @@ export function digest(body: string, max = 4): Digest {
     }
     firstBlock.push(l.trim());
   }
-  const summary = firstBlock.length && !/^(#|-|>|\*)/.test(firstBlock[0]) ? firstBlock.join(" ") : null;
+  const summary = firstBlock.length && !BLOCK_START.test(firstBlock[0]) ? firstBlock.join(" ") : null;
 
   const bulletsAfter = (start: number) => {
     const out: string[] = [];
@@ -78,7 +53,7 @@ export function digest(body: string, max = 4): Digest {
     }
     return out;
   };
-  const hl = lines.findIndex((l) => /^###\s+.*highlights/i.test(l));
+  const hl = lines.findIndex((l) => /^###[^\n]*highlights/i.test(l));
   const items = bulletsAfter(hl >= 0 ? hl + 1 : 0);
   return { summary, items };
 }
@@ -94,26 +69,27 @@ export function plain(md: string): string {
 }
 
 /** A highlight's headline: its bold lead-in ("**Saves for 28 more games.**"),
- *  else its first sentence. */
+ *  else its first sentence. (No lookbehind: older macOS WebKit can't parse it.) */
 export function headline(item: string): string {
   const bold = /^\*\*(.+?)\*\*/.exec(item);
-  const text = plain(bold ? bold[1] : item.split(/(?<=[.!?])\s/)[0]);
-  return text.replace(/[.:]$/, "");
+  const first = bold ? bold[1] : (/^.*?[.!?](?=\s|$)/.exec(item)?.[0] ?? item);
+  return plain(first).replace(/[.:]$/, "");
 }
 
-/** What an available update brings, as plain text for the update prompt.
- *  `body` is the release notes the updater got (the GitHub release). */
+/** What an available update brings, as plain lines for the update prompt.
+ *  `body` is the notes the updater got (the version's CHANGELOG section).
+ *  Null unless there are highlights or a real summary paragraph. */
 export function updateSummary(body: string | null | undefined): string | null {
   if (!body) return null;
-  const notes = body.split(/\n---\s*\n|\n## Downloads/)[0].replace(/^## .*\n/, "");
-  const d = digest(notes, 4);
+  const notes = body.split(/\n---\s*\n|^## Downloads|\n## Downloads/m)[0].replace(/^## .*\n/, "");
+  const d = digest(notes);
   if (d.items.length) return d.items.map((i) => `• ${headline(i)}`).join("\n");
   return d.summary ? plain(d.summary) : null;
 }
 
 const SEEN_KEY = "synccrate-release-notes-seen";
 
-function readSeen(): string | null {
+export function readReleaseNotesSeen(): string | null {
   try {
     return localStorage.getItem(SEEN_KEY);
   } catch {
@@ -127,23 +103,4 @@ export function markReleaseNotesSeen(version: string): void {
   } catch {
     // Storage unavailable: the notes may show again, which is harmless.
   }
-}
-
-/** The release to announce once after an update, or null. A fresh install
- *  (`newInstall`) has nothing new to announce; someone updating from a
- *  version before release notes existed has never seen any. */
-export function releaseToAnnounce(current: string, newInstall: boolean): Release | null {
-  const seen = readSeen();
-  if (seen === null && newInstall) {
-    markReleaseNotesSeen(current);
-    return null;
-  }
-  if (seen !== null && compareVersions(current, seen) <= 0) return null;
-  const release = releaseFor(current);
-  const d = release ? digest(release.body) : null;
-  if (!release || !d || (!d.summary && d.items.length === 0)) {
-    markReleaseNotesSeen(current);
-    return null;
-  }
-  return release;
 }

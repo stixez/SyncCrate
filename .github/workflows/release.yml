@@ -25,6 +25,11 @@ jobs:
       contents: write
     outputs:
       release_id: ${{ steps.create.outputs.result }}
+      # This version's CHANGELOG section: the updater's notes (latest.json),
+      # which the app's update prompt shows as highlights.
+      notes: ${{ steps.create.outputs.notes }}
+      # The Discord announcement text: summary and highlight headlines.
+      announce: ${{ steps.create.outputs.announce }}
     steps:
       # A manually run release must name a real version tag; it's passed
       # through the environment, never pasted into the script (injection).
@@ -72,6 +77,30 @@ jobs:
               }
             } catch {}
             if (!notes) core.warning(`CHANGELOG.md has no "## ${version} — <date>" section: the release keeps its current notes.`);
+
+            // The summary and first four highlight headlines (the same rules as
+            // the app's releaseNotes.ts), for the Discord announcement.
+            const lines = notes.split('\n');
+            const first = [];
+            for (const l of lines) {
+              if (!l.trim()) { if (first.length) break; continue; }
+              first.push(l.trim());
+            }
+            const summary = first.length && !/^(#|[-*] |>|\|)/.test(first[0]) ? first.join(' ') : '';
+            const hl = lines.findIndex((l) => /^###[^\n]*highlights/i.test(l));
+            const heads = [];
+            for (let i = hl + 1; hl >= 0 && i < lines.length && heads.length < 4; i++) {
+              if (/^#{1,3} /.test(lines[i])) break;
+              if (!lines[i].startsWith('- ')) continue;
+              const item = lines[i].slice(2).trim();
+              const bold = /^\*\*(.+?)\*\*/.exec(item);
+              const head = bold ? bold[1] : (/^.*?[.!?](?=\s|$)/.exec(item)?.[0] ?? item);
+              heads.push('• ' + head.replace(/[`*]/g, '').replace(/[.:]$/, ''));
+            }
+            const announce = [summary, heads.join('\n'), 'The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app']
+              .filter(Boolean).join('\n\n').slice(0, 4000);
+            core.setOutput('notes', notes);
+            core.setOutput('announce', announce);
             // Notes written on GitHub by hand are kept when the changelog has none.
             const releaseBody = (current) => notes
               ? `## SyncCrate ${version}\n\n${notes}\n\n---\n\n${downloads}`
@@ -189,6 +218,7 @@ jobs:
         with:
           projectPath: synccrate
           releaseId: ${{ needs.create-release.outputs.release_id }}
+          releaseBody: ${{ needs.create-release.outputs.notes }}
           updaterJsonKeepUniversal: true
           args: --target ${{ matrix.target }}
 
@@ -227,54 +257,26 @@ jobs:
   # workflows. Does nothing until the DISCORD_RELEASE_WEBHOOK secret exists.
   discord:
     name: Announce on Discord
-    needs: build
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Checkout CHANGELOG.md
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-          persist-credentials: false
-          sparse-checkout: CHANGELOG.md
-          sparse-checkout-cone-mode: false
-
       - name: "Post to #announcements"
         env:
           WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
           TAG: ${{ inputs.tag || github.ref_name }}
           REPO: ${{ github.repository }}
+          NOTES: ${{ needs.create-release.outputs.announce }}
           UPDATES_ROLE: "1565000145802895427"
         run: |
           if [ -z "$WEBHOOK" ]; then echo "No DISCORD_RELEASE_WEBHOOK secret: skipping Discord."; exit 0; fi
-          # The version's summary and highlight headlines from CHANGELOG.md.
-          python3 - "$TAG" > notes.txt <<'PY'
-          import re, sys
-          version = sys.argv[1].lstrip("v")
-          try:
-              log = open("CHANGELOG.md", encoding="utf-8").read()
-          except OSError:
-              log = ""
-          m = re.search(r"^## " + re.escape(version) + r" — .*?\n(.*?)(?=^## |\Z)", log, re.M | re.S)
-          body = m.group(1).strip() if m else ""
-          summary = body.split("\n\n")[0].strip() if body and not body.startswith(("#", "-", ">")) else ""
-          hl = re.search(r"^### .*Highlights.*?\n(.*?)(?=^#|\Z)", body, re.M | re.S | re.I)
-          heads = []
-          for line in (hl.group(1) if hl else "").splitlines():
-              if line.startswith("- "):
-                  bold = re.match(r"- \*\*(.+?)\*\*", line)
-                  heads.append("• " + (bold.group(1) if bold else line[2:]).rstrip(".:"))
-          parts = [p for p in [summary, "\n".join(heads[:5])] if p]
-          parts.append("The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app")
-          print("\n\n".join(parts)[:4000])
-          PY
-          jq -n --arg tag "$TAG" --arg repo "$REPO" --arg role "$UPDATES_ROLE" --rawfile notes notes.txt '{
+          jq -n --arg tag "$TAG" --arg repo "$REPO" --arg role "$UPDATES_ROLE" --arg notes "$NOTES" '{
             content: "<@&\($role)> SyncCrate \($tag) is out!",
             allowed_mentions: { roles: [$role] },
             embeds: [{
               title: "SyncCrate \($tag)",
               url: "https://github.com/\($repo)/releases/tag/\($tag)",
-              description: ($notes | rtrimstr("\n")),
+              description: (if $notes == "" then "The app updates itself: open SyncCrate and accept the update.\nNew here? Download it from https://synccrate.app" else $notes end),
               color: 2078846,
               thumbnail: { url: "https://synccrate.app/apple-touch-icon.png" },
               footer: { text: "Windows · macOS · Linux" }

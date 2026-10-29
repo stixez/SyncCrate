@@ -6,7 +6,7 @@ import { useAppStore } from "../stores/useAppStore";
 import { gamePrimaryColor, getGameDef } from "../lib/games";
 import { applyAccent, applyAppearanceRoot, applyThemeClass, useMediaPreference } from "../lib/appearance";
 import { isDemoMode } from "../lib/demoData";
-import { markReleaseNotesSeen, releaseFor, releaseToAnnounce, RELEASES, type Release } from "../lib/releaseNotes";
+import { markReleaseNotesSeen, type Release } from "../lib/releaseNotes";
 import * as cmd from "../lib/commands";
 import DonateModal from "./DonateModal";
 import ReleaseNotesModal from "./ReleaseNotesModal";
@@ -63,9 +63,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     const demo = isDemoMode();
     if (demo && !new URLSearchParams(window.location.search).has("releasenotes")) return;
-    cmd.getAppVersion()
-      .catch(() => pkg.version)
-      .then((v) => setAnnounce(demo ? releaseFor(v) ?? RELEASES[0] ?? null : releaseToAnnounce(v, !isOnboardingComplete())));
+    const newInstall = !isOnboardingComplete();
+    // The changelog loads after startup: it grows with every release.
+    Promise.all([cmd.getAppVersion().catch(() => pkg.version), import("../lib/changelog")])
+      .then(([v, log]) => setAnnounce(demo ? log.releaseFor(v) ?? log.RELEASES[0] ?? null : log.releaseToAnnounce(v, newInstall)))
+      .catch(() => {});
   }, []);
   const closeAnnounce = () => {
     if (announce && !isDemoMode()) markReleaseNotesSeen(announce.version);

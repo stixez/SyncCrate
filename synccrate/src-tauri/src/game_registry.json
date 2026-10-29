@@ -2130,7 +2130,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/Stronghold Crusader 2/Saved Games"],
+          "roots": ["%DOCUMENTS%/Stronghold Crusader 2/Saved Games"],
           "extensions": ["sgd"],
           "file_type": "Save",
           "recursive": false
@@ -2478,7 +2478,8 @@
           "folder": "save",
           "extensions": [],
           "file_type": "Save",
-          "syncable": true
+          "syncable": true,
+          "recursive": false
         }
       ],
       "dangerous_script_extensions": [],
@@ -3490,7 +3491,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Skyrim Special Edition/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/Skyrim Special Edition/Saves"],
           "extensions": ["ess", "skse"],
           "file_type": "Save",
           "recursive": false
@@ -3569,7 +3570,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/Mount and Blade II Bannerlord/Game Saves"],
+          "roots": ["%DOCUMENTS%/Mount and Blade II Bannerlord/Game Saves"],
           "extensions": ["sav"],
           "file_type": "Save"
         }
@@ -3743,7 +3744,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Fallout4/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/Fallout4/Saves"],
           "extensions": ["fos", "f4se"],
           "file_type": "Save",
           "recursive": false
@@ -3835,7 +3836,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/FalloutNV/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/FalloutNV/Saves"],
           "extensions": ["fos", "nvse"],
           "file_type": "Save",
           "recursive": false
@@ -3912,7 +3913,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Skyrim/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/Skyrim/Saves"],
           "extensions": ["ess", "skse"],
           "file_type": "Save",
           "recursive": false
@@ -4001,7 +4002,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Oblivion/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/Oblivion/Saves"],
           "extensions": ["ess", "obse"],
           "file_type": "Save",
           "recursive": false
@@ -4181,7 +4182,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/The Witcher 3/gamesaves"],
+          "roots": ["%DOCUMENTS%/The Witcher 3/gamesaves"],
           "extensions": ["sav", "png"],
           "file_type": "Save",
           "recursive": false
@@ -5282,9 +5283,10 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/my games/XCOM2/XComGame/SaveData", "~/Library/Application Support/Feral Interactive/XCOM 2/VFS/Local/my games/XCOM2/XComGame/SaveData", "~/.local/share/feral-interactive/XCOM2/VFS/Local/my games/XCOM2/XComGame/SaveData"],
+          "roots": ["%DOCUMENTS%/my games/XCOM2/XComGame/SaveData", "~/Library/Application Support/Feral Interactive/XCOM 2/VFS/Local/my games/XCOM2/XComGame/SaveData", "~/.local/share/feral-interactive/XCOM2/VFS/Local/my games/XCOM2/XComGame/SaveData"],
           "extensions": [],
           "file_type": "Save",
+          "exclude_files": ["steam_autocloud.vdf"],
           "recursive": false
         },
         {
@@ -5293,9 +5295,10 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/my games/XCOM2 War of the Chosen/XComGame/SaveData", "~/Library/Application Support/Feral Interactive/XCOM 2 WotC/VFS/Local/my games/XCOM2 War of the Chosen/XComGame/SaveData", "~/.local/share/feral-interactive/XCOM 2 WotC/VFS/Local/my games/XCOM2 War of the Chosen/XComGame/SaveData"],
+          "roots": ["%DOCUMENTS%/my games/XCOM2 War of the Chosen/XComGame/SaveData", "~/Library/Application Support/Feral Interactive/XCOM 2 WotC/VFS/Local/my games/XCOM2 War of the Chosen/XComGame/SaveData", "~/.local/share/feral-interactive/XCOM 2 WotC/VFS/Local/my games/XCOM2 War of the Chosen/XComGame/SaveData"],
           "extensions": [],
           "file_type": "Save",
+          "exclude_files": ["steam_autocloud.vdf"],
           "recursive": false
         }
       ],
@@ -6801,9 +6804,10 @@
           "icon": "layout-grid",
           "color": "text-sky-400",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/Dyson Sphere Program/Blueprints"],
+          "roots": ["%DOCUMENTS%/Dyson Sphere Program/Blueprints"],
           "extensions": [],
-          "file_type": "Blueprint"
+          "file_type": "Blueprint",
+          "exclude_files": ["steam_autocloud.vdf"]
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -6981,7 +6985,19 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Daedalic Entertainment GmbH/Barotrauma", "~/Library/Application Support/Daedalic Entertainment GmbH/Barotrauma", "~/.local/share/Daedalic Entertainment GmbH/Barotrauma"],
           "extensions": ["save"],
-          "file_type": "Save"
+          "file_type": "Save",
+          "recursive": false
+        },
+        {
+          "id": "mp_saves",
+          "label": "Multiplayer saves",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%LOCALAPPDATA%/Daedalic Entertainment GmbH/Barotrauma/Multiplayer", "~/Library/Application Support/Daedalic Entertainment GmbH/Barotrauma/Multiplayer", "~/.local/share/Daedalic Entertainment GmbH/Barotrauma/Multiplayer"],
+          "extensions": ["save", "xml"],
+          "file_type": "Save",
+          "recursive": false
         }
       ],
       "dangerous_script_extensions": [
@@ -7154,7 +7170,8 @@
           "folder": ".",
           "roots": ["%USERPROFILE%/AppData/LocalLow/Nolla_Games_Noita/save00"],
           "extensions": [],
-          "file_type": "Save"
+          "file_type": "Save",
+          "exclude_files": ["steam_autocloud.vdf"]
         }
       ],
       "dangerous_script_extensions": [
@@ -8348,7 +8365,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Oblivion Remastered/Saved/SaveGames"],
+          "roots": ["%DOCUMENTS%/My Games/Oblivion Remastered/Saved/SaveGames"],
           "extensions": ["sav"],
           "file_type": "Save",
           "recursive": false
@@ -8453,7 +8470,7 @@
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/Documents/My Games/Fallout3/Saves"],
+          "roots": ["%DOCUMENTS%/My Games/Fallout3/Saves"],
           "extensions": ["fos", "fose"],
           "file_type": "Save",
           "recursive": false
@@ -8669,6 +8686,17 @@
           ],
           "file_type": "Save",
           "syncable": true
+        },
+        {
+          "id": "hd_saves",
+          "label": "Save Files (HD Edition)",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%DOCUMENTS%/Ubisoft/Heroes of Might & Magic III - HD Edition/pref/games"],
+          "extensions": [],
+          "file_type": "Save",
+          "exclude_files": ["steam_autocloud.vdf"]
         }
       ],
       "dangerous_script_extensions": [],
@@ -8676,7 +8704,8 @@
         "h3hota.exe",
         "h3hota HD.exe",
         "Heroes3.exe",
-        "Heroes3 HD.exe"
+        "Heroes3 HD.exe",
+        "HOMM3 2.0.exe"
       ],
       "disable_method": "none"
     },
@@ -9169,7 +9198,8 @@
           "roots": ["%LOCALAPPDATA%/Hinterland/TheLongDark", "~/.local/share/Hinterland/TheLongDark"],
           "extensions": [],
           "file_type": "Save",
-          "exclude_patterns": ["*.log"]
+          "exclude_patterns": ["*.log"],
+          "exclude_files": ["steam_autocloud.vdf"]
         }
       ],
       "dangerous_script_extensions": [

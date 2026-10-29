@@ -1,22 +1,23 @@
 import { Fragment, type ReactNode } from "react";
 import { Lightbulb } from "lucide-react";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { isHttps, openCreatorLink } from "../lib/links";
 import { cx } from "./ui";
 
-/** `**bold**`, `*italic*`, `code` and [links](https://…). Links open in the browser. */
+/** `**bold**`, `*italic*`, `code` and [links](https://…), for release notes and
+ *  the Guide. Links open in the browser (https only). */
 export function inline(text: string): ReactNode {
   return text.split(/(\[[^\]]+\]\([^)\s]+\)|\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/).map((part, i) => {
     const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
     if (link) {
       const href = link[2];
-      if (!/^https?:\/\//.test(href)) return <Fragment key={i}>{link[1]}</Fragment>;
+      if (!isHttps(href)) return <Fragment key={i}>{link[1]}</Fragment>;
       return (
         <a
           key={i}
           href={href}
           onClick={(e) => {
             e.preventDefault();
-            openUrl(href).catch(() => {});
+            openCreatorLink(href);
           }}
           className="text-neon underline underline-offset-2 decoration-neon/40 hover:decoration-neon"
         >

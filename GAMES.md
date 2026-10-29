@@ -24,7 +24,7 @@
 | **7 Days to Die** | Mods, Mods (user folder) |
 | **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods |
 | **ARK: Survival Evolved** | Mods, Save Files |
-| **Barotrauma** | Local Mods, Saves |
+| **Barotrauma** | Local Mods, Saves, Multiplayer saves |
 | **Conan Exiles** | Mods |
 | **Don't Starve** | Mods |
 | **Don't Starve Together** | Mods |
@@ -122,7 +122,7 @@
 | **Europa Universalis IV** | Mods, Save Files |
 | **Europa Universalis V** | Mods, Save Files |
 | **Hearts of Iron IV** | Mods, Save Files |
-| **Heroes of Might and Magic III** | Maps, Save Files |
+| **Heroes of Might and Magic III** | Maps, Save Files, Save Files (HD Edition) |
 | **Mount & Blade II: Bannerlord** | Modules, Saves |
 | **Mount & Blade: Warband** | Modules |
 | **RimWorld** | Mods, Saves |

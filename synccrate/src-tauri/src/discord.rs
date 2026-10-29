@@ -25,7 +25,7 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBSITE: &str = "https://synccrate.app";
 const ICON: &str = "https://synccrate.app/apple-touch-icon.png";
 /// The SyncCrate community server, the status's second button.
-const COMMUNITY: &str = "https://discord.gg/NY2P9u6v7Z";
+pub(crate) const COMMUNITY: &str = "https://discord.gg/NY2P9u6v7Z";
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Presence {

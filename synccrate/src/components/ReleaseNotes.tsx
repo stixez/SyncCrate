@@ -3,7 +3,7 @@ import { ChevronDown, ExternalLink } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import pkg from "../../package.json";
 import * as cmd from "../lib/commands";
-import { RELEASES } from "../lib/releaseNotes";
+import { RELEASES } from "../lib/changelog";
 import Markdown from "./Markdown";
 import { Badge, Button, Panel, SectionHeader } from "./ui";
 

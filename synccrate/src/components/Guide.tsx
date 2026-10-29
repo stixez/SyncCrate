@@ -1,23 +1,15 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, BookOpen, Lightbulb, MessageCircle, Search } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { GUIDE, searchGuide, type GuideSection } from "../lib/guideContent";
 import { toastInfo } from "../lib/toast";
 import { openDiscord } from "../lib/links";
 import { Button, EmptyState, Input, Panel, SectionHeader, cx } from "./ui";
+import { inline } from "./Markdown";
 import type { Page } from "../lib/types";
 
 /** Pages that don't belong to a game. */
 const GLOBAL_PAGES: Page[] = ["crews", "activity", "settings", "game-browser"];
-
-/** `**bold**` and `code` in guide text. */
-function inline(text: string): ReactNode {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <b key={i} className="font-medium text-txt">{part.slice(2, -2)}</b>;
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="font-mono text-[11px] text-accent-light bg-bg px-1 border border-border">{part.slice(1, -1)}</code>;
-    return <Fragment key={i}>{part}</Fragment>;
-  });
-}
 
 function go(page: Page) {
   const s = useAppStore.getState();

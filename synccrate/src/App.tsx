@@ -152,7 +152,10 @@ function App() {
         const update = await check();
         if (update) {
           toast(`Update v${update.version} available`, {
-            description: updateSummary(update.body) ?? undefined,
+            description: (() => {
+              const brings = updateSummary(update.body);
+              return brings ? <span className="whitespace-pre-line">{brings}</span> : undefined;
+            })(),
             duration: Infinity,
             action: {
               label: "Update Now",

@@ -13,7 +13,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub const ISSUE_URL: &str = "https://github.com/stixez/SyncCrate/issues/new/choose";
-pub const DISCORD_URL: &str = "https://discord.gg/NY2P9u6v7Z";
 /// Enough to see what went wrong before the report, short enough to read.
 pub const MAX_LOG_LINES: usize = 30;
 const MAX_LOG_LINE_CHARS: usize = 300;
@@ -433,7 +432,7 @@ fn format_time(ms: u64) -> String {
 pub fn format_report(d: &DiagnosticsInput, scrub: &Scrubber) -> String {
     let mut lines: Vec<String> = Vec::new();
     lines.push("SyncCrate diagnostics".to_string());
-    lines.push(format!("Paste this into a GitHub issue ({ISSUE_URL}) or a #help post on Discord ({DISCORD_URL}). It has no files, join codes or PINs, and names the app knows are removed. Read it before posting."));
+    lines.push(format!("Paste this into a GitHub issue ({ISSUE_URL}) or a #help post on Discord ({}). It has no files, join codes or PINs, and names the app knows are removed. Read it before posting.", crate::discord::COMMUNITY));
     lines.push(String::new());
 
     lines.push(format!("App version:   {}", d.app_version));

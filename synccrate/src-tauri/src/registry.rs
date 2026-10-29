@@ -749,9 +749,9 @@ mod tests {
         let get = |id: &str| registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
         let ct = |id: &str, ct: &str| get(id).content_types.iter().find(|c| c.id == ct).cloned().unwrap_or_else(|| panic!("{id}/{ct}"));
         for (id, root) in [
-            ("skyrim_se", "%USERPROFILE%/Documents/My Games/Skyrim Special Edition/Saves"),
-            ("fallout4", "%USERPROFILE%/Documents/My Games/Fallout4/Saves"),
-            ("witcher3", "%USERPROFILE%/Documents/The Witcher 3/gamesaves"),
+            ("skyrim_se", "%DOCUMENTS%/My Games/Skyrim Special Edition/Saves"),
+            ("fallout4", "%DOCUMENTS%/My Games/Fallout4/Saves"),
+            ("witcher3", "%DOCUMENTS%/The Witcher 3/gamesaves"),
             ("cyberpunk2077", "%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077"),
             ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
         ] {
@@ -786,6 +786,18 @@ mod tests {
         }
         // RimWorld 1.6+ runs as RimWorld.exe.
         assert!(get("rimworld").process_names.iter().any(|p| p == "RimWorld.exe"));
+        // Saves in Documents use %DOCUMENTS% (OneDrive/moved Documents), never a fixed path.
+        for g in &registry.games {
+            for c in &g.content_types {
+                assert!(c.roots.iter().all(|r| !r.to_lowercase().contains("%userprofile%/documents")), "{}/{}: use %DOCUMENTS%", g.id, c.id);
+                // Steam writes steam_autocloud.vdf (the account id) into cloud save folders.
+                if c.is_external() && c.extensions.is_empty() && c.file_type != "Mod" {
+                    assert!(c.exclude_files.iter().any(|f| f == "steam_autocloud.vdf"), "{}/{}: exclude steam_autocloud.vdf", g.id, c.id);
+                }
+            }
+        }
+        // Torchlight II on Steam keeps saves per account (save/<SteamID>/).
+        assert!(!ct("torchlight2", "saves").recursive);
     }
 
     /// Modpacks need their configs and recipe scripts to match or servers

@@ -475,6 +475,18 @@ fn roots_key(base: &str) -> String {
     if cfg!(target_os = "windows") { b.to_lowercase() } else { b.to_string() }
 }
 
+/// Where a `roots` candidate can be on this PC. `%DOCUMENTS%` is the user's
+/// real Documents folder, found like documents_relative detection finds it
+/// (Known Folder redirection, OneDrive and its localized names):
+/// `%USERPROFILE%/Documents` missed every save there.
+pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
+    let norm = candidate.replace('\\', "/");
+    match norm.strip_prefix("%DOCUMENTS%") {
+        Some(rest) => build_candidates_str(rest.trim_start_matches('/'), &[""]),
+        None => vec![PathBuf::from(expand_path_vars(candidate))],
+    }
+}
+
 /// Where each external content folder of `cts` is on this PC: the user's
 /// choice (`overrides`, by content type id) or the first candidate that
 /// exists. Folders that aren't there are left out (the game never ran).
@@ -486,7 +498,7 @@ pub fn resolve_roots(cts: &[crate::registry::ContentType], overrides: &std::coll
             // silently swapped for the auto-found folder sent downloads there.
             let found = match overrides.get(&ct.id) {
                 Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
-                None => ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute() && p.is_dir()),
+                None => ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute() && p.is_dir()),
             }?;
             Some((prefix, found))
         })
@@ -554,7 +566,7 @@ fn split_root(base: &str, relative: &str) -> Result<Option<(PathBuf, String)>, S
 /// Where an external content type's folder would be (its first candidate
 /// for this OS), for watching it before the game has created it.
 pub fn expected_root(ct: &crate::registry::ContentType) -> Option<PathBuf> {
-    let root = ct.roots.iter().map(|c| PathBuf::from(expand_path_vars(c))).find(|p| p.is_absolute())?;
+    let root = ct.roots.iter().flat_map(|c| root_candidates(c)).find(|p| p.is_absolute())?;
     Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
@@ -962,6 +974,16 @@ pub fn sanitize_id(id: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn documents_roots_follow_the_real_documents_folder() {
+        let docs = dirs::document_dir().expect("a Documents folder");
+        let first = root_candidates("%DOCUMENTS%/My Games/Skyrim/Saves").into_iter().next().unwrap();
+        assert_eq!(first.components().collect::<Vec<_>>(), docs.join("My Games/Skyrim/Saves").components().collect::<Vec<_>>());
+        // Backslashes and other candidates are unchanged.
+        assert_eq!(root_candidates("%DOCUMENTS%\\The Witcher 3\\gamesaves")[0].components().collect::<Vec<_>>(), docs.join("The Witcher 3/gamesaves").components().collect::<Vec<_>>());
+        assert_eq!(root_candidates("~/x"), vec![PathBuf::from(expand_path_vars("~/x"))]);
+    }
 
     #[test]
     fn read_only_files_can_be_replaced() {
