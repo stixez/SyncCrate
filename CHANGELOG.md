@@ -4,6 +4,11 @@ Every SyncCrate release, newest first. The app shows a version's notes once afte
 
 Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. Start with a one-paragraph summary, then `### Highlights` (the update popup shows its first four items).
 
+## Unreleased
+
+### Smaller improvements
+- The **Join the Discord** button moved from Settings to the bottom of the sidebar, in Discord's colors, so help is one click away from any page.
+
 ## 0.8.7 — 2026-10-29
 
 Five new co-op games, saves for 28 more, and SyncCrate now tells you what changed after it updates. It supports 129 games.

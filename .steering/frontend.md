@@ -14,7 +14,7 @@
 
 ## Links and copy
 
-- Outside links live in `src/lib/links.ts` (`DISCORD_INVITE`, the website). The Rust side has its own `crate::discord::COMMUNITY` for the Discord status button; change both together.
+- Outside links live in `src/lib/links.ts` (`DISCORD_INVITE`, the website). Buttons that open the Discord use `<Button variant="discord">` with `<DiscordLogo />` (Discord's blurple and logo); the main one sits at the bottom of the sidebar. The Rust side has its own `crate::discord::COMMUNITY` for the Discord status button; change both together.
 - Donations: Buy Me a Coffee only, one-time; the app's copy says coffees keep it free. Supporting unlocks nothing.
 - The in-app Guide is `src/lib/guideContent.ts`.
 - A content type's `icon` must exist in `ICON_MAP` in `src/components/Sidebar.tsx`.
