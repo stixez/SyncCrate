@@ -4,12 +4,12 @@ Every SyncCrate release, newest first. The app shows a version's notes once afte
 
 Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. Start with a one-paragraph summary, then `### Highlights` (the update popup shows its first four items).
 
-## Unreleased
+## 0.8.8 — 2026-10-29
 
-Windows games played on Linux through Steam's Proton now find their mods and saves on their own.
+Windows games played on Linux through Steam's Proton now find their mods and saves on their own, and the Discord button moved to the sidebar.
 
 ### Highlights
-- **Proton support on Linux.** For a Windows game you play through Steam Play (Proton), SyncCrate looks inside the game's Proton prefix for the folders it keeps in Documents and AppData: The Sims 4's Mods, Bethesda saves, and the saves of every game whose save folder is outside the game folder. Before, you had to pick those folders by hand. Linux and Windows PCs sync the same game with each other.
+- **Proton support on Linux.** For a Windows game you play through Steam Play (Proton), SyncCrate looks inside the game's Proton prefix for the folders it keeps in Documents and AppData: The Sims 4's Mods, Bethesda saves, and the saves of every game whose save folder is outside the game folder. Before, you had to pick those folders by hand. If you've played a game both natively and through Proton, SyncCrate uses whichever you played last.
 
 ### Smaller improvements
 - The **Join the Discord** button moved from Settings to the bottom of the sidebar, in Discord's colors, so help is one click away from any page.
