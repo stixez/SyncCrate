@@ -239,8 +239,14 @@ jobs:
         shell: bash
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        # Updates need the package to exist in winget-pkgs (the first
+        # version is reviewed by hand), so skip until it's there.
         run: |
-          if [ -n "$WINGET_TOKEN" ]; then echo "set=true" >> "$GITHUB_OUTPUT"; else echo "No WINGET_TOKEN secret: skipping winget."; fi
+          if [ -z "$WINGET_TOKEN" ]; then echo "No WINGET_TOKEN secret: skipping winget."; exit 0; fi
+          if ! curl -sf -o /dev/null https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/s/stixez/SyncCrate; then
+            echo "stixez.SyncCrate isn't in winget-pkgs yet: skipping winget."; exit 0
+          fi
+          echo "set=true" >> "$GITHUB_OUTPUT"
 
       - name: Open the winget-pkgs PR
         if: steps.token.outputs.set == 'true'
