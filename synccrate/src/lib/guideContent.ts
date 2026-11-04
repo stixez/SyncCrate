@@ -198,7 +198,7 @@ export const GUIDE: GuideGroup[] = [
           "Join your host through the crew (**Crews**, then **Join**). If they have the save and aren't playing, click **Take it**: their copy replaces yours.",
           "Mark **I'm playing** so the others wait. When you're done, click **Give to** your host: your copy replaces theirs.",
           "Two friends hand a save over through whoever hosts: one gives it to the host, the other takes it.",
-          "Works for The Sims 3 and 4, Valheim, Minecraft Java, Terraria, Stardew Valley, RimWorld, Factorio, Cities: Skylines and Project Zomboid.",
+          "Works for The Sims 3 and 4, Valheim, Minecraft Java, Terraria, Stardew Valley, RimWorld, Factorio, Cities: Skylines, Project Zomboid and Satisfactory.",
         ],
         tip: "Close the game before taking or giving a save. The old copy is kept in File history either way.",
         keywords: "save handoff turns rotate legacy world share check out check in",

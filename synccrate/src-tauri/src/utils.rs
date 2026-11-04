@@ -400,7 +400,7 @@ pub(crate) fn proton_candidates(candidate: &str, pfx: &std::path::Path) -> Vec<P
     // The spelling this prefix's Wine actually made comes first.
     let mut bases = proton_bases(token, pfx);
     bases.sort_by_key(|b| !b.is_dir());
-    bases.into_iter().map(|b| join_ci(&b, rest, &drive_c)).collect()
+    bases.into_iter().map(|b| join_ci(&b, rest, &drive_c)).filter_map(expand_account).collect()
 }
 
 /// The folders a Windows path token (`%APPDATA%`, `C:`) stands for in the
@@ -681,7 +681,7 @@ fn roots_key(base: &str) -> String {
 /// and resolving it there made the watcher wait on a folder no game creates.
 pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
     let norm = candidate.replace('\\', "/");
-    match norm.strip_prefix("%DOCUMENTS%") {
+    let found = match norm.strip_prefix("%DOCUMENTS%") {
         Some(rest) if cfg!(target_os = "windows") => {
             let rest = rest.trim_matches('/');
             let (base, last) = rest.rsplit_once('/').unwrap_or(("", rest));
@@ -689,7 +689,43 @@ pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
         }
         Some(_) => Vec::new(),
         None => vec![PathBuf::from(expand_path_vars(candidate))],
+    };
+    found.into_iter().filter_map(expand_account).collect()
+}
+
+/// A `roots` candidate ending in this folder name is a game that keeps saves
+/// per player account (Satisfactory: `SaveGames/<Steam or Epic id>`). It
+/// stands for this PC's own account folder, so the host's saves land in each
+/// friend's own folder, where their game reads them. A literal id in the
+/// registry would only ever match the PC it came from.
+pub const ACCOUNT_FOLDER: &str = "{account}";
+
+/// A Steam id (`76561198…`, digits) or an Epic account id (32 hex digits):
+/// not `common` or `blueprints`, which sit next to them.
+fn is_account_id(name: &str) -> bool {
+    let steam = (5..=20).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_digit());
+    let epic = name.len() == 32 && name.bytes().all(|b| b.is_ascii_hexdigit());
+    steam || epic
+}
+
+/// `…/{account}` → this PC's account folder there: the one played most
+/// recently (newest file in it), when several accounts used this PC. None
+/// when there's none yet (the game never ran). Other paths are unchanged.
+fn expand_account(p: PathBuf) -> Option<PathBuf> {
+    if p.file_name().is_none_or(|n| n != ACCOUNT_FOLDER) {
+        return Some(p);
     }
+    let newest = |dir: &std::path::Path| -> Option<std::time::SystemTime> {
+        let own = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
+        let files = std::fs::read_dir(dir).ok()?.flatten().filter_map(|e| e.metadata().and_then(|m| m.modified()).ok());
+        own.into_iter().chain(files).max()
+    };
+    std::fs::read_dir(p.parent()?)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()) && e.file_name().to_str().is_some_and(is_account_id))
+        .map(|e| e.path())
+        .max_by_key(|d| newest(d))
 }
 
 /// Where each external content folder of `cts` is on this PC: the user's
@@ -1277,6 +1313,40 @@ mod tests {
         std::fs::write(lib1.join("appmanifest_1222670.acf"), "").unwrap();
         assert_eq!(proton_prefix_in(&[lib2.clone(), lib1.clone()], 1222670), Some(moved));
         assert!(proton_candidates("%DOCUMENTS%/Electronic Arts/The Sims 4", &pfx)[0].is_dir());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_account_folder_is_this_pcs_own_most_recent_one() {
+        let root = crate::testutil::temp_dir("account-folder");
+        let saves = root.join("SaveGames");
+        std::fs::create_dir_all(saves.join("common")).unwrap();
+        std::fs::create_dir_all(saves.join("blueprints")).unwrap();
+        let candidate = saves.join(ACCOUNT_FOLDER);
+        // The game never ran on this account: nothing to sync into yet.
+        assert!(root_candidates(&candidate.to_string_lossy()).is_empty());
+        let old = saves.join("76561198000000001");
+        let epic = saves.join("0123456789abcdef0123456789ABCDEF");
+        for d in [&old, &epic] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let past = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        for d in [&old, &epic] {
+            std::fs::write(d.join("a.sav"), "x").unwrap();
+            std::fs::File::options().write(true).open(d.join("a.sav")).unwrap().set_modified(past).unwrap();
+            std::fs::File::open(d).and_then(|f| f.set_modified(past)).ok();
+        }
+        // The account played last (newest save) wins.
+        std::fs::write(epic.join("b.sav"), "x").unwrap();
+        assert_eq!(root_candidates(&candidate.to_string_lossy()), vec![epic.clone()]);
+        std::fs::write(old.join("c.sav"), "x").unwrap();
+        assert_eq!(root_candidates(&candidate.to_string_lossy()), vec![old.clone()]);
+        // Through Proton too.
+        let pfx = root.join("pfx");
+        let local = pfx.join("drive_c/users/steamuser/AppData/Local/FactoryGame/Saved/SaveGames/76561198000000002");
+        std::fs::create_dir_all(&local).unwrap();
+        assert_eq!(proton_candidates("%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/{account}", &pfx), vec![local]);
+        assert_eq!(root_candidates("/no/such/folder"), vec![PathBuf::from("/no/such/folder")], "other paths unchanged");
         let _ = std::fs::remove_dir_all(&root);
     }
 

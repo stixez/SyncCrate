@@ -6,6 +6,9 @@ Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. S
 
 ## Unreleased
 
+### Highlights
+- **Satisfactory saves sync, and crews can take turns on a factory.** SyncCrate now finds your Satisfactory saves in your own Steam or Epic account folder and syncs them with the mods. Share a factory from the Dashboard's **Shared saves** and friends take and give it back like any other shared save; its autosaves move with it.
+
 ### Smaller improvements
 - After a sync works, the Dashboard asks once how SyncCrate is working for you, with a button to the Discord's **#feature-requests**.
 

@@ -159,9 +159,22 @@ fn save_stem(file: &str) -> &str {
         Some((head, tail)) if !head.is_empty() && is_backup(tail) => head,
         _ => f,
     };
-    match f.rsplit_once('.') {
+    let f = match f.rsplit_once('.') {
         Some((head, _)) if !head.is_empty() => head,
         _ => f,
+    };
+    strip_autosave(f)
+}
+
+/// `MyFactory_autosave_2` → `MyFactory`: Satisfactory's rotating autosaves
+/// belong to the save they're named after, so taking it brings the newest
+/// one along. Factorio's own `_autosave1` has no name before it and stays.
+fn strip_autosave(stem: &str) -> &str {
+    const TAG: &str = "_autosave_";
+    let lower = stem.to_ascii_lowercase();
+    match lower.rfind(TAG) {
+        Some(i) if i > 0 && stem.len() > i + TAG.len() && stem.as_bytes()[i + TAG.len()..].iter().all(u8::is_ascii_digit) => &stem[..i],
+        _ => stem,
     }
 }
 
@@ -385,6 +398,15 @@ mod tests {
         assert_eq!(unit_of(&sims, "Mods/a.package"), None, "not a save");
         let factorio = vec![ct("saves", "saves", "Save", Some(0))];
         assert_ne!(unit_of(&factorio, "saves/base v1.1.zip"), unit_of(&factorio, "saves/base v1.2.zip"), "dots in a name don't merge saves");
+        assert_eq!(unit_of(&factorio, "saves/_autosave1.zip").as_deref(), Some("saves/_autosave1"), "Factorio's autosaves are their own saves");
+        // Satisfactory: rotating autosaves belong to the save they're named after.
+        let satisfactory = vec![ct("saves", ".", "Save", Some(0))];
+        for path in ["MyFactory.sav", "MyFactory_autosave_0.sav", "myfactory_AUTOSAVE_12.sav"] {
+            assert!(unit_of(&satisfactory, path).is_some_and(|u| u.eq_ignore_ascii_case("saves/MyFactory")), "{path}");
+        }
+        assert_eq!(unit_of(&satisfactory, "Other_autosave_1.sav").as_deref(), Some("saves/Other"), "another factory");
+        assert_eq!(unit_of(&satisfactory, "MyFactory_autosave_.sav").as_deref(), Some("saves/MyFactory_autosave_"), "no number: a name");
+        assert_eq!(unit_of(&satisfactory, "My_autosave_x_autosave_2.sav").as_deref(), Some("saves/My_autosave_x"));
         let minecraft = vec![ct("saves", "saves", "Save", Some(1))];
         assert_eq!(unit_of(&minecraft, "saves/My World/region/r.0.0.mca").as_deref(), Some("saves/My World"));
         let zomboid = vec![ct("saves", "Saves", "Save", Some(2))];

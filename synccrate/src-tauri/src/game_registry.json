@@ -2678,6 +2678,19 @@
           "extensions": [],
           "file_type": "Mod",
           "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Save Files",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/{account}"],
+          "extensions": ["sav"],
+          "file_type": "Save",
+          "recursive": false,
+          "save_unit_depth": 0,
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [

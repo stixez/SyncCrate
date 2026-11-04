@@ -754,6 +754,8 @@ mod tests {
             ("witcher3", "%DOCUMENTS%/The Witcher 3/gamesaves"),
             ("cyberpunk2077", "%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077"),
             ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
+            // Steam Cloud: SaveGames/{64BitSteamID}; each PC's own id (`ACCOUNT_FOLDER`).
+            ("satisfactory", "%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/{account}"),
         ] {
             assert_eq!(ct(id, "saves").roots.first().map(String::as_str), Some(root), "{id}");
         }
