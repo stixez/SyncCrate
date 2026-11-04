@@ -496,6 +496,11 @@ mod tests {
             crate::handoff::unit_of(&g.content_types, path)
         };
         assert_eq!(unit("satisfactory", "@saves/MyFactory_autosave_1.sav").as_deref(), Some("saves/MyFactory"));
+        // Blueprints sit in one folder per session, next to the account folders, outside any save.
+        let sf = registry.games.iter().find(|g| g.id == "satisfactory").unwrap();
+        assert!(crate::sync::diff::path_accepted_by(&sf.content_types, "@blueprints/MyFactory/Smelter Row.sbp"));
+        assert!(crate::sync::diff::path_accepted_by(&sf.content_types, "@blueprints/MyFactory/Smelter Row.sbpcfg"));
+        assert_eq!(unit("satisfactory", "@blueprints/MyFactory/Smelter Row.sbp"), None);
         assert_eq!(unit("v_rising", "@saves/v4/3f2a/AutoSave_120.save.gz").as_deref(), Some("saves/v4/3f2a"));
         assert_eq!(unit("v_rising", "@saves/v4/3f2a/ServerHostSettings.json").as_deref(), Some("saves/v4/3f2a"));
         assert_ne!(unit("v_rising", "@saves/v4/3f2a/x"), unit("v_rising", "@saves/v4/9c1b/x"), "two worlds stay apart");

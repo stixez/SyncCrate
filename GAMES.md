@@ -61,7 +61,7 @@
 |------|------------|
 | **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs, Patchers, Blueprints |
 | **Factorio** | Mods, Save Files, Scenarios |
-| **Satisfactory** | Mods (SMM), Save Files |
+| **Satisfactory** | Mods (SMM), Save Files, Blueprints |
 
 </details>
 

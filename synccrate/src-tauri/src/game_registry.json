@@ -2692,6 +2692,17 @@
           "recursive": false,
           "save_unit_depth": 0,
           "syncable": true
+        },
+        {
+          "id": "blueprints",
+          "label": "Blueprints",
+          "icon": "layout-grid",
+          "color": "text-sky-400",
+          "folder": ".",
+          "roots": ["%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/blueprints"],
+          "extensions": ["sbp", "sbpcfg"],
+          "file_type": "Blueprint",
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": [
