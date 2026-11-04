@@ -12,6 +12,7 @@ Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. S
 - **Match the host's Steam Workshop mods.** Workshop mods live in Steam's folder and can't sync, so when you join a host, the Content page now lists the host's Workshop mods you aren't subscribed to, each with **Open in Steam**, and the host sees in **Who's connected** how many each friend is missing. For RimWorld, Project Zomboid, Cities: Skylines, the Paradox games, tModLoader and every other game with Workshop mods.
 
 ### Smaller improvements
+- The **Guide** is easier to find your way around: topics are listed on the left and open one at a time, with numbered steps, **Previous** and **Next**, and a button to the right page. Its home has a quick start, tips for the game you're playing and the most common questions, and search highlights what matched (**Enter** opens the first result). New topics cover Steam Workshop mods, Bethesda load order and saves outside the game folder.
 - After a sync works, the Dashboard asks once how SyncCrate is working for you, with a button to the Discord's **#feature-requests**.
 
 ## 0.8.8 — 2026-10-29

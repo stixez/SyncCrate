@@ -15,6 +15,8 @@ export interface GuideSection {
   keywords?: string;
   /** "Take me there". Game pages open the active game. */
   go?: { label: string; page: Page };
+  /** Registry ids this section is about: the Guide's home suggests it while one is the active game. */
+  games?: string[];
 }
 
 export interface GuideGroup {
@@ -98,6 +100,20 @@ export const GUIDE: GuideGroup[] = [
         tip: "It pauses while the game is running.",
         keywords: "automatic auto pull background",
         go: { label: "Open the Dashboard", page: "dashboard" },
+      },
+      {
+        id: "save-folders",
+        title: "Saves outside the game folder",
+        summary: "Saves in Documents, AppData or your Steam account's folder sync too.",
+        steps: [
+          "Many games keep saves in your user folder, not next to the mods: Valheim, Stardew Valley, RimWorld, Skyrim, Fallout, Cyberpunk 2077 and more. SyncCrate finds those folders and syncs them with the mods.",
+          "Start the game once on each PC first, so the folder exists. Until then the mods still sync, and SyncCrate says which folder is missing.",
+          "Satisfactory, V Rising and Abiotic Factor keep saves in a folder named after your Steam (or Epic) account. The host's saves go into your own account's folder, where your game looks for them.",
+          "**Settings → Games** shows where each folder is. Click **Browse** to pick another one.",
+        ],
+        tip: "On Linux, Windows games played through Proton are found inside the game's Proton prefix.",
+        keywords: "saves documents appdata appdata steam account cloud satisfactory v rising abiotic factor valheim stardew proton linux folder not found",
+        go: { label: "Open Settings", page: "settings" },
       },
     ],
   },
@@ -198,10 +214,10 @@ export const GUIDE: GuideGroup[] = [
           "Join your host through the crew (**Crews**, then **Join**). If they have the save and aren't playing, click **Take it**: their copy replaces yours.",
           "Mark **I'm playing** so the others wait. When you're done, click **Give to** your host: your copy replaces theirs.",
           "Two friends hand a save over through whoever hosts: one gives it to the host, the other takes it.",
-          "Works for The Sims 3 and 4, Valheim, Minecraft Java, Terraria, Stardew Valley, RimWorld, Factorio, Cities: Skylines, Project Zomboid, Satisfactory, V Rising and Abiotic Factor.",
+          "Works for The Sims 3 and 4, Valheim, Minecraft Java, Terraria, Stardew Valley, RimWorld, Factorio, Cities: Skylines, Project Zomboid, Satisfactory, V Rising and Abiotic Factor. A Satisfactory factory's autosaves move with it, and its blueprints sync as usual.",
         ],
         tip: "Close the game before taking or giving a save. The old copy is kept in File history either way.",
-        keywords: "save handoff turns rotate legacy world share check out check in",
+        keywords: "save handoff turns rotate legacy world share check out check in satisfactory factory v rising abiotic factor host",
         go: { label: "Open the Dashboard", page: "dashboard" },
       },
       {
@@ -265,6 +281,20 @@ export const GUIDE: GuideGroup[] = [
         go: { label: "Open Content", page: "content" },
       },
       {
+        id: "workshop",
+        title: "Steam Workshop mods",
+        summary: "They can't sync, but you can match the host's in a few clicks.",
+        steps: [
+          "Steam keeps Workshop mods in its own folder, and only Steam can install them, so they never sync.",
+          "Join the host as usual. Your **Content** page lists the host's Workshop mods you aren't subscribed to.",
+          "Click **Open in Steam** next to each one, then **Subscribe** in Steam.",
+          "When Steam has downloaded them, click **Check again**. Once you have them all, the list turns into a green note.",
+        ],
+        tip: "Hosting? **Who's connected** on your Dashboard shows how many of your Workshop mods each friend is missing.",
+        keywords: "steam workshop subscribe rimworld zomboid cities skylines paradox stellaris tmodloader terraria arma gmod mods missing",
+        go: { label: "Open Content", page: "content" },
+      },
+      {
         id: "sims4",
         title: "The Sims 4 tips",
         summary: "What SyncCrate does differently for Sims 4.",
@@ -281,6 +311,7 @@ export const GUIDE: GuideGroup[] = [
         ],
         keywords: "sims sims4 cc custom content script reshade gshade tray health resource.cfg lastexception duplicate curseforge patreon link",
         go: { label: "Open Content", page: "content" },
+        games: ["sims4", "sims4-reshade", "sims4-gshade"],
       },
       {
         id: "minecraft",
@@ -296,6 +327,7 @@ export const GUIDE: GuideGroup[] = [
         ],
         keywords: "minecraft fabric forge neoforge quilt jar modrinth curseforge dependency library version loader modpack config kubejs crafttweaker datapack resource pack shader prism instance",
         go: { label: "Open Content", page: "content" },
+        games: ["minecraft_java"],
       },
       {
         id: "wow",
@@ -308,6 +340,22 @@ export const GUIDE: GuideGroup[] = [
         ],
         keywords: "wow world of warcraft addon addons toc wtf curseforge forever classic retail",
         go: { label: "Open Content", page: "content" },
+        games: ["wow_retail", "wow_classic", "wow_classic_era", "wow_forever", "wow_wotlk", "wow_tbc", "wow_vanilla", "wow_custom"],
+      },
+      {
+        id: "bethesda",
+        title: "Skyrim, Fallout and Oblivion tips",
+        summary: "Same plugins, same load order, for everyone.",
+        steps: [
+          "Mods in `Data` sync, but never the base game, its DLC or paid Creation Club files.",
+          "The load order syncs too: `Plugins.txt` (which plugins are on, in what order) and `loadorder.txt`. A different load order shows up as a conflict: click **Use theirs** to match the host.",
+          "Oblivion, Fallout 3 and New Vegas order plugins by file date; synced files keep the host's dates, so the order matches there too.",
+          "Saves in `Documents/My Games` sync with the mods.",
+        ],
+        tip: "Mod Organizer 2 keeps its own load order in each profile, which SyncCrate doesn't change. Vortex and playing without a mod manager use the synced one.",
+        keywords: "skyrim fallout oblivion starfield new vegas bethesda plugins.txt loadorder load order esp esm esl vortex mo2 mod organizer",
+        go: { label: "Open Content", page: "content" },
+        games: ["skyrim_se", "skyrim_le", "fallout4", "fallout_new_vegas", "fallout_3", "oblivion", "starfield"],
       },
     ],
   },
