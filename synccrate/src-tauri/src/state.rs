@@ -604,6 +604,8 @@ mod tests {
             exclude_patterns: Vec::new(),
             save_unit_depth: None,
             roots: vec![],
+            include_files: vec![],
+            autosave_suffix: None,
         }
     }
 

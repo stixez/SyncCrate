@@ -56,18 +56,27 @@ pub async fn launch_game(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id:
             }
             c
         }
-        Launch::SteamUrl(url) => {
-            #[cfg(target_os = "windows")]
-            let mut c = std::process::Command::new(crate::utils::windows_system_exe("explorer.exe"));
-            #[cfg(target_os = "macos")]
-            let mut c = std::process::Command::new("open");
-            #[cfg(target_os = "linux")]
-            let mut c = std::process::Command::new("xdg-open");
-            c.arg(url);
-            c
-        }
+        Launch::SteamUrl(url) => return open_steam_url(url).map_err(|e| format!("Couldn't start the game: {e}")),
     };
     cmd.spawn().map(|_| ()).map_err(|e| format!("Couldn't start the game: {e}"))
+}
+
+/// Hands a `steam://` URL to the OS, which passes it to the Steam app.
+/// Errors when this PC has no Steam: the OS would otherwise "succeed" and
+/// show its own "no app for this link" dialog, and callers' fallbacks (the
+/// web page) never ran.
+fn open_steam_url(url: &str) -> Result<(), String> {
+    if crate::utils::steam_steamapps_dirs().is_empty() {
+        return Err("Steam isn't installed on this PC.".into());
+    }
+    #[cfg(target_os = "windows")]
+    let mut c = std::process::Command::new(crate::utils::windows_system_exe("explorer.exe"));
+    #[cfg(target_os = "macos")]
+    let mut c = std::process::Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut c = std::process::Command::new("xdg-open");
+    c.arg(url);
+    c.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Opens a Workshop item's page in the Steam app, where Subscribe works
@@ -77,15 +86,7 @@ pub async fn open_workshop_item(id: String) -> Result<(), String> {
     if !crate::commands::files::is_workshop_id(&id) {
         return Err("Not a Workshop item.".into());
     }
-    let url = format!("steam://url/CommunityFilePage/{id}");
-    #[cfg(target_os = "windows")]
-    let mut c = std::process::Command::new(crate::utils::windows_system_exe("explorer.exe"));
-    #[cfg(target_os = "macos")]
-    let mut c = std::process::Command::new("open");
-    #[cfg(target_os = "linux")]
-    let mut c = std::process::Command::new("xdg-open");
-    c.arg(url);
-    c.spawn().map(|_| ()).map_err(|e| format!("Couldn't open Steam: {e}"))
+    open_steam_url(&format!("steam://url/CommunityFilePage/{id}"))
 }
 
 /// Whether one of the game's executables (registry `process_names`) is running.

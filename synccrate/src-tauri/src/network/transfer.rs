@@ -122,17 +122,34 @@ fn sanitize_game_info(info: GameInfo) -> GameInfo {
 /// read now, not at startup (subscribed to more since). Each side sends it
 /// when they connect, so friends can match the host's Workshop mods and the
 /// host sees who's missing some.
-async fn game_info_to_send(state: &Arc<Mutex<AppState>>) -> Option<GameInfo> {
+async fn game_info_to_send(state: &Arc<Mutex<AppState>>, names: bool) -> Option<GameInfo> {
     let (info, workshop_app) = {
         let app_state = state.lock().await;
         let app_id = app_state.game_registry.games.iter().find(|g| g.id == app_state.active_game).and_then(|g| g.steam_workshop_app_id);
         (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
     };
     let Some(app_id) = workshop_app else { return info };
-    let workshop = tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id))
+    let workshop = tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id, names))
         .await
         .unwrap_or_default();
     Some(GameInfo { workshop: Some(workshop), ..info.unwrap_or_default() })
+}
+
+/// A friend sends its game info again mid-session (Workshop mods subscribed
+/// since joining); the host's message loop takes it like the first one.
+pub(crate) async fn resend_game_info(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
+    let stream = {
+        let st = state.lock().await;
+        if st.session_type != crate::state::SessionType::Client {
+            return Ok(());
+        }
+        let Some(conn) = st.connections.values().next() else { return Ok(()) };
+        conn.stream.clone()
+    };
+    let Some(info) = game_info_to_send(state, false).await else { return Ok(()) };
+    // Not while a sync has the connection: the host learns it next time.
+    let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await else { return Ok(()) };
+    protocol::send_message(&mut *s, &Message::GameInfoExchange { game_info: info }).await
 }
 
 static LISTENER_TOKEN: Mutex<Option<CancellationToken>> = Mutex::const_new(None);
@@ -593,7 +610,8 @@ async fn handle_client(
     // Send our game info to the peer. Copied out first: sending while
     // holding AppState froze the whole app for up to 30 s when a peer
     // stopped reading.
-    let info = game_info_to_send(&state).await;
+    // The host's names show in each friend's list; the friend's own are never shown.
+    let info = game_info_to_send(&state, true).await;
     {
         if let Some(info) = info {
             let mut s = stream.lock().await;
@@ -1346,7 +1364,7 @@ pub(crate) async fn run_client_session(
     };
 
     // Send our game info to the host
-    if let Some(info) = game_info_to_send(&state).await {
+    if let Some(info) = game_info_to_send(&state, false).await {
         let mut s = stream.lock().await;
         protocol::send_message(&mut *s, &Message::GameInfoExchange { game_info: info }).await?;
     }

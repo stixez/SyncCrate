@@ -146,7 +146,7 @@ pub struct PendingGive {
 /// `Midgard`: rotated-backup suffixes (`.verN`, `.bak`, `.old`), then one
 /// extension. Splitting at the first dot merged
 /// `base v1.1` and `base v1.2` into one save.
-fn save_stem(file: &str) -> &str {
+fn save_stem<'a>(file: &'a str, autosave_suffix: Option<&str>) -> &'a str {
     let f = file.strip_suffix(crate::commands::files::DISABLED_SUFFIX).unwrap_or(file);
     // `get`, not slicing: an extension like `.größe` isn't cut at a char
     // boundary, and a friend's file name could panic the host.
@@ -163,17 +163,19 @@ fn save_stem(file: &str) -> &str {
         Some((head, _)) if !head.is_empty() => head,
         _ => f,
     };
-    strip_autosave(f)
+    match autosave_suffix {
+        Some(tag) => strip_autosave(f, tag),
+        None => f,
+    }
 }
 
-/// `MyFactory_autosave_2` → `MyFactory`: Satisfactory's rotating autosaves
-/// belong to the save they're named after, so taking it brings the newest
-/// one along. Factorio's own `_autosave1` has no name before it and stays.
-fn strip_autosave(stem: &str) -> &str {
-    const TAG: &str = "_autosave_";
+/// `MyFactory_autosave_2` → `MyFactory` (`tag` `_autosave_`, the content
+/// type's `autosave_suffix`): rotating autosaves belong to the save they're
+/// named after, so taking it brings the newest one along.
+fn strip_autosave<'a>(stem: &'a str, tag: &str) -> &'a str {
     let lower = stem.to_ascii_lowercase();
-    match lower.rfind(TAG) {
-        Some(i) if i > 0 && stem.len() > i + TAG.len() && stem.as_bytes()[i + TAG.len()..].iter().all(u8::is_ascii_digit) => &stem[..i],
+    match lower.rfind(&tag.to_ascii_lowercase()) {
+        Some(i) if i > 0 && stem.len() > i + tag.len() && stem.as_bytes()[i + tag.len()..].iter().all(u8::is_ascii_digit) => &stem[..i],
         _ => stem,
     }
 }
@@ -188,7 +190,7 @@ pub fn unit_of(cts: &[ContentType], path: &str) -> Option<String> {
     let parts: Vec<&str> = rel.split('/').collect();
     let name = if depth == 0 {
         match parts.as_slice() {
-            [file] => save_stem(file).to_string(),
+            [file] => save_stem(file, ct.autosave_suffix.as_deref()).to_string(),
             // A file save's folder has no subfolders that belong to it.
             _ => return None,
         }
@@ -374,7 +376,7 @@ mod tests {
         ContentType {
             id: id.into(), label: id.into(), folder: folder.into(), extensions: vec![], install_extensions: vec![], allow_blocked_extensions: vec![], file_type: file_type.into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: depth, roots: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: depth, roots: vec![], include_files: vec![], autosave_suffix: None,
         }
     }
 
@@ -399,8 +401,9 @@ mod tests {
         let factorio = vec![ct("saves", "saves", "Save", Some(0))];
         assert_ne!(unit_of(&factorio, "saves/base v1.1.zip"), unit_of(&factorio, "saves/base v1.2.zip"), "dots in a name don't merge saves");
         assert_eq!(unit_of(&factorio, "saves/_autosave1.zip").as_deref(), Some("saves/_autosave1"), "Factorio's autosaves are their own saves");
+        assert_eq!(unit_of(&factorio, "saves/Base_autosave_2.zip").as_deref(), Some("saves/Base_autosave_2"), "a name, without autosave_suffix");
         // Satisfactory: rotating autosaves belong to the save they're named after.
-        let satisfactory = vec![ct("saves", ".", "Save", Some(0))];
+        let satisfactory = vec![ContentType { autosave_suffix: Some("_autosave_".into()), ..ct("saves", ".", "Save", Some(0)) }];
         for path in ["MyFactory.sav", "MyFactory_autosave_0.sav", "myfactory_AUTOSAVE_12.sav"] {
             assert!(unit_of(&satisfactory, path).is_some_and(|u| u.eq_ignore_ascii_case("saves/MyFactory")), "{path}");
         }

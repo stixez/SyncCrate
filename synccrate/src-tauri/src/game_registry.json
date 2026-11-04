@@ -2691,6 +2691,7 @@
           "file_type": "Save",
           "recursive": false,
           "save_unit_depth": 0,
+          "autosave_suffix": "_autosave_",
           "syncable": true
         },
         {
@@ -3529,7 +3530,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Skyrim Special Edition", "%LOCALAPPDATA%/Skyrim Special Edition GOG", "%LOCALAPPDATA%/Skyrim Special Edition EPIC", "%LOCALAPPDATA%/Skyrim Special Edition MS"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -3795,7 +3796,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Fallout4", "%LOCALAPPDATA%/Fallout4 EPIC", "%LOCALAPPDATA%/Fallout4 MS"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -3900,7 +3901,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/FalloutNV", "%LOCALAPPDATA%/FalloutNV_Epic"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -3990,7 +3991,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Skyrim"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -4092,7 +4093,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Oblivion"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -4484,7 +4485,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Starfield"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true
@@ -6836,11 +6837,24 @@
         },
         {
           "id": "saves",
-          "label": "Worlds",
+          "label": "Worlds (Steam Cloud)",
           "icon": "save",
           "color": "text-status-green",
           "folder": ".",
-          "roots": ["%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/CloudSaves/{account}", "%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/Saves"],
+          "roots": ["%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/CloudSaves/{account}"],
+          "extensions": [],
+          "exclude_files": ["steam_autocloud.vdf"],
+          "file_type": "Save",
+          "save_unit_depth": 2,
+          "syncable": true
+        },
+        {
+          "id": "local_saves",
+          "label": "Worlds (local)",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/Saves"],
           "extensions": [],
           "exclude_files": ["steam_autocloud.vdf"],
           "file_type": "Save",
@@ -8599,7 +8613,7 @@
           "folder": ".",
           "roots": ["%LOCALAPPDATA%/Fallout3"],
           "extensions": ["txt"],
-          "exclude_files": ["DLCList.txt"],
+          "include_files": ["Plugins.txt", "loadorder.txt"],
           "file_type": "Config",
           "recursive": false,
           "syncable": true

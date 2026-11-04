@@ -16,6 +16,9 @@ Every supported game is one entry in `synccrate/src-tauri/src/game_registry.json
 - On Linux, a game played through Proton (`utils::game_proton_prefix`: its prefix was used more recently than any native folder of it, or it has none) gets its Windows paths (`%DOCUMENTS%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%`, `C:`…) looked up in its prefix first, for detection and every save folder. A Windows-only Steam game needs no Linux entries for that.
 - Write Windows Documents as `%DOCUMENTS%` (resolved like `documents_relative`, so OneDrive and moved Documents work). It's Windows-only, so give macOS and Linux their own entries. Never `%USERPROFILE%/Documents`.
 - An external save type with `"extensions": []` must exclude `steam_autocloud.vdf` (Steam's account file). A test enforces it.
+- Several roots that can all exist (one per store: Skyrim's `Skyrim Special Edition` and `… GOG`) are fine: the one used most recently wins. Two folders that both hold saves at once (V Rising's cloud and local) are two content types.
+- Rotating autosaves named after their save (`<save>_autosave_<n>`) group with it only when the type sets `autosave_suffix`.
+- A folder that also holds files that must never sync (Bethesda's `%LOCALAPPDATA%/<game>` has `ContentCatalog.txt`, the paid Creations someone owns) lists the ones that do in `include_files`.
 
 ## Mods
 

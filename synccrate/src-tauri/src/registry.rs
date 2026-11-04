@@ -249,6 +249,18 @@ pub struct ContentType {
     /// which `utils::safe_join` resolves: a game only ever had one folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roots: Vec<String>,
+    /// Only these file names (case-insensitive) belong to this type, when
+    /// set: the folder also holds files that must not sync (Bethesda's
+    /// `%LOCALAPPDATA%/<game>` has `ContentCatalog.txt`, the paid Creations
+    /// someone owns, next to `Plugins.txt`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub include_files: Vec<String>,
+    /// Save handoff with `save_unit_depth` 0: rotating autosaves named
+    /// `<save><suffix><n>` belong to `<save>` (Satisfactory's `_autosave_`),
+    /// so taking a save brings its newest autosave. Only where set: in other
+    /// games a save someone named `Base_autosave_2` is a save of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autosave_suffix: Option<String>,
 }
 
 /// Hello/Welcome feature: this app understands `@<id>/` paths (content
@@ -504,6 +516,8 @@ mod tests {
         assert_eq!(unit("v_rising", "@saves/v4/3f2a/AutoSave_120.save.gz").as_deref(), Some("saves/v4/3f2a"));
         assert_eq!(unit("v_rising", "@saves/v4/3f2a/ServerHostSettings.json").as_deref(), Some("saves/v4/3f2a"));
         assert_ne!(unit("v_rising", "@saves/v4/3f2a/x"), unit("v_rising", "@saves/v4/9c1b/x"), "two worlds stay apart");
+        // Worlds with Steam Cloud off are their own folder, so both kinds are seen.
+        assert_eq!(unit("v_rising", "@local_saves/v4/3f2a/AutoSave_1.save.gz").as_deref(), Some("local_saves/v4/3f2a"));
         assert_eq!(unit("abiotic_factor", "@worlds/Worlds/Cascade/PlayerData/Player_76561198000000001.sav").as_deref(), Some("worlds/Cascade"));
         assert!(crate::sync::diff::content_type_for(&registry.games.iter().find(|g| g.id == "abiotic_factor").unwrap().content_types, "@worlds/Settings.sav").is_none(), "per-player files next to Worlds stay local");
     }
@@ -851,7 +865,7 @@ mod tests {
             for path in ["@load_order/Plugins.txt", "@load_order/plugins.txt", "@load_order/loadorder.txt"] {
                 assert!(path_accepted_by(&g.content_types, path), "{id}: {path} should sync");
             }
-            for path in ["@load_order/DLCList.txt", "@load_order/Sub/plugins.txt", "@load_order/crash.log"] {
+            for path in ["@load_order/DLCList.txt", "@load_order/ContentCatalog.txt", "@load_order/notes.txt", "@load_order/Sub/plugins.txt", "@load_order/crash.log"] {
                 assert!(!path_accepted_by(&g.content_types, path), "{id}: {path} should not sync");
             }
         }

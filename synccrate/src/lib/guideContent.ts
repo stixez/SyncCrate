@@ -108,7 +108,7 @@ export const GUIDE: GuideGroup[] = [
         steps: [
           "Many games keep saves in your user folder, not next to the mods: Valheim, Stardew Valley, RimWorld, Skyrim, Fallout, Cyberpunk 2077 and more. SyncCrate finds those folders and syncs them with the mods.",
           "Start the game once on each PC first, so the folder exists. Until then the mods still sync, and SyncCrate says which folder is missing.",
-          "Satisfactory, V Rising and Abiotic Factor keep saves in a folder named after your Steam (or Epic) account. The host's saves go into your own account's folder, where your game looks for them.",
+          "Satisfactory, V Rising and Abiotic Factor keep saves in a folder named after your Steam (or Epic) account. The host's saves go into your own account's folder, where your game looks for them. On a PC several people use, that's the account signed in to Steam.",
           "**Settings → Games** shows where each folder is. Click **Browse** to pick another one.",
         ],
         tip: "On Linux, Windows games played through Proton are found inside the game's Proton prefix.",
@@ -348,7 +348,7 @@ export const GUIDE: GuideGroup[] = [
         summary: "Same plugins, same load order, for everyone.",
         steps: [
           "Mods in `Data` sync, but never the base game, its DLC or paid Creation Club files.",
-          "The load order syncs too: `Plugins.txt` (which plugins are on, in what order) and `loadorder.txt`. A different load order shows up as a conflict: click **Use theirs** to match the host.",
+          "The load order syncs too: `Plugins.txt` (which plugins are on, in what order) and `loadorder.txt`, nothing else from that folder. A different load order shows up as a conflict: click **Use theirs** to match the host.",
           "Oblivion, Fallout 3 and New Vegas order plugins by file date; synced files keep the host's dates, so the order matches there too.",
           "Saves in `Documents/My Games` sync with the mods.",
         ],

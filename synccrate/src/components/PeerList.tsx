@@ -32,7 +32,7 @@ export default function PeerList() {
   useEffect(() => {
     let cancelled = false;
     if (!isHost || !activeGame) { setMyWorkshop(null); return; }
-    cmd.getWorkshopItems(activeGame).then((w) => { if (!cancelled) setMyWorkshop(new Set(w.map((i) => i.id))); }).catch(() => {});
+    cmd.getWorkshopItems(activeGame, false).then((w) => { if (!cancelled) setMyWorkshop(new Set(w.map((i) => i.id))); }).catch(() => {});
     return () => { cancelled = true; };
   }, [isHost, activeGame, peerCount]);
 

@@ -44,11 +44,18 @@ export default function WorkshopPanel({ gameId, gameLabel, syncedFolders, hasWor
   const hostItems = demo ? DEMO_HOST : host && (!host.game_id || host.game_id === gameId) ? host.game_info?.workshop ?? [] : [];
   const hostName = demo ? "Alex" : host?.name ?? "The host";
 
+  // Another game's list must never be compared with this game's host.
+  useEffect(() => { setMine(null); }, [gameId]);
   useEffect(() => {
     let cancelled = false;
     if (demo) { setMine(DEMO_HOST.slice(0, 1)); return; }
     if (!hasWorkshop) { setMine([]); return; }
-    cmd.getWorkshopItems(gameId).then((m) => { if (!cancelled) setMine(m); }).catch(() => { if (!cancelled) setMine([]); });
+    cmd.getWorkshopItems(gameId).then((m) => {
+      if (cancelled) return;
+      setMine(m);
+      // The host's Who's connected counts what we're missing: keep it right.
+      if (checks > 0) cmd.shareWorkshopItems().catch(() => {});
+    }).catch(() => { if (!cancelled) setMine([]); });
     return () => { cancelled = true; };
   }, [gameId, hasWorkshop, demo, checks]);
 

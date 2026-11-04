@@ -390,6 +390,11 @@ fn last_changed(path: &std::path::Path) -> Option<std::time::SystemTime> {
 /// and older Wine versions spell some folders differently, so a path can
 /// have two places. Empty for a path that isn't a Windows one.
 pub(crate) fn proton_candidates(candidate: &str, pfx: &std::path::Path) -> Vec<PathBuf> {
+    proton_candidates_raw(candidate, pfx).into_iter().filter_map(expand_account).collect()
+}
+
+/// `proton_candidates` with `{account}` (`ACCOUNT_FOLDER`) left in.
+fn proton_candidates_raw(candidate: &str, pfx: &std::path::Path) -> Vec<PathBuf> {
     let norm = candidate.replace('\\', "/");
     let (token, rest) = match norm.strip_prefix('%').and_then(|r| r.find('%')) {
         Some(end) => (&norm[..end + 2], &norm[end + 2..]),
@@ -400,7 +405,7 @@ pub(crate) fn proton_candidates(candidate: &str, pfx: &std::path::Path) -> Vec<P
     // The spelling this prefix's Wine actually made comes first.
     let mut bases = proton_bases(token, pfx);
     bases.sort_by_key(|b| !b.is_dir());
-    bases.into_iter().map(|b| join_ci(&b, rest, &drive_c)).filter_map(expand_account).collect()
+    bases.into_iter().map(|b| join_ci(&b, rest, &drive_c)).collect()
 }
 
 /// The folders a Windows path token (`%APPDATA%`, `C:`) stands for in the
@@ -680,8 +685,13 @@ fn roots_key(base: &str) -> String {
 /// candidate, like `%USERPROFILE%`: macOS/Linux saves have their own entries,
 /// and resolving it there made the watcher wait on a folder no game creates.
 pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
+    root_candidates_raw(candidate).into_iter().filter_map(expand_account).collect()
+}
+
+/// `root_candidates` with `{account}` (`ACCOUNT_FOLDER`) left in.
+fn root_candidates_raw(candidate: &str) -> Vec<PathBuf> {
     let norm = candidate.replace('\\', "/");
-    let found = match norm.strip_prefix("%DOCUMENTS%") {
+    match norm.strip_prefix("%DOCUMENTS%") {
         Some(rest) if cfg!(target_os = "windows") => {
             let rest = rest.trim_matches('/');
             let (base, last) = rest.rsplit_once('/').unwrap_or(("", rest));
@@ -689,8 +699,7 @@ pub(crate) fn root_candidates(candidate: &str) -> Vec<PathBuf> {
         }
         Some(_) => Vec::new(),
         None => vec![PathBuf::from(expand_path_vars(candidate))],
-    };
-    found.into_iter().filter_map(expand_account).collect()
+    }
 }
 
 /// A `roots` candidate ending in this folder name is a game that keeps saves
@@ -708,24 +717,84 @@ fn is_account_id(name: &str) -> bool {
     steam || epic
 }
 
-/// `…/{account}` → this PC's account folder there: the one played most
-/// recently (newest file in it), when several accounts used this PC. None
-/// when there's none yet (the game never ran). Other paths are unchanged.
+/// When a folder (or a file directly in it) last changed: which of several
+/// candidates is the one in use.
+fn last_used(dir: &std::path::Path) -> Option<std::time::SystemTime> {
+    let own = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
+    let files = std::fs::read_dir(dir).ok().into_iter().flatten().flatten().filter_map(|e| e.metadata().and_then(|m| m.modified()).ok());
+    own.into_iter().chain(files).max()
+}
+
+/// `…/{account}` → this PC's account folder there. None when there's none
+/// yet (the game never ran for this account). Other paths are unchanged.
 fn expand_account(p: PathBuf) -> Option<PathBuf> {
     if p.file_name().is_none_or(|n| n != ACCOUNT_FOLDER) {
         return Some(p);
     }
-    let newest = |dir: &std::path::Path| -> Option<std::time::SystemTime> {
-        let own = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
-        let files = std::fs::read_dir(dir).ok()?.flatten().filter_map(|e| e.metadata().and_then(|m| m.modified()).ok());
-        own.into_iter().chain(files).max()
-    };
-    std::fs::read_dir(p.parent()?)
+    let dirs: Vec<PathBuf> = std::fs::read_dir(p.parent()?)
         .ok()?
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()) && e.file_name().to_str().is_some_and(is_account_id))
         .map(|e| e.path())
-        .max_by_key(|d| newest(d))
+        .collect();
+    pick_account(dirs, steam_login().as_ref())
+}
+
+/// The Steam account signed in on this PC (the most recent login in
+/// `config/loginusers.vdf`), as `(SteamID64, Steam3 account id)`: games
+/// name their save folder with one or the other.
+fn steam_login() -> Option<(String, String)> {
+    // Tests don't depend on who's signed in to Steam on the machine running them.
+    if cfg!(test) {
+        return None;
+    }
+    steam_roots().iter().find_map(|r| std::fs::read_to_string(r.join("config").join("loginusers.vdf")).ok()).and_then(|t| login_from_vdf(&t))
+}
+
+fn login_from_vdf(text: &str) -> Option<(String, String)> {
+    // "7656119…" { "AccountName" "x" "MostRecent" "1" "Timestamp" "…" } per user.
+    let mut best: Option<(bool, u64, u64)> = None;
+    let mut current: Option<u64> = None;
+    let (mut recent, mut stamp) = (false, 0u64);
+    let finish = |id: Option<u64>, recent: bool, stamp: u64, best: &mut Option<(bool, u64, u64)>| {
+        if let Some(id) = id {
+            if best.is_none_or(|(r, s, _)| (recent, stamp) > (r, s)) {
+                *best = Some((recent, stamp, id));
+            }
+        }
+    };
+    for line in text.lines() {
+        let quoted: Vec<&str> = line.split('"').skip(1).step_by(2).collect();
+        match quoted.as_slice() {
+            [id] if id.len() == 17 && id.bytes().all(|b| b.is_ascii_digit()) => {
+                finish(current, recent, stamp, &mut best);
+                current = id.parse().ok();
+                (recent, stamp) = (false, 0);
+            }
+            [k, v] if k.eq_ignore_ascii_case("MostRecent") => recent = *v == "1",
+            [k, v] if k.eq_ignore_ascii_case("Timestamp") => stamp = v.parse().unwrap_or(0),
+            _ => {}
+        }
+    }
+    finish(current, recent, stamp, &mut best);
+    let id64 = best?.2;
+    Some((id64.to_string(), id64.checked_sub(76_561_197_960_265_728)?.to_string()))
+}
+
+/// Which account folder is this PC's: the signed-in Steam account's. If it
+/// has none yet, not another Steam account's (a sibling's saves on a shared
+/// PC), but an Epic one if there is one. Without a known login, the one
+/// played most recently.
+fn pick_account(dirs: Vec<PathBuf>, login: Option<&(String, String)>) -> Option<PathBuf> {
+    let name = |d: &PathBuf| d.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+    let is_steam = |d: &PathBuf| name(d).bytes().all(|b| b.is_ascii_digit());
+    if let Some((id64, id3)) = login {
+        if let Some(mine) = dirs.iter().find(|d| name(d) == *id64 || name(d) == *id3) {
+            return Some(mine.clone());
+        }
+        return dirs.into_iter().filter(|d| !is_steam(d)).max_by_key(|d| last_used(d));
+    }
+    dirs.into_iter().max_by_key(|d| last_used(d))
 }
 
 /// Where each external content folder of `cts` is on this PC: the user's
@@ -746,9 +815,11 @@ pub fn resolve_roots(
             let found = match overrides.get(&ct.id) {
                 Some(p) => Some(PathBuf::from(p)).filter(|p| p.is_dir()),
                 None => {
-                    let in_prefix = proton.into_iter().flat_map(|pfx| ct.roots.iter().flat_map(move |c| proton_candidates(c, pfx)));
-                    let native = ct.roots.iter().flat_map(|c| root_candidates(c)).filter(|p| p.is_absolute());
-                    in_prefix.chain(native).find(|p| p.is_dir())
+                    // Several can exist (Skyrim's Steam and GOG folders, a
+                    // leftover from another store): the one in use changed last.
+                    let newest = |c: Vec<PathBuf>| c.into_iter().filter(|p| p.is_dir()).max_by_key(|p| last_used(p));
+                    let in_prefix = proton.and_then(|pfx| newest(ct.roots.iter().flat_map(|c| proton_candidates(c, pfx)).collect()));
+                    in_prefix.or_else(|| newest(ct.roots.iter().flat_map(|c| root_candidates(c)).filter(|p| p.is_absolute()).collect()))
                 }
             }?;
             Some((prefix, found))
@@ -853,8 +924,15 @@ fn root_for_this_os(candidate: &str) -> bool {
 /// the game has created it: in the game's Proton prefix when it's played
 /// through Proton, else its first candidate for this OS.
 pub fn expected_root(base: &str, ct: &crate::registry::ContentType) -> Option<PathBuf> {
-    let in_prefix = proton_prefix_of(base).and_then(|pfx| ct.roots.iter().flat_map(|c| proton_candidates(c, &pfx)).next());
-    let root = in_prefix.or_else(|| ct.roots.iter().filter(|c| root_for_this_os(c)).flat_map(|c| root_candidates(c)).find(|p| p.is_absolute()))?;
+    let in_prefix = proton_prefix_of(base).and_then(|pfx| ct.roots.iter().flat_map(|c| proton_candidates_raw(c, &pfx)).next());
+    let root = in_prefix.or_else(|| ct.roots.iter().filter(|c| root_for_this_os(c)).flat_map(|c| root_candidates_raw(c)).find(|p| p.is_absolute()))?;
+    // A per-account folder the game hasn't made yet appears next to the
+    // others: watch where it will appear, and the rescan then finds it.
+    if root.file_name().is_some_and(|n| n == ACCOUNT_FOLDER) {
+        return expand_account(root.clone())
+            .map(|r| if ct.folder.is_empty() || ct.folder == "." { r } else { r.join(&ct.folder) })
+            .or_else(|| root.parent().map(std::path::Path::to_path_buf));
+    }
     Some(if ct.folder.is_empty() || ct.folder == "." { root } else { root.join(&ct.folder) })
 }
 
@@ -1351,6 +1429,82 @@ mod tests {
     }
 
     #[test]
+    fn the_signed_in_steam_accounts_folder_is_used() {
+        let vdf = r#""users"
+{
+	"76561198000000001"
+	{
+		"AccountName"		"sibling"
+		"MostRecent"		"0"
+		"Timestamp"		"1800000000"
+	}
+	"76561198000000002"
+	{
+		"AccountName"		"me"
+		"MostRecent"		"1"
+		"Timestamp"		"1700000000"
+	}
+}"#;
+        let login = login_from_vdf(vdf).expect("a login");
+        assert_eq!(login, ("76561198000000002".to_string(), (76561198000000002u64 - 76561197960265728).to_string()));
+        // No MostRecent flag: the latest Timestamp.
+        assert_eq!(login_from_vdf(&vdf.replace("\"MostRecent\"\t\t\"1\"", "")).unwrap().0, "76561198000000001");
+        assert!(login_from_vdf("").is_none());
+
+        let root = crate::testutil::temp_dir("account-pick");
+        let mk = |n: &str| { let d = root.join(n); std::fs::create_dir_all(&d).unwrap(); d };
+        let (sibling, mine, epic) = (mk("76561198000000001"), mk(&login.1), mk("0123456789abcdef0123456789abcdef"));
+        std::fs::write(sibling.join("newest.sav"), "x").unwrap();
+        // By either id form, even when a sibling played last.
+        assert_eq!(pick_account(vec![sibling.clone(), mine.clone(), epic.clone()], Some(&login)), Some(mine.clone()));
+        // Not a sibling's folder: the signed-in account has none yet, so an Epic one or nothing.
+        assert_eq!(pick_account(vec![sibling.clone(), epic.clone()], Some(&login)), Some(epic.clone()));
+        assert_eq!(pick_account(vec![sibling.clone()], Some(&login)), None);
+        // Nobody signed in to Steam: the one played last.
+        assert_eq!(pick_account(vec![mine, sibling.clone()], None), Some(sibling));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_missing_account_folder_is_watched_where_it_will_appear() {
+        let root = crate::testutil::temp_dir("account-watch");
+        let saves = root.join("SaveGames");
+        std::fs::create_dir_all(&saves).unwrap();
+        let ct: crate::registry::ContentType = serde_json::from_str(&format!(
+            r#"{{"id":"worlds","label":"Worlds","folder":"Worlds","file_type":"Save","roots":[{r:?}]}}"#,
+            r = saves.join(ACCOUNT_FOLDER).to_string_lossy()
+        ))
+        .unwrap();
+        let base = root.join("game").to_string_lossy().to_string();
+        assert_eq!(expected_root(&base, &ct), Some(saves.clone()), "the game hasn't run: watch SaveGames");
+        std::fs::create_dir_all(saves.join("76561198000000003")).unwrap();
+        assert_eq!(expected_root(&base, &ct), Some(saves.join("76561198000000003").join("Worlds")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn of_several_existing_folders_the_one_in_use_wins() {
+        let root = crate::testutil::temp_dir("roots-newest");
+        let (steam, gog) = (root.join("Skyrim Special Edition"), root.join("Skyrim Special Edition GOG"));
+        for d in [&steam, &gog] {
+            std::fs::create_dir_all(d).unwrap();
+            std::fs::write(d.join("Plugins.txt"), "x").unwrap();
+        }
+        let past = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        std::fs::File::options().write(true).open(steam.join("Plugins.txt")).unwrap().set_modified(past).unwrap();
+        std::fs::File::open(&steam).and_then(|f| f.set_modified(past)).ok();
+        let ct: crate::registry::ContentType = serde_json::from_str(&format!(
+            r#"{{"id":"load_order","label":"Load Order","folder":".","file_type":"Config","roots":[{a:?},{b:?}]}}"#,
+            a = steam.to_string_lossy(),
+            b = gog.to_string_lossy()
+        ))
+        .unwrap();
+        // A leftover Steam folder listed first doesn't win over the GOG one in use.
+        assert_eq!(resolve_roots(std::slice::from_ref(&ct), &std::collections::HashMap::new(), None).get("@load_order"), Some(&gog));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_proton_games_save_folders_come_from_its_prefix_first() {
         let root = crate::testutil::temp_dir("proton-roots");
         let pfx = root.join("pfx");
@@ -1383,8 +1537,12 @@ mod tests {
             let pfx = root.join(&game.id).join("pfx");
             std::fs::create_dir_all(pfx.join("drive_c")).unwrap();
             for ct in &game.content_types {
-                let Some(first) = ct.roots.iter().flat_map(|c| proton_candidates(c, &pfx)).next() else { continue };
+                let Some(mut first) = ct.roots.iter().flat_map(|c| proton_candidates_raw(c, &pfx)).next() else { continue };
                 assert!(first.starts_with(&pfx), "{}/{}: {first:?}", game.id, ct.id);
+                // A per-account folder: the game makes one named after the Steam id.
+                if first.file_name().is_some_and(|n| n == ACCOUNT_FOLDER) {
+                    first = first.with_file_name("76561198000000009");
+                }
                 std::fs::create_dir_all(&first).unwrap();
                 let found = resolve_roots(std::slice::from_ref(ct), &std::collections::HashMap::new(), Some(&pfx));
                 assert_eq!(found.get(&ct.root_prefix().unwrap()), Some(&first), "{}/{}", game.id, ct.id);
