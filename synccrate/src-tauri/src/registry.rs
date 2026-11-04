@@ -809,6 +809,40 @@ mod tests {
         assert!(!ct("torchlight2", "saves").recursive);
     }
 
+    /// Which plugins are on, and in what order, lives in `%LOCALAPPDATA%`
+    /// (`Plugins.txt`, and `loadorder.txt` from LOOT and Vortex). Folder names
+    /// per store from libloadorder's `appdata_folder_name`, checked 2026-11-04.
+    #[test]
+    fn bethesda_load_order_syncs() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        for (id, first) in [
+            ("skyrim_se", "%LOCALAPPDATA%/Skyrim Special Edition"),
+            ("skyrim_le", "%LOCALAPPDATA%/Skyrim"),
+            ("fallout4", "%LOCALAPPDATA%/Fallout4"),
+            ("fallout_new_vegas", "%LOCALAPPDATA%/FalloutNV"),
+            ("fallout_3", "%LOCALAPPDATA%/Fallout3"),
+            ("oblivion", "%LOCALAPPDATA%/Oblivion"),
+            ("starfield", "%LOCALAPPDATA%/Starfield"),
+        ] {
+            let g = registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+            let ct = g.content_types.iter().find(|c| c.id == "load_order").unwrap_or_else(|| panic!("{id}/load_order"));
+            assert_eq!(ct.roots.first().map(String::as_str), Some(first), "{id}");
+            assert!(!ct.recursive, "{id}");
+            for path in ["@load_order/Plugins.txt", "@load_order/plugins.txt", "@load_order/loadorder.txt"] {
+                assert!(path_accepted_by(&g.content_types, path), "{id}: {path} should sync");
+            }
+            for path in ["@load_order/DLCList.txt", "@load_order/Sub/plugins.txt", "@load_order/crash.log"] {
+                assert!(!path_accepted_by(&g.content_types, path), "{id}: {path} should not sync");
+            }
+        }
+        let se = registry.games.iter().find(|g| g.id == "skyrim_se").unwrap();
+        let roots = &se.content_types.iter().find(|c| c.id == "load_order").unwrap().roots;
+        for store in ["GOG", "EPIC", "MS"] {
+            assert!(roots.iter().any(|r| r.ends_with(&format!("Skyrim Special Edition {store}"))), "{store}");
+        }
+    }
+
     /// Modpacks need their configs and recipe scripts to match or servers
     /// kick players (issue #4). `options.txt` (keybinds, video, volume) and
     /// the Distant Horizons LOD cache stay personal.
