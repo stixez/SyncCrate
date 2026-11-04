@@ -325,11 +325,11 @@ pub struct PackInfo {
 pub struct GameInfo {
     pub game_version: Option<String>,
     pub installed_packs: Vec<PackInfo>,
-    /// The Steam Workshop items this PC is subscribed to for the game (a
-    /// host sends them so friends can subscribe to the same ones). Older
-    /// peers neither send nor read it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub workshop: Vec<WorkshopItem>,
+    /// The Steam Workshop items this PC is subscribed to for the game, so
+    /// friends can match them. None: the peer didn't say (an older
+    /// SyncCrate, or a game without Workshop mods), unlike an empty list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workshop: Option<Vec<WorkshopItem>>,
 }
 
 /// A Steam Workshop item: `steamapps/workshop/content/<app id>/<id>`.

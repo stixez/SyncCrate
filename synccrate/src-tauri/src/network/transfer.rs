@@ -99,22 +99,40 @@ fn sanitize_game_info(info: GameInfo) -> GameInfo {
         .collect();
 
     let mut seen = std::collections::HashSet::new();
-    let workshop = info
-        .workshop
-        .into_iter()
-        .filter(|w| crate::commands::files::is_workshop_id(&w.id) && seen.insert(w.id.clone()))
-        .take(MAX_PEER_WORKSHOP)
-        .map(|w| crate::state::WorkshopItem {
-            name: w.name.map(|n| clean_peer_text(&n, MAX_PACK_STRING_LEN)).filter(|n| !n.trim().is_empty()),
-            id: w.id,
-        })
-        .collect();
+    let workshop = info.workshop.map(|items| {
+        items
+            .into_iter()
+            .filter(|w| crate::commands::files::is_workshop_id(&w.id) && seen.insert(w.id.clone()))
+            .take(MAX_PEER_WORKSHOP)
+            .map(|w| crate::state::WorkshopItem {
+                name: w.name.map(|n| clean_peer_text(&n, MAX_PACK_STRING_LEN)).filter(|n| !n.trim().is_empty()),
+                id: w.id,
+            })
+            .collect()
+    });
 
     GameInfo {
         game_version,
         installed_packs,
         workshop,
     }
+}
+
+/// This PC's game info for the active game, with its Workshop subscriptions
+/// read now, not at startup (subscribed to more since). Each side sends it
+/// when they connect, so friends can match the host's Workshop mods and the
+/// host sees who's missing some.
+async fn game_info_to_send(state: &Arc<Mutex<AppState>>) -> Option<GameInfo> {
+    let (info, workshop_app) = {
+        let app_state = state.lock().await;
+        let app_id = app_state.game_registry.games.iter().find(|g| g.id == app_state.active_game).and_then(|g| g.steam_workshop_app_id);
+        (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
+    };
+    let Some(app_id) = workshop_app else { return info };
+    let workshop = tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id))
+        .await
+        .unwrap_or_default();
+    Some(GameInfo { workshop: Some(workshop), ..info.unwrap_or_default() })
 }
 
 static LISTENER_TOKEN: Mutex<Option<CancellationToken>> = Mutex::const_new(None);
@@ -575,21 +593,7 @@ async fn handle_client(
     // Send our game info to the peer. Copied out first: sending while
     // holding AppState froze the whole app for up to 30 s when a peer
     // stopped reading.
-    let (info, workshop_app) = {
-        let app_state = state.lock().await;
-        let app_id = app_state.game_registry.games.iter().find(|g| g.id == app_state.active_game).and_then(|g| g.steam_workshop_app_id);
-        (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
-    };
-    // Read now, not at startup: the host may have subscribed to more since.
-    let workshop = match workshop_app {
-        Some(app_id) => tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id)).await.unwrap_or_default(),
-        None => Vec::new(),
-    };
-    let info = if workshop.is_empty() {
-        info
-    } else {
-        Some(GameInfo { workshop, ..info.unwrap_or_default() })
-    };
+    let info = game_info_to_send(&state).await;
     {
         if let Some(info) = info {
             let mut s = stream.lock().await;
@@ -1342,19 +1346,9 @@ pub(crate) async fn run_client_session(
     };
 
     // Send our game info to the host
-    {
-        let app_state = state.lock().await;
-        let active = &app_state.active_game;
-        if let Some(info) = app_state.game_info.get(active) {
-            let mut s = stream.lock().await;
-            protocol::send_message(
-                &mut *s,
-                &Message::GameInfoExchange {
-                    game_info: info.clone(),
-                },
-            )
-            .await?;
-        }
+    if let Some(info) = game_info_to_send(&state).await {
+        let mut s = stream.lock().await;
+        protocol::send_message(&mut *s, &Message::GameInfoExchange { game_info: info }).await?;
     }
 
     // Request manifest — the host may have sent GameInfoExchange first,
@@ -2569,21 +2563,26 @@ mod tests {
         use crate::state::WorkshopItem;
         let item = |id: &str, name: Option<&str>| WorkshopItem { id: id.into(), name: name.map(str::to_string) };
         let mut gi = GameInfo::default();
-        gi.workshop = vec![
+        gi.workshop = Some(vec![
             item("111", Some("Hospitality\u{202e}")),
             item("111", Some("again")),
             item("../../x", None),
             item("12a", None),
             item("222", Some("   ")),
-        ];
-        gi.workshop.extend((1000..1000 + MAX_PEER_WORKSHOP as u64 + 10).map(|n| item(&n.to_string(), None)));
+        ]);
+        gi.workshop.as_mut().unwrap().extend((1000..1000 + MAX_PEER_WORKSHOP as u64 + 10).map(|n| item(&n.to_string(), None)));
         let out = sanitize_game_info(gi);
-        assert_eq!(out.workshop[0], item("111", Some("Hospitality")));
-        assert_eq!(out.workshop[1], item("222", None), "blank names dropped, bad ids and repeats skipped");
-        assert_eq!(out.workshop.len(), MAX_PEER_WORKSHOP);
+        let w = out.workshop.as_ref().unwrap();
+        assert_eq!(w[0], item("111", Some("Hospitality")));
+        assert_eq!(w[1], item("222", None), "blank names dropped, bad ids and repeats skipped");
+        assert_eq!(w.len(), MAX_PEER_WORKSHOP);
+        // "No Workshop mods" and "didn't say" stay apart on the wire.
+        let none_subscribed = GameInfo { workshop: Some(vec![]), ..Default::default() };
+        let back: GameInfo = serde_json::from_str(&serde_json::to_string(&none_subscribed).unwrap()).unwrap();
+        assert_eq!(back.workshop, Some(vec![]));
         // Older peers: a GameInfo without the field still reads, and theirs ignores it.
         let old: GameInfo = serde_json::from_str(r#"{"game_version":"1.5","installed_packs":[]}"#).unwrap();
-        assert!(old.workshop.is_empty());
+        assert!(old.workshop.is_none());
         #[derive(serde::Deserialize)]
         #[allow(dead_code)]
         struct OldGameInfo { game_version: Option<String>, installed_packs: Vec<crate::state::PackInfo> }

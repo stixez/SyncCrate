@@ -36,7 +36,7 @@ export interface GameInfo {
   game_version: string | null;
   installed_packs: PackInfo[];
   /** Steam Workshop items this PC is subscribed to (a host sends its own). */
-  workshop?: WorkshopItem[];
+  workshop?: WorkshopItem[] | null;
 }
 
 export interface WorkshopItem {

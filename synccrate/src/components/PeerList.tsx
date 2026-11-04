@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Users, Monitor, X, ChevronDown, ChevronRight, Gamepad2, ArrowUpFromLine } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Users, Monitor, X, ChevronDown, ChevronRight, Gamepad2, ArrowUpFromLine, Puzzle } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { formatBytes, formatRelative, plural } from "../lib/utils";
 import * as cmd from "../lib/commands";
@@ -23,6 +23,18 @@ export default function PeerList() {
   const [confirmKick, setConfirmKick] = useState<string | null>(null);
 
   const isHost = session?.session_type === "Host";
+
+  // The host's Workshop subscriptions, to show which friends lack some
+  // (friends on 0.8.8 or older don't send theirs: no badge for them).
+  const activeGame = useAppStore((s) => s.activeGame);
+  const [myWorkshop, setMyWorkshop] = useState<Set<string> | null>(null);
+  const peerCount = session?.peers.length ?? 0;
+  useEffect(() => {
+    let cancelled = false;
+    if (!isHost || !activeGame) { setMyWorkshop(null); return; }
+    cmd.getWorkshopItems(activeGame).then((w) => { if (!cancelled) setMyWorkshop(new Set(w.map((i) => i.id))); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isHost, activeGame, peerCount]);
 
   const handleKick = async (peerId: string, peerName: string) => {
     try {
@@ -105,6 +117,17 @@ export default function PeerList() {
                     <Badge tone={differs ? "amber" : "neon"} icon={<Gamepad2 size={10} />} title={differs ? `Different game patch than yours (v${mine}): script mods may break for one of you.` : "Same game version as yours"}>
                       v{peer.game_info.game_version}
                     </Badge>
+                  );
+                })()}
+                {isHost && myWorkshop && myWorkshop.size > 0 && peer.game_info?.workshop && (() => {
+                  const theirs = new Set(peer.game_info.workshop.map((w) => w.id));
+                  const missing = [...myWorkshop].filter((id) => !theirs.has(id)).length;
+                  return missing > 0 ? (
+                    <Badge tone="amber" icon={<Puzzle size={10} />} title={`${peer.name} isn't subscribed to ${missing} of your Workshop mods. Their Content page lists them with Open in Steam.`}>
+                      {missing} Workshop
+                    </Badge>
+                  ) : (
+                    <Badge tone="neon" icon={<Puzzle size={10} />} title="Subscribed to all of your Workshop mods">Workshop ✓</Badge>
                   );
                 })()}
                 <span className="font-mono text-[11px] text-txt-dim tabular whitespace-nowrap">
