@@ -311,6 +311,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                 addresses: ranked,
                 node_id: s.node_id,
                 last_sync: None,
+                workshop_missing: None,
             })
         })
         .collect()

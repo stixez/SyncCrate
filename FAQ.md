@@ -63,7 +63,7 @@ Yes. For a Windows game you play through Proton, SyncCrate looks in the game's P
 <details>
 <summary><strong>Do Steam Workshop mods sync?</strong></summary>
 
-No: Steam keeps them in its own folder and only Steam can install them. Instead, when you join a host, the game's **Content** page lists the host's Workshop mods you aren't subscribed to. Click **Open in Steam**, then **Subscribe**, for each one, and **Check again** once Steam has downloaded them. It works for every game with Workshop mods SyncCrate knows (RimWorld, Project Zomboid, Cities: Skylines, the Paradox games, tModLoader and more). The host sees in **Who's connected** how many of its Workshop mods each friend is missing. The host needs this version of SyncCrate or newer.
+No: Steam keeps them in its own folder and only Steam can install them. Instead, when you join a host, the game's **Content** page lists the host's Workshop mods you aren't subscribed to. Click **Open in Steam**, then **Subscribe**, for each one, and **Check again** once Steam has downloaded them. It works for every game with Workshop mods SyncCrate knows (RimWorld, Project Zomboid, Cities: Skylines, the Paradox games, tModLoader and more). The host sees in **Who's connected** how many of its Workshop mods each friend is missing. Mods the host subscribes to after a friend joined show up for that friend when they reconnect. The host needs this version of SyncCrate or newer.
 </details>
 
 <details>

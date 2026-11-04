@@ -350,7 +350,7 @@ export const GUIDE: GuideGroup[] = [
           "Mods in `Data` sync, but never the base game, its DLC or paid Creation Club files.",
           "The load order syncs too: `Plugins.txt` (which plugins are on, in what order) and `loadorder.txt`, nothing else from that folder. A different load order shows up as a conflict: click **Use theirs** to match the host.",
           "Oblivion, Fallout 3 and New Vegas order plugins by file date; synced files keep the host's dates, so the order matches there too.",
-          "Saves in `Documents/My Games` sync with the mods.",
+          "Saves in `Documents/My Games` sync with the mods (not Starfield's yet).",
         ],
         tip: "Mod Organizer 2 keeps its own load order in each profile, which SyncCrate doesn't change. Vortex and playing without a mod manager use the synced one.",
         keywords: "skyrim fallout oblivion starfield new vegas bethesda plugins.txt loadorder load order esp esm esl vortex mo2 mod organizer",

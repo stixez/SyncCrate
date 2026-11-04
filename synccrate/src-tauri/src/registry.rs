@@ -244,7 +244,8 @@ pub struct ContentType {
     /// Where this content lives when it isn't inside the game's folder
     /// (Valheim worlds, Stardew saves: the user's AppData or ~/.config).
     /// Candidates, tried in order (`%VAR%` and `~` expand; one per OS
-    /// usually); the first folder that exists wins, and `folder` is then
+    /// usually); of the folders that exist, the one used most recently wins
+    /// (`utils::resolve_roots`), and `folder` is then
     /// relative to it. Its files' paths start with `@<id>/` (`root_prefix`),
     /// which `utils::safe_join` resolves: a game only ever had one folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

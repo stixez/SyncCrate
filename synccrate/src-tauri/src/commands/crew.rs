@@ -345,6 +345,7 @@ mod tests {
             addresses: vec![ip.into()],
             node_id,
             last_sync: None,
+            workshop_missing: None,
         }
     }
 

@@ -212,6 +212,8 @@ fn steam_roots() -> Vec<PathBuf> {
             roots.push(home.join(".steam/steam"));
             roots.push(home.join(".local/share/Steam"));
             roots.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+            // The Snap package (Ubuntu's App Center).
+            roots.push(home.join("snap/steam/common/.local/share/Steam"));
         }
     }
 
@@ -798,9 +800,10 @@ fn pick_account(dirs: Vec<PathBuf>, login: Option<&(String, String)>) -> Option<
 }
 
 /// Where each external content folder of `cts` is on this PC: the user's
-/// choice (`overrides`, by content type id) or the first candidate that
-/// exists. For a game played through Proton (`proton`: its prefix, from
-/// `game_proton_prefix`), the candidates in the prefix come first. Folders
+/// choice (`overrides`, by content type id) or, of the candidates that
+/// exist, the one used most recently (the first listed on a tie). For a game
+/// played through Proton (`proton`: its prefix, from `game_proton_prefix`),
+/// the candidates in the prefix come first. Folders
 /// that aren't there are left out (the game never ran).
 pub fn resolve_roots(
     cts: &[crate::registry::ContentType],
@@ -817,7 +820,8 @@ pub fn resolve_roots(
                 None => {
                     // Several can exist (Skyrim's Steam and GOG folders, a
                     // leftover from another store): the one in use changed last.
-                    let newest = |c: Vec<PathBuf>| c.into_iter().filter(|p| p.is_dir()).max_by_key(|p| last_used(p));
+                    // `rev`: on a tie, the first listed wins (max_by_key keeps the last).
+                    let newest = |c: Vec<PathBuf>| c.into_iter().rev().filter(|p| p.is_dir()).max_by_key(|p| last_used(p));
                     let in_prefix = proton.and_then(|pfx| newest(ct.roots.iter().flat_map(|c| proton_candidates(c, pfx)).collect()));
                     in_prefix.or_else(|| newest(ct.roots.iter().flat_map(|c| root_candidates(c)).filter(|p| p.is_absolute()).collect()))
                 }

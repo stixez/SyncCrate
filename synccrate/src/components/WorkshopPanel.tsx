@@ -53,11 +53,12 @@ export default function WorkshopPanel({ gameId, gameLabel, syncedFolders, hasWor
     cmd.getWorkshopItems(gameId).then((m) => {
       if (cancelled) return;
       setMine(m);
-      // The host's Who's connected counts what we're missing: keep it right.
-      if (checks > 0) cmd.shareWorkshopItems().catch(() => {});
+      // The host's Who's connected counts what we're missing: keep it right
+      // whenever this list is read (subscribed in Steam since joining).
+      if (host) cmd.shareWorkshopItems().catch(() => {});
     }).catch(() => { if (!cancelled) setMine([]); });
     return () => { cancelled = true; };
-  }, [gameId, hasWorkshop, demo, checks]);
+  }, [gameId, hasWorkshop, demo, checks, !!host]);
 
   const missing = useMemo(() => {
     const have = new Set((mine ?? []).map((w) => w.id));

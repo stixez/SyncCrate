@@ -129,10 +129,31 @@ async fn game_info_to_send(state: &Arc<Mutex<AppState>>, names: bool) -> Option<
         (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
     };
     let Some(app_id) = workshop_app else { return info };
-    let workshop = tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id, names))
-        .await
-        .unwrap_or_default();
-    Some(GameInfo { workshop: Some(workshop), ..info.unwrap_or_default() })
+    // No Steam found here (or one SyncCrate doesn't know): say nothing,
+    // rather than "subscribed to none", which looked like missing them all.
+    let workshop = tokio::task::spawn_blocking(move || {
+        let dirs = crate::utils::steam_steamapps_dirs();
+        (!dirs.is_empty()).then(|| crate::commands::files::list_workshop_items(&dirs, app_id, names))
+    })
+    .await
+    .ok()
+    .flatten();
+    if workshop.is_none() {
+        return info;
+    }
+    Some(GameInfo { workshop, ..info.unwrap_or_default() })
+}
+
+/// How many of the Workshop ids the host sent a friend the friend lacks.
+/// None unless both sides said (a friend on an older SyncCrate, or a host
+/// without Workshop mods, gets no count rather than "missing everything").
+fn workshop_missing(sent: Option<&[String]>, theirs: Option<&[crate::state::WorkshopItem]>) -> Option<usize> {
+    let (sent, theirs) = (sent?, theirs?);
+    if sent.is_empty() {
+        return None;
+    }
+    let have: std::collections::HashSet<&str> = theirs.iter().map(|w| w.id.as_str()).collect();
+    Some(sent.iter().filter(|id| !have.contains(id.as_str())).count())
 }
 
 /// A friend sends its game info again mid-session (Workshop mods subscribed
@@ -583,6 +604,7 @@ async fn handle_client(
             addresses: Vec::new(),
             node_id: peer_node.clone(),
             last_sync: None,
+            workshop_missing: None,
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -593,6 +615,7 @@ async fn handle_client(
                 remote_links: Vec::new(),
                 sync_plan: None,
                 is_syncing: false,
+                workshop_sent: None,
             },
         );
         let now = crate::utils::timestamp_now();
@@ -612,6 +635,12 @@ async fn handle_client(
     // stopped reading.
     // The host's names show in each friend's list; the friend's own are never shown.
     let info = game_info_to_send(&state, true).await;
+    if let Some(sent) = info.as_ref().and_then(|i| i.workshop.as_ref()) {
+        let ids = sent.iter().map(|w| w.id.clone()).collect();
+        if let Some(conn) = state.lock().await.connections.get_mut(&peer_id) {
+            conn.workshop_sent = Some(ids);
+        }
+    }
     {
         if let Some(info) = info {
             let mut s = stream.lock().await;
@@ -996,6 +1025,7 @@ async fn handle_client(
                 let sanitized = sanitize_game_info(game_info);
                 let mut app_state = state.lock().await;
                 if let Some(conn) = app_state.connections.get_mut(&peer_id) {
+                    conn.info.workshop_missing = workshop_missing(conn.workshop_sent.as_deref(), sanitized.workshop.as_deref());
                     conn.info.game_info = Some(sanitized.clone());
                 }
                 let _ = app.emit(
@@ -1441,6 +1471,7 @@ pub(crate) async fn run_client_session(
             addresses: addresses.to_vec(),
             node_id: host_node,
             last_sync: None,
+            workshop_missing: None,
         };
         app_state.connections.insert(
             peer_id.to_string(),
@@ -1451,6 +1482,7 @@ pub(crate) async fn run_client_session(
                 remote_links,
                 sync_plan: None,
                 is_syncing: false,
+                workshop_sent: None,
             },
         );
         app_state.pending_client_peer_id = None;
@@ -2574,6 +2606,18 @@ mod tests {
         assert!(decompress_chunk(&bomb).is_err());
         let ok = compress_chunk(b"hello").unwrap();
         assert_eq!(decompress_chunk(&ok).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn workshop_missing_counts_only_when_both_sides_said() {
+        use crate::state::WorkshopItem;
+        let sent = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let theirs = vec![WorkshopItem { id: "2".into(), name: None }, WorkshopItem { id: "9".into(), name: None }];
+        assert_eq!(workshop_missing(Some(&sent), Some(&theirs)), Some(2));
+        assert_eq!(workshop_missing(Some(&sent), Some(&[])), Some(3));
+        assert_eq!(workshop_missing(Some(&sent), None), None, "an older friend didn't say");
+        assert_eq!(workshop_missing(Some(&[]), Some(&theirs)), None, "the host has no Workshop mods");
+        assert_eq!(workshop_missing(None, Some(&theirs)), None);
     }
 
     #[test]
