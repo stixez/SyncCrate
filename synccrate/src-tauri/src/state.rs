@@ -325,6 +325,21 @@ pub struct PackInfo {
 pub struct GameInfo {
     pub game_version: Option<String>,
     pub installed_packs: Vec<PackInfo>,
+    /// The Steam Workshop items this PC is subscribed to for the game (a
+    /// host sends them so friends can subscribe to the same ones). Older
+    /// peers neither send nor read it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workshop: Vec<WorkshopItem>,
+}
+
+/// A Steam Workshop item: `steamapps/workshop/content/<app id>/<id>`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkshopItem {
+    /// The Workshop file id (digits).
+    pub id: String,
+    /// From the item's own mod info, when it has one SyncCrate reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

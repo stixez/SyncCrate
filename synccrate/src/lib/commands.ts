@@ -669,6 +669,17 @@ export async function setGameHidden(gameId: string, hidden: boolean): Promise<st
   return invoke("set_game_hidden", { gameId, hidden });
 }
 
+/** This PC's Steam Workshop subscriptions for the game, named where the mod says. */
+export async function getWorkshopItems(game: string): Promise<import("./types").WorkshopItem[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_workshop_items", { game });
+}
+
+/** Opens a Workshop item's page in the Steam app. */
+export async function openWorkshopItem(id: string): Promise<void> {
+  return invoke("open_workshop_item", { id });
+}
+
 /** Mods installed from the Steam Workshop (they live outside the game folder). */
 export async function getWorkshopModCount(game: string): Promise<number> {
   if (isDemoMode()) return 0;

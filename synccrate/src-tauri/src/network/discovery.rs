@@ -305,7 +305,7 @@ fn merge_sightings(sightings: Vec<Sighting>) -> Vec<PeerInfo> {
                 pin_required: s.pin_required,
                 game_info: s.game_version.map(|gv| crate::state::GameInfo {
                     game_version: Some(gv),
-                    installed_packs: Vec::new(),
+                    ..Default::default()
                 }),
                 game_id: s.game_id,
                 addresses: ranked,

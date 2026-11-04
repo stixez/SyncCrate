@@ -70,6 +70,24 @@ pub async fn launch_game(state: tauri::State<'_, Arc<Mutex<AppState>>>, game_id:
     cmd.spawn().map(|_| ()).map_err(|e| format!("Couldn't start the game: {e}"))
 }
 
+/// Opens a Workshop item's page in the Steam app, where Subscribe works
+/// without signing in to a browser.
+#[tauri::command]
+pub async fn open_workshop_item(id: String) -> Result<(), String> {
+    if !crate::commands::files::is_workshop_id(&id) {
+        return Err("Not a Workshop item.".into());
+    }
+    let url = format!("steam://url/CommunityFilePage/{id}");
+    #[cfg(target_os = "windows")]
+    let mut c = std::process::Command::new(crate::utils::windows_system_exe("explorer.exe"));
+    #[cfg(target_os = "macos")]
+    let mut c = std::process::Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut c = std::process::Command::new("xdg-open");
+    c.arg(url);
+    c.spawn().map(|_| ()).map_err(|e| format!("Couldn't open Steam: {e}"))
+}
+
 /// Whether one of the game's executables (registry `process_names`) is running.
 /// Used to warn before syncing so files aren't locked or half-loaded.
 #[tauri::command]

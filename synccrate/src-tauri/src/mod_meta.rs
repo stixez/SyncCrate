@@ -849,6 +849,23 @@ fn dir_name(rel_dir: &str) -> &str {
 /// their names vary per mod, so they come from the manifest, not a guess.
 fn probe_dir(base: &str, rel_dir: &str, named: &[String]) -> Option<ModMeta> {
     let dir = crate::utils::safe_join(base, rel_dir).ok()?;
+    probe_abs(&dir, rel_dir, named)
+}
+
+/// A Workshop item's name from its own mod info: the item folder itself
+/// (RimWorld `About/About.xml`, Paradox `descriptor.mod`, …) or, for
+/// Project Zomboid, the first mod in its `mods` folder.
+pub fn workshop_item_name(dir: &Path) -> Option<String> {
+    if let Some(meta) = probe_abs(dir, "", &[]) {
+        return Some(meta.name);
+    }
+    let mut subs: Vec<std::path::PathBuf> = std::fs::read_dir(dir.join("mods")).ok()?.flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).map(|e| e.path()).collect();
+    subs.sort();
+    subs.iter().find_map(|d| probe_abs(d, "", &[])).map(|m| m.name)
+}
+
+fn probe_abs(dir: &Path, rel_dir: &str, named: &[String]) -> Option<ModMeta> {
+    let dir = dir.to_path_buf();
     let with = |mut meta: ModMeta, icon: Option<String>| {
         meta.key = rel_dir.to_string();
         if let Some(icon) = icon.filter(|i| small_regular_file(&dir.join(i), MAX_ICON_BYTES)) {

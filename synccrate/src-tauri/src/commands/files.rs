@@ -1503,6 +1503,43 @@ pub(crate) fn count_workshop_items(steamapps_dirs: &[std::path::PathBuf], app_id
     ids.len()
 }
 
+/// A Workshop file id: digits, as Steam names the item folders.
+pub(crate) fn is_workshop_id(id: &str) -> bool {
+    (1..=20).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit()) && id != "0"
+}
+
+/// The Workshop items under every Steam library's
+/// `steamapps/workshop/content/<app_id>`, by id, named from their own mod
+/// info where SyncCrate reads it (RimWorld, Project Zomboid, Paradox, …).
+pub(crate) fn list_workshop_items(steamapps_dirs: &[std::path::PathBuf], app_id: u32) -> Vec<crate::state::WorkshopItem> {
+    let mut items: std::collections::BTreeMap<String, Option<String>> = std::collections::BTreeMap::new();
+    for dir in steamapps_dirs {
+        let Ok(rd) = std::fs::read_dir(dir.join("workshop").join("content").join(app_id.to_string())) else { continue };
+        for e in rd.filter_map(|e| e.ok()) {
+            let Some(id) = e.file_name().to_str().map(str::to_string).filter(|id| is_workshop_id(id)) else { continue };
+            if !e.file_type().is_ok_and(|t| t.is_dir()) || items.get(&id).is_some_and(Option::is_some) {
+                continue;
+            }
+            items.insert(id, crate::mod_meta::workshop_item_name(&e.path()));
+        }
+    }
+    items.into_iter().map(|(id, name)| crate::state::WorkshopItem { id, name }).collect()
+}
+
+/// This PC's Workshop subscriptions for the game (empty without Workshop mods).
+#[tauri::command]
+pub async fn get_workshop_items(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String) -> Result<Vec<crate::state::WorkshopItem>, String> {
+    let app_id = {
+        let s = state.lock().await;
+        let id = resolve_game(&s, &game)?;
+        s.game_registry.games.iter().find(|g| g.id == id).and_then(|g| g.steam_workshop_app_id)
+    };
+    let Some(app_id) = app_id else { return Ok(Vec::new()) };
+    tokio::task::spawn_blocking(move || list_workshop_items(&utils::steam_steamapps_dirs(), app_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// How many of the game's mods are Steam Workshop subscriptions (0 when the
 /// game has no Workshop-installed mods). Those live outside the game folder,
 /// so the Content page explains why they aren't listed (GitHub issue #2).
@@ -2092,6 +2129,30 @@ mod tests {
         assert!(openable_folder(other.to_str().unwrap(), &roots).is_err(), "outside every game");
         assert!(openable_folder("\\\\attacker\\share", &roots).unwrap_err().contains("Network"));
         assert!(openable_folder(root.join("missing").to_str().unwrap(), &roots).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workshop_items_are_listed_once_with_their_names() {
+        let root = crate::testutil::temp_dir("workshop-list");
+        let (a, b) = (root.join("a"), root.join("b"));
+        let content = |lib: &std::path::Path| lib.join("workshop/content/294100");
+        // RimWorld: About/About.xml.
+        std::fs::create_dir_all(content(&a).join("111/About")).unwrap();
+        std::fs::write(content(&a).join("111/About/About.xml"), "<ModMetaData><name>Hospitality</name></ModMetaData>").unwrap();
+        // Project Zomboid: mods/<mod>/mod.info.
+        std::fs::create_dir_all(content(&b).join("222/mods/Brita")).unwrap();
+        std::fs::write(content(&b).join("222/mods/Brita/mod.info"), "name=Brita's Weapon Pack\nid=Brita").unwrap();
+        // No mod info SyncCrate reads; the same item in two libraries; not items.
+        std::fs::create_dir_all(content(&a).join("333")).unwrap();
+        std::fs::create_dir_all(content(&b).join("111")).unwrap();
+        std::fs::create_dir_all(content(&a).join("notes")).unwrap();
+        std::fs::write(content(&a).join("444"), b"a file").unwrap();
+        let items = list_workshop_items(&[b.clone(), a.clone()], 294100);
+        let got: Vec<(&str, Option<&str>)> = items.iter().map(|w| (w.id.as_str(), w.name.as_deref())).collect();
+        assert_eq!(got, vec![("111", Some("Hospitality")), ("222", Some("Brita's Weapon Pack")), ("333", None)]);
+        assert!(list_workshop_items(&[a.clone()], 5).is_empty());
+        assert!(!is_workshop_id("0") && !is_workshop_id("12a") && !is_workshop_id("") && !is_workshop_id(&"9".repeat(21)));
         let _ = std::fs::remove_dir_all(&root);
     }
 

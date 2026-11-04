@@ -61,9 +61,15 @@ Yes. For a Windows game you play through Proton, SyncCrate looks in the game's P
 </details>
 
 <details>
+<summary><strong>Do Steam Workshop mods sync?</strong></summary>
+
+No: Steam keeps them in its own folder and only Steam can install them. Instead, when you join a host, the game's **Content** page lists the host's Workshop mods you aren't subscribed to. Click **Open in Steam**, then **Subscribe**, for each one, and **Check again** once Steam has downloaded them. It works for every game with Workshop mods SyncCrate knows (RimWorld, Project Zomboid, Cities: Skylines, the Paradox games, tModLoader and more). The host needs this version of SyncCrate or newer.
+</details>
+
+<details>
 <summary><strong>My tModLoader (Terraria) mods don't show up.</strong></summary>
 
-Mods you subscribed to on the Steam Workshop are kept by Steam in its own folder, not in Terraria's, so SyncCrate can't list, sync or back them up; the Content page tells you how many there are. Friends can subscribe to the same Workshop mods. SyncCrate syncs tModLoader's worlds and players, `enabled.json` (which mods are on) and any `.tmod` files in `Documents/My Games/Terraria/tModLoader/Mods`.
+Mods you subscribed to on the Steam Workshop are kept by Steam in its own folder, not in Terraria's, so SyncCrate can't list, sync or back them up; the Content page tells you how many there are. When you host, a friend's Content page lists the Workshop mods you have and they don't, each with **Open in Steam** to subscribe. SyncCrate syncs tModLoader's worlds and players, `enabled.json` (which mods are on) and any `.tmod` files in `Documents/My Games/Terraria/tModLoader/Mods`.
 </details>
 
 <details>

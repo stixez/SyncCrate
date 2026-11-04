@@ -35,6 +35,13 @@ export interface PackInfo {
 export interface GameInfo {
   game_version: string | null;
   installed_packs: PackInfo[];
+  /** Steam Workshop items this PC is subscribed to (a host sends its own). */
+  workshop?: WorkshopItem[];
+}
+
+export interface WorkshopItem {
+  id: string;
+  name?: string | null;
 }
 
 export type CompatibilityStatus = "Compatible" | "MissingPacks" | "Unknown";

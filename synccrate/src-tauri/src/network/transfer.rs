@@ -40,6 +40,8 @@ const MAX_CHUNK_SIZE: usize = 1_048_576;
 
 /// Maximum number of packs a peer can advertise
 const MAX_PEER_PACKS: usize = 200;
+/// Workshop items a peer may list (big RimWorld lists run to a few hundred).
+const MAX_PEER_WORKSHOP: usize = 2000;
 
 /// Maximum string length for a pack code or name from a peer
 const MAX_PACK_STRING_LEN: usize = 128;
@@ -96,9 +98,22 @@ fn sanitize_game_info(info: GameInfo) -> GameInfo {
         })
         .collect();
 
+    let mut seen = std::collections::HashSet::new();
+    let workshop = info
+        .workshop
+        .into_iter()
+        .filter(|w| crate::commands::files::is_workshop_id(&w.id) && seen.insert(w.id.clone()))
+        .take(MAX_PEER_WORKSHOP)
+        .map(|w| crate::state::WorkshopItem {
+            name: w.name.map(|n| clean_peer_text(&n, MAX_PACK_STRING_LEN)).filter(|n| !n.trim().is_empty()),
+            id: w.id,
+        })
+        .collect();
+
     GameInfo {
         game_version,
         installed_packs,
+        workshop,
     }
 }
 
@@ -560,9 +575,20 @@ async fn handle_client(
     // Send our game info to the peer. Copied out first: sending while
     // holding AppState froze the whole app for up to 30 s when a peer
     // stopped reading.
-    let info = {
+    let (info, workshop_app) = {
         let app_state = state.lock().await;
-        app_state.game_info.get(&app_state.active_game).cloned()
+        let app_id = app_state.game_registry.games.iter().find(|g| g.id == app_state.active_game).and_then(|g| g.steam_workshop_app_id);
+        (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
+    };
+    // Read now, not at startup: the host may have subscribed to more since.
+    let workshop = match workshop_app {
+        Some(app_id) => tokio::task::spawn_blocking(move || crate::commands::files::list_workshop_items(&crate::utils::steam_steamapps_dirs(), app_id)).await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let info = if workshop.is_empty() {
+        info
+    } else {
+        Some(GameInfo { workshop, ..info.unwrap_or_default() })
     };
     {
         if let Some(info) = info {
@@ -2536,6 +2562,32 @@ mod tests {
         assert!(decompress_chunk(&bomb).is_err());
         let ok = compress_chunk(b"hello").unwrap();
         assert_eq!(decompress_chunk(&ok).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn a_peers_workshop_list_is_checked() {
+        use crate::state::WorkshopItem;
+        let item = |id: &str, name: Option<&str>| WorkshopItem { id: id.into(), name: name.map(str::to_string) };
+        let mut gi = GameInfo::default();
+        gi.workshop = vec![
+            item("111", Some("Hospitality\u{202e}")),
+            item("111", Some("again")),
+            item("../../x", None),
+            item("12a", None),
+            item("222", Some("   ")),
+        ];
+        gi.workshop.extend((1000..1000 + MAX_PEER_WORKSHOP as u64 + 10).map(|n| item(&n.to_string(), None)));
+        let out = sanitize_game_info(gi);
+        assert_eq!(out.workshop[0], item("111", Some("Hospitality")));
+        assert_eq!(out.workshop[1], item("222", None), "blank names dropped, bad ids and repeats skipped");
+        assert_eq!(out.workshop.len(), MAX_PEER_WORKSHOP);
+        // Older peers: a GameInfo without the field still reads, and theirs ignores it.
+        let old: GameInfo = serde_json::from_str(r#"{"game_version":"1.5","installed_packs":[]}"#).unwrap();
+        assert!(old.workshop.is_empty());
+        #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
+        struct OldGameInfo { game_version: Option<String>, installed_packs: Vec<crate::state::PackInfo> }
+        assert!(serde_json::from_str::<OldGameInfo>(&serde_json::to_string(&out).unwrap()).is_ok());
     }
 
     #[test]
