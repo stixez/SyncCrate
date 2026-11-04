@@ -2638,6 +2638,7 @@
       "primary_color": "#f97316",
       "genres": ["automation", "sandbox"],
       "steam_app_id": 526870,
+      "handoff_note": "A factory's autosaves move with it. A save you gave another name is shared on its own.",
       "auto_detect": true,
       "detection": {
         "strategies": [
@@ -6821,6 +6822,19 @@
           "extensions": [],
           "file_type": "Patcher",
           "syncable": true
+        },
+        {
+          "id": "saves",
+          "label": "Worlds",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": ".",
+          "roots": ["%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/CloudSaves/{account}", "%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/Saves"],
+          "extensions": [],
+          "exclude_files": ["steam_autocloud.vdf"],
+          "file_type": "Save",
+          "save_unit_depth": 2,
+          "syncable": true
         }
       ],
       "dangerous_script_extensions": ["dll"],
@@ -9584,6 +9598,18 @@
           "folder": "AbioticFactor/Binaries/Win64/ue4ss/Mods",
           "extensions": [],
           "file_type": "Mod",
+          "syncable": true
+        },
+        {
+          "id": "worlds",
+          "label": "Worlds",
+          "icon": "save",
+          "color": "text-status-green",
+          "folder": "Worlds",
+          "roots": ["%LOCALAPPDATA%/AbioticFactor/Saved/SaveGames/{account}"],
+          "extensions": ["sav", "ini"],
+          "file_type": "Save",
+          "save_unit_depth": 1,
           "syncable": true
         }
       ],

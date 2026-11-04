@@ -22,7 +22,7 @@
 | Game | What syncs |
 |------|------------|
 | **7 Days to Die** | Mods, Mods (user folder) |
-| **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods |
+| **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods, Worlds |
 | **ARK: Survival Evolved** | Mods, Save Files |
 | **Barotrauma** | Local Mods, Saves, Multiplayer saves |
 | **Conan Exiles** | Mods |
@@ -35,7 +35,7 @@
 | **Sons of the Forest** | Mods (RedLoader) |
 | **Subnautica** | Plugins (BepInEx), Save Files, Mod Configs, Patchers |
 | **The Long Dark** | Mods (MelonLoader), Saves |
-| **V Rising** | Plugins (BepInEx), Mod Configs, Patchers |
+| **V Rising** | Plugins (BepInEx), Mod Configs, Patchers, Worlds |
 | **Valheim** | Plugins (BepInEx), Mod Configs, Worlds, Patchers, Characters |
 
 </details>

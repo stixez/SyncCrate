@@ -490,6 +490,17 @@ mod tests {
         let stardew = registry.games.iter().find(|g| g.id == "stardew_valley").unwrap();
         assert_eq!(crate::handoff::unit_of(&stardew.content_types, "@saves/Farm_123/Farm_123").as_deref(), Some("saves/Farm_123"));
         assert!(stardew.handoff_note.is_some());
+        // Saves in each player's own account folder (`utils::ACCOUNT_FOLDER`).
+        let unit = |id: &str, path: &str| {
+            let g = registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+            crate::handoff::unit_of(&g.content_types, path)
+        };
+        assert_eq!(unit("satisfactory", "@saves/MyFactory_autosave_1.sav").as_deref(), Some("saves/MyFactory"));
+        assert_eq!(unit("v_rising", "@saves/v4/3f2a/AutoSave_120.save.gz").as_deref(), Some("saves/v4/3f2a"));
+        assert_eq!(unit("v_rising", "@saves/v4/3f2a/ServerHostSettings.json").as_deref(), Some("saves/v4/3f2a"));
+        assert_ne!(unit("v_rising", "@saves/v4/3f2a/x"), unit("v_rising", "@saves/v4/9c1b/x"), "two worlds stay apart");
+        assert_eq!(unit("abiotic_factor", "@worlds/Worlds/Cascade/PlayerData/Player_76561198000000001.sav").as_deref(), Some("worlds/Cascade"));
+        assert!(crate::sync::diff::content_type_for(&registry.games.iter().find(|g| g.id == "abiotic_factor").unwrap().content_types, "@worlds/Settings.sav").is_none(), "per-player files next to Worlds stay local");
     }
 
     #[test]
@@ -756,9 +767,12 @@ mod tests {
             ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
             // Steam Cloud: SaveGames/{64BitSteamID}; each PC's own id (`ACCOUNT_FOLDER`).
             ("satisfactory", "%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/{account}"),
+            ("v_rising", "%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/CloudSaves/{account}"),
         ] {
             assert_eq!(ct(id, "saves").roots.first().map(String::as_str), Some(root), "{id}");
         }
+        assert_eq!(ct("abiotic_factor", "worlds").roots, vec!["%LOCALAPPDATA%/AbioticFactor/Saved/SaveGames/{account}"]);
+        assert_eq!(ct("abiotic_factor", "worlds").folder, "Worlds");
         // Celeste saves next to the game only on Windows.
         assert_eq!(ct("celeste", "saves").folder, "Saves");
         assert!(ct("celeste", "user_saves").roots.iter().any(|r| r == "~/.local/share/Celeste/Saves"));

@@ -11,7 +11,7 @@ Every supported game is one entry in `synccrate/src-tauri/src/game_registry.json
 ## Saves
 
 - A save path containing `{64BitSteamID}` or `{Steam3AccountID}` is per Steam account: never put a literal id in the registry, since a friend's game only reads its own account's folder. When the id is the last folder of the path, end the root with `{account}` (`utils::ACCOUNT_FOLDER`): each PC uses its own account folder there (Satisfactory). Ids deeper in the path aren't supported; those games sync mods, not saves.
-- Before setting `save_unit_depth` for a co-op game, check the host's character isn't stored in the save under a fixed id (Palworld): handing the world to another host would swap characters.
+- Before setting `save_unit_depth` for a co-op game, check the host's character isn't stored in the save under a fixed id or as "the host" (Palworld, Sons of the Forest): handing the world to another host would swap characters.
 - Saves outside the game folder use `roots`: Windows, then macOS, then Linux candidates; the first existing one wins.
 - On Linux, a game played through Proton (`utils::game_proton_prefix`: its prefix was used more recently than any native folder of it, or it has none) gets its Windows paths (`%DOCUMENTS%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%`, `C:`…) looked up in its prefix first, for detection and every save folder. A Windows-only Steam game needs no Linux entries for that.
 - Write Windows Documents as `%DOCUMENTS%` (resolved like `documents_relative`, so OneDrive and moved Documents work). It's Windows-only, so give macOS and Linux their own entries. Never `%USERPROFILE%/Documents`.
