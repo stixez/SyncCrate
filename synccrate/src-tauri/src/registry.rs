@@ -792,6 +792,13 @@ mod tests {
         for g in &registry.games {
             for c in &g.content_types {
                 assert!(c.roots.iter().all(|r| !r.to_lowercase().contains("%userprofile%/documents")), "{}/{}: use %DOCUMENTS%", g.id, c.id);
+                // Only `{account}`, and only as the last folder: `{64BitSteamID}`
+                // or a literal id would point every friend at the host's account.
+                for r in &c.roots {
+                    let r = r.replace('\\', "/");
+                    let placeholders = r.matches('{').count();
+                    assert!(placeholders == 0 || (placeholders == 1 && r.ends_with(&format!("/{}", crate::utils::ACCOUNT_FOLDER))), "{}/{}: {r}", g.id, c.id);
+                }
                 // Steam writes steam_autocloud.vdf (the account id) into cloud save folders.
                 if c.is_external() && c.extensions.is_empty() && c.file_type != "Mod" {
                     assert!(c.exclude_files.iter().any(|f| f == "steam_autocloud.vdf"), "{}/{}: exclude steam_autocloud.vdf", g.id, c.id);
