@@ -137,6 +137,10 @@ interface AppState {
   donationMilestone: number | null;
   setDonationMilestone: (milestone: number | null) => void;
 
+  /** Show the one-time feedback note (after a successful sync). */
+  feedbackPrompt: boolean;
+  setFeedbackPrompt: (show: boolean) => void;
+
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
 
@@ -347,6 +351,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   donationMilestone: null,
   setDonationMilestone: (milestone) => set({ donationMilestone: milestone }),
+
+  feedbackPrompt: false,
+  setFeedbackPrompt: (show) => set({ feedbackPrompt: show }),
 
   isScanning: false,
   setIsScanning: (scanning) => set({ isScanning: scanning }),

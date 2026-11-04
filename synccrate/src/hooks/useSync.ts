@@ -4,6 +4,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { toastError, toastErrorAction, toastInfo, toastSuccess } from "../lib/toast";
 import { copyDiagnostics } from "../lib/diagnostics";
 import { incrementSyncCount, checkMilestone } from "../lib/donations";
+import { loadFeedbackHintShown } from "../lib/prefs";
 import * as cmd from "../lib/commands";
 import type { Resolution } from "../lib/types";
 import { friendlyError } from "../lib/errors";
@@ -64,6 +65,9 @@ export function useSync() {
       const milestone = checkMilestone(count);
       if (milestone) {
         useAppStore.getState().setDonationMilestone(milestone);
+      } else if (!loadFeedbackHintShown()) {
+        // Ask once, right after a sync worked (never on top of a milestone).
+        useAppStore.getState().setFeedbackPrompt(true);
       }
     } catch (e: any) {
       // Early backend errors return before `sync-complete` fires; don't leave

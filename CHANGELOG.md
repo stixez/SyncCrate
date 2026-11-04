@@ -4,6 +4,11 @@ Every SyncCrate release, newest first. The app shows a version's notes once afte
 
 Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. Start with a one-paragraph summary, then `### Highlights` (the update popup shows its first four items).
 
+## Unreleased
+
+### Smaller improvements
+- After a sync works, the Dashboard asks once how SyncCrate is working for you, with a button to the Discord's **#feature-requests**.
+
 ## 0.8.8 — 2026-10-29
 
 Windows games played on Linux through Steam's Proton now find their mods and saves on their own, and the Discord button moved to the sidebar.

@@ -8,7 +8,7 @@ import { useLogStore } from "../stores/useLogStore";
 import { useSession } from "../hooks/useSession";
 import { useSync } from "../hooks/useSync";
 import { useHostUpdates } from "../hooks/useHostUpdates";
-import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadDiscordPresence, saveDiscordPresence, loadDiscordHintShown, markDiscordHintShown } from "../lib/prefs";
+import { loadDisplayName, saveDisplayName, loadUsePin, saveUsePin, loadFolderPerms, saveFolderPerms, loadDiscordPresence, saveDiscordPresence, loadDiscordHintShown, markDiscordHintShown, markFeedbackHintShown } from "../lib/prefs";
 import { formatBytes, parseInviteLink, plural, webLink } from "../lib/utils";
 import { toastSuccess, toastError, toastInfo } from "../lib/toast";
 import { getGameDef } from "../lib/games";
@@ -28,8 +28,9 @@ import WhatsNew from "./WhatsNew";
 import SourceLinksPanel from "./SourceLinksPanel";
 import DonationBanner from "./DonationBanner";
 import { FirewallCheck } from "./NetworkHealth";
-import { Badge, Banner, Button, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
+import { Badge, Banner, Button, DiscordLogo, Input, LiveDot, Panel, SectionHeader, StatTile, Toggle, cx } from "./ui";
 import { isDemoMode, demoJoinCode } from "../lib/demoData";
+import { openDiscord } from "../lib/links";
 
 interface Props {
   gameId: string;
@@ -1076,6 +1077,7 @@ export default function GameDashboard({ gameId }: Props) {
         <SourceLinksPanel gameId={gameId} items={syncPlan.source_links!} />
       )}
       {isClient && !syncProgress && <WhatsNew gameId={gameId} />}
+      {!syncProgress && <FeedbackHint />}
       {isClient && !(syncPlan && syncPlan.actions.length > 0) && !syncProgress && <UndoLastSync gameId={gameId} />}
       {syncPlan && !sessionGameMismatch && syncPlan.actions.length === 0 && (
         (syncPlan.source_links?.length ?? 0) > 0 ? (
@@ -1104,6 +1106,43 @@ export default function GameDashboard({ gameId }: Props) {
 
       {!(isHost && session.peers.length > 0) && <PeerList />}
     </div>
+  );
+}
+
+/** One-time note after a sync worked, asking for feedback on the Discord.
+ * Nobody reports what's missing unless asked. Marked as shown on first
+ * display, like DiscordHint. */
+function FeedbackHint() {
+  const visible = useAppStore((s) => s.feedbackPrompt);
+  const setVisible = useAppStore((s) => s.setFeedbackPrompt);
+  useEffect(() => {
+    if (visible && !isDemoMode()) markFeedbackHintShown();
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <Banner
+      tone="info"
+      icon={<MessageCircle size={16} />}
+      title="How is SyncCrate working for you?"
+      actions={
+        <>
+          <Button
+            size="sm"
+            variant="discord"
+            icon={<DiscordLogo size={14} />}
+            onClick={() => {
+              openDiscord();
+              setVisible(false);
+            }}
+          >
+            Open Discord
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setVisible(false)}>No thanks</Button>
+        </>
+      }
+    >
+      Tell us what to fix or add next in <span className="font-semibold">#feature-requests</span>. It decides what gets built.
+    </Banner>
   );
 }
 
