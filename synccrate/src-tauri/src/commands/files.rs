@@ -265,6 +265,7 @@ pub(crate) struct ScanFilter<'a> {
     pub must_contain: Option<&'a str>,
     pub exclude_files: &'a [String],
     pub exclude_patterns: &'a [String],
+    pub include_files: &'a [String],
     /// The content type's folder, which anchors `exclude_patterns` with a `/`.
     pub folder: &'a str,
     /// The content folder on disk, when the caller knows it: the path inside
@@ -279,6 +280,7 @@ impl<'a> ScanFilter<'a> {
             must_contain: ct.must_contain.as_deref(),
             exclude_files: &ct.exclude_files,
             exclude_patterns: &ct.exclude_patterns,
+            include_files: &ct.include_files,
             folder: &ct.folder,
             root: None,
         }
@@ -318,6 +320,9 @@ impl<'a> ScanFilter<'a> {
     fn accepts(&self, path: &std::path::Path) -> bool {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if self.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(name)) || self.excluded_by_pattern(path) {
+            return false;
+        }
+        if !self.include_files.is_empty() && !self.include_files.iter().any(|x| x.eq_ignore_ascii_case(name)) {
             return false;
         }
         match self.must_contain {
@@ -1491,32 +1496,64 @@ pub async fn add_to_library(
 /// Workshop items (one folder per item id) under every Steam library's
 /// `steamapps/workshop/content/<app_id>`.
 pub(crate) fn count_workshop_items(steamapps_dirs: &[std::path::PathBuf], app_id: u32) -> usize {
-    let mut ids = std::collections::HashSet::new();
+    workshop_item_dirs(steamapps_dirs, app_id).len()
+}
+
+/// Each Workshop item id with its folders (one per library that has it).
+fn workshop_item_dirs(steamapps_dirs: &[std::path::PathBuf], app_id: u32) -> std::collections::BTreeMap<String, Vec<std::path::PathBuf>> {
+    let mut items: std::collections::BTreeMap<String, Vec<std::path::PathBuf>> = std::collections::BTreeMap::new();
     for dir in steamapps_dirs {
         let Ok(rd) = std::fs::read_dir(dir.join("workshop").join("content").join(app_id.to_string())) else { continue };
         for e in rd.filter_map(|e| e.ok()) {
+            let Some(id) = e.file_name().to_str().map(str::to_string).filter(|id| is_workshop_id(id)) else { continue };
             if e.file_type().is_ok_and(|t| t.is_dir()) {
-                ids.insert(e.file_name());
+                items.entry(id).or_default().push(e.path());
             }
         }
     }
-    ids.len()
+    items
 }
 
-/// How many of the game's mods are Steam Workshop subscriptions (0 when the
-/// game has no Workshop-installed mods). Those live outside the game folder,
-/// so the Content page explains why they aren't listed (GitHub issue #2).
+/// A Workshop file id: digits, as Steam names the item folders.
+pub(crate) fn is_workshop_id(id: &str) -> bool {
+    (1..=20).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit()) && id != "0"
+}
+
+/// The Workshop items under every Steam library's
+/// `steamapps/workshop/content/<app_id>`, by id. With `names`, each is named
+/// from its own mod info where SyncCrate reads it (RimWorld, Project Zomboid,
+/// Paradox, …): a few file reads per item, so only where a list is shown.
+pub(crate) fn list_workshop_items(steamapps_dirs: &[std::path::PathBuf], app_id: u32, names: bool) -> Vec<crate::state::WorkshopItem> {
+    workshop_item_dirs(steamapps_dirs, app_id)
+        .into_iter()
+        .map(|(id, dirs)| crate::state::WorkshopItem {
+            name: if names { dirs.iter().find_map(|d| crate::mod_meta::workshop_item_name(d)) } else { None },
+            id,
+        })
+        .collect()
+}
+
+/// This PC's Workshop subscriptions for the game (empty without Workshop
+/// mods), named unless `names` is false (only the ids are compared).
 #[tauri::command]
-pub async fn get_workshop_mod_count(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String) -> Result<usize, String> {
+pub async fn get_workshop_items(state: tauri::State<'_, Arc<Mutex<AppState>>>, game: String, names: Option<bool>) -> Result<Vec<crate::state::WorkshopItem>, String> {
     let app_id = {
         let s = state.lock().await;
         let id = resolve_game(&s, &game)?;
         s.game_registry.games.iter().find(|g| g.id == id).and_then(|g| g.steam_workshop_app_id)
     };
-    let Some(app_id) = app_id else { return Ok(0) };
-    tokio::task::spawn_blocking(move || count_workshop_items(&utils::steam_steamapps_dirs(), app_id))
+    let Some(app_id) = app_id else { return Ok(Vec::new()) };
+    let names = names.unwrap_or(true);
+    tokio::task::spawn_blocking(move || list_workshop_items(&utils::steam_steamapps_dirs(), app_id, names))
         .await
         .map_err(|e| e.to_string())
+}
+
+/// A friend tells the host their Workshop subscriptions again (after
+/// subscribing to some), so the host's Who's connected stays right.
+#[tauri::command]
+pub async fn share_workshop_items(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+    crate::network::transfer::resend_game_info(state.inner()).await
 }
 
 /// Hide or show `id` in `hidden`, keeping it sorted and duplicate-free.
@@ -2096,6 +2133,44 @@ mod tests {
     }
 
     #[test]
+    fn a_scan_only_takes_the_files_a_type_lists() {
+        let dir = crate::testutil::temp_dir("include-files");
+        for f in ["Plugins.txt", "loadorder.txt", "ContentCatalog.txt", "DLCList.txt"] {
+            std::fs::write(dir.join(f), b"x").unwrap();
+        }
+        let registry = crate::registry::load_registry();
+        let ct = registry.games.iter().find(|g| g.id == "skyrim_se").unwrap().content_types.iter().find(|c| c.id == "load_order").unwrap().clone();
+        let took: Vec<&str> = ["Plugins.txt", "loadorder.txt", "ContentCatalog.txt", "DLCList.txt"].into_iter().filter(|f| content_type_accepts(&ct, &dir.join(f))).collect();
+        assert_eq!(took, vec!["Plugins.txt", "loadorder.txt"], "the paid Creations list stays on this PC");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workshop_items_are_listed_once_with_their_names() {
+        let root = crate::testutil::temp_dir("workshop-list");
+        let (a, b) = (root.join("a"), root.join("b"));
+        let content = |lib: &std::path::Path| lib.join("workshop/content/294100");
+        // RimWorld: About/About.xml.
+        std::fs::create_dir_all(content(&a).join("111/About")).unwrap();
+        std::fs::write(content(&a).join("111/About/About.xml"), "<ModMetaData><name>Hospitality</name></ModMetaData>").unwrap();
+        // Project Zomboid: mods/<mod>/mod.info.
+        std::fs::create_dir_all(content(&b).join("222/mods/Brita")).unwrap();
+        std::fs::write(content(&b).join("222/mods/Brita/mod.info"), "name=Brita's Weapon Pack\nid=Brita").unwrap();
+        // No mod info SyncCrate reads; the same item in two libraries; not items.
+        std::fs::create_dir_all(content(&a).join("333")).unwrap();
+        std::fs::create_dir_all(content(&b).join("111")).unwrap();
+        std::fs::create_dir_all(content(&a).join("notes")).unwrap();
+        std::fs::write(content(&a).join("444"), b"a file").unwrap();
+        let items = list_workshop_items(&[b.clone(), a.clone()], 294100, true);
+        let got: Vec<(&str, Option<&str>)> = items.iter().map(|w| (w.id.as_str(), w.name.as_deref())).collect();
+        assert_eq!(got, vec![("111", Some("Hospitality")), ("222", Some("Brita's Weapon Pack")), ("333", None)]);
+        assert!(list_workshop_items(&[a.clone()], 5, true).is_empty());
+        assert!(list_workshop_items(&[b.clone(), a.clone()], 294100, false).iter().all(|w| w.name.is_none()), "ids only");
+        assert!(!is_workshop_id("0") && !is_workshop_id("12a") && !is_workshop_id("") && !is_workshop_id(&"9".repeat(21)));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn workshop_items_are_counted_once_across_libraries() {
         let a = crate::testutil::temp_dir("ws-a");
         let b = crate::testutil::temp_dir("ws-b");
@@ -2103,6 +2178,7 @@ mod tests {
             std::fs::create_dir_all(lib.join("workshop/content/1281930").join(id).join("2024.1")).unwrap();
         }
         std::fs::write(a.join("workshop/content/1281930/stray.txt"), b"x").unwrap();
+        std::fs::create_dir_all(a.join("workshop/content/1281930/temp")).unwrap();
         std::fs::create_dir_all(a.join("workshop/content/999/444")).unwrap();
         assert_eq!(count_workshop_items(&[a.clone(), b.clone(), a.join("missing")], 1281930), 3);
         assert_eq!(count_workshop_items(&[a.clone()], 5), 0);

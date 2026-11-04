@@ -244,11 +244,24 @@ pub struct ContentType {
     /// Where this content lives when it isn't inside the game's folder
     /// (Valheim worlds, Stardew saves: the user's AppData or ~/.config).
     /// Candidates, tried in order (`%VAR%` and `~` expand; one per OS
-    /// usually); the first folder that exists wins, and `folder` is then
+    /// usually); of the folders that exist, the one used most recently wins
+    /// (`utils::resolve_roots`), and `folder` is then
     /// relative to it. Its files' paths start with `@<id>/` (`root_prefix`),
     /// which `utils::safe_join` resolves: a game only ever had one folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roots: Vec<String>,
+    /// Only these file names (case-insensitive) belong to this type, when
+    /// set: the folder also holds files that must not sync (Bethesda's
+    /// `%LOCALAPPDATA%/<game>` has `ContentCatalog.txt`, the paid Creations
+    /// someone owns, next to `Plugins.txt`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub include_files: Vec<String>,
+    /// Save handoff with `save_unit_depth` 0: rotating autosaves named
+    /// `<save><suffix><n>` belong to `<save>` (Satisfactory's `_autosave_`),
+    /// so taking a save brings its newest autosave. Only where set: in other
+    /// games a save someone named `Base_autosave_2` is a save of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autosave_suffix: Option<String>,
 }
 
 /// Hello/Welcome feature: this app understands `@<id>/` paths (content
@@ -490,6 +503,24 @@ mod tests {
         let stardew = registry.games.iter().find(|g| g.id == "stardew_valley").unwrap();
         assert_eq!(crate::handoff::unit_of(&stardew.content_types, "@saves/Farm_123/Farm_123").as_deref(), Some("saves/Farm_123"));
         assert!(stardew.handoff_note.is_some());
+        // Saves in each player's own account folder (`utils::ACCOUNT_FOLDER`).
+        let unit = |id: &str, path: &str| {
+            let g = registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+            crate::handoff::unit_of(&g.content_types, path)
+        };
+        assert_eq!(unit("satisfactory", "@saves/MyFactory_autosave_1.sav").as_deref(), Some("saves/MyFactory"));
+        // Blueprints sit in one folder per session, next to the account folders, outside any save.
+        let sf = registry.games.iter().find(|g| g.id == "satisfactory").unwrap();
+        assert!(crate::sync::diff::path_accepted_by(&sf.content_types, "@blueprints/MyFactory/Smelter Row.sbp"));
+        assert!(crate::sync::diff::path_accepted_by(&sf.content_types, "@blueprints/MyFactory/Smelter Row.sbpcfg"));
+        assert_eq!(unit("satisfactory", "@blueprints/MyFactory/Smelter Row.sbp"), None);
+        assert_eq!(unit("v_rising", "@saves/v4/3f2a/AutoSave_120.save.gz").as_deref(), Some("saves/v4/3f2a"));
+        assert_eq!(unit("v_rising", "@saves/v4/3f2a/ServerHostSettings.json").as_deref(), Some("saves/v4/3f2a"));
+        assert_ne!(unit("v_rising", "@saves/v4/3f2a/x"), unit("v_rising", "@saves/v4/9c1b/x"), "two worlds stay apart");
+        // Worlds with Steam Cloud off are their own folder, so both kinds are seen.
+        assert_eq!(unit("v_rising", "@local_saves/v4/3f2a/AutoSave_1.save.gz").as_deref(), Some("local_saves/v4/3f2a"));
+        assert_eq!(unit("abiotic_factor", "@worlds/Worlds/Cascade/PlayerData/Player_76561198000000001.sav").as_deref(), Some("worlds/Cascade"));
+        assert!(crate::sync::diff::content_type_for(&registry.games.iter().find(|g| g.id == "abiotic_factor").unwrap().content_types, "@worlds/Settings.sav").is_none(), "per-player files next to Worlds stay local");
     }
 
     #[test]
@@ -754,9 +785,14 @@ mod tests {
             ("witcher3", "%DOCUMENTS%/The Witcher 3/gamesaves"),
             ("cyberpunk2077", "%USERPROFILE%/Saved Games/CD Projekt Red/Cyberpunk 2077"),
             ("kingdom_come_deliverance_2", "%USERPROFILE%/Saved Games/kingdomcome2/saves"),
+            // Steam Cloud: SaveGames/{64BitSteamID}; each PC's own id (`ACCOUNT_FOLDER`).
+            ("satisfactory", "%LOCALAPPDATA%/FactoryGame/Saved/SaveGames/{account}"),
+            ("v_rising", "%USERPROFILE%/AppData/LocalLow/Stunlock Studios/VRising/CloudSaves/{account}"),
         ] {
             assert_eq!(ct(id, "saves").roots.first().map(String::as_str), Some(root), "{id}");
         }
+        assert_eq!(ct("abiotic_factor", "worlds").roots, vec!["%LOCALAPPDATA%/AbioticFactor/Saved/SaveGames/{account}"]);
+        assert_eq!(ct("abiotic_factor", "worlds").folder, "Worlds");
         // Celeste saves next to the game only on Windows.
         assert_eq!(ct("celeste", "saves").folder, "Saves");
         assert!(ct("celeste", "user_saves").roots.iter().any(|r| r == "~/.local/share/Celeste/Saves"));
@@ -790,6 +826,13 @@ mod tests {
         for g in &registry.games {
             for c in &g.content_types {
                 assert!(c.roots.iter().all(|r| !r.to_lowercase().contains("%userprofile%/documents")), "{}/{}: use %DOCUMENTS%", g.id, c.id);
+                // Only `{account}`, and only as the last folder: `{64BitSteamID}`
+                // or a literal id would point every friend at the host's account.
+                for r in &c.roots {
+                    let r = r.replace('\\', "/");
+                    let placeholders = r.matches('{').count();
+                    assert!(placeholders == 0 || (placeholders == 1 && r.ends_with(&format!("/{}", crate::utils::ACCOUNT_FOLDER))), "{}/{}: {r}", g.id, c.id);
+                }
                 // Steam writes steam_autocloud.vdf (the account id) into cloud save folders.
                 if c.is_external() && c.extensions.is_empty() && c.file_type != "Mod" {
                     assert!(c.exclude_files.iter().any(|f| f == "steam_autocloud.vdf"), "{}/{}: exclude steam_autocloud.vdf", g.id, c.id);
@@ -798,6 +841,40 @@ mod tests {
         }
         // Torchlight II on Steam keeps saves per account (save/<SteamID>/).
         assert!(!ct("torchlight2", "saves").recursive);
+    }
+
+    /// Which plugins are on, and in what order, lives in `%LOCALAPPDATA%`
+    /// (`Plugins.txt`, and `loadorder.txt` from LOOT and Vortex). Folder names
+    /// per store from libloadorder's `appdata_folder_name`, checked 2026-11-04.
+    #[test]
+    fn bethesda_load_order_syncs() {
+        use crate::sync::diff::path_accepted_by;
+        let registry = load_registry();
+        for (id, first) in [
+            ("skyrim_se", "%LOCALAPPDATA%/Skyrim Special Edition"),
+            ("skyrim_le", "%LOCALAPPDATA%/Skyrim"),
+            ("fallout4", "%LOCALAPPDATA%/Fallout4"),
+            ("fallout_new_vegas", "%LOCALAPPDATA%/FalloutNV"),
+            ("fallout_3", "%LOCALAPPDATA%/Fallout3"),
+            ("oblivion", "%LOCALAPPDATA%/Oblivion"),
+            ("starfield", "%LOCALAPPDATA%/Starfield"),
+        ] {
+            let g = registry.games.iter().find(|g| g.id == id).unwrap_or_else(|| panic!("{id}"));
+            let ct = g.content_types.iter().find(|c| c.id == "load_order").unwrap_or_else(|| panic!("{id}/load_order"));
+            assert_eq!(ct.roots.first().map(String::as_str), Some(first), "{id}");
+            assert!(!ct.recursive, "{id}");
+            for path in ["@load_order/Plugins.txt", "@load_order/plugins.txt", "@load_order/loadorder.txt"] {
+                assert!(path_accepted_by(&g.content_types, path), "{id}: {path} should sync");
+            }
+            for path in ["@load_order/DLCList.txt", "@load_order/ContentCatalog.txt", "@load_order/notes.txt", "@load_order/Sub/plugins.txt", "@load_order/crash.log"] {
+                assert!(!path_accepted_by(&g.content_types, path), "{id}: {path} should not sync");
+            }
+        }
+        let se = registry.games.iter().find(|g| g.id == "skyrim_se").unwrap();
+        let roots = &se.content_types.iter().find(|c| c.id == "load_order").unwrap().roots;
+        for store in ["GOG", "EPIC", "MS"] {
+            assert!(roots.iter().any(|r| r.ends_with(&format!("Skyrim Special Edition {store}"))), "{store}");
+        }
     }
 
     /// Modpacks need their configs and recipe scripts to match or servers

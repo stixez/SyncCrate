@@ -35,6 +35,13 @@ export interface PackInfo {
 export interface GameInfo {
   game_version: string | null;
   installed_packs: PackInfo[];
+  /** Steam Workshop items this PC is subscribed to (a host sends its own). */
+  workshop?: WorkshopItem[] | null;
+}
+
+export interface WorkshopItem {
+  id: string;
+  name?: string | null;
 }
 
 export type CompatibilityStatus = "Compatible" | "MissingPacks" | "Unknown";
@@ -57,6 +64,8 @@ export interface PeerInfo {
   game_info?: GameInfo | null;
   /** Game the host is sharing (from discovery; absent for hosts before 0.5.6). */
   game_id?: string | null;
+  /** Host side: how many of the Workshop mods the host sent this friend they lack. */
+  workshop_missing?: number | null;
   /** Every address the host was discovered on, best first (`ip` is the first). */
   addresses?: string[];
   /** Host's iroh node id (hex), for recognising crew members; absent before 0.6.0. */

@@ -113,7 +113,7 @@ mod tests {
         ContentType {
             id: id.into(), label: id.into(), folder: folder.into(), extensions: vec![], install_extensions: vec![], allow_blocked_extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![], include_files: vec![], autosave_suffix: None,
         }
     }
 

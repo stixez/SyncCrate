@@ -40,6 +40,8 @@ const MAX_CHUNK_SIZE: usize = 1_048_576;
 
 /// Maximum number of packs a peer can advertise
 const MAX_PEER_PACKS: usize = 200;
+/// Workshop items a peer may list (big RimWorld lists run to a few hundred).
+const MAX_PEER_WORKSHOP: usize = 2000;
 
 /// Maximum string length for a pack code or name from a peer
 const MAX_PACK_STRING_LEN: usize = 128;
@@ -96,10 +98,79 @@ fn sanitize_game_info(info: GameInfo) -> GameInfo {
         })
         .collect();
 
+    let mut seen = std::collections::HashSet::new();
+    let workshop = info.workshop.map(|items| {
+        items
+            .into_iter()
+            .filter(|w| crate::commands::files::is_workshop_id(&w.id) && seen.insert(w.id.clone()))
+            .take(MAX_PEER_WORKSHOP)
+            .map(|w| crate::state::WorkshopItem {
+                name: w.name.map(|n| clean_peer_text(&n, MAX_PACK_STRING_LEN)).filter(|n| !n.trim().is_empty()),
+                id: w.id,
+            })
+            .collect()
+    });
+
     GameInfo {
         game_version,
         installed_packs,
+        workshop,
     }
+}
+
+/// This PC's game info for the active game, with its Workshop subscriptions
+/// read now, not at startup (subscribed to more since). Each side sends it
+/// when they connect, so friends can match the host's Workshop mods and the
+/// host sees who's missing some.
+async fn game_info_to_send(state: &Arc<Mutex<AppState>>, names: bool) -> Option<GameInfo> {
+    let (info, workshop_app) = {
+        let app_state = state.lock().await;
+        let app_id = app_state.game_registry.games.iter().find(|g| g.id == app_state.active_game).and_then(|g| g.steam_workshop_app_id);
+        (app_state.game_info.get(&app_state.active_game).cloned(), app_id)
+    };
+    let Some(app_id) = workshop_app else { return info };
+    // No Steam found here (or one SyncCrate doesn't know): say nothing,
+    // rather than "subscribed to none", which looked like missing them all.
+    let workshop = tokio::task::spawn_blocking(move || {
+        let dirs = crate::utils::steam_steamapps_dirs();
+        (!dirs.is_empty()).then(|| crate::commands::files::list_workshop_items(&dirs, app_id, names))
+    })
+    .await
+    .ok()
+    .flatten();
+    if workshop.is_none() {
+        return info;
+    }
+    Some(GameInfo { workshop, ..info.unwrap_or_default() })
+}
+
+/// How many of the Workshop ids the host sent a friend the friend lacks.
+/// None unless both sides said (a friend on an older SyncCrate, or a host
+/// without Workshop mods, gets no count rather than "missing everything").
+fn workshop_missing(sent: Option<&[String]>, theirs: Option<&[crate::state::WorkshopItem]>) -> Option<usize> {
+    let (sent, theirs) = (sent?, theirs?);
+    if sent.is_empty() {
+        return None;
+    }
+    let have: std::collections::HashSet<&str> = theirs.iter().map(|w| w.id.as_str()).collect();
+    Some(sent.iter().filter(|id| !have.contains(id.as_str())).count())
+}
+
+/// A friend sends its game info again mid-session (Workshop mods subscribed
+/// since joining); the host's message loop takes it like the first one.
+pub(crate) async fn resend_game_info(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
+    let stream = {
+        let st = state.lock().await;
+        if st.session_type != crate::state::SessionType::Client {
+            return Ok(());
+        }
+        let Some(conn) = st.connections.values().next() else { return Ok(()) };
+        conn.stream.clone()
+    };
+    let Some(info) = game_info_to_send(state, false).await else { return Ok(()) };
+    // Not while a sync has the connection: the host learns it next time.
+    let Ok(mut s) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.lock()).await else { return Ok(()) };
+    protocol::send_message(&mut *s, &Message::GameInfoExchange { game_info: info }).await
 }
 
 static LISTENER_TOKEN: Mutex<Option<CancellationToken>> = Mutex::const_new(None);
@@ -533,6 +604,7 @@ async fn handle_client(
             addresses: Vec::new(),
             node_id: peer_node.clone(),
             last_sync: None,
+            workshop_missing: None,
         };
         app_state.connections.insert(
             peer_id.clone(),
@@ -543,6 +615,7 @@ async fn handle_client(
                 remote_links: Vec::new(),
                 sync_plan: None,
                 is_syncing: false,
+                workshop_sent: None,
             },
         );
         let now = crate::utils::timestamp_now();
@@ -560,10 +633,14 @@ async fn handle_client(
     // Send our game info to the peer. Copied out first: sending while
     // holding AppState froze the whole app for up to 30 s when a peer
     // stopped reading.
-    let info = {
-        let app_state = state.lock().await;
-        app_state.game_info.get(&app_state.active_game).cloned()
-    };
+    // The host's names show in each friend's list; the friend's own are never shown.
+    let info = game_info_to_send(&state, true).await;
+    if let Some(sent) = info.as_ref().and_then(|i| i.workshop.as_ref()) {
+        let ids = sent.iter().map(|w| w.id.clone()).collect();
+        if let Some(conn) = state.lock().await.connections.get_mut(&peer_id) {
+            conn.workshop_sent = Some(ids);
+        }
+    }
     {
         if let Some(info) = info {
             let mut s = stream.lock().await;
@@ -948,6 +1025,7 @@ async fn handle_client(
                 let sanitized = sanitize_game_info(game_info);
                 let mut app_state = state.lock().await;
                 if let Some(conn) = app_state.connections.get_mut(&peer_id) {
+                    conn.info.workshop_missing = workshop_missing(conn.workshop_sent.as_deref(), sanitized.workshop.as_deref());
                     conn.info.game_info = Some(sanitized.clone());
                 }
                 let _ = app.emit(
@@ -1316,19 +1394,9 @@ pub(crate) async fn run_client_session(
     };
 
     // Send our game info to the host
-    {
-        let app_state = state.lock().await;
-        let active = &app_state.active_game;
-        if let Some(info) = app_state.game_info.get(active) {
-            let mut s = stream.lock().await;
-            protocol::send_message(
-                &mut *s,
-                &Message::GameInfoExchange {
-                    game_info: info.clone(),
-                },
-            )
-            .await?;
-        }
+    if let Some(info) = game_info_to_send(&state, false).await {
+        let mut s = stream.lock().await;
+        protocol::send_message(&mut *s, &Message::GameInfoExchange { game_info: info }).await?;
     }
 
     // Request manifest — the host may have sent GameInfoExchange first,
@@ -1403,6 +1471,7 @@ pub(crate) async fn run_client_session(
             addresses: addresses.to_vec(),
             node_id: host_node,
             last_sync: None,
+            workshop_missing: None,
         };
         app_state.connections.insert(
             peer_id.to_string(),
@@ -1413,6 +1482,7 @@ pub(crate) async fn run_client_session(
                 remote_links,
                 sync_plan: None,
                 is_syncing: false,
+                workshop_sent: None,
             },
         );
         app_state.pending_client_peer_id = None;
@@ -2536,6 +2606,49 @@ mod tests {
         assert!(decompress_chunk(&bomb).is_err());
         let ok = compress_chunk(b"hello").unwrap();
         assert_eq!(decompress_chunk(&ok).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn workshop_missing_counts_only_when_both_sides_said() {
+        use crate::state::WorkshopItem;
+        let sent = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let theirs = vec![WorkshopItem { id: "2".into(), name: None }, WorkshopItem { id: "9".into(), name: None }];
+        assert_eq!(workshop_missing(Some(&sent), Some(&theirs)), Some(2));
+        assert_eq!(workshop_missing(Some(&sent), Some(&[])), Some(3));
+        assert_eq!(workshop_missing(Some(&sent), None), None, "an older friend didn't say");
+        assert_eq!(workshop_missing(Some(&[]), Some(&theirs)), None, "the host has no Workshop mods");
+        assert_eq!(workshop_missing(None, Some(&theirs)), None);
+    }
+
+    #[test]
+    fn a_peers_workshop_list_is_checked() {
+        use crate::state::WorkshopItem;
+        let item = |id: &str, name: Option<&str>| WorkshopItem { id: id.into(), name: name.map(str::to_string) };
+        let mut gi = GameInfo::default();
+        gi.workshop = Some(vec![
+            item("111", Some("Hospitality\u{202e}")),
+            item("111", Some("again")),
+            item("../../x", None),
+            item("12a", None),
+            item("222", Some("   ")),
+        ]);
+        gi.workshop.as_mut().unwrap().extend((1000..1000 + MAX_PEER_WORKSHOP as u64 + 10).map(|n| item(&n.to_string(), None)));
+        let out = sanitize_game_info(gi);
+        let w = out.workshop.as_ref().unwrap();
+        assert_eq!(w[0], item("111", Some("Hospitality")));
+        assert_eq!(w[1], item("222", None), "blank names dropped, bad ids and repeats skipped");
+        assert_eq!(w.len(), MAX_PEER_WORKSHOP);
+        // "No Workshop mods" and "didn't say" stay apart on the wire.
+        let none_subscribed = GameInfo { workshop: Some(vec![]), ..Default::default() };
+        let back: GameInfo = serde_json::from_str(&serde_json::to_string(&none_subscribed).unwrap()).unwrap();
+        assert_eq!(back.workshop, Some(vec![]));
+        // Older peers: a GameInfo without the field still reads, and theirs ignores it.
+        let old: GameInfo = serde_json::from_str(r#"{"game_version":"1.5","installed_packs":[]}"#).unwrap();
+        assert!(old.workshop.is_none());
+        #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
+        struct OldGameInfo { game_version: Option<String>, installed_packs: Vec<crate::state::PackInfo> }
+        assert!(serde_json::from_str::<OldGameInfo>(&serde_json::to_string(&out).unwrap()).is_ok());
     }
 
     #[test]

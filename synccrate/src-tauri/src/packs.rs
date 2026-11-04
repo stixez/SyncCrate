@@ -301,6 +301,7 @@ pub fn detect_game_info(game_id: &str, game_path: &str) -> GameInfo {
     GameInfo {
         game_version,
         installed_packs,
+        ..Default::default()
     }
 }
 
@@ -413,7 +414,7 @@ mod tests {
         );
         assert!(check_mod_compatibility(&manifest, &GameInfo::default(), "sims4").is_empty());
         let ep02 = get_pack_registry("sims4").into_iter().find(|p| p.id.code == "EP02").unwrap();
-        let info = GameInfo { game_version: None, installed_packs: vec![ep02] };
+        let info = GameInfo { game_version: None, installed_packs: vec![ep02], ..Default::default() };
         let r = check_mod_compatibility(&manifest, &info, "sims4");
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].missing_packs[0].code, "EP01");

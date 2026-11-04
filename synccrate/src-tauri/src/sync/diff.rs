@@ -128,6 +128,9 @@ pub fn content_type_for<'a>(content_types: &'a [ContentType], rel: &str) -> Opti
         if ct.exclude_files.iter().any(|x| x.eq_ignore_ascii_case(file_name)) || excluded_by_patterns(&ct.exclude_patterns, rest) {
             return None;
         }
+        if !ct.include_files.is_empty() && !ct.include_files.iter().any(|x| x.eq_ignore_ascii_case(file_name)) {
+            return None;
+        }
         if !ct.extensions.is_empty() {
             let ext = crate::commands::files::effective_extension(std::path::Path::new(rest));
             if !ct.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {
@@ -554,7 +557,7 @@ mod tests {
         let cts = vec![crate::registry::ContentType {
             id: "mods".into(), label: "Mods".into(), folder: "Mods".into(), extensions: vec![], install_extensions: vec![], allow_blocked_extensions: vec![], file_type: "CustomContent".into(),
             classify_by_extension: Default::default(), icon: String::new(), color: String::new(), syncable: true, recursive: true,
-            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![],
+            must_contain: None, exclude_files: vec![], exclude_patterns: vec![], save_unit_depth: None, roots: vec![], include_files: vec![], autosave_suffix: None,
         }];
         let mut m = FileManifest::default();
         let info = |p: &str| FileInfo { relative_path: p.into(), size: 1, hash: "h".into(), modified: 0, file_type: "CustomContent".into() };
@@ -608,6 +611,8 @@ mod tests {
             exclude_patterns: vec!["cc???sse*".to_string(), "Skyrim - *.bsa".to_string(), "SquadExpansion/*".to_string()],
             save_unit_depth: None,
             roots: vec![],
+            include_files: vec![],
+            autosave_suffix: None,
         }
     }
 

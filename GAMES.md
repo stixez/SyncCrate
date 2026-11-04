@@ -22,7 +22,7 @@
 | Game | What syncs |
 |------|------------|
 | **7 Days to Die** | Mods, Mods (user folder) |
-| **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods |
+| **Abiotic Factor** | Pak Mods, Logic Mods, UE4SS Mods, Worlds |
 | **ARK: Survival Evolved** | Mods, Save Files |
 | **Barotrauma** | Local Mods, Saves, Multiplayer saves |
 | **Conan Exiles** | Mods |
@@ -35,7 +35,7 @@
 | **Sons of the Forest** | Mods (RedLoader) |
 | **Subnautica** | Plugins (BepInEx), Save Files, Mod Configs, Patchers |
 | **The Long Dark** | Mods (MelonLoader), Saves |
-| **V Rising** | Plugins (BepInEx), Mod Configs, Patchers |
+| **V Rising** | Plugins (BepInEx), Mod Configs, Patchers, Worlds |
 | **Valheim** | Plugins (BepInEx), Mod Configs, Worlds, Patchers, Characters |
 
 </details>
@@ -61,7 +61,7 @@
 |------|------------|
 | **Dyson Sphere Program** | Plugins (BepInEx), Mod Configs, Patchers, Blueprints |
 | **Factorio** | Mods, Save Files, Scenarios |
-| **Satisfactory** | Mods (SMM) |
+| **Satisfactory** | Mods (SMM), Save Files, Blueprints |
 
 </details>
 
@@ -75,9 +75,9 @@
 | **Darkest Dungeon** | Mods |
 | **Divinity: Original Sin 2** | Mods |
 | **Dragon Age: Origins** | Override Mods, AddIns (DAZip), Save Files |
-| **Fallout 3** | Mods & Plugins, Saves |
-| **Fallout 4** | Mods & Plugins, Saves |
-| **Fallout: New Vegas** | Mods & Plugins, Saves |
+| **Fallout 3** | Mods & Plugins, Saves, Load Order |
+| **Fallout 4** | Mods & Plugins, Saves, Load Order |
+| **Fallout: New Vegas** | Mods & Plugins, Saves, Load Order |
 | **Grim Dawn** | Mods |
 | **Hogwarts Legacy** | Pak Mods |
 | **Kenshi** | Mods |
@@ -85,11 +85,11 @@
 | **Kingdom Come: Deliverance II** | Mods, Saves |
 | **Neverwinter Nights: Enhanced Edition** | Hak Paks, Override, Modules, Custom Talk Tables, Portraits, Characters (local vault), Save Files |
 | **Oblivion Remastered** | Plugins (Data), Pak Mods, OBSE Plugins, UE4SS Mods, Saves |
-| **Skyrim (Legendary Edition)** | Mods & Plugins, Saves |
-| **Skyrim Special Edition** | Mods & Plugins, Saves |
-| **Starfield** | Mods & Plugins |
+| **Skyrim (Legendary Edition)** | Mods & Plugins, Saves, Load Order |
+| **Skyrim Special Edition** | Mods & Plugins, Saves, Load Order |
+| **Starfield** | Mods & Plugins, Load Order |
 | **The Elder Scrolls III: Morrowind** | Mods & Plugins, Saves |
-| **The Elder Scrolls IV: Oblivion** | Mods & Plugins, Saves |
+| **The Elder Scrolls IV: Oblivion** | Mods & Plugins, Saves, Load Order |
 | **The Witcher 3: Wild Hunt** | Mods, Mod Menus, Saves |
 | **Titan Quest Anniversary Edition** | Custom Maps & Mods, Save Files |
 | **Torchlight II** | Mods, Save Files |

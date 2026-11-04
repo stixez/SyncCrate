@@ -109,6 +109,11 @@ pub struct PeerInfo {
     /// could only guess "finished" from 4 s without a download request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_sync: Option<PeerSyncReport>,
+    /// Host side: how many of the Workshop mods the host sent this friend
+    /// they aren't subscribed to (None: either side didn't say). Counted
+    /// from the list the friend saw, so both screens agree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workshop_missing: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -325,6 +330,21 @@ pub struct PackInfo {
 pub struct GameInfo {
     pub game_version: Option<String>,
     pub installed_packs: Vec<PackInfo>,
+    /// The Steam Workshop items this PC is subscribed to for the game, so
+    /// friends can match them. None: the peer didn't say (an older
+    /// SyncCrate, or a game without Workshop mods), unlike an empty list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workshop: Option<Vec<WorkshopItem>>,
+}
+
+/// A Steam Workshop item: `steamapps/workshop/content/<app id>/<id>`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkshopItem {
+    /// The Workshop file id (digits).
+    pub id: String,
+    /// From the item's own mod info, when it has one SyncCrate reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -391,6 +411,8 @@ pub struct PeerConnection {
     pub remote_links: Vec<crate::source_links::LinkedFile>,
     pub sync_plan: Option<SyncPlan>,
     pub is_syncing: bool,
+    /// Host side: the Workshop ids sent to this friend when they joined.
+    pub workshop_sent: Option<Vec<String>>,
 }
 
 pub struct AppState {
@@ -589,6 +611,8 @@ mod tests {
             exclude_patterns: Vec::new(),
             save_unit_depth: None,
             roots: vec![],
+            include_files: vec![],
+            autosave_suffix: None,
         }
     }
 

@@ -14,6 +14,7 @@ import ModUpdates, { canCheckUpdates } from "./ModUpdates";
 import ConflictResolver from "./ConflictResolver";
 import DuplicateFinder from "./DuplicateFinder";
 import FiftyFifty from "./FiftyFifty";
+import WorkshopPanel from "./WorkshopPanel";
 import { Banner, Button, EmptyState, Input, SectionHeader, StatTile, cx } from "./ui";
 import { useSync } from "../hooks/useSync";
 import { useVirtualList } from "../hooks/useVirtualList";
@@ -210,18 +211,11 @@ export default function ContentBrowser({ gameId }: Props) {
 
   // Workshop-installed mods (tModLoader, RimWorld, Paradox, ...) live outside
   // the game folder; say so, or an empty Mods list looks like a detection bug
-  // (GitHub issue #2).
-  const [workshopMods, setWorkshopMods] = useState(0);
+  // (GitHub issue #2). `WorkshopPanel` lists the host's for a friend.
   const syncedFolders = useMemo(() => {
     const labels = (gameDef?.content_types ?? []).filter((c) => c.syncable !== false).map((c) => c.label);
     return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels[0] ?? "";
   }, [gameDef]);
-  useEffect(() => {
-    let cancelled = false;
-    if (!gameDef?.steam_workshop_app_id) { setWorkshopMods(0); return; }
-    cmd.getWorkshopModCount(gameId).then((n) => { if (!cancelled) setWorkshopMods(n); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [gameId, gameDef?.steam_workshop_app_id]);
 
   // Legacy `_Disabled/` folder: The Sims loads subfolders, so those mods still load.
   const renameDisable = gameDef?.disable_method === "rename";
@@ -911,13 +905,7 @@ export default function ContentBrowser({ gameId }: Props) {
 
       {!readOnly && isModLike && canCheckUpdates(modMetas, gameId) && <ModUpdates gameId={gameId} metas={allMetas} />}
 
-      {workshopMods > 0 && (
-        <Banner tone="info" icon={<Info size={14} />} title={`${workshopMods} of your ${gameDef?.label ?? gameId} mods come from the Steam Workshop`}>
-          Steam keeps Workshop mods in its own folder, outside the game folder, so SyncCrate can't list, sync or back them up.
-          Friends can subscribe to the same mods on the Workshop.
-          {syncedFolders && <> SyncCrate still syncs {syncedFolders}.</>}
-        </Banner>
-      )}
+      <WorkshopPanel gameId={gameId} gameLabel={gameDef?.label ?? gameId} syncedFolders={syncedFolders} hasWorkshop={!!gameDef?.steam_workshop_app_id} />
 
       {legacyCount > 0 && legacyDismissed !== gameId && !readOnly && (
         <Banner

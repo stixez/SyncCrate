@@ -263,6 +263,7 @@ function App() {
         useAppStore.setState({ selectedGame: null, myLibrary: [] });
       }
       if (q.has("light")) useAppStore.getState().setTheme("light");
+      if (q.has("feedback")) useAppStore.setState({ feedbackPrompt: true });
       // &big: ~8,000 synthetic CC files to exercise the virtual content list.
       if (q.has("big")) {
         const big = bigSims4Demo();

@@ -4,6 +4,19 @@ Every SyncCrate release, newest first. The app shows a version's notes once afte
 
 Releasing: rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD` before tagging. Start with a one-paragraph summary, then `### Highlights` (the update popup shows its first four items).
 
+## 0.8.9 — 2026-11-04
+
+Satisfactory, V Rising and Abiotic Factor saves now sync and can be passed around a crew, Bethesda games share their load order, and friends can match the host's Steam Workshop mods in a few clicks. The Guide is easier to find your way around, too.
+
+### Highlights
+- **Satisfactory, V Rising and Abiotic Factor saves sync, and crews can take turns on them.** These games keep saves in a folder named after your Steam (or Epic) account, so a friend's game never saw the host's copy. SyncCrate now puts them in each friend's own account folder and syncs them with the mods. Share a factory or world from the Dashboard's **Shared saves** and friends take and give it back like any other shared save; a Satisfactory factory's autosaves move with it, and its blueprints sync too, so whoever hosts next can still build them.
+- **Bethesda load order syncs.** For Skyrim, Fallout 3, New Vegas and 4, Oblivion and Starfield, SyncCrate now syncs `Plugins.txt` and `loadorder.txt` along with the mods, so friends get the same plugins switched on in the same order. If yours differs, it shows up as a conflict: pick **Use theirs** to match the host. Mod Organizer 2 keeps its own load order per profile, so it isn't changed.
+- **Match the host's Steam Workshop mods.** Workshop mods live in Steam's folder and can't sync, so when you join a host, the **Content** page now lists the host's Workshop mods you aren't subscribed to, each with **Open in Steam**, and the host sees in **Who's connected** how many each friend is missing. For RimWorld, Project Zomboid, Cities: Skylines, the Paradox games, tModLoader and every other game with Workshop mods.
+
+### Smaller improvements
+- The **Guide** is easier to find your way around: topics are listed on the left and open one at a time, with numbered steps, **Previous** and **Next**, and a button to the right page. Its home has a quick start, tips for the game you're playing and the most common questions, and search highlights what matched (**Enter** opens the first result). New topics cover Steam Workshop mods, Bethesda load order and saves outside the game folder.
+- After a sync works, the Dashboard asks once how SyncCrate is working for you, with a button to the Discord's **#feature-requests**.
+
 ## 0.8.8 — 2026-10-29
 
 Windows games played on Linux through Steam's Proton now find their mods and saves on their own, and the Discord button moved to the sidebar.

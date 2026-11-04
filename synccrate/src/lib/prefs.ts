@@ -9,6 +9,7 @@ const FOLDER_PERMS_KEY = "synccrate-folder-perms";
 const GAME_ART_KEY = "synccrate-game-art";
 const DISCORD_KEY = "synccrate-discord-presence";
 const DISCORD_HINT_KEY = "synccrate-discord-hint-shown";
+const FEEDBACK_HINT_KEY = "synccrate-feedback-hint-shown";
 
 function read(key: string): string | null {
   try {
@@ -97,6 +98,15 @@ export function loadDiscordHintShown(): boolean {
 
 export function markDiscordHintShown() {
   write(DISCORD_HINT_KEY, "1");
+}
+
+/** Whether the one-time "How is SyncCrate working for you?" note has appeared. */
+export function loadFeedbackHintShown(): boolean {
+  return read(FEEDBACK_HINT_KEY) === "1";
+}
+
+export function markFeedbackHintShown() {
+  write(FEEDBACK_HINT_KEY, "1");
 }
 
 export const DISCORD_PREF_EVENT = "synccrate-discord-pref";

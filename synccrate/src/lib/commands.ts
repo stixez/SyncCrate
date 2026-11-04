@@ -669,10 +669,22 @@ export async function setGameHidden(gameId: string, hidden: boolean): Promise<st
   return invoke("set_game_hidden", { gameId, hidden });
 }
 
-/** Mods installed from the Steam Workshop (they live outside the game folder). */
-export async function getWorkshopModCount(game: string): Promise<number> {
-  if (isDemoMode()) return 0;
-  return invoke("get_workshop_mod_count", { game });
+/** This PC's Steam Workshop subscriptions for the game, named where the mod says
+ * (`names: false` skips reading each mod's info when only the ids matter). */
+export async function getWorkshopItems(game: string, names = true): Promise<import("./types").WorkshopItem[]> {
+  if (isDemoMode()) return [];
+  return invoke("get_workshop_items", { game, names });
+}
+
+/** Friend side: tell the host our Workshop subscriptions again (after subscribing). */
+export async function shareWorkshopItems(): Promise<void> {
+  if (isDemoMode()) return;
+  return invoke("share_workshop_items");
+}
+
+/** Opens a Workshop item's page in the Steam app. */
+export async function openWorkshopItem(id: string): Promise<void> {
+  return invoke("open_workshop_item", { id });
 }
 
 /** Problems that stop the active game's mods from loading (missing loader, Sims 4 settings/placement). */
