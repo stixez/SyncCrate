@@ -1418,10 +1418,16 @@ mod tests {
             std::fs::File::options().write(true).open(d.join("a.sav")).unwrap().set_modified(past).unwrap();
             std::fs::File::open(d).and_then(|f| f.set_modified(past)).ok();
         }
-        // The account played last (newest save) wins.
-        std::fs::write(epic.join("b.sav"), "x").unwrap();
+        // The account played last (newest save) wins. Times set ahead of
+        // "now": writes a moment apart can share a timestamp on Linux, and
+        // writing a file also touches its folder.
+        let saved_at = |path: std::path::PathBuf, secs: u64| {
+            std::fs::write(&path, "x").unwrap();
+            std::fs::File::options().write(true).open(&path).unwrap().set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(secs)).unwrap();
+        };
+        saved_at(epic.join("b.sav"), 3600);
         assert_eq!(root_candidates(&candidate.to_string_lossy()), vec![epic.clone()]);
-        std::fs::write(old.join("c.sav"), "x").unwrap();
+        saved_at(old.join("c.sav"), 7200);
         assert_eq!(root_candidates(&candidate.to_string_lossy()), vec![old.clone()]);
         // Through Proton too.
         let pfx = root.join("pfx");
@@ -1459,6 +1465,8 @@ mod tests {
         let mk = |n: &str| { let d = root.join(n); std::fs::create_dir_all(&d).unwrap(); d };
         let (sibling, mine, epic) = (mk("76561198000000001"), mk(&login.1), mk("0123456789abcdef0123456789abcdef"));
         std::fs::write(sibling.join("newest.sav"), "x").unwrap();
+        // Ahead of "now", so it's the newest whatever the clock's resolution.
+        std::fs::File::options().write(true).open(sibling.join("newest.sav")).unwrap().set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600)).unwrap();
         // By either id form, even when a sibling played last.
         assert_eq!(pick_account(vec![sibling.clone(), mine.clone(), epic.clone()], Some(&login)), Some(mine.clone()));
         // Not a sibling's folder: the signed-in account has none yet, so an Epic one or nothing.
@@ -1494,9 +1502,9 @@ mod tests {
             std::fs::create_dir_all(d).unwrap();
             std::fs::write(d.join("Plugins.txt"), "x").unwrap();
         }
-        let past = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
-        std::fs::File::options().write(true).open(steam.join("Plugins.txt")).unwrap().set_modified(past).unwrap();
-        std::fs::File::open(&steam).and_then(|f| f.set_modified(past)).ok();
+        // The GOG one was used last. Ahead of "now": folder times (touched
+        // by the writes above) can't be set on Windows.
+        std::fs::File::options().write(true).open(gog.join("Plugins.txt")).unwrap().set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600)).unwrap();
         let ct: crate::registry::ContentType = serde_json::from_str(&format!(
             r#"{{"id":"load_order","label":"Load Order","folder":".","file_type":"Config","roots":[{a:?},{b:?}]}}"#,
             a = steam.to_string_lossy(),
