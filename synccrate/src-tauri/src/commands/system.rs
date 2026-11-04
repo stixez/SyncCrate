@@ -87,6 +87,7 @@ mod win {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn current_exe_string() -> Result<String, String> {
     std::env::current_exe()
         .map(|p| crate::utils::clean_path(p).to_string_lossy().to_string())
