@@ -48,7 +48,7 @@ New mods reach everyone automatically. At a LAN party it works without internet.
 
 ## Get started
 
-1. **Download** SyncCrate for Windows, macOS or Linux from [Releases](../../releases/latest) and install it on every PC.
+1. **Download** SyncCrate for Windows, macOS or Linux from [Releases](../../releases/latest) and install it on every PC. On Windows, `winget install stixez.SyncCrate` does the same.
 2. **One friend clicks Start Hosting.** SyncCrate finds the game folder by itself.
 3. **Everyone else joins:** pick the host under **Scan for Hosts** (same network) or paste the join code (anywhere).
 4. **Click Compare & Sync**, check the plan, then **Sync Now**.
